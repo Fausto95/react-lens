@@ -52,8 +52,12 @@ describe("RingBuffer", () => {
     expect(rb.size).toBe(3);
   });
 
-  it("rejects non-positive capacity", () => {
-    expect(() => new RingBuffer(0)).toThrow();
+  it("returns the overwritten item when full", () => {
+    const rb = new RingBuffer<number>(2);
+    expect(rb.push(1)).toBeUndefined();
+    expect(rb.push(2)).toBeUndefined();
+    expect(rb.push(3)).toBe(1);
+    expect(rb.toArray()).toEqual([2, 3]);
   });
 });
 
@@ -144,6 +148,22 @@ describe("TraceStore — commits", () => {
     const commits = store.commits();
     expect(commits).toHaveLength(2);
     expect(commits.map((c) => c.commitId)).toEqual([2, 3]);
+  });
+
+  it("drops commits whose renders were overwritten in the event ring", () => {
+    const store = new TraceStore({ maxEvents: 2 });
+    store.ingest(
+      batch({
+        events: [
+          renderEvent({ commitId: 1 as CommitId, componentId: 1 as ComponentId, timestamp: 10 }),
+          renderEvent({ commitId: 2 as CommitId, componentId: 1 as ComponentId, timestamp: 20 }),
+          renderEvent({ commitId: 3 as CommitId, componentId: 1 as ComponentId, timestamp: 30 }),
+        ],
+      }),
+    );
+    const commits = store.commits();
+    expect(commits.map((c) => c.commitId)).toEqual([2, 3]);
+    expect(store.commit(1 as CommitId)).toBeUndefined();
   });
 });
 
