@@ -1,5 +1,5 @@
 import type { InspectorContext } from "../Inspector.js";
-import { ValueView, type EditFn } from "../ValueView.js";
+import { ValueView, type EditFn } from "@react-lens/ui";
 import { EmptyTab } from "./shared.js";
 
 /** State-bearing hooks with current values, editable when supported. */

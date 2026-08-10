@@ -40,3 +40,7 @@ export function Section({
     </div>
   );
 }
+
+export { formatValue, ms } from "./format.js";
+export { ValueView, type EditFn } from "./ValueView.js";
+export { DiffLines } from "./DiffLines.js";

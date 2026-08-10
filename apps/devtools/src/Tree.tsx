@@ -11,7 +11,7 @@ import {
   type VisibleRow,
 } from "@react-lens/tree";
 import { useTraceVersion } from "./useLens.js";
-import { ms } from "./format.js";
+import { ms } from "@react-lens/ui";
 
 type TreeMode = "components" | "changed" | "waste";
 

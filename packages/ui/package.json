@@ -4,6 +4,10 @@
   "private": true,
   "type": "module",
   "exports": { ".": "./src/index.tsx" },
+  "dependencies": {
+    "@react-lens/protocol": "workspace:*",
+    "@react-lens/diff-engine": "workspace:*"
+  },
   "peerDependencies": { "react": "^19" },
   "devDependencies": { "@types/react": "^19", "react": "^19" },
   "scripts": { "typecheck": "tsc --noEmit" }

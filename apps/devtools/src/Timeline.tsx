@@ -2,7 +2,7 @@ import { useMemo, useRef, useState, useEffect } from "react";
 import type { TraceStore, CommitSummary } from "@react-lens/trace-engine";
 import type { ComponentId, CommitId } from "@react-lens/protocol";
 import { useTraceVersion } from "./useLens.js";
-import { ms } from "./format.js";
+import { ms } from "@react-lens/ui";
 
 const MIN_BAR = 5;
 const MAX_BAR = 30;

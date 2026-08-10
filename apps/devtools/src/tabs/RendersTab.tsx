@@ -1,6 +1,6 @@
 import type { RenderEvent } from "@react-lens/protocol";
 import type { InspectorContext } from "../Inspector.js";
-import { ms } from "../format.js";
+import { ms } from "@react-lens/ui";
 import { DiffLines, EmptyTab } from "./shared.js";
 import { diff } from "@react-lens/diff-engine";
 

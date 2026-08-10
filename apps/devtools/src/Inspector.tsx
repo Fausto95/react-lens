@@ -4,7 +4,7 @@ import type { TraceStore } from "@react-lens/trace-engine";
 import type { Causality } from "@react-lens/causality";
 import type { ComponentId, RenderId, RenderSnapshot } from "@react-lens/protocol";
 import { useTraceVersion } from "./useLens.js";
-import { ms } from "./format.js";
+import { ms } from "@react-lens/ui";
 import { WhySection } from "./tabs/OverviewTab.js";
 import { PropsTab } from "./tabs/PropsTab.js";
 import { StateTab } from "./tabs/StateTab.js";

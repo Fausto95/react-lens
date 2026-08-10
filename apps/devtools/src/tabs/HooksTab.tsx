@@ -1,7 +1,7 @@
 import type { HookKind } from "@react-lens/protocol";
 import type { InspectorContext } from "../Inspector.js";
-import { formatValue } from "../format.js";
-import { ValueView } from "../ValueView.js";
+import { formatValue } from "@react-lens/ui";
+import { ValueView } from "@react-lens/ui";
 import { EmptyTab } from "./shared.js";
 
 const KIND_COLOR: Partial<Record<HookKind, string>> = {

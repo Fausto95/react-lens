@@ -1,5 +1,5 @@
 import type { InspectorContext } from "../Inspector.js";
-import { formatValue } from "../format.js";
+import { formatValue } from "@react-lens/ui";
 import { EmptyTab } from "./shared.js";
 
 /**

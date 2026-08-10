@@ -1,6 +1,6 @@
 import { diff } from "@react-lens/diff-engine";
 import type { InspectorContext } from "../Inspector.js";
-import { ValueView, type EditFn } from "../ValueView.js";
+import { ValueView, type EditFn } from "@react-lens/ui";
 import { EmptyTab } from "./shared.js";
 
 /**

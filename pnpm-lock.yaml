@@ -241,6 +241,13 @@ importers:
         version: link:../protocol
 
   packages/ui:
+    dependencies:
+      '@react-lens/diff-engine':
+        specifier: workspace:*
+        version: link:../diff-engine
+      '@react-lens/protocol':
+        specifier: workspace:*
+        version: link:../protocol
     devDependencies:
       '@types/react':
         specifier: ^19
