@@ -210,7 +210,7 @@ export function Inspector({
         </Section>
       )}
 
-      <Section title="Relations">
+      <Section title="Stack">
         <RelationsTab ctx={ctx} />
       </Section>
 
