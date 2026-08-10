@@ -44,11 +44,18 @@ function EmbeddedPanel({ runtime }: { runtime: LensRuntime }) {
         setOverlayOn((v) => !v);
       }}
       onReplayCommit={(ids: ComponentId[]) => {
-        // Update Wave: light up the commit's components in sequence.
-        ids.forEach((id, i) => {
-          setTimeout(() => highlighter.show(runtime.domNodesOf(id)), i * 90);
+        // Update Wave: accumulate highlights so the commit's fanout builds up
+        // visibly (each rendered component stays lit as the wave progresses).
+        const groups = ids.map((id) => runtime.domNodesOf(id));
+        const acc: Node[] = [];
+        const step = ids.length > 20 ? 40 : 110;
+        groups.forEach((nodes, i) => {
+          setTimeout(() => {
+            acc.push(...nodes);
+            highlighter.show(acc);
+          }, i * step);
         });
-        setTimeout(() => highlighter.hide(), ids.length * 90 + 400);
+        setTimeout(() => highlighter.hide(), ids.length * step + 700);
       }}
       {...(edit ? { edit } : {})}
       onHighlight={(id: ComponentId | null) => {
