@@ -373,17 +373,15 @@ export function Timeline({
       stop();
       return;
     }
-    // Scrub forward from the playhead (or session start when live). With real
-    // time travel on, the page itself replays its state — the cosmetic update
-    // wave would just be noise on top. Without it, flash the wave for the
-    // components that commit from that point onward.
+    // Scrub forward from the playhead (or session start when live) and flash
+    // the update wave for the components that commit from that point onward —
+    // with time travel on it rides on top of the real state replay so the
+    // updating regions stay visible on the page.
     const from = cursor.mode === "historical" ? cursor.t : bounds.t0;
-    if (!travel?.on) {
-      const ids = sessionComponentIds(commits, from);
-      if (ids.length > 0) onReplay?.(ids);
-    }
+    const ids = sessionComponentIds(commits, from);
+    if (ids.length > 0) onReplay?.(ids);
     play(from, bounds.t1, false);
-  }, [playing, stop, play, cursor, bounds, commits, onReplay, travel?.on]);
+  }, [playing, stop, play, cursor, bounds, commits, onReplay]);
 
   /**
    * Rescale while keeping the time under `viewportX` (px from the viewport's
@@ -478,15 +476,11 @@ export function Timeline({
       zoomTo((scale || fit) * (e.deltaY < 0 ? 1.2 : 0.8), viewportX);
       return;
     }
-    // Over the waterfall lane a vertical wheel scrolls the lane itself; only
-    // translate deltaY→pan when the lane can't move further that way. Without
-    // this the pan fights the native scroll and the last rows feel unreachable.
+    // Over the waterfall lane a vertical wheel belongs to the lane, full stop —
+    // including at its edges. Falling through to deltaY→pan there made the view
+    // jump sideways exactly when overscrolling, which reads as broken.
     const lane = (e.target as HTMLElement).closest?.(".rl-wf-packed");
-    if (lane && Math.abs(e.deltaY) >= Math.abs(e.deltaX)) {
-      const down = e.deltaY > 0 && lane.scrollTop + lane.clientHeight < lane.scrollHeight - 1;
-      const up = e.deltaY < 0 && lane.scrollTop > 0;
-      if (down || up) return; // let the lane scroll natively
-    }
+    if (lane && Math.abs(e.deltaY) >= Math.abs(e.deltaX)) return;
     el.scrollLeft += e.deltaX || e.deltaY;
   };
 

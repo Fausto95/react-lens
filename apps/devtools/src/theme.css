@@ -1298,6 +1298,8 @@
   /* Vertical scroll only — horizontal panning belongs to the outer track
      scroller, and clipping x here cropped end-of-session boxes. */
   overflow: hidden auto;
+  /* Edge overscroll must not chain into the page/outer scroller. */
+  overscroll-behavior: contain;
 }
 .rl-wf-canvas { position: relative; width: 100%; }
 .rl-wf-phase {
