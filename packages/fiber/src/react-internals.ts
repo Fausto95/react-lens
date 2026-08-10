@@ -80,6 +80,10 @@ export interface DevToolsHook {
   onPostCommitFiberRoot?: (rendererId: number, root: FiberRoot) => void;
   /** Present when another tool (official DevTools) already installed a hook. */
   _lensChained?: boolean;
+  /** Set by the synchronous document_start stub that wins the hook slot. */
+  _lensStub?: boolean;
+  /** Roots the stub buffered before the heavy bridge loaded and chained. */
+  _lensQueue?: FiberRoot[];
 }
 
 const HOOK_KEY = "__REACT_DEVTOOLS_GLOBAL_HOOK__";

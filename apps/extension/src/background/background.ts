@@ -1,6 +1,40 @@
 import { PAGE_PORT_NAME, PANEL_PORT_PREFIX, type PortMessage } from "../transport.js";
 
 /**
+ * Register the synchronous hook stub as a MAIN-world script at document_start.
+ * We do this natively via chrome.scripting rather than as a @crxjs content
+ * script because @crxjs wraps content scripts in an `await import(...)` loader —
+ * that runs too late, after the page's React has already read (and cached the
+ * absence of) the DevTools hook. Native registration injects the raw file with
+ * no wrapper, so the stub reliably wins the hook slot before React evaluates.
+ */
+const HOOK_SCRIPT_ID = "react-lens-hook";
+
+async function registerHookStub(): Promise<void> {
+  try {
+    const existing = await chrome.scripting.getRegisteredContentScripts({ ids: [HOOK_SCRIPT_ID] });
+    if (existing.length > 0) return;
+    await chrome.scripting.registerContentScripts([
+      {
+        id: HOOK_SCRIPT_ID,
+        matches: ["<all_urls>"],
+        js: ["lens-hook.js"],
+        runAt: "document_start",
+        world: "MAIN",
+        allFrames: true,
+      },
+    ]);
+  } catch (err) {
+    console.error("[react-lens] failed to register hook stub", err);
+  }
+}
+
+chrome.runtime.onInstalled.addListener(() => void registerHookStub());
+chrome.runtime.onStartup.addListener(() => void registerHookStub());
+// Also on first service-worker spin-up (covers unpacked reloads).
+void registerHookStub();
+
+/**
  * Stateless relay (MV3 terminates it at will). Pairs a page port with the panel
  * port for the same tab and forwards messages both ways. All authoritative
  * state lives in the panel's trace store.

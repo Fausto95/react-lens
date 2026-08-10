@@ -165,9 +165,15 @@ export function createFiberBridge(target: typeof globalThis = globalThis): Fiber
     return findCurrentFiber(fiber);
   }
 
-  /** Cooperate with an already-installed hook rather than clobbering it. */
+  /**
+   * Cooperate with an already-installed hook rather than clobbering it. This is
+   * the normal path in the extension: our zero-import stub wins the hook slot at
+   * document_start and buffers commits; the heavy bridge loads later and chains.
+   * It also chains the official React DevTools hook when that's present instead.
+   */
   function chain(existing: DevToolsHook): void {
     if (existing._lensChained) return;
+    const isStub = existing._lensStub === true;
     // A renderer may already be registered; otherwise capture it at inject time.
     for (const r of existing.renderers.values()) captureRenderer(r);
     const originalInject = existing.inject?.bind(existing);
@@ -175,8 +181,10 @@ export function createFiberBridge(target: typeof globalThis = globalThis): Fiber
       captureRenderer(renderer);
       return originalInject ? originalInject(renderer) : 0;
     };
-    const originalCommit = existing.onCommitFiberRoot?.bind(existing);
-    const originalUnmount = existing.onCommitFiberUnmount?.bind(existing);
+    // The stub's only job was buffering, so don't keep forwarding to it — that
+    // would grow its queue forever. A real peer hook, though, must keep working.
+    const originalCommit = isStub ? undefined : existing.onCommitFiberRoot?.bind(existing);
+    const originalUnmount = isStub ? undefined : existing.onCommitFiberUnmount?.bind(existing);
     existing.onCommitFiberRoot = (id, root, priority) => {
       originalCommit?.(id, root, priority);
       handleCommit(root);
@@ -186,6 +194,23 @@ export function createFiberBridge(target: typeof globalThis = globalThis): Fiber
       handleUnmount(fiber);
     };
     existing._lensChained = true;
+
+    // Replay commits the stub captured before we loaded — this is what makes the
+    // already-mounted tree appear the moment the panel connects. Fibers mutate
+    // in place, so every buffered entry for a given root now points at the same
+    // final tree; replaying each would fabricate dozens of phantom commits. So
+    // we replay each distinct root exactly once (its current, settled state).
+    const queue = existing._lensQueue;
+    if (Array.isArray(queue) && queue.length > 0) {
+      const roots = queue.slice();
+      queue.length = 0;
+      const seen = new Set<FiberRoot>();
+      for (const root of roots) {
+        if (seen.has(root)) continue;
+        seen.add(root);
+        handleCommit(root);
+      }
+    }
   }
 
   function idOf(fiber: Fiber): ComponentId {
