@@ -1,14 +1,12 @@
-import { useMemo, useRef, useState, useEffect, useLayoutEffect, useCallback } from "react";
+import { useMemo, useRef, useState, useEffect, useCallback } from "react";
 import type { TraceStore, Interaction, CommitSummary } from "@react-lens/trace-engine";
 import type { Causality } from "@react-lens/causality";
-import type { ComponentId, RenderEvent, RenderId } from "@react-lens/protocol";
+import type { ComponentId, RenderId } from "@react-lens/protocol";
 import { explainInteraction, type LensRef, type NarrativeNextClick } from "@react-lens/explain";
 import {
   IconChevronDown,
   IconChevronRight,
   IconClose,
-  IconMarkA,
-  IconMarkB,
   IconMinus,
   IconPause,
   IconPlay,
@@ -23,20 +21,18 @@ import { NarrativeCard } from "./NarrativeCard.js";
 import { diagnoseOne } from "./doctor.js";
 
 type Mode = "collapsed" | "compact" | "expanded";
-/** Open sizes always include the Components lane; collapsed hides the tracks. */
+/** Open sizes always include the phase waterfall; collapsed hides the tracks. */
 const NEXT_MODE: Record<Mode, Mode> = {
   collapsed: "compact",
   compact: "expanded",
   expanded: "collapsed",
 };
 const SNAP_PX = 6;
-const LANE_LABEL_W = 88;
-const WATERFALL_MAX = 120;
 const WHY_CAP = 80;
 
 /**
- * Video-editor-style time machine: labeled lanes, real playhead, interactive
- * component waterfall, Premiere-like gestures. DOM-rendered (Canvas LOD later).
+ * Video-editor-style time machine: interaction / commit tracks plus a
+ * phase-packed component waterfall (no persistent component lanes).
  */
 export function Timeline({
   store,
@@ -47,6 +43,8 @@ export function Timeline({
   onSetAB,
   onReplay,
   onSelectComponent,
+  onHighlight,
+  selectedComponent = null,
   explainToken = 0,
 }: {
   store: TraceStore;
@@ -57,6 +55,10 @@ export function Timeline({
   onSetAB: (ab: ABMarks) => void;
   onReplay?: (ids: ComponentId[]) => void;
   onSelectComponent?: (id: ComponentId) => void;
+  /** Highlight DOM hosts on the page (same as tree hover). */
+  onHighlight?: (id: ComponentId | null) => void;
+  /** Currently selected component — keeps page highlight sticky after a bar click. */
+  selectedComponent?: ComponentId | null;
   /** Increment to open Explain for the current selection (⌘K). */
   explainToken?: number;
 }) {
@@ -286,22 +288,26 @@ export function Timeline({
       stop();
       return;
     }
-    // Transport play always scrubs the whole session (selection strip replays a clip).
+    // Transport play scrubs the whole session and flashes an update wave.
     const from = cursor.mode === "historical" ? cursor.t : bounds.t0;
     const ids = sessionComponentIds(commits);
     if (ids.length > 0) onReplay?.(ids);
     play(from, bounds.t1, false);
   }, [playing, stop, play, cursor, bounds, commits, onReplay]);
 
-  const replayInteraction = (it: Interaction) => {
+  const playSelection = useCallback(() => {
+    if (playing) {
+      stop();
+      return;
+    }
+    if (!selected) return;
     const ids =
-      it.metrics.componentIds.length > 0
-        ? it.metrics.componentIds
-        : uniqueComponentIds(it.renderIds.map((id) => store.getRender(id)?.componentId));
+      selected.metrics.componentIds.length > 0
+        ? selected.metrics.componentIds
+        : uniqueComponentIds(selected.renderIds.map((id) => store.getRender(id)?.componentId));
     if (ids.length > 0) onReplay?.(ids);
-    setSelectedId(it.id);
-    play(it.start, it.end, false);
-  };
+    play(selected.start, selected.end, false);
+  }, [playing, stop, selected, store, onReplay, play]);
 
   // Keyboard: T, L, [ ], Space, arrows
   useEffect(() => {
@@ -395,7 +401,7 @@ export function Timeline({
             mode === "collapsed"
               ? "Show timeline (T)"
               : mode === "compact"
-                ? "Expand components lane (T)"
+                ? "Expand phase waterfall (T)"
                 : "Collapse timeline (T)"
           }
           aria-label="Cycle timeline size (T)"
@@ -433,6 +439,22 @@ export function Timeline({
             aria-label={playing ? "Pause" : "Play session"}
           >
             {playing ? <IconPause size={12} /> : <IconPlay size={12} />}
+          </button>
+          <button
+            className="rl-icon-btn rl-tl-play-sel"
+            onClick={playSelection}
+            disabled={!selected}
+            title={
+              selected
+                ? playing
+                  ? "Pause"
+                  : `Play selected · ${selected.label}`
+                : "Select an interaction to play"
+            }
+            aria-label={selected ? "Play selected interaction" : "Play selected interaction (none selected)"}
+          >
+            <IconPlay size={11} />
+            <span className="rl-tl-play-sel-mark" aria-hidden />
           </button>
           <button
             className="rl-icon-btn"
@@ -495,11 +517,20 @@ export function Timeline({
           <div className="rl-tl-empty">No activity yet — interact with the page.</div>
         ) : (
           <div className="rl-tl-body">
-            <div className="rl-tl-labels" style={{ width: LANE_LABEL_W }}>
+            <div className="rl-tl-labels">
               <div className="rl-tl-label rl-tl-label-ruler" />
-              <div className="rl-tl-label">Interactions</div>
-              <div className="rl-tl-label">Commits</div>
-              <div className="rl-tl-label rl-tl-label-wf">Components</div>
+              <div className="rl-tl-label" title="Interactions">
+                <span className="rl-tl-label-full">Interact</span>
+                <span className="rl-tl-label-short">Ixn</span>
+              </div>
+              <div className="rl-tl-label" title="Commits">
+                <span className="rl-tl-label-full">Commits</span>
+                <span className="rl-tl-label-short">Cmt</span>
+              </div>
+              <div className="rl-tl-label rl-tl-label-wf" title="Components">
+                <span className="rl-tl-label-full">Comps</span>
+                <span className="rl-tl-label-short">Cmp</span>
+              </div>
             </div>
             <div className="rl-tl-scroll" ref={scrollRef} onWheel={onWheel}>
               <div
@@ -544,9 +575,8 @@ export function Timeline({
                         style={{
                           left: xOf(it.start),
                           width: Math.max(3, xOf(it.end) - xOf(it.start)),
-                          background: `rgba(${c},0.16)`,
-                          borderColor: `rgba(${c},0.55)`,
-                          color: `rgb(${c})`,
+                          background: `rgba(${c},0.1)`,
+                          borderColor: `rgba(${c},0.28)`,
                         }}
                         title={`${it.label} · ${ms(it.metrics.totalDuration)} · ${it.metrics.renderCount} renders`}
                         onPointerDown={(e) => {
@@ -609,20 +639,25 @@ export function Timeline({
                   })}
                 </div>
 
-                {/* Component waterfall — always when timeline is open */}
+                {/* Phase-packed component bars (no persistent lanes) */}
                 <div className="rl-tl-track rl-tl-track-wf">
-                  {selected ? (
-                    <ComponentWaterfall
-                      store={store}
-                      causality={causality}
-                      interaction={selected}
-                      playheadT={cursorT}
-                      xOf={xOf}
-                      onSelectComponent={onSelectComponent}
-                    />
-                  ) : (
-                    <div className="rl-tl-wf-empty">Select an interaction</div>
-                  )}
+                  <PhaseWaterfall
+                    store={store}
+                    causality={causality}
+                    interactions={interactions}
+                    selectedId={selectedId}
+                    playheadT={cursorT}
+                    xOf={xOf}
+                    onSelectComponent={onSelectComponent}
+                    onHighlight={onHighlight}
+                    selectedComponent={selectedComponent}
+                    onSeek={(t) => onCursor({ t, mode: "historical" })}
+                    onSelectInteraction={(id) => {
+                      setSelectedId(id);
+                      const it = interactions.find((i) => i.id === id);
+                      if (it) onCursor({ t: it.start, mode: "historical" });
+                    }}
+                  />
                 </div>
 
                 {/* Idle gaps */}
@@ -690,11 +725,6 @@ export function Timeline({
           anomalyCommit={cursorAnomaly}
           anomaly={anomaly}
           causality={causality}
-          ab={ab}
-          onSetA={() => onSetAB({ ...ab, a: cursorT })}
-          onSetB={() => onSetAB({ ...ab, b: cursorT })}
-          onReplay={replayInteraction}
-          onFit={selected ? () => fitSelection(selected) : undefined}
           onSelectComponent={onSelectComponent}
           onCursor={onCursor}
           explainToken={explainToken}
@@ -710,11 +740,6 @@ function SelectionStrip({
   anomalyCommit,
   anomaly,
   causality,
-  ab,
-  onSetA,
-  onSetB,
-  onReplay,
-  onFit,
   onSelectComponent,
   onCursor,
   explainToken,
@@ -724,11 +749,6 @@ function SelectionStrip({
   anomalyCommit: CommitSummary | null;
   anomaly: AnomalyStats;
   causality: Causality;
-  ab: ABMarks;
-  onSetA: () => void;
-  onSetB: () => void;
-  onReplay: (it: Interaction) => void;
-  onFit?: () => void;
   onSelectComponent?: (id: ComponentId) => void;
   onCursor: (c: TimeCursor) => void;
   explainToken: number;
@@ -818,50 +838,18 @@ function SelectionStrip({
             </span>
           )}
         </div>
-        <div className="rl-tl-card-actions" role="toolbar" aria-label="Selection actions">
-          {interaction && (
+        {interaction && (
+          <div className="rl-tl-card-actions" role="toolbar" aria-label="Selection actions">
             <button
-              className={`rl-icon-btn${explainOpen ? " active" : ""}`}
+              className={`rl-btn${explainOpen ? " primary" : ""}`}
               onClick={() => setExplainOpen((v) => !v)}
-              title="Explain this interaction"
-              aria-label="Explain this interaction"
+              title="Explain this interaction (why it cost what it cost)"
               aria-pressed={explainOpen}
             >
-              ?
+              Explain
             </button>
-          )}
-          <button
-            className={`rl-icon-btn mark-a${ab.a !== undefined ? " active" : ""}`}
-            onClick={onSetA}
-            title="Set comparison A at cursor"
-            aria-label="Set comparison A at cursor"
-          >
-            <IconMarkA size={13} />
-          </button>
-          <button
-            className={`rl-icon-btn mark-b${ab.b !== undefined ? " active" : ""}`}
-            onClick={onSetB}
-            title="Set comparison B at cursor"
-            aria-label="Set comparison B at cursor"
-          >
-            <IconMarkB size={13} />
-          </button>
-          {onFit && (
-            <button className="rl-icon-btn" onClick={onFit} title="Fit selection" aria-label="Fit selection">
-              <span className="rl-tl-fit-glyph">⛶</span>
-            </button>
-          )}
-          {interaction && (
-            <button
-              className="rl-icon-btn primary"
-              onClick={() => onReplay(interaction)}
-              title="Replay interaction on page"
-              aria-label="Replay interaction on page"
-            >
-              <IconPlay size={12} />
-            </button>
-          )}
-        </div>
+          </div>
+        )}
       </div>
       {narrative && (
         <NarrativeCard
@@ -876,35 +864,174 @@ function SelectionStrip({
 }
 
 /**
- * Ranked component tracks for the selected interaction. Name gutter stays
- * pinned while panning time; heat clips share session xOf with other lanes.
+ * Phase-scoped packed waterfall: one column per interaction. Each bar is one
+ * render (re-renders of the same component show as separate bars). Width is
+ * cost-scaled inside the phase column; order follows render time.
  */
-function ComponentWaterfall({
+function PhaseWaterfall({
   store,
   causality,
-  interaction,
+  interactions,
+  selectedId,
   playheadT,
   xOf,
   onSelectComponent,
+  onHighlight,
+  selectedComponent = null,
+  onSelectInteraction,
+  onSeek,
 }: {
   store: TraceStore;
   causality: Causality;
-  interaction: Interaction;
+  interactions: Interaction[];
+  selectedId: string | null;
   playheadT: number;
   xOf: (t: number) => number;
   onSelectComponent?: (id: ComponentId) => void;
+  onHighlight?: (id: ComponentId | null) => void;
+  selectedComponent?: ComponentId | null;
+  onSelectInteraction?: (id: string) => void;
+  onSeek?: (t: number) => void;
 }) {
-  const rootRef = useRef<HTMLDivElement>(null);
+  const packed = useMemo(
+    () => packPhaseBars(store, causality, interactions, xOf),
+    [store, causality, interactions, xOf],
+  );
 
-  const rows = useMemo(() => {
-    const renders = interaction.renderIds
-      .map((id) => store.getRender(id))
-      .filter((r): r is RenderEvent => r != null)
-      .sort((a, b) => b.selfDuration - a.selfDuration)
-      .slice(0, WATERFALL_MAX);
-    const maxSelf = Math.max(1, ...renders.map((r) => r.selfDuration));
-    let whyChecked = 0;
-    return renders.map((r, rank) => {
+  if (interactions.length === 0 || packed.bars.length === 0) {
+    return <div className="rl-tl-wf-empty">No component activity yet</div>;
+  }
+
+  const canvasH = PHASE_PAD_Y + packed.trackCount * TRACK_H + 6;
+
+  return (
+    <div className="rl-wf-packed" style={{ minHeight: canvasH }}>
+      {packed.phases.map((phase) => {
+        const selected = selectedId === phase.id;
+        const dim = selectedId != null && !selected;
+        return (
+          <div
+            key={phase.id}
+            className={`rl-wf-phase${selected ? " sel" : ""}${dim ? " dim" : ""}`}
+            style={{ left: phase.left, width: Math.max(8, phase.width) }}
+            title={`${phase.label} · ${phase.renderCount} renders · ${phase.barCount} shown`}
+            onPointerDown={(e) => {
+              e.stopPropagation();
+              onSelectInteraction?.(phase.id);
+            }}
+          >
+            <div className="rl-wf-phase-rule" aria-hidden />
+          </div>
+        );
+      })}
+
+      {packed.bars.map((bar) => {
+        const underPlayhead = playheadT >= bar.t0 - 0.25 && playheadT <= bar.t1;
+        const dim = selectedId != null && selectedId !== bar.phaseId;
+        const rgb = componentRgb(bar.id);
+        const fillA = 0.07 + bar.heat * 0.1;
+        const borderA = 0.22 + bar.heat * 0.12;
+        return (
+          <button
+            type="button"
+            key={`${bar.phaseId}-${bar.renderId}`}
+            className={`rl-wf-bar${bar.wasted ? " wasted" : ""}${underPlayhead ? " under-playhead" : ""}${dim ? " dim" : ""}`}
+            style={{
+              left: bar.left,
+              width: bar.width,
+              top: PHASE_PAD_Y + bar.track * TRACK_H,
+              height: BAR_H,
+              ["--rl-wf-fill" as string]: `rgba(${rgb},${fillA})`,
+              ["--rl-wf-border" as string]: `rgba(${rgb},${borderA})`,
+              ["--rl-wf-tick" as string]: `rgba(${rgb},${0.32 + bar.heat * 0.28})`,
+            }}
+            title={`${bar.name} · ${ms(bar.self)} · ${bar.reason}${bar.wasted ? " · no visible change" : ""} · ${bar.phaseLabel}`}
+            onPointerEnter={() => onHighlight?.(bar.id)}
+            onPointerLeave={() => onHighlight?.(selectedComponent ?? null)}
+            onClick={(e) => {
+              e.stopPropagation();
+              onSelectInteraction?.(bar.phaseId);
+              onSelectComponent?.(bar.id);
+              onHighlight?.(bar.id);
+              onSeek?.(bar.t0);
+            }}
+          >
+            <span className="rl-wf-bar-label">{bar.name}</span>
+            {bar.width >= 64 && <span className="rl-wf-bar-ms">{ms(bar.self)}</span>}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+const PHASE_PAD_Y = 8;
+const TRACK_H = 28;
+const BAR_H = 22;
+const PHASE_BAR_CAP = 64;
+/** Minimum readable bar width inside a phase column. */
+const MIN_BAR_PX = 56;
+
+interface PackedBar {
+  id: ComponentId;
+  renderId: RenderId;
+  name: string;
+  phaseId: string;
+  phaseLabel: string;
+  t0: number;
+  t1: number;
+  self: number;
+  heat: number;
+  wasted: boolean;
+  reason: string;
+  track: number;
+  left: number;
+  width: number;
+}
+
+interface PackedPhase {
+  id: string;
+  label: string;
+  left: number;
+  width: number;
+  barCount: number;
+  renderCount: number;
+}
+
+function packPhaseBars(
+  store: TraceStore,
+  causality: Causality,
+  interactions: Interaction[],
+  xOf: (t: number) => number,
+): { phases: PackedPhase[]; bars: PackedBar[]; trackCount: number } {
+  const phases: PackedPhase[] = [];
+  const bars: PackedBar[] = [];
+  let trackCount = 1;
+  let whyChecked = 0;
+
+  for (const it of interactions) {
+    const phaseLeft = xOf(it.start);
+    const phaseRight = xOf(Math.max(it.end, it.start + 0.05));
+    const phaseWidth = Math.max(8, phaseRight - phaseLeft);
+
+    type Agg = {
+      id: ComponentId;
+      renderId: RenderId;
+      name: string;
+      t0: number;
+      t1: number;
+      self: number;
+      wasted: boolean;
+      reason: string;
+    };
+    const items: Agg[] = [];
+
+    for (const rid of it.renderIds) {
+      const r = store.getRender(rid);
+      if (!r) continue;
+      const name = store.instance(r.componentId)?.name ?? `#${r.componentId}`;
+      const t0 = r.timestamp;
+      const t1 = r.timestamp + Math.max(r.selfDuration, 0.05);
       let wasted = false;
       if (whyChecked < WHY_CAP) {
         whyChecked++;
@@ -914,89 +1041,109 @@ function ComponentWaterfall({
           /* ignore */
         }
       }
-      const reason = r.reasons[0]?.type ?? "render";
-      const t0 = r.timestamp;
-      const t1 = r.timestamp + Math.max(r.selfDuration, 0.05);
-      const x0 = xOf(t0);
-      const x1 = xOf(t1);
-      return {
+      items.push({
         id: r.componentId,
-        name: store.instance(r.componentId)?.name ?? `#${r.componentId}`,
-        rank: rank + 1,
-        left: x0,
-        width: Math.max(4, x1 - x0),
-        self: r.selfDuration,
-        heat: r.selfDuration / maxSelf,
-        wasted,
-        reason,
+        renderId: r.renderId,
+        name,
         t0,
         t1,
+        self: r.selfDuration,
+        wasted,
+        reason: r.reasons[0]?.type ?? "render",
+      });
+    }
+
+    // One bar per render (re-renders stay visible), ranked by self-time.
+    const ranked = [...items].sort((a, b) => b.self - a.self).slice(0, PHASE_BAR_CAP);
+
+    phases.push({
+      id: it.id,
+      label: it.label,
+      left: phaseLeft,
+      width: phaseWidth,
+      barCount: ranked.length,
+      renderCount: items.length,
+    });
+
+    if (ranked.length === 0) continue;
+
+    const maxSelf = Math.max(1e-6, ...ranked.map((a) => a.self));
+    const act0 = Math.min(...ranked.map((a) => a.t0));
+    const act1 = Math.max(...ranked.map((a) => a.t1));
+    const actSpan = Math.max(act1 - act0, 1e-6);
+
+    const pad = Math.min(6, phaseWidth * 0.04);
+    const innerW = Math.max(4, phaseWidth - pad * 2);
+
+    const laid = ranked.map((item) => {
+      const heat = item.self / maxSelf;
+      const width = Math.min(
+        innerW,
+        Math.max(Math.min(MIN_BAR_PX, innerW), heat * innerW * 0.92),
+      );
+      const rel = (item.t0 - act0) / actSpan;
+      const maxLeft = innerW - width;
+      const left = phaseLeft + pad + Math.max(0, Math.min(Math.max(0, maxLeft), rel * maxLeft));
+      return {
+        ...item,
+        heat,
+        left,
+        width,
+        pack0: left,
+        pack1: left + width,
       };
     });
-  }, [store, causality, interaction, xOf]);
 
-  // Pin gutters via DOM (not React state) so panning 60+ rows stays cheap.
-  useLayoutEffect(() => {
-    const root = rootRef.current;
-    const scroller = root?.closest(".rl-tl-scroll");
-    if (!root || !scroller) return;
-    const sync = () => {
-      const transform = `translateX(${scroller.scrollLeft}px)`;
-      root.querySelectorAll<HTMLElement>("[data-rl-pin]").forEach((el) => {
-        el.style.transform = transform;
+    const packedItems = greedyPack(
+      laid.map((item) => ({ ...item, t0: item.pack0, t1: item.pack1 })),
+    );
+    for (const item of packedItems) {
+      trackCount = Math.max(trackCount, item.track + 1);
+      const real = ranked.find((r) => r.renderId === item.renderId)!;
+      bars.push({
+        id: item.id,
+        renderId: item.renderId,
+        name: item.name,
+        phaseId: it.id,
+        phaseLabel: it.label,
+        t0: real.t0,
+        t1: real.t1,
+        self: item.self,
+        heat: item.heat,
+        wasted: item.wasted,
+        reason: item.reason,
+        track: item.track,
+        left: item.left,
+        width: item.width,
       });
-    };
-    sync();
-    scroller.addEventListener("scroll", sync, { passive: true });
-    return () => scroller.removeEventListener("scroll", sync);
-  }, [interaction.id, rows]);
-
-  if (rows.length === 0) {
-    return <div className="rl-tl-wf-empty">No renders in this interaction</div>;
+    }
   }
 
-  return (
-    <div className="rl-wf" ref={rootRef}>
-      <div className="rl-wf-head">
-        <span className="rl-wf-head-sticky" data-rl-pin>
-          {rows.length} ranked by self
-        </span>
-      </div>
-      <div className="rl-wf-rows">
-        {rows.map((row, i) => {
-          const underPlayhead = playheadT >= row.t0 - 0.25 && playheadT <= row.t1;
-          return (
-            <button
-              type="button"
-              className={`rl-wf-row${row.wasted ? " wasted" : ""}${underPlayhead ? " under-playhead" : ""}`}
-              key={`${row.id}-${i}`}
-              title={`${row.name} · ${ms(row.self)} · ${row.reason}${row.wasted ? " · no visible change" : ""}`}
-              onClick={() => onSelectComponent?.(row.id)}
-            >
-              <span className="rl-wf-canvas" aria-hidden>
-                <span
-                  className="rl-wf-clip"
-                  style={{
-                    left: row.left,
-                    width: row.width,
-                    background: heatColor(row.self),
-                    opacity: 0.55 + row.heat * 0.45,
-                    height: `${6 + Math.round(row.heat * 6)}px`,
-                  }}
-                />
-              </span>
-              <span className="rl-wf-gutter" data-rl-pin>
-                <span className="rl-wf-rank">#{row.rank}</span>
-                <span className="rl-wf-name">{row.name}</span>
-                {row.wasted && <span className="rl-wf-pip" title="No observable change" />}
-                <span className="rl-wf-ms">{ms(row.self)}</span>
-              </span>
-            </button>
-          );
-        })}
-      </div>
-    </div>
+  return { phases, bars, trackCount: Math.min(trackCount, 16) };
+}
+
+/** Assign non-overlapping tracks (greedy). Intervals are display px here. */
+function greedyPack<T extends { t0: number; t1: number }>(
+  items: T[],
+): Array<T & { track: number }> {
+  const sorted = [...items].sort(
+    (a, b) => a.t0 - b.t0 || b.t1 - b.t0 - (a.t1 - a.t0),
   );
+  const trackEnds: number[] = [];
+  return sorted.map((item) => {
+    let track = trackEnds.findIndex((end) => end <= item.t0 + 0.5);
+    if (track < 0) {
+      track = trackEnds.length;
+      trackEnds.push(item.t1);
+    } else {
+      trackEnds[track] = item.t1;
+    }
+    return { ...item, track };
+  });
+}
+
+function componentRgb(id: ComponentId): string {
+  return PALETTE[Math.abs(Number(id)) % PALETTE.length]!;
 }
 
 // ── helpers ──────────────────────────────────────────────────────────────────
@@ -1023,13 +1170,20 @@ function percentile(sorted: number[], p: number): number {
   return sorted[i] ?? 0;
 }
 
+/** Desaturated identity hues — Linear/Vercel quiet, not neon. */
 const PALETTE = [
-  "167,139,250", "96,165,250", "52,211,153", "251,191,36",
-  "244,114,182", "45,212,191", "251,146,60", "129,140,248",
+  "120,132,152", // slate
+  "108,138,142", // muted teal
+  "138,128,148", // mauve
+  "148,136,118", // warm stone
+  "112,142,132", // sage
+  "148,126,128", // dusty rose
+  "122,134,156", // soft periwinkle
+  "132,138,126", // olive gray
 ];
 function intColor(it: Interaction, i: number): string {
-  if (it.kind === "load") return "148,163,184";
-  if (it.kind === "system") return "100,116,139";
+  if (it.kind === "load") return "130,138,150";
+  if (it.kind === "system") return "110,118,130";
   return PALETTE[i % PALETTE.length]!;
 }
 

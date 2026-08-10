@@ -418,7 +418,9 @@ export function Panel({
         onCursor={setCursor}
         onSetAB={setAB}
         onSelectComponent={setSelected}
+        selectedComponent={selected}
         explainToken={explainToken}
+        {...(onHighlight ? { onHighlight } : {})}
         {...(onReplayCommit ? { onReplay: onReplayCommit } : {})}
       />
 

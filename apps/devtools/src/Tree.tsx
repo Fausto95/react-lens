@@ -15,10 +15,10 @@ import { ms } from "@react-lens/ui";
 
 type TreeMode = "components" | "changed" | "waste";
 
-const MODES: Array<{ id: TreeMode; label: string; hint: string }> = [
-  { id: "components", label: "Components", hint: "Full ownership tree" },
-  { id: "changed", label: "Changed", hint: "Rendered with observable output change" },
-  { id: "waste", label: "Potential Waste", hint: "Rendered with no observable change" },
+const MODES: Array<{ id: TreeMode; label: string; compact: string; hint: string }> = [
+  { id: "components", label: "Components", compact: "All", hint: "Full ownership tree" },
+  { id: "changed", label: "Changed", compact: "Δ", hint: "Rendered with observable output change" },
+  { id: "waste", label: "Potential Waste", compact: "Waste", hint: "Rendered with no observable change" },
 ];
 
 export function Tree({
@@ -137,7 +137,8 @@ export function Tree({
               title={m.hint}
               onClick={() => setMode(m.id)}
             >
-              {m.label}
+              <span className="rl-mode-full">{m.label}</span>
+              <span className="rl-mode-compact">{m.compact}</span>
             </button>
           ))}
         </div>
@@ -276,11 +277,19 @@ function TreeRow({
         )}
       </div>
 
-      <span className="rl-flame">
-        <span className="rl-flame-bar" style={{ width: `${(self / maxSelf) * 100}%` }} />
+      <span
+        className="rl-tree-stats"
+        title={`${rowRenders(row)}×${self > 0 ? ` · ${ms(self)}` : ""}`}
+      >
+        <span className="rl-flame" aria-hidden>
+          <span className="rl-flame-bar" style={{ width: `${(self / maxSelf) * 100}%` }} />
+        </span>
+        <span className="rl-tree-metric rl-tree-renders">{rowRenders(row)}×</span>
+        <span className="rl-tree-metric rl-tree-ms dim">{self > 0 ? ms(self) : ""}</span>
+        <span className="rl-tree-stats-compact">
+          {rowRenders(row)}×{self > 0 ? ` · ${ms(self)}` : ""}
+        </span>
       </span>
-      <span className="rl-tree-metric rl-tree-renders">{rowRenders(row)}×</span>
-      <span className="rl-tree-metric rl-tree-ms dim">{self > 0 ? ms(self) : ""}</span>
     </div>
   );
 }
