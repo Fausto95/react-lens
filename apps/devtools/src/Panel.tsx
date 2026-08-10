@@ -21,6 +21,7 @@ import {
 } from "./session.js";
 import { WasteBanner } from "./WasteBanner.js";
 import { sourceResolver } from "./sourceResolver.js";
+import { createTooltipLayer } from "./tooltip.js";
 import "./theme.css";
 
 export { configureSourceFetcher, getSourceResolver } from "./sourceResolver.js";
@@ -93,6 +94,15 @@ export function Panel({
   const { width, onResizeStart } = useDockResize(embedded);
   const { splitPct, bodyRef, onSplitStart } = usePaneSplit();
   const stats = store.stats();
+
+  // Fast themed tooltips for every `title` in the panel (see tooltip.ts).
+  const rootRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = rootRef.current;
+    if (!el) return;
+    const tooltips = createTooltipLayer(el);
+    return () => tooltips.dispose();
+  }, []);
 
   useEffect(() => {
     if (selectComponent == null) return;
@@ -295,6 +305,7 @@ export function Panel({
 
   return (
     <div
+      ref={rootRef}
       className={`rl-root${embedded ? " rl-embedded" : ""}`}
       style={embedded && width ? { width } : undefined}
     >

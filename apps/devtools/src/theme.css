@@ -1471,3 +1471,26 @@
   70% { box-shadow: 0 0 0 5px rgba(248,113,113,0); }
   100% { box-shadow: 0 0 0 0 rgba(248,113,113,0); }
 }
+
+/* Fast custom tooltip (tooltip.ts) — replaces the slow native title bubble. */
+.rl-tooltip {
+  position: fixed;
+  z-index: 2147483002;
+  max-width: 280px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  background: var(--rl-bg-active);
+  border: 1px solid var(--rl-border-strong);
+  color: var(--rl-text);
+  font-family: var(--rl-font);
+  font-size: 11px;
+  line-height: 1.45;
+  white-space: pre-line;
+  overflow-wrap: break-word;
+  pointer-events: none;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.45);
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 80ms ease-out, visibility 80ms;
+}
+.rl-tooltip.visible { opacity: 1; visibility: visible; }
