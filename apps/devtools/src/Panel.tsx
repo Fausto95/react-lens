@@ -310,6 +310,7 @@ export function Panel({
         ab={ab}
         onCursor={setCursor}
         onSetAB={setAB}
+        onSelectComponent={setSelected}
         {...(onReplayCommit ? { onReplay: onReplayCommit } : {})}
       />
 
