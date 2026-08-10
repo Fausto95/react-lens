@@ -23,6 +23,11 @@ export interface SourceResolver {
 type Fetcher = (url: string) => Promise<string>;
 
 const defaultFetch: Fetcher = async (url) => {
+  // Only fetch absolute http(s) URLs. A bare pathname would resolve against the
+  // caller's origin — in the extension panel that's chrome-extension://, which
+  // logs a noisy ERR_FILE_NOT_FOUND for every lookup. Bail before fetch so the
+  // resolver degrades quietly to null instead.
+  if (!/^https?:\/\//.test(url)) throw new Error(`unsupported source url: ${url}`);
   const res = await fetch(url);
   if (!res.ok) throw new Error(`fetch ${url}: ${res.status}`);
   return res.text();

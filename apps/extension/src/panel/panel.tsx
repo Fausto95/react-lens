@@ -16,17 +16,43 @@ function ExtensionPanel() {
   const portRef = useRef<chrome.runtime.Port | null>(null);
 
   useEffect(() => {
+    let disposed = false;
     const tabId = chrome.devtools.inspectedWindow.tabId;
-    const port = chrome.runtime.connect({ name: `${PANEL_PORT_PREFIX}${tabId}` });
-    portRef.current = port;
 
-    port.onMessage.addListener((msg: PortMessage) => {
-      // Both live tree frames and on-demand snapshot responses ingest the same
-      // way — snapshot frames just carry a single snapshot and no events.
-      if (msg.kind === "frame" || msg.kind === "snapshot") store.ingest(msg.frame);
-    });
-    return () => port.disconnect();
+    // The background service worker is recycled at will, which disconnects this
+    // port. Reconnect when that happens: the background re-sends `panel-ready`,
+    // the content buffer replays, and the store dedupes by renderId — so the
+    // trace survives worker restarts without gaps or double-counting.
+    const connect = () => {
+      if (disposed) return;
+      const port = chrome.runtime.connect({ name: `${PANEL_PORT_PREFIX}${tabId}` });
+      portRef.current = port;
+      port.onMessage.addListener((msg: PortMessage) => {
+        // Live tree frames and on-demand snapshot responses ingest the same way.
+        if (msg.kind === "frame" || msg.kind === "snapshot") store.ingest(msg.frame);
+      });
+      port.onDisconnect.addListener(() => {
+        portRef.current = null;
+        if (!disposed) setTimeout(connect, 500);
+      });
+    };
+    connect();
+    return () => {
+      disposed = true;
+      portRef.current?.disconnect();
+    };
   }, [store]);
+
+  // Guard every send: the port may be mid-reconnect after a worker recycle.
+  const send = (msg: PortMessage) => {
+    const port = portRef.current;
+    if (!port) return;
+    try {
+      port.postMessage(msg);
+    } catch {
+      portRef.current = null;
+    }
+  };
 
   return (
     <Panel
@@ -36,17 +62,11 @@ function ExtensionPanel() {
       onToggleRecording={() => {
         const next = !recording;
         setRecording(next);
-        portRef.current?.postMessage({ kind: "record", recording: next } satisfies PortMessage);
+        send({ kind: "record", recording: next });
       }}
-      onRequestSnapshot={(renderId) =>
-        portRef.current?.postMessage({ kind: "snapshot-request", renderId } satisfies PortMessage)
-      }
-      onHighlight={(componentId) =>
-        portRef.current?.postMessage({ kind: "highlight", componentId } satisfies PortMessage)
-      }
-      onReplayCommit={(componentIds) =>
-        portRef.current?.postMessage({ kind: "replay", componentIds } satisfies PortMessage)
-      }
+      onRequestSnapshot={(renderId) => send({ kind: "snapshot-request", renderId })}
+      onHighlight={(componentId) => send({ kind: "highlight", componentId })}
+      onReplayCommit={(componentIds) => send({ kind: "replay", componentIds })}
     />
   );
 }

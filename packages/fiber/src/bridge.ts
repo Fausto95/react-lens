@@ -513,13 +513,11 @@ function parseStackSource(stack: string): SourceLocation | undefined {
     if (SKIP_FRAME.test(line)) continue;
     const m = /\(?((?:https?:\/\/[^\s)]+?)|(?:\/[^\s)]+?)):(\d+):(\d+)\)?\s*$/.exec(line);
     if (!m) continue;
-    let file = m[1]!;
-    try {
-      file = new URL(file).pathname;
-    } catch {
-      // already a path
-    }
-    return { file: file.split("?")[0]!, line: Number(m[2]), column: Number(m[3]) };
+    // Keep the full origin (http://host:port/…): the panel is a different
+    // origin in the extension and must fetch the source by absolute URL, not a
+    // bare pathname (which would resolve against chrome-extension:// → 404).
+    const file = m[1]!.split("?")[0]!;
+    return { file, line: Number(m[2]), column: Number(m[3]) };
   }
   return undefined;
 }

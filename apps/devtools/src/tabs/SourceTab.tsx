@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import type { ComponentInstance, SourceLocation } from "@react-lens/protocol";
 import { definitionLine } from "@react-lens/diagnostics";
+import { shortSource } from "@react-lens/ui";
 import type { InspectorContext } from "../Inspector.js";
 import { sourceResolver as resolver } from "../sourceResolver.js";
 import { EmptyTab } from "./shared.js";
@@ -51,7 +52,7 @@ export function SourceTab({ inst }: { inst: ComponentInstance; ctx: InspectorCon
   // original location; else the raw compiled creation site.
   const shown = original ?? compiled;
   const line = defLine ?? shown.line;
-  const location = `${shown.file}:${line}`;
+  const location = `${shortSource(shown.file)}:${line}`;
   const kind = defLine != null ? "definition" : original ? "original" : "compiled";
 
   return (
@@ -69,7 +70,7 @@ export function SourceTab({ inst }: { inst: ComponentInstance; ctx: InspectorCon
         )}
       </div>
       {kind !== "compiled" && (
-        <div className="rl-source-sub">compiled: {compiled.file}:{compiled.line}</div>
+        <div className="rl-source-sub">compiled: {shortSource(compiled.file)}:{compiled.line}</div>
       )}
       <div className="rl-actions">
         <button className="rl-btn" onClick={() => copy(location)}>

@@ -104,6 +104,9 @@ export class TraceStore {
   }
 
   private addEvent(event: LensEvent): void {
+    // Idempotent on renderId: the content-script buffer can replay (e.g. after a
+    // panel reconnect), and re-ingesting the same render must not double-count.
+    if (event.type === "render" && this.rendersById.has(event.renderId)) return;
     this.events.push(event);
     if (event.type === "render") {
       const buf = this.rendersByComponent.get(event.componentId) ??

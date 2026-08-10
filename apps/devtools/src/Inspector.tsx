@@ -4,7 +4,7 @@ import type { TraceStore } from "@react-lens/trace-engine";
 import type { Causality } from "@react-lens/causality";
 import type { ComponentId, RenderId, RenderSnapshot } from "@react-lens/protocol";
 import { useTraceVersion } from "./useLens.js";
-import { ms } from "@react-lens/ui";
+import { ms, shortSource } from "@react-lens/ui";
 import { WhySection } from "./tabs/OverviewTab.js";
 import { PropsTab } from "./tabs/PropsTab.js";
 import { StateTab } from "./tabs/StateTab.js";
@@ -124,7 +124,7 @@ export function Inspector({
         )}
       </div>
       <div className="rl-source">
-        {inst.source ? `${inst.source.file}:${inst.source.line}` : "source unavailable"}
+        {inst.source ? `${shortSource(inst.source.file)}:${inst.source.line}` : "source unavailable"}
         {" · "}
         {store.renderCount(componentId)} renders · {ms(store.selfTimeTotal(componentId))}
       </div>

@@ -48,3 +48,18 @@ export function ms(n: number): string {
   if (n < 10) return `${n.toFixed(1)}ms`;
   return `${Math.round(n)}ms`;
 }
+
+/**
+ * Display form of a source file: drop the origin so an absolute URL
+ * (http://host:port/src/App.tsx) reads as a repo-relative path. Source
+ * locations keep the full URL so the panel can fetch cross-origin.
+ */
+export function shortSource(file: string): string {
+  let path = file;
+  try {
+    path = new URL(file).pathname;
+  } catch {
+    // already a path
+  }
+  return path.replace(/^.*?\/(src\/)/, "$1").replace(/^\//, "");
+}
