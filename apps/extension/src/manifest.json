@@ -1,0 +1,28 @@
+{
+  "manifest_version": 3,
+  "name": "React Lens",
+  "version": "0.0.0",
+  "description": "React observability for development. See why your React app behaves the way it does.",
+  "minimum_chrome_version": "116",
+  "devtools_page": "src/devtools/devtools.html",
+  "background": {
+    "service_worker": "src/background/background.ts",
+    "type": "module"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["src/content/content.ts"],
+      "run_at": "document_start",
+      "world": "ISOLATED"
+    },
+    {
+      "matches": ["<all_urls>"],
+      "js": ["src/injected/injected.ts"],
+      "run_at": "document_start",
+      "world": "MAIN"
+    }
+  ],
+  "permissions": ["scripting"],
+  "host_permissions": ["<all_urls>"]
+}

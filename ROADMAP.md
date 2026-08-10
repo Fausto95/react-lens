@@ -35,19 +35,29 @@ All packages: **45 tests passing**, full `tsc -b` clean.
 
 ## Apps
 
-- ⬜ **`extension`** — MV3 shell (background relay, content script, devtools page)
-- ⬜ **`devtools`** — React 19 + Compiler panel; inspector, render history, diff view
-- ⬜ **`playground`** — React 19 + Compiler app engineered to misbehave (§89 scenarios)
-- ⬜ **`ui`** / **`icons`** — keyboard-first design system
+- ✅ **`devtools`** — React 19 panel: ranked component list, inspector, render history, why-did-this-render, props diff
+- ✅ **`playground`** — React 19 + Compiler app engineered to misbehave; dev overlay mounts the panel
+- ✅ **`extension`** — MV3 shell (stateless background relay, ISOLATED+MAIN content scripts, devtools page, panel); builds clean
+- ⬜ **`ui`** / **`icons`** — extract the panel's components into a keyboard-first design system
 
 ## Vertical slices (the demoable milestones)
 
-1. ⬜ **Transport round-trip** — page → panel ping + overhead-budget harness
-2. ⬜ **Fiber resolution** — click element → component identity
-3. ⬜ **First magic moment** — hover → inspector → source + render count
-4. ⬜ **Render diff wired** — props/state/context/DOM diff in the inspector
-5. ⬜ **Why did this render?** — causality over one interaction
+1. ✅ **Transport** — page → panel frames (embedded direct + extension port)
+2. ✅ **Fiber resolution** — DOM node → component identity (verified vs React 19)
+3. ✅ **First magic moment** — click → inspector → renders + source + why + diff
+4. ✅ **Render diff wired** — props + DOM diff in the inspector
+5. ✅ **Why did this render?** — causality with no-observable-change verdict
 6. ⬜ **Doctor** — OXC findings mapped to components with runtime cost
+
+## Known follow-ups
+
+- **Compiler detection.** The playground has the React Compiler enabled, yet
+  the panel reports components as "not compiled". Either the babel plugin isn't
+  transforming or the memo-cache heuristic in `fiber` is too weak — investigate
+  (DESIGN §7 flagged this risk). Until resolved, compiled status is best-effort.
+- **`_debugSource`** is absent in React 19 production-ish builds, so source
+  locations may be unavailable; needs a source-map path.
+- Extract `ui`/`icons`; add the Doctor (`diagnostics` + `source-maps`) slice.
 
 ## North star
 
