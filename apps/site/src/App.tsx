@@ -3,7 +3,7 @@ import { FiveQuestions } from "./sections/FiveQuestions.js";
 import { TraceSection } from "./sections/TraceSection.js";
 import { GraphSection } from "./sections/GraphSection.js";
 import { DiffSection } from "./sections/DiffSection.js";
-import { Install } from "./sections/Install.js";
+import { Features } from "./sections/Features.js";
 import { Coachmark } from "./sections/Coachmark.js";
 
 /**
@@ -19,7 +19,7 @@ export function App() {
       <TraceSection />
       <GraphSection />
       <DiffSection />
-      <Install />
+      <Features />
       <Coachmark />
     </main>
   );

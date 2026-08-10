@@ -81,6 +81,13 @@ h2 { font-size: 30px; letter-spacing: -0.01em; margin: 0 0 12px; }
 .chip { font-family: var(--mono); font-size: 12px; padding: 5px 10px; border-radius: 7px; background: var(--hover); border: 1px solid var(--border); color: var(--dim); }
 .chip.lit { background: rgba(167,139,250,0.16); border-color: rgba(167,139,250,0.4); color: var(--accent); }
 
+/* What's new / changelog */
+.changelog { display: grid; grid-template-columns: 1fr; gap: 14px; max-width: 700px; }
+.change { background: var(--raised); border: 1px solid var(--border); border-radius: 12px; padding: 18px 20px; }
+.change .tag { display: inline-block; margin-bottom: 10px; }
+.change h3 { margin: 0 0 6px; font-size: 18px; letter-spacing: -0.01em; }
+.change p { margin: 0; color: var(--dim); font-size: 15px; }
+
 /* Code */
 pre.code { background: #0e1116; border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; overflow-x: auto; font-size: 13px; color: var(--dim); }
 pre.code .k { color: var(--accent); }

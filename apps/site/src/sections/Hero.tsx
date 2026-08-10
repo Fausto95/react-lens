@@ -17,7 +17,7 @@ export function Hero() {
         it shows is this page's real component tree.
       </p>
       <div className="cta-row">
-        <a className="btn primary" href="#install">Get started</a>
+        <a className="btn primary" href="#features">Features</a>
         <a className="btn" href={REPO} target="_blank" rel="noreferrer">GitHub ↗</a>
       </div>
     </section>
