@@ -214,54 +214,57 @@ function TreeRow({
   return (
     <div
       className={`rl-tree-row${selClass}${frozenClass}`}
-      // Cap the indent: deep real-world trees (50+ levels) would otherwise push
-      // the row off-screen and collapse the name to zero width.
-      style={{ paddingLeft: 6 + Math.min(depth, 14) * 8 }}
       onClick={() => {
         if (isComponent) onSelect(node.id);
         else onToggle(node.key);
       }}
       onMouseEnter={() => isComponent && onHover?.(node.id)}
     >
-      <span
-        className={`rl-caret${expandable ? "" : " hidden"}`}
-        onClick={(e) => {
-          if (!expandable) return;
-          e.stopPropagation();
-          onToggle(node.key);
-        }}
+      {/* Indent lives in the left cluster so flame + metrics stay column-aligned. */}
+      <div
+        className="rl-tree-main"
+        style={{ paddingLeft: 6 + Math.min(depth, 14) * 8 }}
       >
-        {expandable ? (expanded ? "▾" : "▸") : ""}
-      </span>
+        <span
+          className={`rl-caret${expandable ? "" : " hidden"}`}
+          onClick={(e) => {
+            if (!expandable) return;
+            e.stopPropagation();
+            onToggle(node.key);
+          }}
+        >
+          {expandable ? (expanded ? "▾" : "▸") : ""}
+        </span>
 
-      {node.kind === "component" ? (
-        <>
-          <span className="rl-tree-name">{node.datum.name}</span>
-          {inFrozen && <span className="rl-frozen-dot" title="Rendered in the frozen commit" />}
-          {suspended?.has(node.id) && <span className="rl-suspense-mark" title="Suspended">◇</span>}
-          {doctor?.has(node.id) && <span className="rl-doc-mark" title="Doctor issue">⚕</span>}
-          {node.datum.compiled && <span className="rl-compiler" title="React Compiler optimized">◆</span>}
-          {node.datum.observableChange === false && (
-            <span className="rl-dot suspicious" title="No observable change" />
-          )}
-        </>
-      ) : (
-        <>
-          <span className="rl-tree-name">{node.name}</span>
-          <span className="rl-badge render">×{node.count}</span>
-          {node.suspicious > 0 && (
-            <span className="rl-badge suspicious" title="Suspicious instances">
-              ⚠ {node.suspicious}
-            </span>
-          )}
-        </>
-      )}
+        {node.kind === "component" ? (
+          <>
+            <span className="rl-tree-name">{node.datum.name}</span>
+            {inFrozen && <span className="rl-frozen-dot" title="Rendered in the frozen commit" />}
+            {suspended?.has(node.id) && <span className="rl-suspense-mark" title="Suspended">◇</span>}
+            {doctor?.has(node.id) && <span className="rl-doc-mark" title="Doctor issue">⚕</span>}
+            {node.datum.compiled && <span className="rl-compiler" title="React Compiler optimized">◆</span>}
+            {node.datum.observableChange === false && (
+              <span className="rl-dot suspicious" title="No observable change" />
+            )}
+          </>
+        ) : (
+          <>
+            <span className="rl-tree-name">{node.name}</span>
+            <span className="rl-badge render">×{node.count}</span>
+            {node.suspicious > 0 && (
+              <span className="rl-badge suspicious" title="Suspicious instances">
+                ⚠ {node.suspicious}
+              </span>
+            )}
+          </>
+        )}
+      </div>
 
       <span className="rl-flame">
         <span className="rl-flame-bar" style={{ width: `${(self / maxSelf) * 100}%` }} />
       </span>
-      <span className="rl-tree-metric">{rowRenders(row)}×</span>
-      {self > 0 && <span className="rl-tree-metric dim">{ms(self)}</span>}
+      <span className="rl-tree-metric rl-tree-renders">{rowRenders(row)}×</span>
+      <span className="rl-tree-metric rl-tree-ms dim">{self > 0 ? ms(self) : ""}</span>
     </div>
   );
 }

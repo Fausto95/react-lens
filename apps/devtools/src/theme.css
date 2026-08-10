@@ -237,7 +237,7 @@
 .rl-cmdk-label { flex: 1; }
 .rl-cmdk-hint { color: var(--rl-text-faint); font-size: 11px; font-family: var(--rl-mono); }
 .rl-tree-row {
-  display: flex; align-items: center; gap: 5px;
+  display: flex; align-items: center; gap: 6px;
   height: 26px; padding-right: var(--rl-s4);
   cursor: default; font-size: 12px;
   border-bottom: 1px solid rgba(35,40,51,0.3);
@@ -250,18 +250,31 @@
 .rl-tree-row.rl-in-selection:hover {
   background: rgba(167, 139, 250, 0.12);
 }
-.rl-caret { width: 20px; color: var(--rl-text-faint); font-size: 15px; cursor: pointer; user-select: none; text-align: center; }
+/* Left cluster absorbs indent + name length; right columns stay fixed. */
+.rl-tree-main {
+  flex: 1 1 auto; min-width: 0;
+  display: flex; align-items: center; gap: 5px;
+  overflow: hidden;
+}
+.rl-caret { flex: 0 0 20px; width: 20px; color: var(--rl-text-faint); font-size: 15px; cursor: pointer; user-select: none; text-align: center; }
 .rl-caret:hover { color: var(--rl-text); }
 .rl-caret.hidden { visibility: hidden; }
 .rl-tree-name { flex: 1 1 auto; min-width: 0; color: var(--rl-text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.rl-compiler { color: var(--rl-render); font-size: 10px; }
-.rl-suspense-mark { color: var(--rl-warn); font-size: 11px; }
-.rl-dot { width: 6px; height: 6px; border-radius: 50%; display: inline-block; }
+.rl-compiler { flex: 0 0 auto; color: var(--rl-render); font-size: 10px; }
+.rl-suspense-mark { flex: 0 0 auto; color: var(--rl-warn); font-size: 11px; }
+.rl-dot { flex: 0 0 auto; width: 6px; height: 6px; border-radius: 50%; display: inline-block; }
 .rl-dot.suspicious { background: var(--rl-suspicious); }
-/* Decorative: yields space to the name (shrinks ~3x faster) when rows are tight. */
-.rl-flame { flex: 0 3 56px; min-width: 0; height: 4px; margin: 0 var(--rl-s2); background: rgba(255,255,255,0.04); border-radius: 2px; overflow: hidden; }
+.rl-flame {
+  flex: 0 0 56px; width: 56px; height: 4px;
+  background: rgba(255,255,255,0.04); border-radius: 2px; overflow: hidden;
+}
 .rl-flame-bar { display: block; height: 100%; background: linear-gradient(90deg, var(--rl-render), var(--rl-suspicious)); border-radius: 2px; }
-.rl-tree-metric { font-variant-numeric: tabular-nums; color: var(--rl-text-dim); font-size: 11px; min-width: 26px; text-align: right; }
+.rl-tree-metric {
+  flex: 0 0 auto;
+  font-variant-numeric: tabular-nums; color: var(--rl-text-dim); font-size: 11px; text-align: right;
+}
+.rl-tree-metric.rl-tree-renders { flex: 0 0 28px; width: 28px; }
+.rl-tree-metric.rl-tree-ms { flex: 0 0 44px; width: 44px; }
 .rl-tree-metric.dim { color: var(--rl-text-faint); }
 
 .rl-inspector { padding: var(--rl-s4); }
