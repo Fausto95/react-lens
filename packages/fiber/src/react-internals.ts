@@ -99,6 +99,72 @@ export function fiberFromDomNode(node: Node): Fiber | undefined {
   return undefined;
 }
 
+/**
+ * Returns the fiber that belongs to the *current* (committed) tree, given
+ * either buffer. Ported from React's findCurrentFiberUsingSlowPath. Needed
+ * because a targeted update (e.g. overrideProps) bails out ancestors, so
+ * traversing `root.current` can reach a stale child fiber whose memoizedProps
+ * lag behind the committed DOM — the real one is its alternate.
+ */
+export function findCurrentFiber(fiber: Fiber): Fiber {
+  const alternate = fiber.alternate;
+  if (!alternate) return fiber;
+
+  let a: Fiber = fiber;
+  let b: Fiber = alternate;
+  // Climb until we reach the HostRoot, keeping `a`/`b` as the two buffers.
+  for (let guard = 0; guard < 10_000; guard++) {
+    const parentA = a.return;
+    if (parentA === null) break;
+    const parentB = parentA.alternate;
+    if (parentB === null) {
+      const nextParent = parentA.return;
+      if (nextParent !== null) {
+        a = nextParent;
+        b = nextParent;
+        continue;
+      }
+      break;
+    }
+    if (parentA.child === parentB.child) {
+      let child = parentA.child;
+      while (child) {
+        if (child === a) return fiber;
+        if (child === b) return alternate;
+        child = child.sibling;
+      }
+      return fiber;
+    }
+    if (a.return !== b.return) {
+      a = parentA;
+      b = parentB;
+    } else {
+      let found = false;
+      let child = parentA.child;
+      while (child) {
+        if (child === a) { a = parentA; b = parentB; found = true; break; }
+        if (child === b) { b = parentA; a = parentB; found = true; break; }
+        child = child.sibling;
+      }
+      if (!found) {
+        child = parentB.child;
+        while (child) {
+          if (child === a) { a = parentB; b = parentA; found = true; break; }
+          if (child === b) { b = parentB; a = parentA; found = true; break; }
+          child = child.sibling;
+        }
+        if (!found) return fiber;
+      }
+    }
+  }
+
+  if (a.tag === HostRoot) {
+    const root = a.stateNode as { current?: Fiber } | null;
+    return root && root.current === a ? fiber : alternate;
+  }
+  return fiber;
+}
+
 export function isComponentTag(tag: WorkTag): boolean {
   return (
     tag === FunctionComponent ||

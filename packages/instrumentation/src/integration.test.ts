@@ -163,4 +163,50 @@ describe("instrumentation + fiber against real React 19", () => {
 
     inst.stop();
   });
+
+  it("captures the committed value after a targeted prop override", async () => {
+    const frames: Frame[] = [];
+    const { React, createRoot, act, bridge } = await react();
+    const inst = createInstrumentation({ fiber: bridge, serializer: createSerializer() });
+    inst.start({ captureDOM: true, interactionWindowMs: 200, onFrame: (f) => frames.push(f) });
+
+    function Child({ flag }: { flag: boolean }) {
+      return React.createElement("div", { className: "flagged" }, String(flag));
+    }
+    function Parent() {
+      // Parent bails out on the override, so root.current can point at a stale
+      // Child fiber — the regression guarded here.
+      return React.createElement("div", null, React.createElement(Child, { flag: false }));
+    }
+
+    const root = createRoot(document.getElementById("root")!);
+    await act(async () => {
+      root.render(React.createElement(Parent));
+    });
+
+    const childId = frames.flatMap((f) => f.instances).find((i) => i.name === "Child")?.id;
+    expect(childId).toBeDefined();
+    // Requires the dev renderer's live-edit API (react-dom development build).
+    expect(bridge.canEditValues()).toBe(true);
+
+    await act(async () => {
+      bridge.setProp(childId!, ["flag"], true);
+    });
+    await flush();
+
+    const childSnap = frames
+      .flatMap((f) => f.snapshots)
+      .filter((s) => s.componentId === childId)
+      .at(-1);
+    const flag =
+      childSnap?.props.k === "object"
+        ? childSnap.props.entries?.find((e) => e[0] === "flag")?.[1]
+        : undefined;
+
+    // Snapshot must reflect the committed value (true), matching the DOM.
+    expect(flag).toEqual({ k: "primitive", type: "boolean", value: true });
+    expect(document.querySelector(".flagged")?.textContent).toBe("true");
+
+    inst.stop();
+  });
 });

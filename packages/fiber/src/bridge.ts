@@ -19,6 +19,7 @@ import {
   fiberFromDomNode,
   isComponentTag,
   displayNameOf,
+  findCurrentFiber,
   HostComponent,
   HostRoot,
 } from "./react-internals.js";
@@ -159,7 +160,7 @@ export function createFiberBridge(target: typeof globalThis = globalThis): Fiber
 
   /** Prefer the committed (current) fiber for edits, not a stale alternate. */
   function currentOf(fiber: Fiber): Fiber {
-    return fiber;
+    return findCurrentFiber(fiber);
   }
 
   /** Cooperate with an already-installed hook rather than clobbering it. */
@@ -245,8 +246,11 @@ export function createFiberBridge(target: typeof globalThis = globalThis): Fiber
     const details = new Map<ComponentId, RenderDetail>();
     const rendered: ComponentId[] = [];
 
-    traverse(root.current, (fiber) => {
-      if (!isComponentTag(fiber.tag)) return;
+    traverse(root.current, (visited) => {
+      if (!isComponentTag(visited.tag)) return;
+      // A bailed-out parent can leave root.current pointing at a stale child;
+      // resolve to the fiber actually on the committed tree before reading it.
+      const fiber = findCurrentFiber(visited);
       const detail = renderDetail(fiber);
       if (!detail) return;
       const id = idOf(fiber);
