@@ -17,6 +17,6 @@
       "world": "ISOLATED"
     }
   ],
-  "permissions": ["scripting"],
+  "permissions": ["scripting", "storage"],
   "host_permissions": ["<all_urls>"]
 }
