@@ -55,6 +55,7 @@ export function Inspector({
   edit,
   highlight,
   onSelectComponent,
+  onRequestSnapshot,
 }: {
   store: TraceStore;
   causality: Causality;
@@ -62,6 +63,7 @@ export function Inspector({
   edit?: EditApi;
   highlight?: (id: ComponentId | null) => void;
   onSelectComponent?: (id: ComponentId) => void;
+  onRequestSnapshot?: (renderId: RenderId) => void;
 }) {
   useTraceVersion(store, { kind: "component", id: componentId });
   const inst = store.instance(componentId);
@@ -72,6 +74,16 @@ export function Inspector({
   useEffect(() => {
     if (latest) setSelectedRender(latest.renderId);
   }, [latest?.renderId]);
+
+  // When snapshots aren't streamed inline (large apps), fetch the selected
+  // render's snapshot on demand the first time it's needed.
+  const activeRender = selectedRender ?? latest?.renderId ?? null;
+  const hasSnapshot = activeRender !== null && store.snapshot(activeRender) !== undefined;
+  useEffect(() => {
+    if (onRequestSnapshot && activeRender !== null && !hasSnapshot) {
+      onRequestSnapshot(activeRender);
+    }
+  }, [onRequestSnapshot, activeRender, hasSnapshot]);
 
   const doctor = useDoctor(store, causality, componentId);
 

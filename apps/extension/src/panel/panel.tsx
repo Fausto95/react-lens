@@ -21,7 +21,9 @@ function ExtensionPanel() {
     portRef.current = port;
 
     port.onMessage.addListener((msg: PortMessage) => {
-      if (msg.kind === "frame") store.ingest(msg.frame);
+      // Both live tree frames and on-demand snapshot responses ingest the same
+      // way — snapshot frames just carry a single snapshot and no events.
+      if (msg.kind === "frame" || msg.kind === "snapshot") store.ingest(msg.frame);
     });
     return () => port.disconnect();
   }, [store]);
@@ -36,6 +38,9 @@ function ExtensionPanel() {
         setRecording(next);
         portRef.current?.postMessage({ kind: "record", recording: next } satisfies PortMessage);
       }}
+      onRequestSnapshot={(renderId) =>
+        portRef.current?.postMessage({ kind: "snapshot-request", renderId } satisfies PortMessage)
+      }
     />
   );
 }

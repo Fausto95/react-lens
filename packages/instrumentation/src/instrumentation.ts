@@ -23,6 +23,14 @@ export interface CaptureConfig {
   /** Ms after a user event during which renders are attributed to it. */
   interactionWindowMs: number;
   onFrame: (frame: EventsBatchMessage["payload"]) => void;
+  /**
+   * Stream full per-render snapshots (props/hooks/state/context/DOM) inline.
+   * Cheap for small apps; ruinous for large ones — a single mount commit of a
+   * few thousand components produces tens of MB. When false, only render events
+   * and instances stream (enough for the tree/timeline) and snapshots are built
+   * lazily via `snapshot(renderId)`. Defaults to true.
+   */
+  streamSnapshots?: boolean;
   /** Optional overhead telemetry sink. */
   onOverhead?: (report: { cpuPercent: number; bytesApprox: number; eventsPerSec: number }) => void;
 }
@@ -30,12 +38,19 @@ export interface CaptureConfig {
 const DEFAULT_CONFIG: Omit<CaptureConfig, "onFrame"> = {
   captureDOM: true,
   interactionWindowMs: 200,
+  streamSnapshots: true,
 };
 
 export interface Instrumentation {
   start(config: CaptureConfig): void;
   stop(): void;
   isRecording(): boolean;
+  /**
+   * Build a snapshot on demand for a render still retained in the ring buffer.
+   * Used when snapshots aren't streamed inline (large apps): the panel requests
+   * the selected render's detail lazily. Returns undefined once evicted.
+   */
+  snapshot(renderId: RenderId): RenderSnapshot | undefined;
 }
 
 const INTERACTION_EVENTS = ["click", "keydown", "submit"] as const;
@@ -61,6 +76,14 @@ export function createInstrumentation(deps: {
   let flushScheduled = false;
 
   let currentInteraction: { id: InteractionId; until: number } | null = null;
+
+  // Retained render details for on-demand snapshot building when snapshots
+  // aren't streamed inline. Bounded ring: recent renders only.
+  const retained = new Map<
+    RenderId,
+    { componentId: ComponentId; detail: RenderDetail; timestamp: number }
+  >();
+  const RETAIN_MAX = 2000;
 
   // Overhead accounting.
   let cpuTimeMs = 0;
@@ -125,11 +148,35 @@ export function createInstrumentation(deps: {
         ...(interactionId !== null ? { interactionId } : {}),
       };
       pendingEvents.push(event);
-      pendingSnapshots.push(buildSnapshot(id, renderId, detail, commit.timestamp));
+      if (config.streamSnapshots !== false) {
+        pendingSnapshots.push(buildSnapshot(id, renderId, detail, commit.timestamp));
+      } else {
+        retain(renderId, id, detail, commit.timestamp);
+      }
     }
 
     cpuTimeMs += now() - t0;
     scheduleFlush();
+  }
+
+  function retain(
+    renderId: RenderId,
+    componentId: ComponentId,
+    detail: RenderDetail,
+    timestamp: number,
+  ): void {
+    retained.set(renderId, { componentId, detail, timestamp });
+    if (retained.size > RETAIN_MAX) {
+      const oldest = retained.keys().next().value;
+      if (oldest !== undefined) retained.delete(oldest);
+    }
+  }
+
+  /** On-demand snapshot for a retained render (see Instrumentation.snapshot). */
+  function snapshot(renderId: RenderId): RenderSnapshot | undefined {
+    const held = retained.get(renderId);
+    if (!held) return undefined;
+    return buildSnapshot(held.componentId, renderId, held.detail, held.timestamp);
   }
 
   function buildSnapshot(
@@ -298,7 +345,7 @@ export function createInstrumentation(deps: {
     windowStart = now();
   }
 
-  return { start, stop, isRecording };
+  return { start, stop, isRecording, snapshot };
 }
 
 function approxBytes(frame: EventsBatchMessage["payload"]): number {

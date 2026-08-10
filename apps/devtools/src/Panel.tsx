@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect, useRef } from "react";
 import type { TraceStore } from "@react-lens/trace-engine";
 import type { Causality } from "@react-lens/causality";
-import type { ComponentId, CommitId } from "@react-lens/protocol";
+import type { ComponentId, CommitId, RenderId } from "@react-lens/protocol";
 import { useTraceVersion } from "./useLens.js";
 import { Inspector, type EditApi } from "./Inspector.js";
 import { Tree } from "./Tree.js";
@@ -26,6 +26,12 @@ export interface PanelProps {
   onToggleOverlay?: () => void;
   /** Update Wave: flash a commit's components on the page (embedded only). */
   onReplayCommit?: (ids: ComponentId[]) => void;
+  /**
+   * Fetch one render's heavy snapshot on demand. Present when snapshots aren't
+   * streamed inline (the extension, for scale); the inspector calls it for the
+   * selected render and the result is ingested into the store.
+   */
+  onRequestSnapshot?: (renderId: RenderId) => void;
 }
 
 export function Panel({
@@ -39,6 +45,7 @@ export function Panel({
   overlayEnabled,
   onToggleOverlay,
   onReplayCommit,
+  onRequestSnapshot,
 }: PanelProps) {
   useTraceVersion(store, { kind: "global" });
   const [selected, setSelected] = useState<ComponentId | null>(null);
@@ -53,8 +60,13 @@ export function Panel({
     ? new Set(store.commit(frozenCommit)?.componentIds ?? [])
     : null;
 
-  // Doctor: components with at least one diagnostic (for tree badges).
-  const { diagnostics, affected } = diagnoseAll(store, causality);
+  // Doctor: components with at least one diagnostic (for tree badges). The pass
+  // walks every component and runs causality per render, so it's skipped on very
+  // large apps to keep the panel responsive (Task 28 moves it to a worker).
+  const tooLargeForDoctor = stats.components > 800;
+  const { diagnostics, affected } = tooLargeForDoctor
+    ? { diagnostics: [], affected: new Set<ComponentId>() }
+    : diagnoseAll(store, causality);
   const suspended = new Set(store.allInstances().filter((i) => i.suspended).map((i) => i.id));
 
   // ⌘K / Ctrl+K opens the command palette.
@@ -151,6 +163,7 @@ export function Panel({
               onSelectComponent={setSelected}
               {...(edit ? { edit } : {})}
               {...(onHighlight ? { highlight: onHighlight } : {})}
+              {...(onRequestSnapshot ? { onRequestSnapshot } : {})}
             />
           )}
         </div>

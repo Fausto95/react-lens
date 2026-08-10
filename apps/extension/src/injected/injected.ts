@@ -49,6 +49,11 @@ function start(): void {
   instrumentation.start({
     captureDOM: true,
     interactionWindowMs: 200,
+    // Stream only the lightweight tree (events + instances). Full per-render
+    // snapshots — props/hooks/state/DOM — are fetched on demand (see the
+    // snapshot-request handler); streaming them inline melts large apps, whose
+    // single mount commit can serialize tens of MB across postMessage.
+    streamSnapshots: false,
     onFrame: (frame) => {
       debug.framesProduced++;
       debug.totalInstances += frame.instances.length;
@@ -75,5 +80,16 @@ window.addEventListener("message", (event: MessageEvent) => {
   if (data.kind === "record") {
     if (data.recording) start();
     else instrumentation.stop();
+  } else if (data.kind === "snapshot-request") {
+    const snapshot = instrumentation.snapshot(data.renderId);
+    if (!snapshot) return;
+    window.postMessage(
+      {
+        source: PAGE_SOURCE,
+        kind: "snapshot",
+        frame: { events: [], snapshots: [snapshot], instances: [] },
+      },
+      "*",
+    );
   }
 });
