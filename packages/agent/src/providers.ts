@@ -23,14 +23,14 @@ export const PROVIDER_PRESETS: Record<
   anthropic: {
     label: "Claude",
     baseUrl: "https://api.anthropic.com",
-    model: "claude-sonnet-4-20250514",
+    model: "claude-sonnet-5",
     hint: "Anthropic Messages API (Claude)",
     keyRequired: true,
     api: "anthropic",
   },
   zml: {
     label: "Z.AI (GLM)",
-    baseUrl: "https://api.z.ai/api/coding/paas/v4",
+    baseUrl: "https://api.z.ai/api/anthropic",
     model: "glm-5v-turbo",
     hint: "Z.AI GLM via Anthropic-compatible API",
     keyRequired: true,
