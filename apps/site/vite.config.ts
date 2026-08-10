@@ -4,8 +4,8 @@ import react from "@vitejs/plugin-react";
 export default defineConfig({
   resolve: {
     alias: [
-      // oxc-parser (native/WASM) isn't browser-bundleable; the diagnostics layer
-      // falls back to regex when the AST parser throws (see src/oxc-stub.ts).
+      // oxc-parser WASM isn't browser-bundleable (worker or main). Stub it so
+      // analyzeSourceSmart falls back to regex — including in doctorWorker.
       {
         find: "oxc-parser",
         replacement: new URL("./src/oxc-stub.ts", import.meta.url).pathname,

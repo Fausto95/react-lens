@@ -1,7 +1,8 @@
 import { useMemo, useRef, useState, useEffect, useLayoutEffect, useCallback } from "react";
 import type { TraceStore, Interaction, CommitSummary } from "@react-lens/trace-engine";
 import type { Causality } from "@react-lens/causality";
-import type { ComponentId, RenderEvent } from "@react-lens/protocol";
+import type { ComponentId, RenderEvent, RenderId } from "@react-lens/protocol";
+import { explainInteraction, type LensRef, type NarrativeNextClick } from "@react-lens/explain";
 import {
   IconChevronDown,
   IconChevronRight,
@@ -18,6 +19,8 @@ import {
 import { useTraceVersion } from "./useLens.js";
 import { ms } from "@react-lens/ui";
 import type { TimeCursor, ABMarks } from "./timeCursor.js";
+import { NarrativeCard } from "./NarrativeCard.js";
+import { diagnoseOne } from "./doctor.js";
 
 type Mode = "collapsed" | "compact" | "expanded";
 /** Open sizes always include the Components lane; collapsed hides the tracks. */
@@ -44,6 +47,7 @@ export function Timeline({
   onSetAB,
   onReplay,
   onSelectComponent,
+  explainToken = 0,
 }: {
   store: TraceStore;
   causality: Causality;
@@ -53,6 +57,8 @@ export function Timeline({
   onSetAB: (ab: ABMarks) => void;
   onReplay?: (ids: ComponentId[]) => void;
   onSelectComponent?: (id: ComponentId) => void;
+  /** Increment to open Explain for the current selection (⌘K). */
+  explainToken?: number;
 }) {
   const version = useTraceVersion(store, { kind: "global" });
   const interactions = useMemo(() => store.interactions(), [store, version]);
@@ -679,6 +685,7 @@ export function Timeline({
 
       {mode !== "collapsed" && (selected || cursorAnomaly) && (
         <SelectionStrip
+          store={store}
           interaction={selected}
           anomalyCommit={cursorAnomaly}
           anomaly={anomaly}
@@ -688,6 +695,9 @@ export function Timeline({
           onSetB={() => onSetAB({ ...ab, b: cursorT })}
           onReplay={replayInteraction}
           onFit={selected ? () => fitSelection(selected) : undefined}
+          onSelectComponent={onSelectComponent}
+          onCursor={onCursor}
+          explainToken={explainToken}
         />
       )}
     </div>
@@ -695,6 +705,7 @@ export function Timeline({
 }
 
 function SelectionStrip({
+  store,
   interaction,
   anomalyCommit,
   anomaly,
@@ -704,7 +715,11 @@ function SelectionStrip({
   onSetB,
   onReplay,
   onFit,
+  onSelectComponent,
+  onCursor,
+  explainToken,
 }: {
+  store: TraceStore;
   interaction: Interaction | null;
   anomalyCommit: CommitSummary | null;
   anomaly: AnomalyStats;
@@ -714,71 +729,149 @@ function SelectionStrip({
   onSetB: () => void;
   onReplay: (it: Interaction) => void;
   onFit?: () => void;
+  onSelectComponent?: (id: ComponentId) => void;
+  onCursor: (c: TimeCursor) => void;
+  explainToken: number;
 }) {
   const changed = useMemo(
     () => (interaction ? changedCount(interaction, causality) : null),
     [interaction, causality],
   );
+  const [explainOpen, setExplainOpen] = useState(false);
+  const narrative = useMemo(() => {
+    if (!explainOpen || !interaction) return null;
+    return explainInteraction(store, causality, interaction, {
+      diagnose: (id) => diagnoseOne(store, causality, id),
+    });
+  }, [explainOpen, interaction, store, causality]);
+
+  useEffect(() => {
+    setExplainOpen(false);
+  }, [interaction?.id]);
+
+  useEffect(() => {
+    if (explainToken > 0 && interaction) setExplainOpen(true);
+  }, [explainToken, interaction]);
+
+  const handleCitation = useCallback(
+    (ref: LensRef) => {
+      if (ref.kind === "component") {
+        onSelectComponent?.(ref.id);
+        return;
+      }
+      if (ref.kind === "doctor") {
+        onSelectComponent?.(ref.componentId);
+        return;
+      }
+      if (ref.kind === "render") {
+        onSelectComponent?.(ref.componentId);
+        const ev = store.getRender(ref.id);
+        if (ev) onCursor({ t: ev.timestamp, mode: "historical" });
+      }
+    },
+    [onSelectComponent, onCursor, store],
+  );
+
+  const handleNext = useCallback(
+    (next: NarrativeNextClick) => {
+      if (next.kind === "component") {
+        onSelectComponent?.(next.id as ComponentId);
+        return;
+      }
+      if (next.kind === "doctor" && next.componentId != null) {
+        onSelectComponent?.(next.componentId);
+        return;
+      }
+      if (next.kind === "render") {
+        const id = next.id as RenderId;
+        const ev = store.getRender(id);
+        if (next.componentId) onSelectComponent?.(next.componentId);
+        if (ev) onCursor({ t: ev.timestamp, mode: "historical" });
+      }
+    },
+    [onSelectComponent, onCursor, store],
+  );
 
   return (
-    <div className="rl-tl-card">
-      <div className="rl-tl-card-info">
-        {interaction && (
-          <div className="rl-tl-card-main">
-            <span className="rl-tl-card-title" title={interaction.label}>
-              {interaction.label}
+    <>
+      <div className="rl-tl-card">
+        <div className="rl-tl-card-info">
+          {interaction && (
+            <div className="rl-tl-card-main">
+              <span className="rl-tl-card-title" title={interaction.label}>
+                {interaction.label}
+              </span>
+              <span className="rl-tl-card-metric">{ms(interaction.metrics.totalDuration)}</span>
+              <span className="rl-tl-card-dim">React {ms(interaction.metrics.reactDuration)}</span>
+              <span className="rl-tl-card-dim">{interaction.metrics.renderCount} renders</span>
+              {changed !== null && changed.wasted > 0 && (
+                <span className="rl-tl-card-warn">{changed.wasted} wasted</span>
+              )}
+            </div>
+          )}
+          {anomalyCommit && (
+            <span
+              className="rl-tl-card-anomaly"
+              title={`${Math.round(anomalyCommit.totalSelfTime / Math.max(0.01, anomaly.p95))}× p95`}
+            >
+              ⚠ {ms(anomalyCommit.totalSelfTime)} · {anomalyCommit.componentIds.length} comps
             </span>
-            <span className="rl-tl-card-metric">{ms(interaction.metrics.totalDuration)}</span>
-            <span className="rl-tl-card-dim">React {ms(interaction.metrics.reactDuration)}</span>
-            <span className="rl-tl-card-dim">{interaction.metrics.renderCount} renders</span>
-            {changed !== null && changed.wasted > 0 && (
-              <span className="rl-tl-card-warn">{changed.wasted} wasted</span>
-            )}
-          </div>
-        )}
-        {anomalyCommit && (
-          <span
-            className="rl-tl-card-anomaly"
-            title={`${Math.round(anomalyCommit.totalSelfTime / Math.max(0.01, anomaly.p95))}× p95`}
-          >
-            ⚠ {ms(anomalyCommit.totalSelfTime)} · {anomalyCommit.componentIds.length} comps
-          </span>
-        )}
-      </div>
-      <div className="rl-tl-card-actions" role="toolbar" aria-label="Selection actions">
-        <button
-          className={`rl-icon-btn mark-a${ab.a !== undefined ? " active" : ""}`}
-          onClick={onSetA}
-          title="Set comparison A at cursor"
-          aria-label="Set comparison A at cursor"
-        >
-          <IconMarkA size={13} />
-        </button>
-        <button
-          className={`rl-icon-btn mark-b${ab.b !== undefined ? " active" : ""}`}
-          onClick={onSetB}
-          title="Set comparison B at cursor"
-          aria-label="Set comparison B at cursor"
-        >
-          <IconMarkB size={13} />
-        </button>
-        {onFit && (
-          <button className="rl-icon-btn" onClick={onFit} title="Fit selection" aria-label="Fit selection">
-            <span className="rl-tl-fit-glyph">⛶</span>
-          </button>
-        )}
-        {interaction && (
+          )}
+        </div>
+        <div className="rl-tl-card-actions" role="toolbar" aria-label="Selection actions">
+          {interaction && (
+            <button
+              className={`rl-icon-btn${explainOpen ? " active" : ""}`}
+              onClick={() => setExplainOpen((v) => !v)}
+              title="Explain this interaction"
+              aria-label="Explain this interaction"
+              aria-pressed={explainOpen}
+            >
+              ?
+            </button>
+          )}
           <button
-            className="rl-icon-btn primary"
-            onClick={() => onReplay(interaction)}
-            title="Replay interaction on page"
-            aria-label="Replay interaction on page"
+            className={`rl-icon-btn mark-a${ab.a !== undefined ? " active" : ""}`}
+            onClick={onSetA}
+            title="Set comparison A at cursor"
+            aria-label="Set comparison A at cursor"
           >
-            <IconPlay size={12} />
+            <IconMarkA size={13} />
           </button>
-        )}
+          <button
+            className={`rl-icon-btn mark-b${ab.b !== undefined ? " active" : ""}`}
+            onClick={onSetB}
+            title="Set comparison B at cursor"
+            aria-label="Set comparison B at cursor"
+          >
+            <IconMarkB size={13} />
+          </button>
+          {onFit && (
+            <button className="rl-icon-btn" onClick={onFit} title="Fit selection" aria-label="Fit selection">
+              <span className="rl-tl-fit-glyph">⛶</span>
+            </button>
+          )}
+          {interaction && (
+            <button
+              className="rl-icon-btn primary"
+              onClick={() => onReplay(interaction)}
+              title="Replay interaction on page"
+              aria-label="Replay interaction on page"
+            >
+              <IconPlay size={12} />
+            </button>
+          )}
+        </div>
       </div>
-    </div>
+      {narrative && (
+        <NarrativeCard
+          narrative={narrative}
+          onCitation={handleCitation}
+          onNext={handleNext}
+          onClose={() => setExplainOpen(false)}
+        />
+      )}
+    </>
   );
 }
 

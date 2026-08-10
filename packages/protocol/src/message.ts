@@ -30,6 +30,18 @@ export type SnapshotRequestMessage = LensMessage<
   { componentId: ComponentId; renderId: RenderId }
 >;
 
+/** Panel asks the page to fetch a module / source-map URL (same-origin to the app). */
+export type SourceRequestMessage = LensMessage<
+  "source/request",
+  { requestId: string; url: string }
+>;
+
+/** Page returns fetched source text (or an error). Body capped by the runtime. */
+export type SourceResponseMessage = LensMessage<
+  "source/response",
+  { requestId: string; url: string; body?: string; error?: string }
+>;
+
 /** Panel toggles recording on the page. */
 export type RecordControlMessage = LensMessage<"record/control", { recording: boolean }>;
 
@@ -43,6 +55,8 @@ export type AnyLensMessage =
   | HelloMessage
   | EventsBatchMessage
   | SnapshotRequestMessage
+  | SourceRequestMessage
+  | SourceResponseMessage
   | RecordControlMessage
   | OverheadMessage;
 

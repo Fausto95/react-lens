@@ -1,0 +1,18 @@
+{
+  "name": "@react-lens/explain",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@react-lens/protocol": "workspace:*",
+    "@react-lens/trace-engine": "workspace:*",
+    "@react-lens/causality": "workspace:*",
+    "@react-lens/diagnostics": "workspace:*"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  }
+}

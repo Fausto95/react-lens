@@ -21,8 +21,10 @@ Legend: ✅ done · 🚧 in progress · ⬜ not started
 - ✅ **`diff-engine`** — universal diff, value + DOM, `ChangeKind` classification (12 tests)
 - ✅ **`trace-engine`** — normalized log, ring buffers, per-component history, subscriptions (10 tests)
 - ✅ **`causality`** — why-did-this-render (3 levels), confidence, no-observable-change verdict (5 tests)
-- ⬜ **`diagnostics`** — Doctor rules over `(ast, runtimeEvidence)` via OXC (interface first, rules later)
-- ⬜ **`source-maps`** — runtime component ↔ source location
+- ✅ **`diagnostics`** — Doctor rules over runtime evidence + static AST/regex; fused impact via `mergeStaticAndRuntime`; OXC in Doctor worker when bundler allows (main thread stubs)
+- ✅ **`source-maps`** — runtime component ↔ original source (page-proxied fetch in extension)
+- ✅ **`explain`** — deterministic interaction narrative (cost / waste / chain / doctor / next click)
+- ✅ **`agent`** — closed TRACE/GRAPH/DIFF tool loop + OpenAI-compatible BYOK
 
 ## Page-side (runs in the inspected page)
 
@@ -48,7 +50,9 @@ fiber's hook list). All packages: **46 tests passing**, full `tsc -b` clean.
 3. ✅ **First magic moment** — click → inspector → renders + source + why + diff
 4. ✅ **Render diff wired** — props + DOM diff in the inspector
 5. ✅ **Why did this render?** — causality with no-observable-change verdict
-6. ⬜ **Doctor** — OXC findings mapped to components with runtime cost
+6. ✅ **Doctor** — runtime findings + static fusion; OXC attempted in worker (regex fallback)
+7. ✅ **Explain this interaction** — one-click deterministic narrative on Timeline / ⌘K
+8. ⬜ **Agent (BYOK)** — deferred; package scaffold remains (`@react-lens/agent`) but UI is unwired until the narrative quality is worth surfacing
 
 ## Semantic tree + graph projections (plan v2)
 
@@ -72,7 +76,8 @@ with multiple **projections** rather than a raw fiber tree.
 - ✅ **`source-maps`** — resolve compiled `_debugStack` coords to original source
 - ✅ **`diagnostics` (Doctor v1)** — impact-ranked rules over runtime evidence; inspector section + tree ⚕ badges + issue count
 - ⬜ **Effect debugger** — effect-execution events, run/cleanup counts, loop detection
-- ⬜ Network, Sessions, Agent layer
+- ⬜ Network, Sessions
+- ⬜ **Agent layer (BYOK)** — deferred. `@react-lens/agent` + provider presets exist; panel UI unwired until answers are more than a restatement of Explain.
 
 ## Resolved
 
@@ -85,15 +90,16 @@ with multiple **projections** rather than a raw fiber tree.
 
 ## Known follow-ups
 
-- **Doctor static rules.** v1 is runtime-evidence only. Static AST rules
-  (inline context value, effect-derives-state, …) need source fetched via
-  `source-maps` + an OXC/AST parse in a worker — the next Doctor layer, which
-  also upgrades source to the definition site.
+- **Doctor static rules.** Runtime + static fusion ships via `mergeStaticAndRuntime`.
+  Browser bundles stub `oxc-parser` (WASM isn't Vite-bundleable yet), so static
+  analysis uses the regex path via `analyzeSourceSmart`. Node/tests still use real OXC.
 - ✅ **Doctor worker** — the all-components Doctor pass (`diagnoseAll`, causality
   per render) now runs in a Web Worker mirroring the store via `TraceStore.onIngest`
   + `export()`; the panel consumes `{count, affected}` async and the old
   800-component guard is gone. Falls back to a synchronous pass if the worker
-  can't spawn.
+  can't spawn. Selected component source is uploaded for static fusion.
+- ✅ **Source fetch via page** — extension `source-request` / `source` hop so the
+  panel resolver reads modules same-origin to the inspected app.
 - **Tree worker** — virtualization mounts few rows, but grouping/projection/query
   still run on the main thread; move to a worker for very large apps (the
   per-render Doctor/verdict pass is now off-thread; the tree build is not).

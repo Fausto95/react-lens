@@ -8,6 +8,8 @@ export interface OriginalSource {
   content: string;
 }
 
+export type Fetcher = (url: string) => Promise<string>;
+
 export interface SourceResolver {
   /**
    * Maps a compiled position (as seen in a stack / _debugStack) back to the
@@ -15,12 +17,14 @@ export interface SourceResolver {
    * no map is available or the position can't be mapped.
    */
   resolve(compiled: SourceLocation): Promise<SourceLocation | null>;
-  /** Original source text for a compiled module, from its source map. */
-  sourceContent(compiledFile: string): Promise<OriginalSource | null>;
+  /**
+   * Original source text for a compiled module. When `prefer` is set, pick the
+   * map source that best matches that path; otherwise use the last resolved
+   * original, else the first entry with content.
+   */
+  sourceContent(compiledFile: string, prefer?: string): Promise<OriginalSource | null>;
   clear(): void;
 }
-
-type Fetcher = (url: string) => Promise<string>;
 
 const defaultFetch: Fetcher = async (url) => {
   // Only fetch absolute http(s) URLs. A bare pathname would resolve against the
@@ -40,6 +44,8 @@ const defaultFetch: Fetcher = async (url) => {
  */
 export function createSourceResolver(fetcher: Fetcher = defaultFetch): SourceResolver {
   const maps = new Map<string, TraceMap | null>();
+  /** Last resolved original path per compiled file — used by sourceContent. */
+  const lastOriginal = new Map<string, string>();
 
   async function mapFor(file: string): Promise<TraceMap | null> {
     if (maps.has(file)) return maps.get(file)!;
@@ -60,27 +66,62 @@ export function createSourceResolver(fetcher: Fetcher = defaultFetch): SourceRes
     if (!map) return null;
     const pos = originalPositionFor(map, { line: compiled.line, column: compiled.column });
     if (pos.source == null || pos.line == null) return null;
+    const file = normalizeSource(pos.source);
+    lastOriginal.set(compiled.file, pos.source);
     return {
-      file: normalizeSource(pos.source),
+      file,
       line: pos.line,
       column: pos.column ?? 0,
     };
   }
 
-  async function sourceContent(compiledFile: string): Promise<OriginalSource | null> {
+  async function sourceContent(
+    compiledFile: string,
+    prefer?: string,
+  ): Promise<OriginalSource | null> {
     const map = await mapFor(compiledFile);
     if (!map) return null;
-    const source = map.sources.find((s): s is string => typeof s === "string");
-    if (!source) return null;
-    const content = sourceContentFor(map, source);
-    if (content == null) return null;
-    return { path: normalizeSource(source), content };
+
+    const matchesPrefer = (raw: string) => {
+      if (!prefer) return true;
+      const norm = normalizeSource(raw);
+      return raw === prefer || norm === prefer || raw.endsWith(prefer) || norm.endsWith(prefer);
+    };
+
+    const ordered: string[] = [];
+    const remembered = lastOriginal.get(compiledFile);
+    if (remembered) ordered.push(remembered);
+    for (const s of map.sources) {
+      if (typeof s === "string") ordered.push(s);
+    }
+
+    const tried = new Set<string>();
+    // First pass: prefer match
+    if (prefer) {
+      for (const raw of ordered) {
+        if (tried.has(raw) || !matchesPrefer(raw)) continue;
+        tried.add(raw);
+        const content = sourceContentFor(map, raw);
+        if (content != null) return { path: normalizeSource(raw), content };
+      }
+    }
+    // Second pass: first available content
+    for (const raw of ordered) {
+      if (tried.has(raw)) continue;
+      tried.add(raw);
+      const content = sourceContentFor(map, raw);
+      if (content != null) return { path: normalizeSource(raw), content };
+    }
+    return null;
   }
 
   return {
     resolve,
     sourceContent,
-    clear: () => maps.clear(),
+    clear: () => {
+      maps.clear();
+      lastOriginal.clear();
+    },
   };
 }
 

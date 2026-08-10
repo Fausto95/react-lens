@@ -8,13 +8,24 @@ export type PageToContent =
   | { source: typeof PAGE_SOURCE; kind: "frame"; frame: EventsBatchMessage["payload"] }
   | { source: typeof PAGE_SOURCE; kind: "hello"; reactVersion: string | null }
   // Response to a snapshot-request: not buffered, relayed straight through.
-  | { source: typeof PAGE_SOURCE; kind: "snapshot"; frame: EventsBatchMessage["payload"] };
+  | { source: typeof PAGE_SOURCE; kind: "snapshot"; frame: EventsBatchMessage["payload"] }
+  // Response to a source-request: module / map text from the page origin.
+  | {
+      source: typeof PAGE_SOURCE;
+      kind: "source";
+      requestId: string;
+      url: string;
+      body?: string;
+      error?: string;
+    };
 
 export type ContentToPage =
   | { source: typeof CONTENT_SOURCE; kind: "record"; recording: boolean }
   // Panel asked for the heavy snapshot of a specific render (built lazily,
   // since snapshots aren't streamed inline for large apps).
   | { source: typeof CONTENT_SOURCE; kind: "snapshot-request"; renderId: RenderId }
+  // Panel asks the page to fetch a URL (JS / source map) same-origin.
+  | { source: typeof CONTENT_SOURCE; kind: "source-request"; requestId: string; url: string }
   // Panel hovered/selected a component: paint (id) or clear (null) its overlay.
   | { source: typeof CONTENT_SOURCE; kind: "highlight"; componentId: ComponentId | null }
   // Panel replayed a commit: flash these components on the page as a wave.
@@ -33,6 +44,10 @@ export type PortMessage =
   | { kind: "snapshot-request"; renderId: RenderId }
   // page → panel: the requested snapshot, ingested into the trace store.
   | { kind: "snapshot"; frame: EventsBatchMessage["payload"] }
+  // panel → page: fetch module / source-map text via the page origin.
+  | { kind: "source-request"; requestId: string; url: string }
+  // page → panel: fetched text (or error).
+  | { kind: "source"; requestId: string; url: string; body?: string; error?: string }
   // panel → page: paint (id) or clear (null) a component's DOM overlay.
   | { kind: "highlight"; componentId: ComponentId | null }
   // panel → page: flash a replayed commit's components as a wave.

@@ -45,6 +45,9 @@ importers:
       '@react-lens/diff-engine':
         specifier: workspace:*
         version: link:../../packages/diff-engine
+      '@react-lens/explain':
+        specifier: workspace:*
+        version: link:../../packages/explain
       '@react-lens/fiber':
         specifier: workspace:*
         version: link:../../packages/fiber
@@ -182,6 +185,30 @@ importers:
         specifier: ^6.0.7
         version: 6.4.3
 
+  packages/agent:
+    dependencies:
+      '@react-lens/causality':
+        specifier: workspace:*
+        version: link:../causality
+      '@react-lens/diagnostics':
+        specifier: workspace:*
+        version: link:../diagnostics
+      '@react-lens/diff-engine':
+        specifier: workspace:*
+        version: link:../diff-engine
+      '@react-lens/explain':
+        specifier: workspace:*
+        version: link:../explain
+      '@react-lens/protocol':
+        specifier: workspace:*
+        version: link:../protocol
+      '@react-lens/source-maps':
+        specifier: workspace:*
+        version: link:../source-maps
+      '@react-lens/trace-engine':
+        specifier: workspace:*
+        version: link:../trace-engine
+
   packages/causality:
     dependencies:
       '@react-lens/diff-engine':
@@ -208,6 +235,21 @@ importers:
       '@react-lens/protocol':
         specifier: workspace:*
         version: link:../protocol
+
+  packages/explain:
+    dependencies:
+      '@react-lens/causality':
+        specifier: workspace:*
+        version: link:../causality
+      '@react-lens/diagnostics':
+        specifier: workspace:*
+        version: link:../diagnostics
+      '@react-lens/protocol':
+        specifier: workspace:*
+        version: link:../protocol
+      '@react-lens/trace-engine':
+        specifier: workspace:*
+        version: link:../trace-engine
 
   packages/fiber:
     dependencies:

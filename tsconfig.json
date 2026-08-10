@@ -11,6 +11,8 @@
     { "path": "./packages/tree" },
     { "path": "./packages/graph" },
     { "path": "./packages/source-maps" },
-    { "path": "./packages/diagnostics" }
+    { "path": "./packages/diagnostics" },
+    { "path": "./packages/explain" },
+    { "path": "./packages/agent" }
   ]
 }

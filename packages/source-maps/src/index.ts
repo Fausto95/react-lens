@@ -1,1 +1,6 @@
-export { createSourceResolver, type SourceResolver } from "./resolver.js";
+export {
+  createSourceResolver,
+  type SourceResolver,
+  type Fetcher,
+  type OriginalSource,
+} from "./resolver.js";

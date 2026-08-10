@@ -391,39 +391,124 @@ output change" with the attached confidence.
 
 ## diagnostics
 
-`[protocol]`. Pure rules over `(ast, runtimeEvidence)`. OXC parses in the worker
-(§DESIGN 8). Declarative rule registry, compiler-aware.
+`[protocol]`. Pure rules over runtime evidence + optional static findings.
+OXC parses in the Doctor worker when available; `analyzeSourceSmart` falls back
+to regex (§DESIGN 8).
 
 ```ts
-interface RuntimeEvidence {
-  component: ComponentInstance;
-  renders: RenderEvent[];
-  downstreamRenderCost?: number;    // ms attributable to this finding
-  affected?: ComponentId[];
+interface DiagnosticInput {
+  componentId: ComponentId;
+  name: string;
+  renders: number;
+  suspiciousRenders: number;
+  selfTime: number;
+  functionPropChurn: boolean;
+  uncompiled: boolean;
+  source?: SourceLocation;
 }
 
 interface Diagnostic {
   ruleId: string;
+  componentId: ComponentId;
   severity: "info" | "warn" | "suspicious" | "severe";
-  componentId?: ComponentId;
+  title: string;
+  detail: string;
+  impact: number;
+  fix?: string;
   source?: SourceLocation;
-  message: string;
-  evidence: string[];               // code excerpt + runtime numbers
-  alternative?: string;             // suggested fix (never manual memoization)
-  impactScore: number;              // duration × frequency × weight × confidence
 }
 
-interface DoctorRule {
-  id: string;
-  match(ast: unknown, evidence?: RuntimeEvidence): boolean;
-  requiresRuntime: boolean;
-  produce(ctx: { ast: unknown; evidence?: RuntimeEvidence }): Diagnostic;
-}
-
-// Registry, not a chain.
-function registerRule(rule: DoctorRule): void;
-function analyze(source: string, evidence?: RuntimeEvidence): Diagnostic[];
+function analyze(inputs: DiagnosticInput[]): Diagnostic[];
+function analyzeOne(input: DiagnosticInput): Diagnostic[];
+function analyzeSourceSmart(source: string, opts, regexFallback): Promise<StaticFinding[]>;
+function mergeStaticAndRuntime(
+  staticFindings: StaticFinding[],
+  runtime: Diagnostic[],
+  evidence: { componentId: ComponentId; selfTime: number; renders: number; suspiciousRenders?: number },
+): Diagnostic[];
 ```
+
+---
+
+## source-maps
+
+`[protocol]`. Compiled `_debugStack` coords → original file/line via injectable
+fetcher (page-proxied in the extension).
+
+```ts
+type Fetcher = (url: string) => Promise<string>;
+
+interface SourceResolver {
+  resolve(compiled: SourceLocation): Promise<SourceLocation | null>;
+  sourceContent(compiledFile: string, prefer?: string): Promise<OriginalSource | null>;
+  clear(): void;
+}
+
+function createSourceResolver(fetcher?: Fetcher): SourceResolver;
+```
+
+Protocol messages: `source/request` `{ requestId, url }` → `source/response`
+`{ requestId, url, body?, error? }` (body capped ~2MB).
+
+---
+
+## explain
+
+`[protocol, trace-engine, causality, diagnostics]`. Deterministic interaction
+narrative — no LLM.
+
+```ts
+function explainInteraction(
+  store: TraceStore,
+  causality: Causality,
+  interaction: Interaction,
+  opts?: { diagnose?: (id: ComponentId) => Diagnostic[] },
+): Narrative;
+
+interface Narrative {
+  headline: string;
+  summary: string;
+  topCost: Array<{ componentId; name; self; renderId; wasted }>;
+  waste: Array<{ componentId; name; renderId; self }>;
+  chain: Cause[];
+  doctor: Diagnostic[];
+  nextClick: { kind: "component" | "render" | "doctor"; id; reason } | null;
+  citations: LensRef[];
+}
+```
+
+---
+
+## agent
+
+`[trace-engine, causality, diff-engine, diagnostics, explain, source-maps]`.
+Closed tool loop over an OpenAI-compatible chat API (BYOK).
+
+```ts
+interface AgentSettings { baseUrl: string; apiKey: string; model: string }
+
+function createToolHandlers(deps: {
+  store: TraceStore;
+  causality: Causality;
+  diagnose: (id: ComponentId) => Diagnostic[];
+  sourceResolver: SourceResolver;
+}): ToolHandlers;
+
+function runAgent(opts: {
+  settings: AgentSettings;
+  question: string;
+  handlers: ToolHandlers;
+  signal?: AbortSignal;
+  onStep?: (step: AgentStep) => void;
+}): Promise<AgentAnswer>;
+
+// Tools: explain_interaction | query_trace | why | root_cause |
+//        diff_snapshots | diagnose | resolve_source
+```
+
+Answers must cite Lens IDs. Keys stay on-device except as auth headers to the
+user-configured provider (`openai` | `anthropic`/Claude | `zml`/Z.AI GLM via
+Anthropic-compatible `https://api.z.ai/api/anthropic`, model `glm-5v-turbo`).
 
 ---
 
@@ -437,3 +522,5 @@ function analyze(source: string, evidence?: RuntimeEvidence): Diagnostic[];
   (solid/dashed, opacity) rather than presenting inference as fact.
 - IDs are numeric and branded internally; human-readable strings appear only at
   the UI boundary.
+- The Agent may only call the closed tool set; it is not a general chatbot over
+  the app heap.

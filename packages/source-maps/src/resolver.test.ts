@@ -45,4 +45,18 @@ describe("source resolver", () => {
     const out = await resolver.resolve(loc("/src/App.tsx", 1, 0));
     expect(out?.file).toBe("src/App.tsx");
   });
+
+  it("picks sourcesContent by prefer path when a map has multiple sources", async () => {
+    const code = inlineModule({
+      version: 3,
+      sources: ["src/Other.tsx", "src/App.tsx"],
+      sourcesContent: ["other", "app-src"],
+      names: [],
+      mappings: "AAAA",
+    });
+    const resolver = createSourceResolver(async () => code);
+    const src = await resolver.sourceContent("/bundle.js", "src/App.tsx");
+    expect(src?.content).toBe("app-src");
+    expect(src?.path).toBe("src/App.tsx");
+  });
 });

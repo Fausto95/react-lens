@@ -1,12 +1,22 @@
 import type { EventsBatchMessage, ComponentId } from "@react-lens/protocol";
+import type { Diagnostic } from "@react-lens/diagnostics";
 
 export interface DoctorResult {
   count: number;
   affected: Set<ComponentId>;
+  fused?: Diagnostic[];
 }
 
 export interface DoctorClient {
   ingest(batch: EventsBatchMessage["payload"]): void;
+  /** Upload original source for static+runtime fusion in the worker. */
+  analyzeSource(args: {
+    componentId: ComponentId;
+    name: string;
+    sourceText: string;
+    file?: string;
+  }): void;
+  clearSources(): void;
   subscribe(cb: (result: DoctorResult) => void): () => void;
   dispose(): void;
 }
@@ -25,13 +35,21 @@ export function createDoctorClient(): DoctorClient | null {
   }
 
   const subscribers = new Set<(result: DoctorResult) => void>();
-  worker.onmessage = (e: MessageEvent<{ count: number; affected: ComponentId[] }>) => {
-    const result: DoctorResult = { count: e.data.count, affected: new Set(e.data.affected) };
+  worker.onmessage = (
+    e: MessageEvent<{ count: number; affected: ComponentId[]; fused?: Diagnostic[] }>,
+  ) => {
+    const result: DoctorResult = {
+      count: e.data.count,
+      affected: new Set(e.data.affected),
+      ...(e.data.fused ? { fused: e.data.fused } : {}),
+    };
     for (const cb of subscribers) cb(result);
   };
 
   return {
     ingest: (batch) => worker.postMessage({ type: "frame", batch }),
+    analyzeSource: (args) => worker.postMessage({ type: "source", ...args }),
+    clearSources: () => worker.postMessage({ type: "clear-sources" }),
     subscribe: (cb) => {
       subscribers.add(cb);
       return () => subscribers.delete(cb);

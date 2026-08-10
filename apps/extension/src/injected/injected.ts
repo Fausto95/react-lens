@@ -47,6 +47,44 @@ function start(): void {
 // initial mount) is replayed into a live listener instead of being lost.
 start();
 
+const SOURCE_MAX_BYTES = 2 * 1024 * 1024;
+
+async function fetchSourceForPanel(requestId: string, url: string): Promise<void> {
+  try {
+    if (!/^https?:\/\//.test(url) && !url.startsWith("/") && !url.startsWith(".")) {
+      throw new Error(`unsupported source url: ${url}`);
+    }
+    const absolute = new URL(url, location.href).href;
+    const res = await fetch(absolute);
+    if (!res.ok) throw new Error(`fetch ${absolute}: ${res.status}`);
+    const text = await res.text();
+    const body =
+      text.length > SOURCE_MAX_BYTES ? text.slice(0, SOURCE_MAX_BYTES) : text;
+    window.postMessage(
+      {
+        source: PAGE_SOURCE,
+        kind: "source",
+        requestId,
+        url: absolute,
+        body,
+        ...(text.length > SOURCE_MAX_BYTES ? { error: "truncated" } : {}),
+      },
+      "*",
+    );
+  } catch (err) {
+    window.postMessage(
+      {
+        source: PAGE_SOURCE,
+        kind: "source",
+        requestId,
+        url,
+        error: err instanceof Error ? err.message : String(err),
+      },
+      "*",
+    );
+  }
+}
+
 window.addEventListener("message", (event: MessageEvent) => {
   if (event.source !== window) return;
   const data = event.data as ContentToPage | undefined;
@@ -65,6 +103,8 @@ window.addEventListener("message", (event: MessageEvent) => {
       },
       "*",
     );
+  } else if (data.kind === "source-request") {
+    void fetchSourceForPanel(data.requestId, data.url);
   } else if (data.kind === "highlight") {
     if (data.componentId === null) {
       if (waveTimers.length > 0) return;

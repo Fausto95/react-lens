@@ -47,6 +47,14 @@ function connect(): void {
     } else if (msg.kind === "snapshot-request") {
       const toPage: ContentToPage = { source: CONTENT_SOURCE, kind: "snapshot-request", renderId: msg.renderId };
       window.postMessage(toPage, "*");
+    } else if (msg.kind === "source-request") {
+      const toPage: ContentToPage = {
+        source: CONTENT_SOURCE,
+        kind: "source-request",
+        requestId: msg.requestId,
+        url: msg.url,
+      };
+      window.postMessage(toPage, "*");
     } else if (msg.kind === "highlight") {
       const toPage: ContentToPage = { source: CONTENT_SOURCE, kind: "highlight", componentId: msg.componentId };
       window.postMessage(toPage, "*");
@@ -83,12 +91,30 @@ window.addEventListener("message", (event: MessageEvent) => {
   const data = event.data as PageToContent | undefined;
   if (!data || data.source !== PAGE_SOURCE) return;
 
-  // Snapshot responses are replies to a live panel request — relay straight
-  // through, never buffered (they'd bloat the buffer and replay stale).
+  // Snapshot / source responses are replies to a live panel request — relay
+  // straight through, never buffered (they'd bloat the buffer and replay stale).
   if (data.kind === "snapshot") {
     if (port) {
       try {
         port.postMessage({ kind: "snapshot", frame: data.frame });
+      } catch {
+        port = null;
+        panelReady = false;
+        scheduleReconnect();
+      }
+    }
+    return;
+  }
+  if (data.kind === "source") {
+    if (port) {
+      try {
+        port.postMessage({
+          kind: "source",
+          requestId: data.requestId,
+          url: data.url,
+          ...(data.body !== undefined ? { body: data.body } : {}),
+          ...(data.error !== undefined ? { error: data.error } : {}),
+        });
       } catch {
         port = null;
         panelReady = false;

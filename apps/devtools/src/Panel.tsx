@@ -19,7 +19,10 @@ import {
   importSession,
 } from "./session.js";
 import { WasteBanner } from "./WasteBanner.js";
+import { sourceResolver } from "./sourceResolver.js";
 import "./theme.css";
+
+export { configureSourceFetcher, getSourceResolver } from "./sourceResolver.js";
 
 export interface PanelProps {
   store: TraceStore;
@@ -70,6 +73,7 @@ export function Panel({
   // shared by the Timeline, Tree, and Inspector.
   const [cursor, setCursor] = useState<TimeCursor>({ t: 0, mode: "live" });
   const [ab, setAB] = useState<ABMarks>({});
+  const [explainToken, setExplainToken] = useState(0);
   const { width, onResizeStart } = useDockResize(embedded);
   const { splitPct, bodyRef, onSplitStart } = usePaneSplit();
   const stats = store.stats();
@@ -99,6 +103,31 @@ export function Panel({
       client.dispose();
     };
   }, [doctorClient, store]);
+
+  // Push selected component source into the Doctor worker for static+runtime fusion.
+  useEffect(() => {
+    const client = doctorClient;
+    if (!client || selected == null) return;
+    const inst = store.instance(selected);
+    if (!inst?.source) return;
+    let alive = true;
+    const compiled = inst.source;
+    void Promise.all([
+      sourceResolver.resolve(compiled),
+      sourceResolver.sourceContent(compiled.file),
+    ]).then(([original, src]) => {
+      if (!alive || !src) return;
+      client.analyzeSource({
+        componentId: selected,
+        name: inst.name,
+        sourceText: src.content,
+        file: original?.file ?? src.path,
+      });
+    });
+    return () => {
+      alive = false;
+    };
+  }, [doctorClient, store, selected]);
 
   // The store was cleared (page navigated/reloaded) — return the timeline to
   // LIVE and drop A/B marks so it doesn't sit at a now-gone historical moment.
@@ -147,6 +176,13 @@ export function Panel({
     hint: "L",
     group: "Timeline",
     run: goLive,
+  });
+  commands.push({
+    id: "explain-interaction",
+    label: "Explain this interaction",
+    hint: "?",
+    group: "Timeline",
+    run: () => setExplainToken((n) => n + 1),
   });
   if (onToggleOverlay) {
     commands.push({
@@ -341,6 +377,7 @@ export function Panel({
         onCursor={setCursor}
         onSetAB={setAB}
         onSelectComponent={setSelected}
+        explainToken={explainToken}
         {...(onReplayCommit ? { onReplay: onReplayCommit } : {})}
       />
 

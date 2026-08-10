@@ -9,7 +9,8 @@ import manifest from "./src/manifest.json";
 export default defineConfig({
   resolve: {
     alias: [
-      // oxc-parser isn't browser-bundleable; diagnostics falls back to regex.
+      // oxc-parser WASM isn't browser-bundleable (worker or main). Stub it so
+      // analyzeSourceSmart falls back to regex — including in doctorWorker.
       {
         find: "oxc-parser",
         replacement: new URL("./src/oxc-stub.ts", import.meta.url).pathname,

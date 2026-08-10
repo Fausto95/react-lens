@@ -7,4 +7,5 @@ export {
   type AnalyzeSourceOptions,
 } from "./static.js";
 export { analyzeSourceAst, analyzeSourceSmart } from "./ast.js";
+export { mergeStaticAndRuntime, type FuseEvidence } from "./fuse.js";
 export type { Diagnostic, DiagnosticInput, Rule, Severity } from "./types.js";

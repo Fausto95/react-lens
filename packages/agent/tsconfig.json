@@ -1,0 +1,17 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "dist"
+  },
+  "include": ["src"],
+  "references": [
+    { "path": "../protocol" },
+    { "path": "../trace-engine" },
+    { "path": "../causality" },
+    { "path": "../diff-engine" },
+    { "path": "../diagnostics" },
+    { "path": "../explain" },
+    { "path": "../source-maps" }
+  ]
+}
