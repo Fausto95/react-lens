@@ -41,6 +41,9 @@ importers:
       '@react-lens/fiber':
         specifier: workspace:*
         version: link:../../packages/fiber
+      '@react-lens/graph':
+        specifier: workspace:*
+        version: link:../../packages/graph
       '@react-lens/instrumentation':
         specifier: workspace:*
         version: link:../../packages/instrumentation
@@ -53,6 +56,9 @@ importers:
       '@react-lens/trace-engine':
         specifier: workspace:*
         version: link:../../packages/trace-engine
+      '@react-lens/tree':
+        specifier: workspace:*
+        version: link:../../packages/tree
       react:
         specifier: ^19
         version: 19.2.8
@@ -156,6 +162,12 @@ importers:
         specifier: workspace:*
         version: link:../protocol
 
+  packages/graph:
+    dependencies:
+      '@react-lens/protocol':
+        specifier: workspace:*
+        version: link:../protocol
+
   packages/instrumentation:
     dependencies:
       '@react-lens/fiber':
@@ -177,6 +189,12 @@ importers:
         version: link:../protocol
 
   packages/trace-engine:
+    dependencies:
+      '@react-lens/protocol':
+        specifier: workspace:*
+        version: link:../protocol
+
+  packages/tree:
     dependencies:
       '@react-lens/protocol':
         specifier: workspace:*

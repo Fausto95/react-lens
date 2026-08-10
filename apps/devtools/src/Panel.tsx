@@ -126,6 +126,7 @@ export function Panel({
               store={store}
               causality={causality}
               componentId={selected}
+              onSelectComponent={setSelected}
               {...(edit ? { edit } : {})}
               {...(onHighlight ? { highlight: onHighlight } : {})}
             />

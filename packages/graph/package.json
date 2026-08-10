@@ -1,0 +1,9 @@
+{
+  "name": "@react-lens/graph",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": { ".": "./src/index.ts" },
+  "dependencies": { "@react-lens/protocol": "workspace:*" },
+  "scripts": { "typecheck": "tsc --noEmit" }
+}

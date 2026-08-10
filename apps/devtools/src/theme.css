@@ -355,6 +355,22 @@
 .rl-dom-text { padding-left: 19px; }
 .rl-dom-ellipsis { color: var(--rl-text-faint); padding-left: 2px; }
 
+/* Relations (Focus Lens) */
+.rl-rel { display: flex; flex-direction: column; gap: var(--rl-s3); }
+.rl-rel-group { display: flex; flex-direction: column; gap: 2px; }
+.rl-rel-title { font-size: 11px; color: var(--rl-text-faint); text-transform: uppercase; letter-spacing: 0.05em; }
+.rl-rel-item {
+  -webkit-app-region: no-drag;
+  display: flex; align-items: center; gap: 6px;
+  background: transparent; border: none; color: var(--rl-text);
+  font: inherit; font-size: 12px; padding: 2px 0; text-align: left; cursor: default;
+}
+.rl-rel-item.link { cursor: pointer; }
+.rl-rel-item.link:hover { color: var(--rl-render); }
+.rl-rel-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--rl-text-faint); }
+.rl-rel-dot.component { background: var(--rl-render); }
+.rl-rel-dot.context { background: var(--rl-healthy); }
+
 .rl-muted { color: var(--rl-text-faint); }
 .rl-source-loc { font-family: var(--rl-mono); font-size: 12px; margin-bottom: var(--rl-s4); overflow-wrap: anywhere; }
 .rl-actions { display: flex; gap: var(--rl-s3); }

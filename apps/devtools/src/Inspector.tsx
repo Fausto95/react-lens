@@ -13,6 +13,7 @@ import { EffectsTab } from "./tabs/EffectsTab.js";
 import { RendersTab } from "./tabs/RendersTab.js";
 import { SourceTab } from "./tabs/SourceTab.js";
 import { DomTab } from "./tabs/DomTab.js";
+import { RelationsTab } from "./tabs/RelationsTab.js";
 
 export interface EditApi {
   setProp(componentId: ComponentId, path: Array<string | number>, value: unknown): void;
@@ -31,6 +32,8 @@ export interface InspectorContext {
   activeRenderId: RenderId | null;
   snapshot: RenderSnapshot | undefined;
   onSelectRender: (id: RenderId) => void;
+  /** Navigate the inspector to another component (Relations links). */
+  onSelectComponent?: (id: ComponentId) => void;
   /** Present only when live editing is available (embedded, dev build). */
   edit?: EditApi;
   /** Highlight this component's DOM on the page (embedded only). */
@@ -48,12 +51,14 @@ export function Inspector({
   componentId,
   edit,
   highlight,
+  onSelectComponent,
 }: {
   store: TraceStore;
   causality: Causality;
   componentId: ComponentId;
   edit?: EditApi;
   highlight?: (id: ComponentId | null) => void;
+  onSelectComponent?: (id: ComponentId) => void;
 }) {
   useTraceVersion(store, { kind: "component", id: componentId });
   const inst = store.instance(componentId);
@@ -79,6 +84,7 @@ export function Inspector({
     onSelectRender: setSelectedRender,
     ...(edit ? { edit } : {}),
     ...(highlight ? { highlight } : {}),
+    ...(onSelectComponent ? { onSelectComponent } : {}),
   };
 
   const hooks = snapshot?.hooks ?? [];
@@ -134,6 +140,10 @@ export function Inspector({
           <EffectsTab ctx={ctx} />
         </Section>
       )}
+
+      <Section title="Relations">
+        <RelationsTab ctx={ctx} />
+      </Section>
 
       <Section title="Renders" count={renders.length}>
         <RendersTab ctx={ctx} renders={renders} />
