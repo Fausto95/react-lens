@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, useRef, useEffect } from "react";
 import type { TraceStore } from "@react-lens/trace-engine";
 import type { Causality } from "@react-lens/causality";
 import type { ComponentId } from "@react-lens/protocol";
@@ -63,6 +63,27 @@ export function Tree({
   const rows = useMemo(() => flatten(roots, expanded), [roots, expanded]);
   const maxSelf = useMemo(() => Math.max(1, ...rows.map((r) => rowSelfTime(r))), [rows]);
 
+  // Row windowing: only mount rows in (or near) the viewport, so a 10k-node
+  // tree still renders ~30-100 rows. Row height is fixed (ROW_H).
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const [scrollTop, setScrollTop] = useState(0);
+  const [viewport, setViewport] = useState(600);
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const update = () => setViewport(el.clientHeight);
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+  const ROW_H = 26;
+  const OVERSCAN = 8;
+  const total = rows.length * ROW_H;
+  const startIndex = Math.max(0, Math.floor(scrollTop / ROW_H) - OVERSCAN);
+  const endIndex = Math.min(rows.length, Math.ceil((scrollTop + viewport) / ROW_H) + OVERSCAN);
+  const windowed = rows.slice(startIndex, endIndex);
+
   const toggle = (key: string) =>
     setCollapsed((prev) => {
       const next = new Set(prev);
@@ -102,18 +123,26 @@ export function Tree({
               : "No components captured. Interact with the page."}
         </div>
       ) : (
-        <div className="rl-tree-rows">
-          {rows.map((row) => (
-            <TreeRow
-              key={row.key}
-              row={row}
-              maxSelf={maxSelf}
-              selected={selected}
-              onSelect={onSelect}
-              onToggle={toggle}
-              onHover={onHover}
-            />
-          ))}
+        <div
+          className="rl-tree-scroll"
+          ref={scrollRef}
+          onScroll={(e) => setScrollTop(e.currentTarget.scrollTop)}
+        >
+          <div className="rl-tree-rows" style={{ height: total, position: "relative" }}>
+            <div style={{ position: "absolute", top: startIndex * ROW_H, left: 0, right: 0 }}>
+              {windowed.map((row) => (
+                <TreeRow
+                  key={row.key}
+                  row={row}
+                  maxSelf={maxSelf}
+                  selected={selected}
+                  onSelect={onSelect}
+                  onToggle={toggle}
+                  onHover={onHover}
+                />
+              ))}
+            </div>
+          </div>
         </div>
       )}
     </div>

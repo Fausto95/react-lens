@@ -106,7 +106,7 @@ export function Panel({
       </div>
 
       <div className="rl-body">
-        <div className="rl-pane">
+        <div className="rl-pane rl-pane-tree">
           <div className="rl-pane-title">Tree</div>
           <Tree
             store={store}

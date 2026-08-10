@@ -114,8 +114,10 @@
 .rl-badge.healthy { color: var(--rl-healthy); background: rgba(74,222,128,0.12); }
 .rl-badge.dim { color: var(--rl-text-faint); background: rgba(95,104,120,0.1); }
 
-/* Tree pane */
-.rl-tree { display: flex; flex-direction: column; }
+/* Tree pane — flex column so the row list gets its own scroll for windowing */
+.rl-pane-tree { display: flex; flex-direction: column; overflow: hidden; }
+.rl-tree { display: flex; flex-direction: column; min-height: 0; flex: 1; }
+.rl-tree-scroll { flex: 1; min-height: 0; overflow-y: auto; }
 .rl-tree-modes {
   display: flex; gap: 2px; padding: var(--rl-s2) var(--rl-s3);
   position: sticky; top: 26px; background: var(--rl-bg); z-index: 1;
