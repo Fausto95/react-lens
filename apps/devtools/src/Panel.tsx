@@ -5,6 +5,7 @@ import type { ComponentId } from "@react-lens/protocol";
 import { useTraceVersion } from "./useLens.js";
 import { Inspector, type EditApi } from "./Inspector.js";
 import { Tree } from "./Tree.js";
+import { CommandPalette, type Command } from "./CommandPalette.js";
 import "./theme.css";
 
 export interface PanelProps {
@@ -35,8 +36,39 @@ export function Panel({
 }: PanelProps) {
   useTraceVersion(store, { kind: "global" });
   const [selected, setSelected] = useState<ComponentId | null>(null);
+  const [paletteOpen, setPaletteOpen] = useState(false);
   const { width, onResizeStart } = useDockResize(embedded);
   const stats = store.stats();
+
+  // ⌘K / Ctrl+K opens the command palette.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        setPaletteOpen((v) => !v);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
+  const commands: Command[] = [];
+  if (onToggleOverlay) {
+    commands.push({
+      id: "toggle-overlay",
+      label: overlayEnabled ? "Disable render overlay" : "Enable render overlay",
+      hint: "⚡",
+      run: onToggleOverlay,
+    });
+  }
+  if (onToggleRecording) {
+    commands.push({
+      id: "toggle-recording",
+      label: recording ? "Pause recording" : "Start recording",
+      hint: "R",
+      run: onToggleRecording,
+    });
+  }
 
   return (
     <div
@@ -49,6 +81,9 @@ export function Panel({
           <span className="rl-dot">◈</span> React Lens
         </span>
         <span className="rl-spacer" />
+        <button className="rl-btn rl-cmdk-btn" onClick={() => setPaletteOpen(true)} title="Command palette">
+          ⌘K
+        </button>
         {onToggleOverlay && (
           <button
             className={`rl-btn rl-overlay-toggle${overlayEnabled ? " active" : ""}`}
@@ -106,6 +141,15 @@ export function Panel({
           {embedded ? "embedded" : "devtools"} · protocol v1
         </span>
       </div>
+
+      {paletteOpen && (
+        <CommandPalette
+          store={store}
+          commands={commands}
+          onSelectComponent={setSelected}
+          onClose={() => setPaletteOpen(false)}
+        />
+      )}
     </div>
   );
 }

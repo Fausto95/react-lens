@@ -2,7 +2,14 @@ import { useMemo, useState } from "react";
 import type { TraceStore } from "@react-lens/trace-engine";
 import type { Causality } from "@react-lens/causality";
 import type { ComponentId } from "@react-lens/protocol";
-import { buildTree, flatten, type ComponentDatum, type SemanticNode, type VisibleRow } from "@react-lens/tree";
+import {
+  buildTree,
+  flatten,
+  parseQuery,
+  type ComponentDatum,
+  type SemanticNode,
+  type VisibleRow,
+} from "@react-lens/tree";
 import { useTraceVersion } from "./useLens.js";
 import { ms } from "./format.js";
 
@@ -29,6 +36,7 @@ export function Tree({
 }) {
   const version = useTraceVersion(store, { kind: "global" });
   const [mode, setMode] = useState<TreeMode>("components");
+  const [query, setQuery] = useState("");
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
 
   const data = useMemo(
@@ -38,10 +46,12 @@ export function Tree({
     [store, causality, mode, version],
   );
 
-  const roots = useMemo(
-    () => buildTree(data, { include: includeFor(mode) }),
-    [data, mode],
-  );
+  const roots = useMemo(() => {
+    const modeInclude = includeFor(mode);
+    const queryPred = parseQuery(query);
+    const include = (d: ComponentDatum) => (modeInclude ? modeInclude(d) : true) && queryPred(d);
+    return buildTree(data, { include });
+  }, [data, mode, query]);
 
   const allKeys = useMemo(() => collectKeys(roots), [roots]);
   const expanded = useMemo(() => {
@@ -75,6 +85,13 @@ export function Tree({
           </button>
         ))}
       </div>
+      <input
+        className="rl-tree-search"
+        placeholder="Search  renders:>20  context:X  compiled:false"
+        value={query}
+        spellCheck={false}
+        onChange={(e) => setQuery(e.target.value)}
+      />
 
       {rows.length === 0 ? (
         <div className="rl-empty">

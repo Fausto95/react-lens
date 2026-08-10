@@ -129,7 +129,50 @@
 .rl-mode:hover { background: var(--rl-bg-hover); color: var(--rl-text); }
 .rl-mode.active { background: var(--rl-bg-active); color: var(--rl-text); border-color: var(--rl-border-strong); }
 
+.rl-tree-search {
+  margin: var(--rl-s2) var(--rl-s3) var(--rl-s3);
+  background: var(--rl-bg); color: var(--rl-text);
+  border: 1px solid var(--rl-border-strong); border-radius: 6px;
+  font: inherit; font-size: 12px; padding: 5px 8px;
+}
+.rl-tree-search:focus { outline: none; border-color: var(--rl-render); }
+.rl-tree-search::placeholder { color: var(--rl-text-faint); }
+
 .rl-tree-rows { display: flex; flex-direction: column; }
+
+/* Command palette */
+.rl-cmdk-btn { font-size: 11px; letter-spacing: 0.02em; }
+.rl-cmdk-backdrop {
+  position: absolute; inset: 0;
+  background: rgba(0,0,0,0.4);
+  display: flex; align-items: flex-start; justify-content: center;
+  padding-top: 60px; z-index: 2147483100;
+}
+.rl-cmdk {
+  width: min(520px, 92%);
+  background: var(--rl-bg-raised);
+  border: 1px solid var(--rl-border-strong);
+  border-radius: 10px;
+  box-shadow: 0 16px 48px rgba(0,0,0,0.5);
+  overflow: hidden;
+}
+.rl-cmdk-input {
+  width: 100%; box-sizing: border-box;
+  background: transparent; color: var(--rl-text);
+  border: none; border-bottom: 1px solid var(--rl-border);
+  font: inherit; font-size: 14px; padding: 12px 14px;
+}
+.rl-cmdk-input:focus { outline: none; }
+.rl-cmdk-list { max-height: 320px; overflow: auto; padding: 4px; }
+.rl-cmdk-item {
+  display: flex; align-items: center; gap: var(--rl-s3);
+  padding: 7px 10px; border-radius: 6px; cursor: pointer; font-size: 13px;
+}
+.rl-cmdk-item.active { background: var(--rl-bg-active); }
+.rl-cmdk-kind { width: 16px; text-align: center; color: var(--rl-text-faint); font-size: 11px; }
+.rl-cmdk-kind.component { color: var(--rl-render); }
+.rl-cmdk-label { flex: 1; }
+.rl-cmdk-hint { color: var(--rl-text-faint); font-size: 11px; font-family: var(--rl-mono); }
 .rl-tree-row {
   display: flex; align-items: center; gap: 5px;
   height: 26px; padding-right: var(--rl-s4);
