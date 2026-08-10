@@ -182,6 +182,17 @@ describe("TraceStore — subscriptions", () => {
     expect(cb).toHaveBeenCalledTimes(1);
   });
 
+  it("clear() empties the store and notifies subscribers", () => {
+    const store = new TraceStore();
+    store.ingest(batch({ events: [renderEvent({ componentId: 1 as ComponentId })], instances: [instance(1, "A")] }));
+    const cb = vi.fn();
+    store.subscribe({ kind: "global" }, cb);
+    store.clear();
+    expect(cb).toHaveBeenCalledTimes(1);
+    expect(store.stats().components).toBe(0);
+    expect(store.stats().renders).toBe(0);
+  });
+
   it("dispose stops notifications", () => {
     const store = new TraceStore();
     const cb = vi.fn();
