@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState, useEffect, useCallback } from "react";
+import { useMemo, useRef, useState, useEffect, useLayoutEffect, useCallback } from "react";
 import {
   anomalyStats,
   type AnomalyStats,
@@ -13,6 +13,8 @@ import {
   IconChevronDown,
   IconChevronRight,
   IconClose,
+  IconFitSelection,
+  IconFitWidth,
   IconMinus,
   IconPause,
   IconPlay,
@@ -38,6 +40,10 @@ const NEXT_MODE: Record<Mode, Mode> = {
 };
 const SNAP_PX = 6;
 const WHY_CAP = 80;
+/** Manual / fit zoom ceiling (px per ms). Short interactions need headroom past 200. */
+const SCALE_MAX = 5000;
+/** Floor (px per ms) for zoom controls. */
+const SCALE_MIN = 0.01;
 
 /**
  * Video-editor-style time machine: interaction / commit tracks plus a
@@ -89,7 +95,10 @@ export function Timeline({
   const scrubbing = useRef(false);
   const draggingPlayhead = useRef(false);
   const rafRef = useRef(0);
+  /** Applied after the scale model commits so scrollLeft isn't clamped to the old width. */
+  const pendingScrollRef = useRef<number | null>(null);
   const [playing, setPlaying] = useState(false);
+  const [scrollLeft, setScrollLeft] = useState(0);
 
   const bounds = useMemo(() => sessionBounds(interactions, commits), [interactions, commits]);
   const anomaly = useMemo(() => anomalyStats(commits), [commits]);
@@ -125,6 +134,28 @@ export function Timeline({
     },
     [tOfX, bounds.t0],
   );
+
+  // Run after layout so the new inner width exists before we set scrollLeft.
+  useLayoutEffect(() => {
+    const x = pendingScrollRef.current;
+    if (x == null) return;
+    pendingScrollRef.current = null;
+    const el = scrollRef.current;
+    if (el) {
+      el.scrollLeft = x;
+      setScrollLeft(el.scrollLeft);
+    }
+  }, [model, scale]);
+
+  // Keep sticky bar labels in sync with horizontal scroll.
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const sync = () => setScrollLeft(el.scrollLeft);
+    sync();
+    el.addEventListener("scroll", sync, { passive: true });
+    return () => el.removeEventListener("scroll", sync);
+  }, [mode, interactions.length]);
 
   const snapTargets = useMemo(() => {
     const ts: number[] = [];
@@ -282,20 +313,56 @@ export function Timeline({
     [commits, cursor, bounds.t1, onCursor, selectAt],
   );
 
+  const fitSession = useCallback(() => {
+    pendingScrollRef.current = 0;
+    if (scale === 0) {
+      const el = scrollRef.current;
+      if (el) el.scrollLeft = 0;
+      pendingScrollRef.current = null;
+    } else {
+      setScale(0);
+    }
+  }, [scale]);
+
   const fitSelection = useCallback(
     (it: Interaction) => {
-      const span = Math.max(1, it.end - it.start);
-      const target = clamp((Math.max(viewW, 400) * 0.75) / span, 0.01, 200);
-      setScale(target);
+      const el = scrollRef.current;
+      const port = el?.clientWidth || viewW;
+      // Fit the clip; expand sub-frame clicks to a small context window so zoom is usable.
+      const span = Math.max(0, it.end - it.start);
+      const window = Math.max(span, 16);
+      const pad = (window - span) / 2;
+      const rangeStart = clamp(it.start - pad, bounds.t0, bounds.t1);
+      const rangeEnd = clamp(Math.max(it.end, it.start) + pad, bounds.t0, bounds.t1);
+      const targetW = Math.max(80, port * 0.85);
+      const next = scaleForProjectedWidth(
+        active,
+        bounds.t0,
+        bounds.t1,
+        rangeStart,
+        rangeEnd,
+        targetW,
+      );
+      const built = buildScale(active, bounds.t0, bounds.t1, next);
+      const x0 = projectX(built.segs, rangeStart);
+      const x1 = projectX(built.segs, rangeEnd);
+      const scrollTo = Math.max(0, (x0 + x1) / 2 - port / 2);
+      pendingScrollRef.current = scrollTo;
       setSelectedId(it.id);
       onCursor({ t: it.start, mode: "historical" });
-      requestAnimationFrame(() => {
-        const el = scrollRef.current;
-        if (!el) return;
-        el.scrollLeft = Math.max(0, xOf(it.start) - 40);
-      });
+      if (next === scale) {
+        // No scale change → layout effect won't re-fire; scroll now.
+        requestAnimationFrame(() => {
+          if (pendingScrollRef.current == null) return;
+          const sc = scrollRef.current;
+          if (sc) sc.scrollLeft = pendingScrollRef.current;
+          pendingScrollRef.current = null;
+        });
+      } else {
+        setScale(next);
+      }
     },
-    [onCursor, xOf, viewW],
+    [active, bounds.t0, bounds.t1, onCursor, scale, viewW],
   );
 
   const togglePlay = useCallback(() => {
@@ -315,7 +382,7 @@ export function Timeline({
     play(from, bounds.t1, false);
   }, [playing, stop, play, cursor, bounds, commits, onReplay, travel?.on]);
 
-  // Keyboard: T, L, [ ], Space, arrows
+  // Keyboard: T, L, F, [ ], Space, arrows
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const el = document.activeElement;
@@ -323,7 +390,10 @@ export function Timeline({
       if (e.metaKey || e.ctrlKey || e.altKey) return;
       if (e.key === "t" || e.key === "T") setMode((m) => NEXT_MODE[m]);
       else if (e.key === "l" || e.key === "L") onCursor({ t: bounds.t1, mode: "live" });
-      else if (e.key === "[") stepInteraction(-1);
+      else if (e.key === "f" || e.key === "F") {
+        if (selected) fitSelection(selected);
+        else fitSession();
+      } else if (e.key === "[") stepInteraction(-1);
       else if (e.key === "]") stepInteraction(1);
       else if (e.key === " " || e.code === "Space") {
         e.preventDefault();
@@ -338,7 +408,7 @@ export function Timeline({
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [bounds.t1, onCursor, stepInteraction, stepCommit, togglePlay]);
+  }, [bounds.t1, onCursor, stepInteraction, stepCommit, togglePlay, selected, fitSelection, fitSession]);
 
   const onPointerDown = (e: React.PointerEvent) => {
     if (e.button !== 0) return;
@@ -367,12 +437,16 @@ export function Timeline({
       const viewportX = e.clientX - el.getBoundingClientRect().left;
       const tAnchor = tOfX(el.scrollLeft + viewportX);
       const factor = e.deltaY < 0 ? 1.2 : 0.8;
-      const next = clamp((scale || fit) * factor, 0.01, 200);
+      const next = clamp((scale || fit) * factor, SCALE_MIN, SCALE_MAX);
       setScale(next);
       requestAnimationFrame(() => {
         const newModel = buildScale(active, bounds.t0, bounds.t1, next);
         const newX = projectX(newModel.segs, clamp(tAnchor, bounds.t0, bounds.t1));
-        el.scrollLeft = Math.max(0, newX - viewportX);
+        pendingScrollRef.current = Math.max(0, newX - viewportX);
+        // Force layout effect if scale didn't change enough to rebuild; apply now too.
+        const sc = scrollRef.current;
+        if (sc) sc.scrollLeft = pendingScrollRef.current;
+        pendingScrollRef.current = null;
       });
     } else {
       el.scrollLeft += e.deltaX || e.deltaY;
@@ -475,7 +549,7 @@ export function Timeline({
           <span className="rl-zoom-sep" />
           <button
             className="rl-icon-btn"
-            onClick={() => setScale((s) => clamp((s || fit) * 0.8, 0.01, 200))}
+            onClick={() => setScale((s) => clamp((s || fit) * 0.8, SCALE_MIN, SCALE_MAX))}
             title="Zoom out"
             aria-label="Zoom out"
           >
@@ -483,7 +557,7 @@ export function Timeline({
           </button>
           <button
             className="rl-icon-btn"
-            onClick={() => setScale((s) => clamp((s || fit) * 1.25, 0.01, 200))}
+            onClick={() => setScale((s) => clamp((s || fit) * 1.25, SCALE_MIN, SCALE_MAX))}
             title="Zoom in"
             aria-label="Zoom in"
           >
@@ -491,22 +565,21 @@ export function Timeline({
           </button>
           <button
             className={`rl-icon-btn${scale === 0 ? " active" : ""}`}
-            onClick={() => setScale(0)}
-            title="Fit session to width"
+            onClick={fitSession}
+            title="Fit session to width (F)"
             aria-label="Fit session to width"
           >
-            <span className="rl-tl-fit-glyph">⊡</span>
+            <IconFitWidth size={13} />
           </button>
-          {selected && (
-            <button
-              className="rl-icon-btn"
-              onClick={() => fitSelection(selected)}
-              title="Fit selection"
-              aria-label="Fit selection"
-            >
-              <span className="rl-tl-fit-glyph">⛶</span>
-            </button>
-          )}
+          <button
+            className="rl-icon-btn"
+            onClick={() => selected && fitSelection(selected)}
+            disabled={!selected}
+            title={selected ? "Fit selection (F)" : "Select an interaction to fit"}
+            aria-label={selected ? "Fit selection" : "Fit selection (none selected)"}
+          >
+            <IconFitSelection size={13} />
+          </button>
         </div>
         <button
           className={`rl-tl-live ${live ? "live" : "past"}`}
@@ -601,7 +674,19 @@ export function Timeline({
                           fitSelection(it);
                         }}
                       >
-                        <span className="rl-tl-int-label">{it.label}</span>
+                        <span
+                          className="rl-tl-int-label"
+                          style={{
+                            transform: `translateX(${stickyLabelShift(
+                              xOf(it.start),
+                              Math.max(3, xOf(it.end) - xOf(it.start)),
+                              scrollLeft,
+                              8,
+                            )}px)`,
+                          }}
+                        >
+                          {it.label}
+                        </span>
                       </button>
                     );
                   })}
@@ -655,6 +740,7 @@ export function Timeline({
                     interactions={interactions}
                     selectedId={selectedId}
                     playheadT={cursorT}
+                    scrollLeft={scrollLeft}
                     xOf={xOf}
                     onSelectComponent={onSelectComponent}
                     onHighlight={onHighlight}
@@ -918,6 +1004,7 @@ function PhaseWaterfall({
   interactions,
   selectedId,
   playheadT,
+  scrollLeft,
   xOf,
   onSelectComponent,
   onHighlight,
@@ -931,6 +1018,7 @@ function PhaseWaterfall({
   interactions: Interaction[];
   selectedId: string | null;
   playheadT: number;
+  scrollLeft: number;
   xOf: (t: number) => number;
   onSelectComponent?: (id: ComponentId) => void;
   onHighlight?: (id: ComponentId | null) => void;
@@ -1002,7 +1090,14 @@ function PhaseWaterfall({
               onSeek?.(bar.t0);
             }}
           >
-            <span className="rl-wf-bar-label">{bar.name}</span>
+            <span
+              className="rl-wf-bar-label"
+              style={{
+                transform: `translateX(${stickyLabelShift(bar.left, bar.width, scrollLeft, 12)}px)`,
+              }}
+            >
+              {bar.name}
+            </span>
             {bar.width >= 64 && <span className="rl-wf-bar-ms">{ms(bar.self)}</span>}
             {onAskAI && bar.self >= SLOW_SELF_MS && bar.width >= 34 && (
               <span
@@ -1031,6 +1126,20 @@ const BAR_H = 22;
 const PHASE_BAR_CAP = 64;
 /** Minimum clickable width when a render is sub-pixel on the scale. */
 const MIN_BAR_PX = 3;
+
+/** Keep a bar label in the visible scrollport while the bar itself is on-screen. */
+function stickyLabelShift(
+  barLeft: number,
+  barWidth: number,
+  scrollLeft: number,
+  _pad = 0,
+): number {
+  const hidden = scrollLeft - barLeft;
+  if (hidden <= 0) return 0;
+  // Leave room so the label doesn't shove the trailing ms off the bar.
+  const maxShift = Math.max(0, barWidth - 56);
+  return Math.min(hidden, maxShift);
+}
 
 interface PackedBar {
   id: ComponentId;
@@ -1308,6 +1417,35 @@ function projectX(segs: Seg[], t: number): number {
   }
   const last = segs[segs.length - 1];
   return last ? last.x1 : 0;
+}
+
+/**
+ * Solve for px/ms so the projected width of [rangeStart, rangeEnd] matches
+ * `targetWidth` under the compressed (idle-gutter) scale.
+ */
+function scaleForProjectedWidth(
+  active: Array<[number, number]>,
+  t0: number,
+  t1: number,
+  rangeStart: number,
+  rangeEnd: number,
+  targetWidth: number,
+): number {
+  const widthAt = (px: number) => {
+    const model = buildScale(active, t0, t1, px);
+    return projectX(model.segs, rangeEnd) - projectX(model.segs, rangeStart);
+  };
+  // Monotone in px for ranges that fall on active time; binary-search the match.
+  let lo = SCALE_MIN;
+  let hi = SCALE_MAX;
+  if (widthAt(lo) >= targetWidth) return lo;
+  if (widthAt(hi) <= targetWidth) return hi;
+  for (let i = 0; i < 28; i++) {
+    const mid = (lo + hi) / 2;
+    if (widthAt(mid) < targetWidth) lo = mid;
+    else hi = mid;
+  }
+  return clamp((lo + hi) / 2, SCALE_MIN, SCALE_MAX);
 }
 
 function projectT(segs: Seg[], x: number): number {

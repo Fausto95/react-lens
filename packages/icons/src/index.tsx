@@ -160,6 +160,25 @@ export function IconPlus(props: IconProps) {
   );
 }
 
+/** Fit session to viewport width — square with center mark. */
+export function IconFitWidth(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <rect x="3" y="3" width="10" height="10" rx="1.2" />
+      <circle cx="8" cy="8" r="1.2" fill="currentColor" stroke="none" />
+    </Svg>
+  );
+}
+
+/** Fit selection to viewport — four corner brackets. */
+export function IconFitSelection(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <path d="M3 5.5V3h2.5M13 5.5V3h-2.5M3 10.5V13h2.5M13 10.5V13h-2.5" />
+    </Svg>
+  );
+}
+
 /** Collapsed / next. */
 export function IconChevronRight(props: IconProps) {
   return (
