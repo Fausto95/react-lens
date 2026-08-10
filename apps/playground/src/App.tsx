@@ -34,14 +34,60 @@ export function App() {
       <header>
         <h1 style={{ fontSize: 22, marginBottom: 4 }}>React Lens Playground</h1>
         <p style={{ color: "#5f6878", marginTop: 0 }}>
-          Click a product. Watch the panel explain the render fanout.
+          Try the different controls — each produces a distinct commit to replay.
         </p>
       </header>
+      <Toolbar />
       <ProductGrid />
       <Cart />
     </SelectedContext.Provider>
   );
 }
+
+/**
+ * A toolbar of independent widgets. Each holds its OWN state, so clicking one
+ * produces a commit that renders only that widget — a visibly different update
+ * wave from the product-grid fanout when you replay it.
+ */
+function Toolbar() {
+  return (
+    <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+      <Ticker />
+      <Ticker />
+      <Clock />
+    </div>
+  );
+}
+
+let tickerSeq = 0;
+function Ticker() {
+  const label = useState(() => `Ticker ${++tickerSeq}`)[0];
+  const [n, setN] = useState(0);
+  return (
+    <button onClick={() => setN((v) => v + 1)} style={widgetStyle}>
+      {label}: {n}
+    </button>
+  );
+}
+
+function Clock() {
+  const [on, setOn] = useState(false);
+  return (
+    <button onClick={() => setOn((v) => !v)} style={widgetStyle}>
+      Toggle: {on ? "on" : "off"}
+    </button>
+  );
+}
+
+const widgetStyle: React.CSSProperties = {
+  padding: "8px 14px",
+  borderRadius: 8,
+  border: "1px solid #e2e5ea",
+  background: "#fff",
+  color: "#16181d",
+  cursor: "pointer",
+  font: "inherit",
+};
 
 function ProductGrid() {
   const { selected, select } = useContext(SelectedContext);

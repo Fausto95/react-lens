@@ -153,7 +153,6 @@ export function Panel({
 
       <Timeline
         store={store}
-        frozen={frozenCommit}
         onFreeze={setFrozenCommit}
         {...(onReplayCommit ? { onReplay: onReplayCommit } : {})}
       />

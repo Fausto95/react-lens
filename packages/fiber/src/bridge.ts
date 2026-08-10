@@ -22,6 +22,7 @@ import {
   findCurrentFiber,
   HostComponent,
   HostRoot,
+  PERFORMED_WORK,
 } from "./react-internals.js";
 
 export type Dispose = () => void;
@@ -376,12 +377,14 @@ function renderDetail(fiber: Fiber): RenderDetail | null {
   const changedPropKeys = shallowChangedKeys(alternate.memoizedProps, fiber.memoizedProps);
   const valuePropsChanged = changedPropKeys.length > 0;
 
-  // In non-profiling builds actualDuration is undefined, so we can't rely on
-  // timing to decide whether this fiber committed. React reuses (bails out on)
-  // fibers it did not re-render, so a fiber whose props- or state-head identity
-  // differs from its alternate is one that actually did work this commit. This
-  // keeps render counts meaningful without profiling and without counting the
-  // whole (bailed-out) tree.
+  // Whether this fiber did work in this commit. Precise per-commit attribution
+  // is ambiguous post-commit under React's double buffering (actualDuration and
+  // the PerformedWork flag can both be stale on the reused buffer of a
+  // bailed-out fiber), so we use the identity heuristic: a fiber whose props-
+  // or state-head identity differs from its alternate rendered recently. This
+  // is correct for fanout commits (the common case) but can over-report on
+  // commits that update only an isolated subtree — a known limitation.
+  void PERFORMED_WORK;
   const hasTiming = typeof fiber.actualDuration === "number" && fiber.actualDuration > 0;
   const propsIdentityChanged = alternate.memoizedProps !== fiber.memoizedProps;
   const stateChanged = alternate.memoizedState !== fiber.memoizedState;

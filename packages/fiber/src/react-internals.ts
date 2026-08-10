@@ -17,6 +17,9 @@ export const ForwardRef = 11;
 export const MemoComponent = 14;
 export const SimpleMemoComponent = 15;
 
+/** Fiber flag set during beginWork when a fiber renders (not a bailout). */
+export const PERFORMED_WORK = 0b1;
+
 export interface Fiber {
   tag: WorkTag;
   key: string | null;
