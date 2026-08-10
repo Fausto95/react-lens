@@ -476,11 +476,18 @@ export function Timeline({
       zoomTo((scale || fit) * (e.deltaY < 0 ? 1.2 : 0.8), viewportX);
       return;
     }
-    // Over the waterfall lane a vertical wheel belongs to the lane, full stop —
-    // including at its edges. Falling through to deltaY→pan there made the view
-    // jump sideways exactly when overscrolling, which reads as broken.
+    // When the waterfall lane is actually scrollable (a phase is expanded), a
+    // vertical wheel over it belongs to the lane entirely — including edges,
+    // where falling through to pan used to jump the view sideways. A collapsed
+    // lane fits its viewport exactly, so the wheel pans as everywhere else.
     const lane = (e.target as HTMLElement).closest?.(".rl-wf-packed");
-    if (lane && Math.abs(e.deltaY) >= Math.abs(e.deltaX)) return;
+    if (
+      lane &&
+      lane.scrollHeight > lane.clientHeight + 1 &&
+      Math.abs(e.deltaY) >= Math.abs(e.deltaX)
+    ) {
+      return;
+    }
     el.scrollLeft += e.deltaX || e.deltaY;
   };
 
@@ -787,6 +794,7 @@ export function Timeline({
                     interactions={interactions}
                     selectedId={selectedId}
                     playheadT={cursorT}
+                    maxRows={mode === "expanded" ? 8 : 4}
                     scrollLeft={scrollLeft}
                     xOf={xOf}
                     onSelectComponent={onSelectComponent}
@@ -1129,6 +1137,7 @@ function PhaseWaterfall({
   interactions,
   selectedId,
   playheadT,
+  maxRows,
   scrollLeft,
   xOf,
   onSelectComponent,
@@ -1143,6 +1152,8 @@ function PhaseWaterfall({
   interactions: Interaction[];
   selectedId: string | null;
   playheadT: number;
+  /** Rows that fit the lane viewport — the collapsed canvas never exceeds it. */
+  maxRows: number;
   scrollLeft: number;
   xOf: (t: number) => number;
   onSelectComponent?: (id: ComponentId) => void;
@@ -1163,21 +1174,22 @@ function PhaseWaterfall({
     return <div className="rl-tl-wf-empty">No component activity yet</div>;
   }
 
-  // Per-phase depth and overflow (tracks are assigned per phase by greedyPack).
+  // Per-phase depth; overflowing phases give their LAST fitting row to the
+  // +N-more chip so the collapsed canvas fits the lane exactly (no dead
+  // scroll stub — the lane only becomes scrollable once a phase is expanded).
   const depthByPhase = new Map<string, number>();
-  const hiddenByPhase = new Map<string, number>();
   for (const bar of packed.bars) {
     depthByPhase.set(bar.phaseId, Math.max(depthByPhase.get(bar.phaseId) ?? 0, bar.track + 1));
-    if (bar.track >= TRACK_CAP) {
-      hiddenByPhase.set(bar.phaseId, (hiddenByPhase.get(bar.phaseId) ?? 0) + 1);
-    }
   }
-  const visibleTracks = (phaseId: string): number => {
+  const contentRows = (phaseId: string): number => {
     const depth = depthByPhase.get(phaseId) ?? 0;
-    return expandedPhases.has(phaseId) ? depth : Math.min(depth, TRACK_CAP);
+    if (expandedPhases.has(phaseId) || depth <= maxRows) return depth;
+    return maxRows - 1;
   };
-  const barVisible = (bar: PackedBar): boolean =>
-    bar.track < TRACK_CAP || expandedPhases.has(bar.phaseId);
+  const chipFor = (phaseId: string): boolean => (depthByPhase.get(phaseId) ?? 0) > maxRows;
+  const hiddenCount = (phaseId: string): number =>
+    packed.bars.filter((b) => b.phaseId === phaseId && b.track >= maxRows - 1).length;
+  const barVisible = (bar: PackedBar): boolean => bar.track < contentRows(bar.phaseId);
   const togglePhaseDepth = (phaseId: string) =>
     setExpandedPhases((prev) => {
       const next = new Set(prev);
@@ -1187,7 +1199,7 @@ function PhaseWaterfall({
     });
   const displayTracks = Math.max(
     1,
-    ...packed.phases.map((p) => visibleTracks(p.id) + (hiddenByPhase.has(p.id) ? 1 : 0)),
+    ...packed.phases.map((p) => contentRows(p.id) + (chipFor(p.id) ? 1 : 0)),
   );
 
   // Bottom pad clears the outer horizontal scrollbar overlaying the lane.
@@ -1219,8 +1231,8 @@ function PhaseWaterfall({
         })}
 
         {packed.phases.map((phase) => {
-          const hidden = hiddenByPhase.get(phase.id);
-          if (!hidden) return null;
+          if (!chipFor(phase.id)) return null;
+          const hidden = hiddenCount(phase.id);
           const open = expandedPhases.has(phase.id);
           return (
             <button
@@ -1229,7 +1241,7 @@ function PhaseWaterfall({
               className="rl-wf-more"
               style={{
                 left: phase.left + 2,
-                top: PHASE_PAD_Y + visibleTracks(phase.id) * TRACK_H,
+                top: PHASE_PAD_Y + contentRows(phase.id) * TRACK_H,
                 height: BAR_H,
               }}
               onClick={(e) => {
@@ -1341,8 +1353,6 @@ const LABEL_MIN_PX = 56;
 const OUT_LABEL_MIN_ROOM = 40;
 /** Right-edge breathing room so end-of-session boxes and labels never crop. */
 const INNER_RIGHT_PAD = 90;
-/** Rows shown per phase before a "+N more" expander (mount bursts pack deep). */
-const TRACK_CAP = 8;
 
 /** Keep a bar label in the visible scrollport while the bar itself is on-screen. */
 function stickyLabelShift(
