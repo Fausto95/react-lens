@@ -43,6 +43,13 @@ function EmbeddedPanel({ runtime }: { runtime: LensRuntime }) {
         else overlay.enable();
         setOverlayOn((v) => !v);
       }}
+      onReplayCommit={(ids: ComponentId[]) => {
+        // Update Wave: light up the commit's components in sequence.
+        ids.forEach((id, i) => {
+          setTimeout(() => highlighter.show(runtime.domNodesOf(id)), i * 90);
+        });
+        setTimeout(() => highlighter.hide(), ids.length * 90 + 400);
+      }}
       {...(edit ? { edit } : {})}
       onHighlight={(id: ComponentId | null) => {
         if (id === null) highlighter.hide();

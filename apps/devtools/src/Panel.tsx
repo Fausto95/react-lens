@@ -1,10 +1,11 @@
 import { useState, useCallback, useEffect, useRef } from "react";
 import type { TraceStore } from "@react-lens/trace-engine";
 import type { Causality } from "@react-lens/causality";
-import type { ComponentId } from "@react-lens/protocol";
+import type { ComponentId, CommitId } from "@react-lens/protocol";
 import { useTraceVersion } from "./useLens.js";
 import { Inspector, type EditApi } from "./Inspector.js";
 import { Tree } from "./Tree.js";
+import { Timeline } from "./Timeline.js";
 import { CommandPalette, type Command } from "./CommandPalette.js";
 import "./theme.css";
 
@@ -21,6 +22,8 @@ export interface PanelProps {
   /** Render-overlay toggle (embedded only). */
   overlayEnabled?: boolean;
   onToggleOverlay?: () => void;
+  /** Update Wave: flash a commit's components on the page (embedded only). */
+  onReplayCommit?: (ids: ComponentId[]) => void;
 }
 
 export function Panel({
@@ -33,12 +36,19 @@ export function Panel({
   edit,
   overlayEnabled,
   onToggleOverlay,
+  onReplayCommit,
 }: PanelProps) {
   useTraceVersion(store, { kind: "global" });
   const [selected, setSelected] = useState<ComponentId | null>(null);
   const [paletteOpen, setPaletteOpen] = useState(false);
+  const [frozenCommit, setFrozenCommit] = useState<CommitId | null>(null);
   const { width, onResizeStart } = useDockResize(embedded);
   const stats = store.stats();
+
+  // Freeze Frame: the component set that rendered in the frozen commit.
+  const frozenSet = frozenCommit !== null
+    ? new Set(store.commit(frozenCommit)?.componentIds ?? [])
+    : null;
 
   // ⌘K / Ctrl+K opens the command palette.
   useEffect(() => {
@@ -114,6 +124,7 @@ export function Panel({
             selected={selected}
             onSelect={setSelected}
             onHover={onHighlight}
+            {...(frozenSet ? { frozen: frozenSet } : {})}
           />
         </div>
 
@@ -133,6 +144,13 @@ export function Panel({
           )}
         </div>
       </div>
+
+      <Timeline
+        store={store}
+        frozen={frozenCommit}
+        onFreeze={setFrozenCommit}
+        {...(onReplayCommit ? { onReplay: onReplayCommit } : {})}
+      />
 
       <div className="rl-statusbar">
         <span>{stats.events} events</span>

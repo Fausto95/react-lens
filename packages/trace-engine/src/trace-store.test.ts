@@ -117,6 +117,36 @@ describe("TraceStore — ingestion & queries", () => {
   });
 });
 
+describe("TraceStore — commits", () => {
+  it("groups renders into commits with their components", () => {
+    const store = new TraceStore();
+    store.ingest(
+      batch({
+        events: [
+          renderEvent({ commitId: 1 as CommitId, componentId: 1 as ComponentId }),
+          renderEvent({ commitId: 1 as CommitId, componentId: 2 as ComponentId }),
+          renderEvent({ commitId: 2 as CommitId, componentId: 1 as ComponentId }),
+        ],
+      }),
+    );
+    const commits = store.commits();
+    expect(commits).toHaveLength(2);
+    expect(new Set(commits[0]!.componentIds)).toEqual(new Set([1, 2]));
+    expect(commits[1]!.componentIds).toEqual([1]);
+  });
+
+  it("bounds the commit list", () => {
+    const store = new TraceStore({ maxCommits: 2 });
+    const events = [1, 2, 3].map((n) =>
+      renderEvent({ commitId: n as CommitId, componentId: 1 as ComponentId }),
+    );
+    store.ingest(batch({ events }));
+    const commits = store.commits();
+    expect(commits).toHaveLength(2);
+    expect(commits.map((c) => c.commitId)).toEqual([2, 3]);
+  });
+});
+
 describe("TraceStore — subscriptions", () => {
   it("notifies a component subscriber only for its component", () => {
     const store = new TraceStore();

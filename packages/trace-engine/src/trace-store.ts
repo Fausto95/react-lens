@@ -5,22 +5,42 @@ import type {
   ComponentInstance,
   InteractionId,
   RenderId,
+  CommitId,
   RenderSnapshot,
   EventsBatchMessage,
 } from "@react-lens/protocol";
 import { RingBuffer } from "./ring-buffer.js";
 
+/** A single commit pass: which components rendered, when. */
+export interface CommitSummary {
+  commitId: CommitId;
+  timestamp: number;
+  componentIds: ComponentId[];
+  interactionId?: InteractionId;
+  totalSelfTime: number;
+}
+
 export interface TraceStoreConfig {
   maxEvents: number;
   maxRendersPerComponent: number;
   maxSnapshots: number;
+  maxCommits: number;
 }
 
 const DEFAULTS: TraceStoreConfig = {
   maxEvents: 10_000,
   maxRendersPerComponent: 100,
   maxSnapshots: 5_000,
+  maxCommits: 1_000,
 };
+
+interface MutableCommit {
+  commitId: CommitId;
+  timestamp: number;
+  components: Set<ComponentId>;
+  interactionId?: InteractionId;
+  totalSelfTime: number;
+}
 
 export type TraceSelector =
   | { kind: "component"; id: ComponentId }
@@ -52,12 +72,15 @@ export class TraceStore {
   private readonly renderTotals = new Map<ComponentId, number>();
   private readonly selfTimeTotals = new Map<ComponentId, number>();
   private readonly eventsByInteractionId = new Map<InteractionId, LensEvent[]>();
+  private readonly commitsById = new Map<CommitId, MutableCommit>();
+  private readonly commitOrder: RingBuffer<CommitId>;
   private readonly subscriptions = new Set<Subscription>();
 
   constructor(config?: Partial<TraceStoreConfig>) {
     this.config = { ...DEFAULTS, ...config };
     this.events = new RingBuffer<LensEvent>(this.config.maxEvents);
     this.snapshotOrder = new RingBuffer<RenderId>(this.config.maxSnapshots);
+    this.commitOrder = new RingBuffer<CommitId>(this.config.maxCommits);
   }
 
   ingest(batch: EventsBatchMessage["payload"]): void {
@@ -89,12 +112,35 @@ export class TraceStore {
         event.componentId,
         (this.selfTimeTotals.get(event.componentId) ?? 0) + event.selfDuration,
       );
+      this.recordCommit(event);
     }
     if (event.interactionId !== undefined) {
       const list = this.eventsByInteractionId.get(event.interactionId) ?? [];
       list.push(event);
       this.eventsByInteractionId.set(event.interactionId, list);
     }
+  }
+
+  private recordCommit(event: RenderEvent): void {
+    let commit = this.commitsById.get(event.commitId);
+    if (!commit) {
+      // Evict the oldest commit when the ring wraps.
+      if (this.commitOrder.size >= this.config.maxCommits) {
+        const evicted = this.commitOrder.toArray()[0];
+        if (evicted !== undefined) this.commitsById.delete(evicted);
+      }
+      commit = {
+        commitId: event.commitId,
+        timestamp: event.timestamp,
+        components: new Set(),
+        totalSelfTime: 0,
+        ...(event.interactionId !== undefined ? { interactionId: event.interactionId } : {}),
+      };
+      this.commitsById.set(event.commitId, commit);
+      this.commitOrder.push(event.commitId);
+    }
+    commit.components.add(event.componentId);
+    commit.totalSelfTime += event.selfDuration;
   }
 
   private createRenderBuffer(id: ComponentId): RingBuffer<RenderEvent> {
@@ -150,6 +196,24 @@ export class TraceStore {
 
   allEvents(): LensEvent[] {
     return this.events.toArray();
+  }
+
+  /** Ordered commits (oldest→newest) for the timeline / time-travel views. */
+  commits(): CommitSummary[] {
+    return this.commitOrder.toArray().map((id) => {
+      const c = this.commitsById.get(id)!;
+      return {
+        commitId: c.commitId,
+        timestamp: c.timestamp,
+        componentIds: [...c.components],
+        totalSelfTime: c.totalSelfTime,
+        ...(c.interactionId !== undefined ? { interactionId: c.interactionId } : {}),
+      };
+    });
+  }
+
+  commit(commitId: CommitId): CommitSummary | undefined {
+    return this.commits().find((c) => c.commitId === commitId);
   }
 
   stats(): { events: number; renders: number; snapshots: number; components: number } {
@@ -209,5 +273,7 @@ export class TraceStore {
     this.renderTotals.clear();
     this.selfTimeTotals.clear();
     this.eventsByInteractionId.clear();
+    this.commitsById.clear();
+    this.commitOrder.clear();
   }
 }

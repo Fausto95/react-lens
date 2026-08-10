@@ -27,12 +27,15 @@ export function Tree({
   selected,
   onSelect,
   onHover,
+  frozen,
 }: {
   store: TraceStore;
   causality: Causality;
   selected: ComponentId | null;
   onSelect: (id: ComponentId) => void;
   onHover?: (id: ComponentId | null) => void;
+  /** Freeze Frame: component ids that rendered in the frozen commit. */
+  frozen?: Set<ComponentId>;
 }) {
   const version = useTraceVersion(store, { kind: "global" });
   const [mode, setMode] = useState<TreeMode>("components");
@@ -139,6 +142,7 @@ export function Tree({
                   onSelect={onSelect}
                   onToggle={toggle}
                   onHover={onHover}
+                  frozen={frozen}
                 />
               ))}
             </div>
@@ -156,6 +160,7 @@ function TreeRow({
   onSelect,
   onToggle,
   onHover,
+  frozen,
 }: {
   row: VisibleRow;
   maxSelf: number;
@@ -163,15 +168,19 @@ function TreeRow({
   onSelect: (id: ComponentId) => void;
   onToggle: (key: string) => void;
   onHover?: (id: ComponentId | null) => void;
+  frozen?: Set<ComponentId>;
 }) {
   const { node, depth, expandable, expanded } = row;
   const self = rowSelfTime(row);
   const isComponent = node.kind === "component";
   const isSelected = isComponent && node.id === selected;
+  // Freeze Frame: did this row render in the frozen commit?
+  const inFrozen = frozen && isComponent ? frozen.has(node.id) : undefined;
+  const frozenClass = inFrozen === false ? " rl-frozen-out" : "";
 
   return (
     <div
-      className={`rl-tree-row${isSelected ? " rl-selected" : ""}`}
+      className={`rl-tree-row${isSelected ? " rl-selected" : ""}${frozenClass}`}
       style={{ paddingLeft: 6 + depth * 12 }}
       onClick={() => {
         if (isComponent) onSelect(node.id);
@@ -193,6 +202,7 @@ function TreeRow({
       {node.kind === "component" ? (
         <>
           <span className="rl-tree-name">{node.datum.name}</span>
+          {inFrozen && <span className="rl-frozen-dot" title="Rendered in the frozen commit" />}
           {node.datum.compiled && <span className="rl-compiler" title="React Compiler optimized">◆</span>}
           {node.datum.observableChange === false && (
             <span className="rl-dot suspicious" title="No observable change" />
