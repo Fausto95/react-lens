@@ -20,6 +20,7 @@ import {
   isComponentTag,
   displayNameOf,
   findCurrentFiber,
+  ClassComponent,
   HostComponent,
   HostRoot,
   SuspenseComponent,
@@ -59,6 +60,14 @@ export interface FiberBridge {
     path: Array<string | number>,
     value: unknown,
   ): boolean;
+  /**
+   * Replace a class component's state object and force a re-render. React has
+   * no renderer override for class state, so this mutates the instance the way
+   * React DevTools does.
+   */
+  setClassState(id: ComponentId, state: unknown): boolean;
+  /** Whether the component still has a live fiber (i.e. is mounted). */
+  hasFiber(id: ComponentId): boolean;
   resolveComponent(node: Node): ComponentInstance | null;
   domNodesOf(id: ComponentId): Node[];
   getInstance(id: ComponentId): ComponentInstance | undefined;
@@ -171,6 +180,36 @@ export function createFiberBridge(target: typeof globalThis = globalThis): Fiber
     if (!fiber || !renderer?.overrideHookState) return false;
     renderer.overrideHookState(currentOf(fiber), hookIndex, path, value);
     return true;
+  }
+
+  function setClassState(id: ComponentId, state: unknown): boolean {
+    const fiber = fiberById.get(id);
+    if (!fiber || fiber.tag !== ClassComponent) return false;
+    const current = currentOf(fiber);
+    const instance = current.stateNode as
+      | { state?: unknown; forceUpdate?: () => void }
+      | null;
+    if (!instance || typeof instance.forceUpdate !== "function") return false;
+    try {
+      // Replacing instance.state alone is not enough: forceUpdate re-derives
+      // state from the fiber's update queue (baseState/memoizedState), which
+      // would silently overwrite the assignment. Rewrite those roots too.
+      instance.state = state;
+      for (const f of [current, current.alternate]) {
+        if (!f) continue;
+        f.memoizedState = state;
+        const queue = f.updateQueue as { baseState?: unknown } | null;
+        if (queue && typeof queue === "object" && "baseState" in queue) queue.baseState = state;
+      }
+      instance.forceUpdate();
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  function hasFiber(id: ComponentId): boolean {
+    return fiberById.has(id);
   }
 
   /** Prefer the committed (current) fiber for edits, not a stale alternate. */
@@ -444,6 +483,8 @@ export function createFiberBridge(target: typeof globalThis = globalThis): Fiber
     canEditValues,
     setProp,
     setHookState,
+    setClassState,
+    hasFiber,
     resolveComponent,
     domNodesOf,
     getInstance,

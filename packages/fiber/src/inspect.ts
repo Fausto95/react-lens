@@ -70,6 +70,44 @@ export function inspectHooks(fiber: Fiber): RawHook[] {
   return hooks;
 }
 
+/**
+ * Raw state/reducer hook value captured for time travel. `index` is the raw
+ * position in the fiber's hook list — exactly what `overrideHookState` expects
+ * (React's findHook walks `hook.next` that many times).
+ */
+export interface CapturedHookState {
+  index: number;
+  value: unknown;
+}
+
+/**
+ * Raw references (not serialized, not cloned) of every state/reducer hook.
+ * Uses the same list walk and index accounting as `inspectHooks` so a captured
+ * index can be replayed through `setHookState` later.
+ */
+export function captureStateHooks(fiber: Fiber): CapturedHookState[] {
+  if (!isFunctionLike(fiber.tag)) return [];
+  const first = fiber.memoizedState as HookNode | null;
+  if (!first || !isHookNode(first)) return [];
+
+  const captured: CapturedHookState[] = [];
+  let node: HookNode | null = first;
+  let index = 0;
+  while (node && index < 200) {
+    if (isStateHook(node)) captured.push({ index, value: node.memoizedState });
+    node = node.next;
+    index++;
+  }
+  return captured;
+}
+
+/** useState/useReducer: a dispatch queue and a memoizedState that isn't hook plumbing. */
+function isStateHook(node: HookNode): boolean {
+  if (node.queue == null) return false;
+  const state = node.memoizedState;
+  return !isEffect(state) && !isMemoCache(state);
+}
+
 function classify(node: HookNode, index: number): RawHook {
   const state = node.memoizedState;
 
