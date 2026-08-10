@@ -42,6 +42,8 @@ export type RenderReasonLite = "mount" | "props" | "state-or-parent";
 
 export interface FiberBridge {
   install(): void;
+  /** Exclude a React root's container from capture (e.g. the panel's own UI). */
+  ignoreContainer(node: Node): void;
   resolveComponent(node: Node): ComponentInstance | null;
   domNodesOf(id: ComponentId): Node[];
   getInstance(id: ComponentId): ComponentInstance | undefined;
@@ -68,6 +70,7 @@ export function createFiberBridge(target: typeof globalThis = globalThis): Fiber
 
   const commitListeners = new Set<(commit: CommitObservation) => void>();
   const unmountListeners = new Set<(id: ComponentId) => void>();
+  const ignoredContainers = new Set<Node>();
 
   let reactVersion: string | null = null;
 
@@ -169,6 +172,7 @@ export function createFiberBridge(target: typeof globalThis = globalThis): Fiber
   }
 
   function handleCommit(root: FiberRoot): void {
+    if (isIgnoredRoot(root)) return;
     const rootId = rootIdOf(root);
     const details = new Map<ComponentId, RenderDetail>();
     const rendered: ComponentId[] = [];
@@ -241,8 +245,23 @@ export function createFiberBridge(target: typeof globalThis = globalThis): Fiber
     return () => unmountListeners.delete(cb);
   }
 
+  function isIgnoredRoot(root: FiberRoot): boolean {
+    if (ignoredContainers.size === 0) return false;
+    const container = (root.current.stateNode as { containerInfo?: Node } | null)?.containerInfo;
+    if (container && isWithinIgnored(container)) return true;
+    return false;
+  }
+
+  function isWithinIgnored(node: Node): boolean {
+    for (const ignored of ignoredContainers) {
+      if (ignored === node || (ignored.contains && ignored.contains(node))) return true;
+    }
+    return false;
+  }
+
   return {
     install,
+    ignoreContainer: (node: Node) => ignoredContainers.add(node),
     resolveComponent,
     domNodesOf,
     getInstance,

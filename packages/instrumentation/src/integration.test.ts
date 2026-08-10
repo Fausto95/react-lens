@@ -111,4 +111,56 @@ describe("instrumentation + fiber against real React 19", () => {
 
     inst.stop();
   });
+
+  it("captures hooks, state, ref, memo and context in the snapshot", async () => {
+    const frames: Frame[] = [];
+    const { React, createRoot, act, bridge } = await react();
+    const inst = createInstrumentation({ fiber: bridge, serializer: createSerializer() });
+    inst.start({ captureDOM: true, interactionWindowMs: 200, onFrame: (f) => frames.push(f) });
+
+    const Theme = React.createContext("light");
+
+    function Widget() {
+      const [count] = React.useState(7);
+      const ref = React.useRef(3);
+      const doubled = React.useMemo(() => count * 2, [count]);
+      const theme = React.useContext(Theme);
+      return React.createElement("div", { className: "widget" }, `${theme}:${count}:${doubled}:${ref.current}`);
+    }
+    function Root() {
+      return React.createElement(Theme.Provider, { value: "dark" }, React.createElement(Widget));
+    }
+
+    const root = createRoot(document.getElementById("root")!);
+    await act(async () => {
+      root.render(React.createElement(Root));
+    });
+    await flush();
+
+    // Find the latest Widget snapshot.
+    const widgetId = frames
+      .flatMap((f) => f.instances)
+      .find((i) => i.name === "Widget")?.id;
+    expect(widgetId).toBeDefined();
+    const snap = frames
+      .flatMap((f) => f.snapshots)
+      .filter((s) => s.componentId === widgetId)
+      .at(-1);
+    expect(snap).toBeDefined();
+
+    const hooks = snap!.hooks ?? [];
+    const stateHook = hooks.find((h) => h.kind === "state");
+    expect(stateHook?.value).toEqual({ k: "primitive", type: "number", value: 7 });
+
+    const refHook = hooks.find((h) => h.kind === "ref");
+    expect(refHook?.value).toEqual({ k: "primitive", type: "number", value: 3 });
+
+    const memoHook = hooks.find((h) => h.kind === "memo");
+    expect(memoHook?.value).toEqual({ k: "primitive", type: "number", value: 14 });
+
+    const contexts = snap!.contexts ?? [];
+    expect(contexts.some((c) => c.value.k === "primitive" && c.value.value === "dark")).toBe(true);
+
+    inst.stop();
+  });
 });

@@ -12,7 +12,9 @@ import type {
   EventsBatchMessage,
 } from "@react-lens/protocol";
 import { createIdFactory } from "@react-lens/protocol";
-import type { FiberBridge, CommitObservation, RenderDetail } from "@react-lens/fiber";
+import type { HookSnapshot, ContextSnapshot, SerializedValue } from "@react-lens/protocol";
+import type { FiberBridge, CommitObservation, RenderDetail, RawHook } from "@react-lens/fiber";
+import { inspectHooks, inspectContexts, inspectClassState } from "@react-lens/fiber";
 import type { Serializer } from "@react-lens/serializer";
 import { snapshotDom } from "./dom-snapshot.js";
 
@@ -132,11 +134,23 @@ export function createInstrumentation(deps: {
     detail: RenderDetail,
     timestamp: number,
   ): RenderSnapshot {
+    const rawHooks = inspectHooks(detail.fiber);
+    const rawContexts = inspectContexts(detail.fiber);
+    const hooks = rawHooks.map((h) => serializeHook(h));
+    const contexts: ContextSnapshot[] = rawContexts.map((c) => ({
+      value: serializer.serialize(c.value),
+      ...(c.displayName ? { displayName: c.displayName } : {}),
+    }));
+
     const snapshot: RenderSnapshot = {
       renderId,
       componentId: id,
       timestamp,
       props: serializer.serialize(detail.fiber.memoizedProps),
+      hooks,
+      contexts,
+      state: combinedState(detail, rawHooks),
+      context: combinedContext(rawContexts),
     };
     if (config?.captureDOM) {
       const nodes = fiber.domNodesOf(id);
@@ -147,6 +161,27 @@ export function createInstrumentation(deps: {
       }
     }
     return snapshot;
+  }
+
+  function serializeHook(h: RawHook): HookSnapshot {
+    const snapshot: HookSnapshot = { index: h.index, kind: h.kind };
+    if ("value" in h) snapshot.value = serializer.serialize(h.value);
+    if (h.deps !== undefined) {
+      snapshot.deps = h.deps === null ? null : h.deps.map((d) => serializer.serialize(d));
+    }
+    return snapshot;
+  }
+
+  /** Combine state-bearing hooks (or class state) into one value for diffing. */
+  function combinedState(detail: RenderDetail, hooks: RawHook[]): SerializedValue {
+    const classState = inspectClassState(detail.fiber);
+    if (classState !== undefined) return serializer.serialize(classState);
+    const stateValues = hooks.filter((h) => h.kind === "state").map((h) => h.value);
+    return serializer.serialize(stateValues);
+  }
+
+  function combinedContext(contexts: { value: unknown }[]): SerializedValue {
+    return serializer.serialize(contexts.map((c) => c.value));
   }
 
   function deriveReasons(
