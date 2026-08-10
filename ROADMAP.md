@@ -30,12 +30,13 @@ Legend: ✅ done · 🚧 in progress · ⬜ not started
 - ✅ **`instrumentation`** — commit + interaction events → `LensEvent`, DOM snapshots, batching, overhead self-report
 
 Verified against **real React 19** (integration tests): mount + state + prop
-re-render counting, prop-change reasons, DOM→component resolution.
-All packages: **45 tests passing**, full `tsc -b` clean.
+re-render counting, prop-change reasons, DOM→component resolution, and
+**hook/state/ref/memo/context extraction** (heuristic classification off the
+fiber's hook list). All packages: **46 tests passing**, full `tsc -b` clean.
 
 ## Apps
 
-- ✅ **`devtools`** — React 19 panel: ranked component list, inspector, render history, why-did-this-render, props diff
+- ✅ **`devtools`** — React 19 panel: ranked component list + **tabbed inspector** (Overview, Props explorer with change status, State, Hooks, Context, Effects, Renders, Source)
 - ✅ **`playground`** — React 19 + Compiler app engineered to misbehave; dev overlay mounts the panel
 - ✅ **`extension`** — MV3 shell (stateless background relay, ISOLATED+MAIN content scripts, devtools page, panel); builds clean
 - ⬜ **`ui`** / **`icons`** — extract the panel's components into a keyboard-first design system
@@ -48,6 +49,19 @@ All packages: **45 tests passing**, full `tsc -b` clean.
 4. ✅ **Render diff wired** — props + DOM diff in the inspector
 5. ✅ **Why did this render?** — causality with no-observable-change verdict
 6. ⬜ **Doctor** — OXC findings mapped to components with runtime cost
+
+## Next major theme — semantic tree + graph projections (plan v2)
+
+The expanded plan reframes the tree as the centerpiece: one unified graph engine
+with multiple **projections** (ownership, causality, dependencies, context,
+queries, effects, DOM) rather than a raw fiber tree.
+
+- ⬜ **`tree`** — normalize fiber → semantic nodes, wrapper/noise collapsing, repeated-component grouping, virtualization, incremental patches (worker)
+- ⬜ **`graph`** — unified `GraphNode`/`GraphEdge` model + projections; Flame Tree, Rendered/Changed/Potential-Waste modes, Focus Lens, Tree Diff, Freeze Frame
+- ⬜ **Render overlay** on the page (React-Scan-style heat + counts)
+- ⬜ **⌘K command palette** + structured search language (`renders:>20`, `context:X`, `visual-change:false`)
+- ⬜ **Effect debugger** — effect-execution events, run/cleanup counts, loop detection
+- ⬜ **Doctor** (`diagnostics` + `source-maps` via OXC), then Network, Sessions, Agent layer
 
 ## Known follow-ups
 
