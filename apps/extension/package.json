@@ -21,7 +21,7 @@
     "vite": "^6.0.7"
   },
   "scripts": {
-    "build": "vite build",
+    "build": "vite build && vite build --config vite.injected.config.ts",
     "typecheck": "tsc --noEmit"
   }
 }

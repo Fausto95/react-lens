@@ -72,8 +72,12 @@ export function createInstrumentation(deps: {
     if (recording) return;
     config = { ...DEFAULT_CONFIG, ...userConfig };
     recording = true;
-    fiber.install();
+    // Subscribe BEFORE install: install() may synchronously replay commits a
+    // document_start stub buffered before the bridge loaded (the extension's
+    // initial-mount tree). Installing first would fire that replay into no
+    // listener and lose the mounted tree entirely.
     disposeCommit = fiber.onCommit(handleCommit);
+    fiber.install();
     attachInteractionListeners();
     windowStart = now();
   }
