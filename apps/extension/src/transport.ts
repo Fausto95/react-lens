@@ -18,7 +18,11 @@ export type ContentToPage = {
 export type PortMessage =
   | { kind: "frame"; frame: EventsBatchMessage["payload"] }
   | { kind: "hello"; reactVersion: string | null }
-  | { kind: "record"; recording: boolean };
+  | { kind: "record"; recording: boolean }
+  // background → content: a panel is now listening, so replay the durable
+  // buffer. Sent whenever a panel pairs with the page, so it survives
+  // service-worker restarts (the content script and its buffer outlive them).
+  | { kind: "panel-ready" };
 
 export const PANEL_PORT_PREFIX = "react-lens/panel:";
 export const PAGE_PORT_NAME = "react-lens/page";

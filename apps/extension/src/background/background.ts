@@ -79,9 +79,9 @@ chrome.runtime.onConnect.addListener((port) => {
     const pair = pairFor(tabId);
     pair.page = port;
 
-    // If a panel is already listening (e.g. the page reloaded), tell the fresh
-    // page to start/flush immediately.
-    if (pair.panel) port.postMessage({ kind: "record", recording: true } satisfies PortMessage);
+    // If a panel is already listening (page reloaded, or worker restarted and
+    // the content script reconnected), ask the content buffer to replay.
+    if (pair.panel) port.postMessage({ kind: "panel-ready" } satisfies PortMessage);
 
     port.onMessage.addListener((msg: PortMessage) => {
       pair.panel?.postMessage(msg);
@@ -97,8 +97,9 @@ chrome.runtime.onConnect.addListener((port) => {
     const pair = pairFor(tabId);
     pair.panel = port;
 
-    // Ask the page to (re)start recording now that a panel is listening.
-    pair.page?.postMessage({ kind: "record", recording: true } satisfies PortMessage);
+    // Tell the content script to replay its durable buffer now that a panel is
+    // listening — this is what surfaces the already-captured tree.
+    pair.page?.postMessage({ kind: "panel-ready" } satisfies PortMessage);
 
     port.onMessage.addListener((msg: PortMessage) => {
       pair.page?.postMessage(msg);

@@ -5,11 +5,11 @@ import type { EventsBatchMessage } from "@react-lens/protocol";
 import { PAGE_SOURCE, CONTENT_SOURCE, type ContentToPage } from "../transport.js";
 
 /**
- * Runs in the MAIN world at document_start — before the page's React loads — so
- * the owned DevTools hook wins the hook slot. It starts recording IMMEDIATELY
- * (so the initial mount is captured even though the panel isn't open yet) and
- * buffers frames until a panel connects, then flushes the buffer and goes live.
- * This decouples capture from the panel-open handshake.
+ * Runs in the MAIN world at document_start (injected natively via
+ * chrome.scripting; see background). It captures commits and posts every frame
+ * to the page window immediately — the ISOLATED content script owns the durable
+ * buffer and decides when to forward to the panel. Keeping this side stateless
+ * means capture never depends on the panel-open / service-worker handshake.
  */
 type Frame = EventsBatchMessage["payload"];
 
@@ -17,39 +17,49 @@ const serializer = createSerializer();
 const fiber = createFiberBridge(globalThis);
 const instrumentation = createInstrumentation({ fiber, serializer });
 
-const buffer: Frame[] = [];
-const MAX_BUFFER = 4000;
-let flushed = false;
+// Reversible diagnostic surface, readable from the page console as
+// `window.__REACT_LENS_DEBUG__`.
+interface LensDebug {
+  stubPresent: boolean;
+  chained: boolean;
+  framesProduced: number;
+  totalInstances: number;
+  framesPosted: number;
+}
+const debug: LensDebug = {
+  stubPresent: false,
+  chained: false,
+  framesProduced: 0,
+  totalInstances: 0,
+  framesPosted: 0,
+};
+(globalThis as unknown as { __REACT_LENS_DEBUG__: LensDebug }).__REACT_LENS_DEBUG__ = debug;
 
 function post(frame: Frame): void {
+  debug.framesPosted++;
   window.postMessage({ source: PAGE_SOURCE, kind: "frame", frame }, "*");
 }
 
 function start(): void {
   if (instrumentation.isRecording()) return;
+  const hook = (globalThis as unknown as {
+    __REACT_DEVTOOLS_GLOBAL_HOOK__?: { _lensStub?: boolean; _lensChained?: boolean };
+  }).__REACT_DEVTOOLS_GLOBAL_HOOK__;
+  debug.stubPresent = hook?._lensStub === true;
   instrumentation.start({
     captureDOM: true,
     interactionWindowMs: 200,
     onFrame: (frame) => {
-      if (flushed) post(frame);
-      else {
-        buffer.push(frame);
-        if (buffer.length > MAX_BUFFER) buffer.shift();
-      }
+      debug.framesProduced++;
+      debug.totalInstances += frame.instances.length;
+      post(frame);
     },
   });
+  debug.chained = hook?._lensChained === true;
   window.postMessage(
     { source: PAGE_SOURCE, kind: "hello", reactVersion: fiber.reactVersion() },
     "*",
   );
-}
-
-/** A panel connected: send everything captured so far, then stream live. */
-function flush(): void {
-  if (flushed) return;
-  flushed = true;
-  for (const frame of buffer) post(frame);
-  buffer.length = 0;
 }
 
 // Begin capturing right away. Do NOT call fiber.install() here first:
@@ -63,11 +73,7 @@ window.addEventListener("message", (event: MessageEvent) => {
   const data = event.data as ContentToPage | undefined;
   if (!data || data.source !== CONTENT_SOURCE) return;
   if (data.kind === "record") {
-    if (data.recording) {
-      start();
-      flush();
-    } else {
-      instrumentation.stop();
-    }
+    if (data.recording) start();
+    else instrumentation.stop();
   }
 });
