@@ -208,6 +208,52 @@
 }
 .rl-sec-body { padding: 0 0 var(--rl-s4) var(--rl-s4); }
 
+/* Value explorer (props / state / hooks / context) */
+.rl-val-list { display: flex; flex-direction: column; }
+.rl-val-row {
+  display: flex; align-items: baseline; gap: var(--rl-s3);
+  padding: 4px 0; border-bottom: 1px solid rgba(35,40,51,0.35);
+  font-family: var(--rl-mono); font-size: 12px;
+}
+.rl-val-key { color: var(--rl-text-dim); min-width: 84px; flex: 0 0 auto; }
+.rl-val { color: var(--rl-text); overflow-wrap: anywhere; }
+.rl-val.rl-muted { color: var(--rl-text-faint); }
+.rl-t-string { color: #9ece6a; }
+.rl-t-number { color: #ff9e64; }
+.rl-t-boolean { color: #7dcfff; }
+.rl-t-function { color: var(--rl-suspicious); }
+
+.rl-val-container { display: inline-flex; flex-direction: column; align-items: flex-start; }
+.rl-val-toggle {
+  -webkit-app-region: no-drag;
+  background: none; border: none; color: inherit; font: inherit; cursor: pointer;
+  padding: 0; display: inline-flex; align-items: center; gap: 4px;
+}
+.rl-val-caret { width: 10px; color: var(--rl-text-faint); font-size: 9px; }
+.rl-val-children {
+  display: flex; flex-direction: column;
+  margin-left: 10px; padding-left: 8px;
+  border-left: 1px solid var(--rl-border);
+}
+
+/* Inline editors */
+.rl-edit-input {
+  background: var(--rl-bg); color: var(--rl-text);
+  border: 1px solid var(--rl-border-strong); border-radius: 4px;
+  font: inherit; font-family: var(--rl-mono); font-size: 12px;
+  padding: 1px 5px; min-width: 40px; max-width: 200px;
+}
+.rl-edit-input:focus { outline: none; border-color: var(--rl-render); }
+.rl-edit-input.rl-t-number { color: #ff9e64; }
+.rl-edit-input.rl-t-string { color: #9ece6a; }
+.rl-edit-bool {
+  -webkit-app-region: no-drag;
+  font: inherit; font-family: var(--rl-mono); font-size: 12px; cursor: pointer;
+  border-radius: 4px; padding: 0 8px; border: 1px solid var(--rl-border-strong);
+}
+.rl-edit-bool.on { color: var(--rl-healthy); background: rgba(74,222,128,0.1); }
+.rl-edit-bool.off { color: var(--rl-text-faint); background: rgba(95,104,120,0.1); }
+
 /* Key/value lists (props, state, context) */
 .rl-kv-list { display: flex; flex-direction: column; }
 .rl-kv {

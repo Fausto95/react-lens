@@ -13,6 +13,15 @@ export interface LensRuntime {
   ignoreContainer(node: Node): void;
   /** Live DOM nodes for a component — used for page highlighting (embedded). */
   domNodesOf(id: ComponentId): Node[];
+  /** Whether live value editing is available (dev-build renderer). */
+  canEditValues(): boolean;
+  setProp(id: ComponentId, path: Array<string | number>, value: unknown): boolean;
+  setHookState(
+    id: ComponentId,
+    hookIndex: number,
+    path: Array<string | number>,
+    value: unknown,
+  ): boolean;
   start(): void;
   stop(): void;
 }
@@ -39,6 +48,9 @@ export function createEmbeddedRuntime(): LensRuntime {
     instrumentation,
     ignoreContainer: (node) => fiber.ignoreContainer(node),
     domNodesOf: (id) => fiber.domNodesOf(id),
+    canEditValues: () => fiber.canEditValues(),
+    setProp: (id, path, value) => fiber.setProp(id, path, value),
+    setHookState: (id, hookIndex, path, value) => fiber.setHookState(id, hookIndex, path, value),
     start() {
       instrumentation.start({
         captureDOM: true,

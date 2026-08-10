@@ -10,12 +10,30 @@ function EmbeddedPanel({ runtime }: { runtime: LensRuntime }) {
   const highlighter = useMemo(() => createHighlighter(), []);
   useEffect(() => () => highlighter.dispose(), [highlighter]);
 
+  const edit = useMemo(
+    () =>
+      runtime.canEditValues()
+        ? {
+            setProp: (id: ComponentId, path: Array<string | number>, value: unknown) =>
+              runtime.setProp(id, path, value),
+            setHookState: (
+              id: ComponentId,
+              hookIndex: number,
+              path: Array<string | number>,
+              value: unknown,
+            ) => runtime.setHookState(id, hookIndex, path, value),
+          }
+        : undefined,
+    [runtime],
+  );
+
   return (
     <Panel
       store={runtime.store}
       causality={runtime.causality}
       recording={recording}
       embedded
+      {...(edit ? { edit } : {})}
       onHighlight={(id: ComponentId | null) => {
         if (id === null) highlighter.hide();
         else highlighter.show(runtime.domNodesOf(id));

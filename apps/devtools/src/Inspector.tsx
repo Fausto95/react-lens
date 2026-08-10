@@ -13,6 +13,16 @@ import { EffectsTab } from "./tabs/EffectsTab.js";
 import { RendersTab } from "./tabs/RendersTab.js";
 import { SourceTab } from "./tabs/SourceTab.js";
 
+export interface EditApi {
+  setProp(componentId: ComponentId, path: Array<string | number>, value: unknown): void;
+  setHookState(
+    componentId: ComponentId,
+    hookIndex: number,
+    path: Array<string | number>,
+    value: unknown,
+  ): void;
+}
+
 export interface InspectorContext {
   store: TraceStore;
   causality: Causality;
@@ -20,6 +30,8 @@ export interface InspectorContext {
   activeRenderId: RenderId | null;
   snapshot: RenderSnapshot | undefined;
   onSelectRender: (id: RenderId) => void;
+  /** Present only when live editing is available (embedded, dev build). */
+  edit?: EditApi;
 }
 
 /**
@@ -31,10 +43,12 @@ export function Inspector({
   store,
   causality,
   componentId,
+  edit,
 }: {
   store: TraceStore;
   causality: Causality;
   componentId: ComponentId;
+  edit?: EditApi;
 }) {
   useTraceVersion(store, { kind: "component", id: componentId });
   const inst = store.instance(componentId);
@@ -58,6 +72,7 @@ export function Inspector({
     activeRenderId,
     snapshot,
     onSelectRender: setSelectedRender,
+    ...(edit ? { edit } : {}),
   };
 
   const hooks = snapshot?.hooks ?? [];

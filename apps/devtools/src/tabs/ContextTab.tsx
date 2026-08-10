@@ -1,6 +1,6 @@
 import { diff } from "@react-lens/diff-engine";
 import type { InspectorContext } from "../Inspector.js";
-import { formatValue } from "../format.js";
+import { ValueView } from "../ValueView.js";
 import { EmptyTab } from "./shared.js";
 
 /**
@@ -18,9 +18,9 @@ export function ContextTab({ ctx }: { ctx: InspectorContext }) {
   return (
     <div className="rl-kv-list">
       {contexts.map((c, i) => (
-        <div className="rl-kv" key={i}>
-          <span className="rl-kv-key">{c.displayName ?? `Context #${i}`}</span>
-          <span className="rl-kv-val">{formatValue(c.value)}</span>
+        <div className="rl-val-row" key={i}>
+          <span className="rl-val-key">{c.displayName ?? `Context #${i}`}</span>
+          <ValueView value={c.value} />
           {changed && <span className="rl-badge warn">changed</span>}
         </div>
       ))}

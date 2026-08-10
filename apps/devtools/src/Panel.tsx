@@ -3,7 +3,7 @@ import type { TraceStore } from "@react-lens/trace-engine";
 import type { Causality } from "@react-lens/causality";
 import type { ComponentId } from "@react-lens/protocol";
 import { useTraceVersion } from "./useLens.js";
-import { Inspector } from "./Inspector.js";
+import { Inspector, type EditApi } from "./Inspector.js";
 import { Tree } from "./Tree.js";
 import "./theme.css";
 
@@ -15,6 +15,8 @@ export interface PanelProps {
   embedded?: boolean;
   /** Highlight a component's DOM on the page (bidirectional selection). */
   onHighlight?: (id: ComponentId | null) => void;
+  /** Live value editing; omit to make the inspector read-only. */
+  edit?: EditApi;
 }
 
 export function Panel({
@@ -24,6 +26,7 @@ export function Panel({
   onToggleRecording,
   embedded,
   onHighlight,
+  edit,
 }: PanelProps) {
   useTraceVersion(store, { kind: "global" });
   const [selected, setSelected] = useState<ComponentId | null>(null);
@@ -67,7 +70,12 @@ export function Panel({
           {selected === null ? (
             <div className="rl-empty">Select a component to inspect its renders and causes.</div>
           ) : (
-            <Inspector store={store} causality={causality} componentId={selected} />
+            <Inspector
+              store={store}
+              causality={causality}
+              componentId={selected}
+              {...(edit ? { edit } : {})}
+            />
           )}
         </div>
       </div>

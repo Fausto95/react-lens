@@ -1,15 +1,15 @@
-import type { SerializedValue } from "@react-lens/protocol";
 import { diff } from "@react-lens/diff-engine";
 import type { InspectorContext } from "../Inspector.js";
-import { ValueRow, EmptyTab } from "./shared.js";
+import { ValueView, type EditFn } from "../ValueView.js";
+import { EmptyTab } from "./shared.js";
 
 /**
- * Full props explorer with per-prop change status vs the previous render
- * (§75) — not just a diff dump. Function/reference-only changes are flagged
- * because they are the usual suspects behind avoidable renders.
+ * Props explorer with per-prop change status vs the previous render and, when
+ * editing is available, inline editors for primitive props that write back to
+ * the running app via the renderer's overrideProps.
  */
 export function PropsTab({ ctx }: { ctx: InspectorContext }) {
-  const { store, componentId, activeRenderId, snapshot } = ctx;
+  const { store, componentId, activeRenderId, snapshot, edit } = ctx;
   if (!snapshot) return <EmptyTab>No snapshot for this render.</EmptyTab>;
 
   const props = snapshot.props;
@@ -18,14 +18,30 @@ export function PropsTab({ ctx }: { ctx: InspectorContext }) {
   }
 
   const statuses = changeStatuses(store, componentId, activeRenderId);
+  const editFn: EditFn | undefined = edit
+    ? (path, value) => edit.setProp(componentId, path, value)
+    : undefined;
 
   return (
-    <div className="rl-kv-list">
-      {props.entries.map(([key, value]) => (
-        <ValueRow key={key} name={key} value={value} status={statuses.get(key)} />
-      ))}
+    <div className="rl-val-list">
+      {props.entries.map(([key, value]) => {
+        const status = statuses.get(key);
+        return (
+          <div className="rl-val-row" key={key}>
+            <span className="rl-val-key">{key}</span>
+            <ValueView value={value} path={[key]} edit={editFn} />
+            {status && <span className={`rl-badge ${statusClass(status)}`}>{status}</span>}
+          </div>
+        );
+      })}
     </div>
   );
+}
+
+function statusClass(status: string): string {
+  if (status === "fn" || status === "ref") return "suspicious";
+  if (status === "changed") return "warn";
+  return "dim";
 }
 
 function changeStatuses(
@@ -45,13 +61,12 @@ function changeStatuses(
   const result = diff({ kind: "props", before: prev.props, after: cur.props });
   for (const change of result.changes) {
     if (change.path.length !== 1) continue;
-    const key = String(change.path[0]);
-    out.set(key, labelFor(change.kind, change.after));
+    out.set(String(change.path[0]), labelFor(change.kind));
   }
   return out;
 }
 
-function labelFor(kind: string, after?: SerializedValue): string {
+function labelFor(kind: string): string {
   switch (kind) {
     case "FUNCTION_IDENTITY_CHANGED":
       return "fn";
@@ -64,6 +79,6 @@ function labelFor(kind: string, after?: SerializedValue): string {
     case "REMOVED":
       return "removed";
     default:
-      return after ? "" : "";
+      return "";
   }
 }

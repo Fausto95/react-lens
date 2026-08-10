@@ -1,6 +1,7 @@
 import type { HookKind } from "@react-lens/protocol";
 import type { InspectorContext } from "../Inspector.js";
 import { formatValue } from "../format.js";
+import { ValueView } from "../ValueView.js";
 import { EmptyTab } from "./shared.js";
 
 const KIND_COLOR: Partial<Record<HookKind, string>> = {
@@ -28,7 +29,11 @@ export function HooksTab({ ctx }: { ctx: InspectorContext }) {
           <div className="rl-hook-head">
             <span className="rl-hook-idx">{h.index}</span>
             <span className={`rl-badge ${KIND_COLOR[h.kind] ?? "dim"}`}>{h.kind}</span>
-            {h.value !== undefined && <span className="rl-hook-val">{formatValue(h.value)}</span>}
+            {h.value !== undefined && (
+              <span className="rl-hook-val">
+                <ValueView value={h.value} />
+              </span>
+            )}
           </div>
           {h.deps !== undefined && (
             <div className="rl-hook-deps">
