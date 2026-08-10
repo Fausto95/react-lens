@@ -287,6 +287,39 @@ disconnects so a closed panel never leaves the app in the past.
 
 ---
 
+## 10.6 Agent — grounded answers, concrete fixes (BYOK)
+
+The assistant's job is the five questions (what is this element / why did it
+render / why is it slow / what changed / how do I fix it), answered from the
+recorded trace — never from vibes. Three design rules keep it honest:
+
+1. **The tools carry the evidence, not summaries of it.** `why` returns each
+   cause's diff summary, top changed paths (e.g. `onSelect` →
+   FUNCTION_IDENTITY_CHANGED) and source location; `read_component_source`
+   returns the user's original code, line-numbered and scoped to the
+   component's definition (`diagnostics.definitionSpan`) — which is what makes
+   a proposed fix a real fenced `tsx file:line` patch instead of generic
+   advice. An evidence pack (session stats, interactions, top components,
+   commit anomalies, compiler coverage) rides in the first turn so tool steps
+   go to analysis, not discovery.
+2. **Budgets and strict arguments.** Every tool result is capped before it
+   reaches the model (with a truncation note it can react to); invalid ids are
+   rejected with a recovery hint naming the right lookup tool — never silently
+   defaulted to a plausible-looking 0.
+3. **The compiler invariant is in the prompt.** React Compiler is assumed on;
+   the agent must never recommend manual `useMemo`/`useCallback`/`memo` for a
+   compiled component (§1.4) and prefers fixes that restore compiler
+   memoization at the cause site.
+
+BYOK: keys live in `chrome.storage.session` (extension) or localStorage
+(embedded), and leave the machine only as auth headers to the user-chosen
+provider. Answers cite Lens ID tokens the panel renders as chips that drive
+selection and the time cursor; fenced fixes get Copy and Open-in-editor.
+Applying changes to disk is out of scope by construction — the panel is a
+browser page.
+
+---
+
 ## 11. Stack
 
 TypeScript (strict; no `any` in public APIs, `unknown` + narrow), React 19 +

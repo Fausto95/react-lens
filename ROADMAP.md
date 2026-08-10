@@ -90,7 +90,15 @@ with multiple **projections** rather than a raw fiber tree.
 - ✅ **Open in editor** — Source tab + inspect tooltip → `cursor://` / `vscode://`
 - ✅ **Explain verdicts** — expected vs avoidable, waste share, one actionable next step (still deterministic / no LLM)
 - ⬜ Network, Sessions
-- ⬜ **Agent layer (BYOK)** — deferred. `@react-lens/agent` + provider presets exist; panel UI unwired until answers are more than a restatement of Explain.
+- ✅ **Agent layer (BYOK)** — multi-turn streamed conversation (`createAgentSession`)
+  over 11 typed tools; `why` carries diff evidence + cause source, and
+  `read_component_source` (definition-scoped, line-numbered) enables concrete fenced
+  `tsx file:line` fix proposals with Copy / Open-in-editor. Evidence pack + budgets +
+  strict arg validation; compiler invariant enforced in the prompt; citations are
+  clickable Lens ID tokens driving selection and the time cursor. Panel wiring: ✨
+  topbar button, ⌘I, ⌘K command; providers OpenAI / Claude / Z.AI GLM (corrected
+  Anthropic-compatible base URL, browser CORS opt-in header, `storage` permission for
+  session-scoped keys).
 
 ## Resolved
 

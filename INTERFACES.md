@@ -524,34 +524,55 @@ interface Narrative {
 
 ## agent
 
-`[trace-engine, causality, diff-engine, diagnostics, explain, source-maps]`.
-Closed tool loop over an OpenAI-compatible chat API (BYOK).
+`[trace-engine, causality, diff-engine, diagnostics, explain, source-maps, graph]`.
+Closed tool loop over OpenAI-compatible / Anthropic chat APIs (BYOK), streamed
+(SSE with buffered fallback). Answers the five product questions grounded in
+the trace, and proposes concrete fixes from the user's actual source.
 
 ```ts
-interface AgentSettings { baseUrl: string; apiKey: string; model: string }
+interface AgentSettings { provider: "openai"|"anthropic"|"zml"; baseUrl: string; apiKey: string; model: string }
 
 function createToolHandlers(deps: {
   store: TraceStore;
   causality: Causality;
   diagnose: (id: ComponentId) => Diagnostic[];
   sourceResolver: SourceResolver;
-}): ToolHandlers;
+}): ToolHandlers;                            // typed results per tool (ToolResultMap)
 
-function runAgent(opts: {
+// Multi-turn conversation; the session owns the provider transcript.
+function createAgentSession(opts: {
   settings: AgentSettings;
-  question: string;
   handlers: ToolHandlers;
-  signal?: AbortSignal;
-  onStep?: (step: AgentStep) => void;
-}): Promise<AgentAnswer>;
+  evidence?: EvidencePack;                   // ~1-2KB session digest in the first turn
+}): AgentSession;
+interface AgentSession {
+  send(question: string, opts?: { signal?: AbortSignal; onEvent?: (e: AgentEvent) => void }): Promise<AgentAnswer>;
+  readonly messages: ChatMessage[];
+}
+type AgentEvent = model_start | text_delta | tool_start | tool_result | done | error;
 
-// Tools: explain_interaction | query_trace | why | root_cause |
-//        diff_snapshots | diagnose | resolve_source
+function buildEvidencePack(store: TraceStore): EvidencePack;  // stats, interactions,
+// top components, commit anomalies (trace-engine anomalyStats), compiler coverage
+
+// Tools (11): explain_interaction | query_trace | why | find_component |
+//   component_renders | read_component_source | effects_summary |
+//   graph_neighbors | diff_snapshots | diagnose | resolve_source
+// - why carries per-cause diff summaries, top changed paths, and the cause's
+//   source location (e.g. the re-rendering parent's file:line).
+// - read_component_source returns a line-numbered snippet scoped to the
+//   definition via diagnostics.definitionSpan — the fix-proposing enabler.
+// - Tool results are budgeted (6KB, 10KB for source) before reaching the model.
 ```
 
-Answers must cite Lens IDs. Keys stay on-device except as auth headers to the
-user-configured provider (`openai` | `anthropic`/Claude | `zml`/Z.AI GLM via
-Anthropic-compatible `https://api.z.ai/api/anthropic`, model `glm-5v-turbo`).
+Answers must cite Lens ID tokens (`[component:12]`, `[render:412]`,
+`[interaction:i3]`, `[doctor:rule@12]`) the panel turns into clickable chips.
+The prompt enforces the React Compiler invariant (no manual memoization advice
+for compiled components) and a fix contract: `read_component_source` + `why`
+before any fenced `lang file:line` code proposal. Keys stay on-device except
+as auth headers to the user-configured provider (`openai` | `anthropic`/Claude
+| `zml`/Z.AI GLM via Anthropic-compatible `https://api.z.ai/api/anthropic`,
+model `glm-5v-turbo`); direct browser calls to Anthropic send the
+`anthropic-dangerous-direct-browser-access` opt-in header.
 
 ---
 
