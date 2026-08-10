@@ -330,6 +330,11 @@ interface TraceStore {
 function applySetAt(store: TraceStore, t: number): Map<ComponentId, RenderId>;
 function diffApplySet(prev: ReadonlyMap<ComponentId, RenderId>, next: ReadonlyMap<ComponentId, RenderId>): TimeTravelEntry[];
 
+// Commit-cost outliers (≥5× median with an 8ms floor, at/above p95).
+// Shared by the Timeline's ⚠ markers and the agent's evidence pack.
+function anomalyStats(commits: CommitSummary[]): AnomalyStats;
+interface AnomalyStats { median: number; p95: number; max: number; isAnomaly(c: CommitSummary): boolean }
+
 type TraceSelector =
   | { kind: "component"; id: ComponentId }
   | { kind: "interaction"; id: InteractionId }

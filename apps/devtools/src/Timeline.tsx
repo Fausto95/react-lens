@@ -1,5 +1,11 @@
 import { useMemo, useRef, useState, useEffect, useCallback } from "react";
-import type { TraceStore, Interaction, CommitSummary } from "@react-lens/trace-engine";
+import {
+  anomalyStats,
+  type AnomalyStats,
+  type TraceStore,
+  type Interaction,
+  type CommitSummary,
+} from "@react-lens/trace-engine";
 import type { Causality } from "@react-lens/causality";
 import type { ComponentId, RenderId } from "@react-lens/protocol";
 import { explainInteraction, type LensRef, type NarrativeNextClick } from "@react-lens/explain";
@@ -1130,28 +1136,6 @@ function componentRgb(id: ComponentId): string {
 }
 
 // ── helpers ──────────────────────────────────────────────────────────────────
-
-interface AnomalyStats {
-  median: number;
-  p95: number;
-  max: number;
-  isAnomaly: (c: CommitSummary) => boolean;
-}
-
-function anomalyStats(commits: CommitSummary[]): AnomalyStats {
-  const times = commits.map((c) => c.totalSelfTime).sort((a, b) => a - b);
-  const median = percentile(times, 0.5);
-  const p95 = percentile(times, 0.95);
-  const max = times[times.length - 1] ?? 1;
-  const floor = Math.max(8, median * 5);
-  return { median, p95, max, isAnomaly: (c) => c.totalSelfTime >= floor && c.totalSelfTime >= p95 };
-}
-
-function percentile(sorted: number[], p: number): number {
-  if (sorted.length === 0) return 0;
-  const i = Math.min(sorted.length - 1, Math.floor(p * sorted.length));
-  return sorted[i] ?? 0;
-}
 
 /** Desaturated identity hues — Linear/Vercel quiet, not neon. */
 const PALETTE = [
