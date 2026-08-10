@@ -22,6 +22,7 @@ describe("agent tools", () => {
       "why",
       "find_component",
       "component_renders",
+      "component_runtime",
       "read_component_source",
       "effects_summary",
       "graph_neighbors",

@@ -13,6 +13,7 @@ import { explainInteraction, type LensRef } from "@react-lens/explain";
 import type { SourceResolver } from "@react-lens/source-maps";
 import { buildGraph, neighbors, componentKey } from "@react-lens/graph";
 import type { CauseSummary, HooksDiffRow, ToolHandlers } from "./types.js";
+import { summarizeValue } from "./summarize.js";
 
 const SNIPPET_MAX_LINES = 200;
 const SNIPPET_MAX_CHARS = 8_000;
@@ -213,6 +214,97 @@ export function createToolHandlers(deps: {
       };
     },
 
+    component_runtime: ({ componentId }) => {
+      const id = componentId as ComponentId;
+      const instance = store.instance(id);
+      if (!instance) {
+        return { error: `Unknown componentId ${componentId} — use find_component to look it up.` };
+      }
+      const retained = store.rendersOf(id);
+
+      let maxSelf = 0;
+      let wasted = 0;
+      const reasons: Record<string, number> = {};
+      for (const r of retained) {
+        if (r.selfDuration > maxSelf) maxSelf = r.selfDuration;
+        for (const reason of r.reasons) reasons[reason.type] = (reasons[reason.type] ?? 0) + 1;
+        try {
+          if (causality.why(r.renderId).verdict === "no-observable-change") wasted++;
+        } catch {
+          /* render evicted between reads — skip */
+        }
+      }
+
+      const renders = store.renderCount(id);
+      const totalSelf = store.selfTimeTotal(id);
+      const lastRender = retained.at(-1);
+
+      // Latest render whose snapshot is still retained panel-side. In extension
+      // mode snapshots are fetched on demand, so none may exist yet.
+      let latest: {
+        renderId: RenderId;
+        props: ReturnType<typeof summarizeValue> | null;
+        hooks: Array<{ index: number; kind: string; value: ReturnType<typeof summarizeValue> | null; hasDeps: boolean }>;
+        contexts: Array<{ name?: string; value: ReturnType<typeof summarizeValue> | null }>;
+      } | null = null;
+      for (let i = retained.length - 1; i >= 0 && !latest; i--) {
+        const snap = store.snapshot(retained[i]!.renderId);
+        if (!snap) continue;
+        latest = {
+          renderId: snap.renderId,
+          props: snap.props ? summarizeValue(snap.props) : null,
+          hooks: (snap.hooks ?? []).map((h) => ({
+            index: h.index,
+            kind: h.kind,
+            value: h.value ? summarizeValue(h.value) : null,
+            hasDeps: h.deps != null,
+          })),
+          contexts: (snap.contexts ?? []).map((c) => ({
+            ...(c.displayName ? { name: c.displayName } : {}),
+            value: c.value ? summarizeValue(c.value) : null,
+          })),
+        };
+      }
+
+      return {
+        componentId: id,
+        componentName: instance.name,
+        kind: instance.kind ?? "component",
+        compiler: instance.compiler,
+        ...(instance.source ? { source: instance.source } : {}),
+        stats: {
+          renders,
+          totalSelfMs: round(totalSelf),
+          avgSelfMs: renders > 0 ? round(totalSelf / renders) : 0,
+          maxSelfMs: round(maxSelf),
+          lastRenderId: lastRender?.renderId ?? null,
+          wastedRenders: wasted,
+          functionPropChurn: hasFunctionPropChurn(causality, lastRender?.renderId),
+        },
+        reasons,
+        latest,
+        ...(latest
+          ? {}
+          : {
+              snapshotReason:
+                "no snapshot retained for this component — select it in the Inspector to fetch one, or analyze renders via why.",
+            }),
+        citations: [
+          componentRef(id),
+          ...(latest
+            ? [
+                {
+                  kind: "render" as const,
+                  id: latest.renderId,
+                  label: `render ${latest.renderId}`,
+                  componentId: id,
+                },
+              ]
+            : []),
+        ],
+      };
+    },
+
     read_component_source: async ({ componentId, contextLines = 8 }) => {
       const id = componentId as ComponentId;
       const instance = store.instance(id);
@@ -395,6 +487,25 @@ async function chaseImport(
 
 function escapeRe(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/**
+ * Latest render caused by a function-identity-only prop change — the classic
+ * inline-arrow signature. Mirrors the Doctor's heuristic (apps/devtools).
+ */
+function hasFunctionPropChurn(causality: Causality, renderId: RenderId | undefined): boolean {
+  if (renderId === undefined) return false;
+  try {
+    const why = causality.why(renderId);
+    return why.causes.some((c) => {
+      if (!c.diff) return false;
+      const fn = c.diff.changes.some((ch) => ch.kind === "FUNCTION_IDENTITY_CHANGED");
+      const value = c.diff.changes.some((ch) => ch.kind === "VALUE_CHANGED");
+      return fn && !value;
+    });
+  } catch {
+    return false;
+  }
 }
 
 /** Project a Cause into what the model needs: evidence, not internals. */

@@ -102,6 +102,19 @@ export const TOOL_DEFINITIONS: Array<{
   {
     type: "function",
     function: {
+      name: "component_runtime",
+      description:
+        "One-call runtime profile of a component: timings (total/avg/max self), render-reason histogram, wasted renders, compiler status, and its latest props/hooks/context values (summarized — real array sizes, key sets, function identities). Call this FIRST when asked to optimize or explain a specific component.",
+      parameters: {
+        type: "object",
+        required: ["componentId"],
+        properties: { componentId: { type: "number" } },
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
       name: "read_component_source",
       description:
         "The component's original source, line-numbered and scoped to its definition. REQUIRED before proposing a code fix.",

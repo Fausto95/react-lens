@@ -1,4 +1,5 @@
 import type { ComponentId, RenderId, SourceLocation, HookKind } from "@react-lens/protocol";
+import type { ValueSummary } from "./summarize.js";
 import type { LensRef, Narrative } from "@react-lens/explain";
 import type { Diagnostic } from "@react-lens/diagnostics";
 import type { DiffChange, DiffSummary } from "@react-lens/diff-engine";
@@ -42,6 +43,7 @@ export interface ToolArgsMap {
   resolve_source: { file: string; line: number; column: number };
   find_component: { name: string };
   component_renders: { componentId: number; limit?: number };
+  component_runtime: { componentId: number };
   read_component_source: { componentId: number; contextLines?: number };
   effects_summary: { componentId: number };
   graph_neighbors: { componentId: number };
@@ -154,6 +156,38 @@ export interface ComponentRendersResult {
   citations: LensRef[];
 }
 
+/** One-call runtime profile of a component — see handlers.ts::component_runtime. */
+export interface ComponentRuntimeResult {
+  componentId: ComponentId;
+  componentName: string;
+  kind: string;
+  compiler: { compiled: boolean; memoized: boolean; bailoutReason?: string };
+  source?: SourceLocation;
+  stats: {
+    /** Lifetime render count (uncapped). */
+    renders: number;
+    totalSelfMs: number;
+    avgSelfMs: number;
+    maxSelfMs: number;
+    lastRenderId: RenderId | null;
+    /** Retained renders whose output provably did not change. */
+    wastedRenders: number;
+    /** Latest render was caused by a function-identity-only prop change. */
+    functionPropChurn: boolean;
+  };
+  /** RenderReason.type histogram over retained renders. */
+  reasons: Record<string, number>;
+  /** Summarized latest available snapshot, or null with snapshotReason. */
+  latest: {
+    renderId: RenderId;
+    props: ValueSummary | null;
+    hooks: Array<{ index: number; kind: string; value: ValueSummary | null; hasDeps: boolean }>;
+    contexts: Array<{ name?: string; value: ValueSummary | null }>;
+  } | null;
+  snapshotReason?: string;
+  citations: LensRef[];
+}
+
 export interface ComponentSourceResult {
   componentId: ComponentId;
   name: string;
@@ -196,6 +230,7 @@ export interface ToolResultMap {
   resolve_source: ResolveSourceResult;
   find_component: FindComponentResult;
   component_renders: ComponentRendersResult;
+  component_runtime: ComponentRuntimeResult;
   read_component_source: ComponentSourceResult;
   effects_summary: EffectsSummaryResult;
   graph_neighbors: GraphNeighborsResult;

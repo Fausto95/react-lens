@@ -21,4 +21,6 @@ export type {
   CauseSummary,
   WhyToolResult,
   ComponentSourceResult,
+  ComponentRuntimeResult,
 } from "./types.js";
+export { summarizeValue, type ValueSummary } from "./summarize.js";

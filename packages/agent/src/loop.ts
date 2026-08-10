@@ -93,6 +93,7 @@ const TOOL_ARG_SPECS: Record<ToolName, Record<string, FieldSpec>> = {
   },
   find_component: { name: { type: "string", required: true } },
   component_renders: { componentId: { type: "number", required: true }, limit: { type: "number" } },
+  component_runtime: { componentId: { type: "number", required: true } },
   read_component_source: {
     componentId: { type: "number", required: true },
     contextLines: { type: "number" },
