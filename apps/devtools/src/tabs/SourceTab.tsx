@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import type { ComponentInstance, SourceLocation } from "@react-lens/protocol";
 import { definitionLine } from "@react-lens/diagnostics";
+import { IconCopy } from "@react-lens/icons";
 import { shortSource } from "@react-lens/ui";
 import type { InspectorContext } from "../Inspector.js";
 import { sourceResolver as resolver } from "../sourceResolver.js";
@@ -73,11 +74,21 @@ export function SourceTab({ inst }: { inst: ComponentInstance; ctx: InspectorCon
         <div className="rl-source-sub">compiled: {shortSource(compiled.file)}:{compiled.line}</div>
       )}
       <div className="rl-actions">
-        <button className="rl-btn" onClick={() => copy(location)}>
-          Copy location
+        <button
+          className="rl-icon-btn"
+          onClick={() => copy(location)}
+          title="Copy location"
+          aria-label="Copy location"
+        >
+          <IconCopy size={14} />
         </button>
-        <button className="rl-btn" onClick={() => copy(shown.file)}>
-          Copy file path
+        <button
+          className="rl-icon-btn"
+          onClick={() => copy(shown.file)}
+          title="Copy file path"
+          aria-label="Copy file path"
+        >
+          <IconCopy size={14} />
         </button>
       </div>
     </div>

@@ -83,3 +83,146 @@ export function IconDiff(props: IconProps) {
     </Svg>
   );
 }
+
+/** Copy to clipboard. */
+export function IconCopy(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <rect x="5.5" y="5.5" width="7.5" height="7.5" rx="1.2" />
+      <path d="M3.5 10.5V3.5A1 1 0 0 1 4.5 2.5h7" />
+    </Svg>
+  );
+}
+
+/** DOM highlight / crosshair. */
+export function IconCrosshair(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <circle cx="8" cy="8" r="3.5" />
+      <path d="M8 1.5v2.5M8 12v2.5M1.5 8h2.5M12 8h2.5" />
+    </Svg>
+  );
+}
+
+/** Play. */
+export function IconPlay(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <path d="M5.5 3.5v9l8-4.5z" fill="currentColor" stroke="none" />
+    </Svg>
+  );
+}
+
+/** Pause. */
+export function IconPause(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <path d="M5 3.5h2v9H5zM9 3.5h2v9H9z" fill="currentColor" stroke="none" />
+    </Svg>
+  );
+}
+
+/** Skip to previous. */
+export function IconSkipBack(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <path d="M3.5 3.5v9" />
+      <path d="M12.5 3.5v9L5.5 8z" fill="currentColor" stroke="none" />
+    </Svg>
+  );
+}
+
+/** Skip to next. */
+export function IconSkipForward(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <path d="M12.5 3.5v9" />
+      <path d="M3.5 3.5v9L10.5 8z" fill="currentColor" stroke="none" />
+    </Svg>
+  );
+}
+
+/** Zoom out / minus. */
+export function IconMinus(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <path d="M3.5 8h9" />
+    </Svg>
+  );
+}
+
+/** Zoom in / plus. */
+export function IconPlus(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <path d="M8 3.5v9M3.5 8h9" />
+    </Svg>
+  );
+}
+
+/** Collapsed / next. */
+export function IconChevronRight(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <path d="m6 3.5 5 4.5-5 4.5" />
+    </Svg>
+  );
+}
+
+/** Expanded. */
+export function IconChevronDown(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <path d="m3.5 6 4.5 5 4.5-5" />
+    </Svg>
+  );
+}
+
+/** Close / dismiss. */
+export function IconClose(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <path d="m4 4 8 8M12 4 4 12" />
+    </Svg>
+  );
+}
+
+/** Comparison mark A. */
+export function IconMarkA(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <text
+        x="8"
+        y="11.5"
+        textAnchor="middle"
+        fill="currentColor"
+        stroke="none"
+        fontSize="9"
+        fontWeight="600"
+        fontFamily="ui-sans-serif, system-ui, sans-serif"
+      >
+        A
+      </text>
+    </Svg>
+  );
+}
+
+/** Comparison mark B. */
+export function IconMarkB(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <text
+        x="8"
+        y="11.5"
+        textAnchor="middle"
+        fill="currentColor"
+        stroke="none"
+        fontSize="9"
+        fontWeight="600"
+        fontFamily="ui-sans-serif, system-ui, sans-serif"
+      >
+        B
+      </text>
+    </Svg>
+  );
+}

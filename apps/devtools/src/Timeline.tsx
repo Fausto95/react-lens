@@ -2,6 +2,19 @@ import { useMemo, useRef, useState, useEffect } from "react";
 import type { TraceStore, Interaction, CommitSummary } from "@react-lens/trace-engine";
 import type { Causality } from "@react-lens/causality";
 import type { ComponentId } from "@react-lens/protocol";
+import {
+  IconChevronDown,
+  IconChevronRight,
+  IconClose,
+  IconMarkA,
+  IconMarkB,
+  IconMinus,
+  IconPause,
+  IconPlay,
+  IconPlus,
+  IconSkipBack,
+  IconSkipForward,
+} from "@react-lens/icons";
 import { useTraceVersion } from "./useLens.js";
 import { ms } from "@react-lens/ui";
 import type { TimeCursor, ABMarks } from "./timeCursor.js";
@@ -172,31 +185,70 @@ export function Timeline({
   return (
     <div className={`rl-tl rl-tl-${mode}`}>
       <div className="rl-tl-head">
-        <button className="rl-tl-mode" onClick={() => setMode(NEXT_MODE[mode])} title="Cycle size (T)">
-          {mode === "collapsed" ? "▸" : mode === "compact" ? "▾" : "▿"} Timeline
+        <button
+          className="rl-icon-btn"
+          onClick={() => setMode(NEXT_MODE[mode])}
+          title="Cycle timeline size (T)"
+          aria-label="Cycle timeline size (T)"
+        >
+          {mode === "collapsed" ? <IconChevronRight size={14} /> : <IconChevronDown size={14} />}
         </button>
         <span className="rl-tl-sub">
           {interactions.length} interactions · {commits.length} commits
         </span>
         <span className="rl-spacer" />
         {ab.a !== undefined && ab.b !== undefined && (
-          <button className="rl-tl-ab-clear" onClick={() => onSetAB({})} title="Clear A/B">
-            A↔B ✕
+          <button
+            className="rl-icon-btn"
+            onClick={() => onSetAB({})}
+            title="Clear A/B comparison"
+            aria-label="Clear A/B comparison"
+          >
+            <IconClose size={12} />
           </button>
         )}
         <div className="rl-tl-nav">
-          <button className="rl-zoom-btn" onClick={() => stepInteraction(-1)} title="Previous interaction ([)">|◀</button>
           <button
-            className={`rl-zoom-btn${playing ? " active" : ""}`}
+            className="rl-icon-btn"
+            onClick={() => stepInteraction(-1)}
+            title="Previous interaction ([)"
+            aria-label="Previous interaction ([)"
+          >
+            <IconSkipBack size={13} />
+          </button>
+          <button
+            className={`rl-icon-btn${playing ? " active" : ""}`}
             onClick={() => (playing ? stop() : play(bounds.t0, bounds.t1))}
             title={playing ? "Pause" : "Replay whole timeline"}
+            aria-label={playing ? "Pause" : "Replay whole timeline"}
           >
-            {playing ? "⏸" : "▶"}
+            {playing ? <IconPause size={12} /> : <IconPlay size={12} />}
           </button>
-          <button className="rl-zoom-btn" onClick={() => stepInteraction(1)} title="Next interaction (])">▶|</button>
+          <button
+            className="rl-icon-btn"
+            onClick={() => stepInteraction(1)}
+            title="Next interaction (])"
+            aria-label="Next interaction (])"
+          >
+            <IconSkipForward size={13} />
+          </button>
           <span className="rl-zoom-sep" />
-          <button className="rl-zoom-btn" onClick={() => setScale((s) => clamp((s || fit) * 0.8, 0.01, 8))} title="Zoom out">−</button>
-          <button className="rl-zoom-btn" onClick={() => setScale((s) => clamp((s || fit) * 1.25, 0.01, 8))} title="Zoom in">+</button>
+          <button
+            className="rl-icon-btn"
+            onClick={() => setScale((s) => clamp((s || fit) * 0.8, 0.01, 8))}
+            title="Zoom out"
+            aria-label="Zoom out"
+          >
+            <IconMinus size={13} />
+          </button>
+          <button
+            className="rl-icon-btn"
+            onClick={() => setScale((s) => clamp((s || fit) * 1.25, 0.01, 8))}
+            title="Zoom in"
+            aria-label="Zoom in"
+          >
+            <IconPlus size={13} />
+          </button>
         </div>
         <button
           className={`rl-tl-live ${live ? "live" : "past"}`}
@@ -204,7 +256,9 @@ export function Timeline({
           title={live ? "Following live" : "Return to live (L)"}
         >
           <span className="rl-tl-live-dot" />
-          {live ? "LIVE" : `PAST · ${ms(cursorT - bounds.t0)}`}
+          <span className="rl-tl-live-label">
+            {live ? "LIVE" : `PAST · ${ms(cursorT - bounds.t0)}`}
+          </span>
         </button>
       </div>
 
@@ -376,11 +430,30 @@ function SelectionCard({
         </div>
       )}
       <span className="rl-spacer" />
-      <button className="rl-ctl" onClick={onSetA} title="Set comparison A at cursor">Set A</button>
-      <button className="rl-ctl" onClick={onSetB} title="Set comparison B at cursor">Set B</button>
+      <button
+        className={`rl-icon-btn mark-a${ab.a !== undefined ? " active" : ""}`}
+        onClick={onSetA}
+        title="Set comparison A at cursor"
+        aria-label="Set comparison A at cursor"
+      >
+        <IconMarkA size={14} />
+      </button>
+      <button
+        className={`rl-icon-btn mark-b${ab.b !== undefined ? " active" : ""}`}
+        onClick={onSetB}
+        title="Set comparison B at cursor"
+        aria-label="Set comparison B at cursor"
+      >
+        <IconMarkB size={14} />
+      </button>
       {interaction && (
-        <button className="rl-ctl rl-ctl-primary" onClick={() => onReplay(interaction)}>
-          ▶ Replay
+        <button
+          className="rl-icon-btn primary"
+          onClick={() => onReplay(interaction)}
+          title="Replay interaction"
+          aria-label="Replay interaction"
+        >
+          <IconPlay size={12} />
         </button>
       )}
       {ab.a !== undefined && ab.b !== undefined && (

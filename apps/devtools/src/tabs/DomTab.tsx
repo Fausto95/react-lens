@@ -1,5 +1,6 @@
 import { useState } from "react";
 import type { DOMNodeSnapshot } from "@react-lens/protocol";
+import { IconCrosshair } from "@react-lens/icons";
 import type { InspectorContext } from "../Inspector.js";
 import { EmptyTab } from "./shared.js";
 
@@ -16,13 +17,15 @@ export function DomTab({ ctx }: { ctx: InspectorContext }) {
     <div>
       {highlight && (
         <button
-          className="rl-btn rl-dom-hl"
+          className="rl-icon-btn rl-dom-hl"
           onMouseEnter={() => highlight(componentId)}
           onMouseLeave={() => highlight(null)}
           onFocus={() => highlight(componentId)}
           onBlur={() => highlight(null)}
+          title="Highlight on page"
+          aria-label="Highlight on page"
         >
-          ⊙ Highlight on page
+          <IconCrosshair size={14} />
         </button>
       )}
       <div className="rl-dom">

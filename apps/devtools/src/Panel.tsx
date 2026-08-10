@@ -10,7 +10,7 @@ import { diagnoseAll } from "./doctor.js";
 import { createDoctorClient, type DoctorResult } from "./doctorClient.js";
 import { CommandPalette, type Command } from "./CommandPalette.js";
 import type { TimeCursor, ABMarks } from "./timeCursor.js";
-import { IconLens, IconBolt } from "@react-lens/icons";
+import { IconLens, IconBolt, IconSearch, IconDoctor } from "@react-lens/icons";
 import "./theme.css";
 
 export interface PanelProps {
@@ -132,27 +132,33 @@ export function Panel({
           <IconLens className="rl-brand-icon" /> React Lens
         </span>
         <span className="rl-spacer" />
-        <button className="rl-btn rl-cmdk-btn" onClick={() => setPaletteOpen(true)} title="Command palette">
-          ⌘K
+        <button
+          className="rl-icon-btn"
+          onClick={() => setPaletteOpen(true)}
+          title="Command palette (⌘K)"
+          aria-label="Command palette (⌘K)"
+        >
+          <IconSearch size={14} />
         </button>
         {onToggleOverlay && (
           <button
-            className={`rl-btn rl-overlay-toggle${overlayEnabled ? " active" : ""}`}
+            className={`rl-icon-btn${overlayEnabled ? " active" : ""}`}
             onClick={onToggleOverlay}
             title="Toggle render overlay"
+            aria-label="Toggle render overlay"
             aria-pressed={overlayEnabled}
           >
-            <IconBolt size={12} /> Renders
+            <IconBolt size={13} />
           </button>
         )}
         <button
-          className={`rl-rec${recording ? " active" : ""}`}
+          className={`rl-icon-btn recording severe${recording ? " active" : ""}`}
           onClick={onToggleRecording}
           title={recording ? "Pause recording (R)" : "Start recording (R)"}
+          aria-label={recording ? "Pause recording (R)" : "Start recording (R)"}
           aria-pressed={recording}
         >
-          <span className="rl-rec-dot" />
-          {recording ? "Recording" : "Paused"}
+          <span className="rl-rec-pulse" />
         </button>
       </div>
 
@@ -208,7 +214,9 @@ export function Panel({
         <span>{stats.renders} renders</span>
         <span>{stats.components} components</span>
         {issueCount > 0 && (
-          <span className="rl-status-issues">⚕ {issueCount} issues</span>
+          <span className="rl-status-issues">
+            <IconDoctor size={12} /> {issueCount} issues
+          </span>
         )}
         <span style={{ marginLeft: "auto" }}>
           {embedded ? "embedded" : "devtools"} · protocol v1

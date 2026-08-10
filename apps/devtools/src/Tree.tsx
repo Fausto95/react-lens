@@ -80,6 +80,8 @@ export function Tree({
 
   const rows = useMemo(() => flatten(roots, expanded), [roots, expanded]);
   const maxSelf = useMemo(() => Math.max(1, ...rows.map((r) => rowSelfTime(r))), [rows]);
+  // Rows under the selected foldable component — tinted so the subtree reads as one group.
+  const inSelection = useMemo(() => descendantKeys(roots, selected), [roots, selected]);
 
   // Row windowing: only mount rows in (or near) the viewport, so a 10k-node
   // tree still renders ~30-100 rows. Row height is fixed (ROW_H).
@@ -115,16 +117,20 @@ export function Tree({
   return (
     <div className="rl-tree" onMouseLeave={() => onHover?.(null)}>
       <div className="rl-tree-modes">
-        {MODES.map((m) => (
-          <button
-            key={m.id}
-            className={`rl-mode${mode === m.id ? " active" : ""}`}
-            title={m.hint}
-            onClick={() => setMode(m.id)}
-          >
-            {m.label}
-          </button>
-        ))}
+        <div className="rl-seg" role="tablist" aria-label="Tree mode">
+          {MODES.map((m) => (
+            <button
+              key={m.id}
+              role="tab"
+              aria-selected={mode === m.id}
+              className={`rl-mode${mode === m.id ? " active" : ""}`}
+              title={m.hint}
+              onClick={() => setMode(m.id)}
+            >
+              {m.label}
+            </button>
+          ))}
+        </div>
       </div>
       <input
         className="rl-tree-search"
@@ -156,6 +162,7 @@ export function Tree({
                   row={row}
                   maxSelf={maxSelf}
                   selected={selected}
+                  inSelection={inSelection.has(row.key)}
                   onSelect={onSelect}
                   onToggle={toggle}
                   onHover={onHover}
@@ -176,6 +183,7 @@ function TreeRow({
   row,
   maxSelf,
   selected,
+  inSelection,
   onSelect,
   onToggle,
   onHover,
@@ -186,6 +194,7 @@ function TreeRow({
   row: VisibleRow;
   maxSelf: number;
   selected: ComponentId | null;
+  inSelection: boolean;
   onSelect: (id: ComponentId) => void;
   onToggle: (key: string) => void;
   onHover?: (id: ComponentId | null) => void;
@@ -200,10 +209,11 @@ function TreeRow({
   // Freeze Frame: did this row render in the frozen commit?
   const inFrozen = frozen && isComponent ? frozen.has(node.id) : undefined;
   const frozenClass = inFrozen === false ? " rl-frozen-out" : "";
+  const selClass = isSelected ? " rl-selected" : inSelection ? " rl-in-selection" : "";
 
   return (
     <div
-      className={`rl-tree-row${isSelected ? " rl-selected" : ""}${frozenClass}`}
+      className={`rl-tree-row${selClass}${frozenClass}`}
       // Cap the indent: deep real-world trees (50+ levels) would otherwise push
       // the row off-screen and collapse the name to zero width.
       style={{ paddingLeft: 6 + Math.min(depth, 14) * 8 }}
@@ -314,4 +324,31 @@ function collectKeys(roots: SemanticNode[]): string[] {
   };
   walk(roots);
   return keys;
+}
+
+/** Keys of every node under the selected component (not including itself). */
+function descendantKeys(roots: SemanticNode[], selected: ComponentId | null): Set<string> {
+  const empty = new Set<string>();
+  if (selected === null) return empty;
+  const out = new Set<string>();
+  const mark = (nodes: SemanticNode[]) => {
+    for (const node of nodes) {
+      out.add(node.key);
+      if (node.kind === "component") mark(node.children);
+      else mark(node.instances);
+    }
+  };
+  const find = (nodes: SemanticNode[]): boolean => {
+    for (const node of nodes) {
+      if (node.kind === "component" && node.id === selected) {
+        mark(node.children);
+        return true;
+      }
+      const kids = node.kind === "component" ? node.children : node.instances;
+      if (find(kids)) return true;
+    }
+    return false;
+  };
+  find(roots);
+  return out;
 }
