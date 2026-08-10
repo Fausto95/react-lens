@@ -123,6 +123,10 @@ export function createFiberBridge(target: typeof globalThis = globalThis): Fiber
 
   let reactVersion: string | null = null;
   let activeHook: DevToolsHook | null = null;
+  // Idempotence is per bridge instance, NOT a flag on the shared hook: several
+  // bridges may live on one page (extension injected + embedded runtime) and
+  // each must chain — a hook-level flag makes every bridge after the first deaf.
+  let installed = false;
   // The renderer react-dom passes to inject(), captured directly — some host
   // hooks (e.g. Vite's Fast Refresh stub) don't store it in `renderers`.
   let injectedRenderer: ReactRenderer | null = null;
@@ -133,6 +137,8 @@ export function createFiberBridge(target: typeof globalThis = globalThis): Fiber
   }
 
   function install(): void {
+    if (installed) return;
+    installed = true;
     const existing = getExistingHook(target);
     if (existing) {
       activeHook = existing;
@@ -152,7 +158,6 @@ export function createFiberBridge(target: typeof globalThis = globalThis): Fiber
       onCommitFiberRoot: (_id, root) => handleCommit(root),
       onCommitFiberUnmount: (_id, fiber) => handleUnmount(fiber),
       onPostCommitFiberRoot: (_id, root) => handlePostCommit(root),
-      _lensChained: false,
     };
     activeHook = hook;
     setHook(target, hook);
@@ -244,10 +249,11 @@ export function createFiberBridge(target: typeof globalThis = globalThis): Fiber
    * Cooperate with an already-installed hook rather than clobbering it. This is
    * the normal path in the extension: our zero-import stub wins the hook slot at
    * document_start and buffers commits; the heavy bridge loads later and chains.
-   * It also chains the official React DevTools hook when that's present instead.
+   * It also chains the official React DevTools hook when that's present, and
+   * stacks when another lens bridge chained before us (extension + embedded on
+   * one page): each bridge wraps the current handlers and forwards.
    */
   function chain(existing: DevToolsHook): void {
-    if (existing._lensChained) return;
     const isStub = existing._lensStub === true;
     // A renderer may already be registered; otherwise capture it at inject time.
     for (const r of existing.renderers.values()) captureRenderer(r);
@@ -258,9 +264,12 @@ export function createFiberBridge(target: typeof globalThis = globalThis): Fiber
     };
     // The stub's only job was buffering, so don't keep forwarding to it — that
     // would grow its queue forever. A real peer hook, though, must keep working.
+    // Clear the marker: after this chain the buffering handler is replaced, so
+    // any LATER bridge sees a real peer and must forward to our wrappers.
     const originalCommit = isStub ? undefined : existing.onCommitFiberRoot?.bind(existing);
     const originalUnmount = isStub ? undefined : existing.onCommitFiberUnmount?.bind(existing);
     const originalPost = isStub ? undefined : existing.onPostCommitFiberRoot?.bind(existing);
+    if (isStub) existing._lensStub = false;
     existing.onCommitFiberRoot = (id, root, priority) => {
       originalCommit?.(id, root, priority);
       handleCommit(root);
@@ -273,7 +282,6 @@ export function createFiberBridge(target: typeof globalThis = globalThis): Fiber
       originalPost?.(id, root);
       handlePostCommit(root);
     };
-    existing._lensChained = true;
 
     // Replay commits the stub captured before we loaded — this is what makes the
     // already-mounted tree appear the moment the panel connects. Fibers mutate
