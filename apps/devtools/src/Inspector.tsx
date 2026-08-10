@@ -12,6 +12,7 @@ import { ContextTab } from "./tabs/ContextTab.js";
 import { EffectsTab } from "./tabs/EffectsTab.js";
 import { RendersTab } from "./tabs/RendersTab.js";
 import { SourceTab } from "./tabs/SourceTab.js";
+import { DomTab } from "./tabs/DomTab.js";
 
 export interface EditApi {
   setProp(componentId: ComponentId, path: Array<string | number>, value: unknown): void;
@@ -32,6 +33,8 @@ export interface InspectorContext {
   onSelectRender: (id: RenderId) => void;
   /** Present only when live editing is available (embedded, dev build). */
   edit?: EditApi;
+  /** Highlight this component's DOM on the page (embedded only). */
+  highlight?: (id: ComponentId | null) => void;
 }
 
 /**
@@ -44,11 +47,13 @@ export function Inspector({
   causality,
   componentId,
   edit,
+  highlight,
 }: {
   store: TraceStore;
   causality: Causality;
   componentId: ComponentId;
   edit?: EditApi;
+  highlight?: (id: ComponentId | null) => void;
 }) {
   useTraceVersion(store, { kind: "component", id: componentId });
   const inst = store.instance(componentId);
@@ -73,6 +78,7 @@ export function Inspector({
     snapshot,
     onSelectRender: setSelectedRender,
     ...(edit ? { edit } : {}),
+    ...(highlight ? { highlight } : {}),
   };
 
   const hooks = snapshot?.hooks ?? [];
@@ -136,6 +142,12 @@ export function Inspector({
       <Section title="Source">
         <SourceTab inst={inst} ctx={ctx} />
       </Section>
+
+      {snapshot?.dom && (
+        <Section title="DOM">
+          <DomTab ctx={ctx} />
+        </Section>
+      )}
     </div>
   );
 }

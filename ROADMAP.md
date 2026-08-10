@@ -36,7 +36,7 @@ fiber's hook list). All packages: **46 tests passing**, full `tsc -b` clean.
 
 ## Apps
 
-- ✅ **`devtools`** — React 19 panel: semantic tree + **single-scroll inspector** (collapsible auto-hiding sections). **Expandable object explorer** and **live-editable primitive props/state** (string/number/boolean) via renderer overrides, reflected in the app
+- ✅ **`devtools`** — React 19 panel: semantic tree + **single-scroll inspector** (collapsible auto-hiding sections). **Expandable object explorer**, **live-editable primitive props/state** via renderer overrides, and a **DOM section** (captured markup + highlight-on-page)
 - ✅ **`playground`** — React 19 + Compiler app engineered to misbehave; dev overlay mounts the panel
 - ✅ **`extension`** — MV3 shell (stateless background relay, ISOLATED+MAIN content scripts, devtools page, panel); builds clean
 - ⬜ **`ui`** / **`icons`** — extract the panel's components into a keyboard-first design system

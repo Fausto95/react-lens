@@ -287,6 +287,23 @@
 .rl-render-reason { flex: 1; color: var(--rl-text-dim); font-size: 12px; }
 .rl-render-cost { font-variant-numeric: tabular-nums; color: var(--rl-text-dim); font-size: 12px; }
 
+/* DOM markup view */
+.rl-dom { font-family: var(--rl-mono); font-size: 12px; line-height: 1.5; }
+.rl-dom-hl { margin-bottom: var(--rl-s3); }
+.rl-dom-line { white-space: nowrap; }
+.rl-dom-open { cursor: pointer; }
+.rl-dom-open:hover { background: var(--rl-bg-hover); }
+.rl-dom-caret { display: inline-block; width: 11px; color: var(--rl-text-faint); font-size: 9px; }
+.rl-dom-children { margin-left: 11px; padding-left: 8px; border-left: 1px solid var(--rl-border); }
+.rl-dom-punct { color: var(--rl-text-faint); }
+.rl-dom-tag { color: var(--rl-interaction); }
+.rl-dom-attr-name { color: var(--rl-suspicious); }
+.rl-dom-attr-val { color: #9ece6a; }
+.rl-dom-text, .rl-dom-textinline { color: var(--rl-text-dim); }
+.rl-dom-textinline { padding: 0 2px; }
+.rl-dom-text { padding-left: 19px; }
+.rl-dom-ellipsis { color: var(--rl-text-faint); padding-left: 2px; }
+
 .rl-muted { color: var(--rl-text-faint); }
 .rl-source-loc { font-family: var(--rl-mono); font-size: 12px; margin-bottom: var(--rl-s4); overflow-wrap: anywhere; }
 .rl-actions { display: flex; gap: var(--rl-s3); }

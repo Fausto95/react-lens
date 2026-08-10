@@ -75,6 +75,7 @@ export function Panel({
               causality={causality}
               componentId={selected}
               {...(edit ? { edit } : {})}
+              {...(onHighlight ? { highlight: onHighlight } : {})}
             />
           )}
         </div>
