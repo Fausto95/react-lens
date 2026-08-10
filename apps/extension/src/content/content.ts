@@ -9,15 +9,6 @@ import {
 
 /**
  * ISOLATED-world bridge and DURABLE buffer.
- *
- * The content script lives and dies with the page, so — unlike the background
- * service worker, which MV3 terminates at will — it can safely hold the trace
- * until a panel is ready for it. It captures every frame the page emits into a
- * rolling buffer, (re)connects its port to the background proactively, and
- * replays the buffer whenever a panel pairs with the tab (`panel-ready`). That
- * makes delivery independent of service-worker lifecycle: the earlier design
- * flushed only on a fragile record ping and lost everything if the worker had
- * recycled between page load and the panel opening.
  */
 const MAX_BUFFER = 4000;
 const buffer: PortMessage[] = [];
@@ -35,7 +26,6 @@ function connect(): void {
   try {
     p = chrome.runtime.connect({ name: PAGE_PORT_NAME });
   } catch {
-    // Extension context invalidated (e.g. just reloaded) — retry shortly.
     scheduleReconnect();
     return;
   }
@@ -61,8 +51,47 @@ function connect(): void {
     } else if (msg.kind === "replay") {
       const toPage: ContentToPage = { source: CONTENT_SOURCE, kind: "replay", componentIds: msg.componentIds };
       window.postMessage(toPage, "*");
+    } else if (msg.kind === "inspect-start") {
+      window.postMessage({ source: CONTENT_SOURCE, kind: "inspect-start" } satisfies ContentToPage, "*");
+    } else if (msg.kind === "inspect-stop") {
+      window.postMessage({ source: CONTENT_SOURCE, kind: "inspect-stop" } satisfies ContentToPage, "*");
+    } else if (msg.kind === "edit-setProp") {
+      window.postMessage(
+        {
+          source: CONTENT_SOURCE,
+          kind: "edit-setProp",
+          requestId: msg.requestId,
+          componentId: msg.componentId,
+          path: msg.path,
+          value: msg.value,
+        } satisfies ContentToPage,
+        "*",
+      );
+    } else if (msg.kind === "edit-setHookState") {
+      window.postMessage(
+        {
+          source: CONTENT_SOURCE,
+          kind: "edit-setHookState",
+          requestId: msg.requestId,
+          componentId: msg.componentId,
+          hookIndex: msg.hookIndex,
+          path: msg.path,
+          value: msg.value,
+        } satisfies ContentToPage,
+        "*",
+      );
+    } else if (msg.kind === "edit-setText") {
+      window.postMessage(
+        {
+          source: CONTENT_SOURCE,
+          kind: "edit-setText",
+          requestId: msg.requestId,
+          componentId: msg.componentId,
+          text: msg.text,
+        } satisfies ContentToPage,
+        "*",
+      );
     } else if (msg.kind === "panel-ready") {
-      // A panel is listening: replay everything captured so far, then stream.
       panelReady = true;
       for (const m of buffer) p.postMessage(m);
     }
@@ -83,44 +112,56 @@ function scheduleReconnect(): void {
   }, 500);
 }
 
-// Connect eagerly and keep the port alive across service-worker restarts.
 connect();
+
+function relayLive(msg: PortMessage): void {
+  if (!port) return;
+  try {
+    port.postMessage(msg);
+  } catch {
+    port = null;
+    panelReady = false;
+    scheduleReconnect();
+  }
+}
 
 window.addEventListener("message", (event: MessageEvent) => {
   if (event.source !== window) return;
   const data = event.data as PageToContent | undefined;
   if (!data || data.source !== PAGE_SOURCE) return;
 
-  // Snapshot / source responses are replies to a live panel request — relay
-  // straight through, never buffered (they'd bloat the buffer and replay stale).
   if (data.kind === "snapshot") {
-    if (port) {
-      try {
-        port.postMessage({ kind: "snapshot", frame: data.frame });
-      } catch {
-        port = null;
-        panelReady = false;
-        scheduleReconnect();
-      }
-    }
+    relayLive({ kind: "snapshot", frame: data.frame });
     return;
   }
   if (data.kind === "source") {
-    if (port) {
-      try {
-        port.postMessage({
-          kind: "source",
-          requestId: data.requestId,
-          url: data.url,
-          ...(data.body !== undefined ? { body: data.body } : {}),
-          ...(data.error !== undefined ? { error: data.error } : {}),
-        });
-      } catch {
-        port = null;
-        panelReady = false;
-        scheduleReconnect();
-      }
-    }
+    relayLive({
+      kind: "source",
+      requestId: data.requestId,
+      url: data.url,
+      ...(data.body !== undefined ? { body: data.body } : {}),
+      ...(data.error !== undefined ? { error: data.error } : {}),
+    });
+    return;
+  }
+  if (data.kind === "inspect-picked") {
+    relayLive({
+      kind: "inspect-picked",
+      componentId: data.componentId,
+      name: data.name,
+      ...(data.sourceFile ? { sourceFile: data.sourceFile } : {}),
+      ...(data.sourceLine != null ? { sourceLine: data.sourceLine } : {}),
+    });
+    return;
+  }
+  if (data.kind === "edit-result") {
+    relayLive({
+      kind: "edit-result",
+      requestId: data.requestId,
+      ok: data.ok,
+      ...(data.mode ? { mode: data.mode } : {}),
+      ...(data.error ? { error: data.error } : {}),
+    });
     return;
   }
 
@@ -137,7 +178,6 @@ window.addEventListener("message", (event: MessageEvent) => {
     try {
       port.postMessage(msg);
     } catch {
-      // Port died between checks — drop to the buffer and reconnect.
       port = null;
       panelReady = false;
       scheduleReconnect();

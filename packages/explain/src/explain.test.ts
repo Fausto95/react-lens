@@ -159,15 +159,17 @@ describe("explainInteraction", () => {
       diagnose,
     });
 
-    expect(narrative.headline).toMatch(/ProductCard/);
+    expect(narrative.headline).toMatch(/ProductCard|avoidable/i);
     expect(narrative.topCost[0]?.name).toBe("ProductCard");
     expect(narrative.topCost[0]?.self).toBe(4.5);
     expect(narrative.waste.some((w) => w.name === "ProductCard")).toBe(true);
     expect(narrative.chain[0]?.explanation).toMatch(/function identity|Parent|props/i);
     expect(narrative.doctor[0]?.ruleId).toBe("unstable-callback");
     expect(narrative.nextClick?.kind).toBe("doctor");
+    expect(narrative.nextClick?.reason).toMatch(/Stabilize the callback|Fix:/i);
     expect(narrative.citations.some((c) => c.kind === "component")).toBe(true);
-    expect(narrative.summary).toMatch(/no observable DOM change/i);
+    expect(narrative.summary).toMatch(/Avoidable:|no observable DOM change/i);
+    expect(narrative.summary).toMatch(/Fix:/i);
   });
 
   it("falls back to costliest component when no waste or doctor", () => {
@@ -184,6 +186,8 @@ describe("explainInteraction", () => {
       createCausality(store),
       interactionOf(store, "Load"),
     );
+    expect(narrative.headline).toMatch(/expected:.*App mount/i);
+    expect(narrative.summary).toMatch(/Expected:|first-paint/i);
     expect(narrative.nextClick?.kind).toBe("component");
     expect(narrative.nextClick?.reason).toMatch(/App/);
   });

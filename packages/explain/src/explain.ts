@@ -87,8 +87,8 @@ export function explainInteraction(
   }
 
   const citations = buildCitations(interaction, topCost, waste, doctor);
-  const nextClick = pickNextClick(waste, topCost, doctor, costliest);
-  const { headline, summary } = writeCopy(interaction, topCost, waste, chain, doctor);
+  const nextClick = pickNextClick(waste, topCost, doctor, costliest, chain);
+  const { headline, summary } = writeCopy(interaction, topCost, waste, chain, doctor, costliest);
 
   return {
     interactionId: interaction.id,
@@ -155,23 +155,37 @@ function pickNextClick(
   topCost: NarrativeCostRow[],
   doctor: Diagnostic[],
   costliest: RenderEvent | undefined,
+  chain: { explanation: string; kind?: string }[],
 ): NarrativeNextClick | null {
   if (doctor[0]) {
+    const fix = doctor[0].fix?.trim();
     return {
       kind: "doctor",
       id: doctor[0].ruleId,
       componentId: doctor[0].componentId,
-      reason: `Inspect Doctor finding: ${doctor[0].title}`,
+      reason: fix
+        ? `Next: ${fix}`
+        : `Inspect Doctor finding: ${doctor[0].title}`,
     };
   }
   if (waste[0]) {
+    const hint = actionableCauseHint(chain[0]?.explanation);
     return {
       kind: "component",
       id: waste[0].componentId,
-      reason: `Inspect ${waste[0].name} — rendered with no observable DOM change`,
+      reason: hint
+        ? `Stabilize ${hint} feeding ${waste[0].name} (no DOM change)`
+        : `Open Why on ${waste[0].name} — find the prop/context that fanned out`,
     };
   }
   if (topCost[0]) {
+    if (topCost[0].wasted) {
+      return {
+        kind: "component",
+        id: topCost[0].componentId,
+        reason: `Open Why on ${topCost[0].name} — cost with no observable DOM change`,
+      };
+    }
     return {
       kind: "component",
       id: topCost[0].componentId,
@@ -189,21 +203,53 @@ function pickNextClick(
   return null;
 }
 
+/** Pull a prop/context name out of a causality explanation when present. */
+function actionableCauseHint(explanation: string | undefined): string | null {
+  if (!explanation) return null;
+  const prop = explanation.match(/\bprops?\.([A-Za-z_$][\w$]*)/i)?.[1]
+    ?? explanation.match(/\bchanged prop[s]?:\s*([A-Za-z_$][\w$,\s]*)/i)?.[1]?.split(",")[0]?.trim()
+    ?? explanation.match(/\b(on[A-Z]\w*)\b/)?.[1];
+  if (prop) return `prop \`${prop}\``;
+  if (/context/i.test(explanation)) {
+    const ctx = explanation.match(/context\s+[«"`]?([^»"`\s]+)/i)?.[1];
+    return ctx ? `context \`${ctx}\`` : "context value";
+  }
+  if (/function identity|inline (function|object|array)/i.test(explanation)) {
+    return "unstable function/object identity";
+  }
+  return null;
+}
+
 function writeCopy(
   interaction: Interaction,
   topCost: NarrativeCostRow[],
   waste: NarrativeWasteRow[],
   chain: { explanation: string }[],
   doctor: Diagnostic[],
+  costliest: RenderEvent | undefined,
 ): { headline: string; summary: string } {
   const top = topCost[0];
+  const sampled = Math.min(WHY_CAP, interaction.metrics.renderCount);
   const wasteShare =
-    interaction.metrics.renderCount > 0
-      ? Math.round((waste.length / Math.min(WHY_CAP, interaction.metrics.renderCount)) * 100)
-      : 0;
+    sampled > 0 ? Math.round((waste.length / sampled) * 100) : 0;
+  const wasteSelf = waste.reduce((s, w) => s + w.self, 0);
+  const costSelf = topCost.reduce((s, r) => s + r.self, 0);
+  const wasteCostShare =
+    costSelf > 0 ? Math.round((wasteSelf / costSelf) * 100) : 0;
+
+  const mountOnly =
+    !!costliest &&
+    costliest.reasons.length > 0 &&
+    costliest.reasons.every((r) => r.type === "mount");
 
   let headline = `${interaction.label}: ${interaction.metrics.renderCount} renders`;
-  if (top) {
+  if (waste.length > 0 && wasteShare >= 25) {
+    headline = `${interaction.label} — ~${wasteShare}% of sampled renders look avoidable`;
+  } else if (top?.wasted) {
+    headline = `${interaction.label} — avoidable: ${top.name} (${fmt(top.self)}, no DOM change)`;
+  } else if (top && mountOnly && waste.length === 0) {
+    headline = `${interaction.label} — expected: ${top.name} mount (${fmt(top.self)})`;
+  } else if (top) {
     headline = `${interaction.label} — ${top.name} paid most (${fmt(top.self)})`;
   }
 
@@ -211,19 +257,33 @@ function writeCopy(
   parts.push(
     `${interaction.kind} ran ${fmt(interaction.metrics.totalDuration)} (React ${fmt(interaction.metrics.reactDuration)}).`,
   );
-  if (top) {
-    parts.push(`Top cost: ${top.name} at ${fmt(top.self)} self.`);
-  }
+
   if (waste.length > 0) {
     parts.push(
-      `${waste.length} checked render${waste.length === 1 ? "" : "s"} produced no observable DOM change${wasteShare ? ` (~${wasteShare}% of sampled)` : ""}.`,
+      `Avoidable: ${waste.length} checked render${waste.length === 1 ? "" : "s"} with no observable DOM change` +
+        ` (~${wasteShare}% of sampled` +
+        (wasteCostShare > 0 ? `, ~${wasteCostShare}% of top self-time` : "") +
+        ").",
     );
+  } else if (mountOnly && top) {
+    parts.push(`Expected: ${top.name} mounted — first-paint cost, not a re-render bug.`);
+  } else if (top) {
+    parts.push(`Top cost: ${top.name} at ${fmt(top.self)} self` + (top.wasted ? " (no DOM change)." : "."));
   }
+
   if (chain[0]) {
     parts.push(`Likely cause: ${chain[0].explanation}`);
   }
   if (doctor[0]) {
-    parts.push(`Doctor: ${doctor[0].title}.`);
+    const fix = doctor[0].fix?.trim();
+    parts.push(fix ? `Fix: ${fix}` : `Doctor: ${doctor[0].title}.`);
+  } else if (waste[0]) {
+    const hint = actionableCauseHint(chain[0]?.explanation);
+    parts.push(
+      hint
+        ? `Next step: stabilize ${hint}.`
+        : `Next step: open Why on ${waste[0].name} and fix the fanout owner.`,
+    );
   }
 
   return { headline, summary: parts.join(" ") };

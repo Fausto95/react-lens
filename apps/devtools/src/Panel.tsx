@@ -10,7 +10,7 @@ import { diagnoseAll } from "./doctor.js";
 import { createDoctorClient, type DoctorResult } from "./doctorClient.js";
 import { CommandPalette, type Command } from "./CommandPalette.js";
 import type { TimeCursor, ABMarks } from "./timeCursor.js";
-import { IconLens, IconBolt, IconSearch, IconDoctor, IconDownload, IconUpload } from "@react-lens/icons";
+import { IconLens, IconBolt, IconSearch, IconDoctor, IconDownload, IconUpload, IconCrosshair } from "@react-lens/icons";
 import {
   downloadSession,
   importSessionFromFile,
@@ -23,6 +23,7 @@ import { sourceResolver } from "./sourceResolver.js";
 import "./theme.css";
 
 export { configureSourceFetcher, getSourceResolver } from "./sourceResolver.js";
+export type { EditApi } from "./Inspector.js";
 
 export interface PanelProps {
   store: TraceStore;
@@ -45,6 +46,12 @@ export interface PanelProps {
    * selected render and the result is ingested into the store.
    */
   onRequestSnapshot?: (renderId: RenderId) => void;
+  /** Page Inspect mode active (crosshair pick on the page). */
+  inspecting?: boolean;
+  onToggleInspect?: () => void;
+  /** External selection (e.g. inspect-picked from the page). */
+  selectComponent?: ComponentId | null;
+  onSelectConsumed?: () => void;
 }
 
 export function Panel({
@@ -59,6 +66,10 @@ export function Panel({
   onToggleOverlay,
   onReplayCommit,
   onRequestSnapshot,
+  inspecting = false,
+  onToggleInspect,
+  selectComponent,
+  onSelectConsumed,
 }: PanelProps) {
   useTraceVersion(store, { kind: "global" });
   const [selected, setSelected] = useState<ComponentId | null>(null);
@@ -77,6 +88,12 @@ export function Panel({
   const { width, onResizeStart } = useDockResize(embedded);
   const { splitPct, bodyRef, onSplitStart } = usePaneSplit();
   const stats = store.stats();
+
+  useEffect(() => {
+    if (selectComponent == null) return;
+    setSelected(selectComponent);
+    onSelectConsumed?.();
+  }, [selectComponent, onSelectConsumed]);
 
   // Time sync: when scrubbed into the past, dim tree components that weren't in
   // the commit at the cursor (reuses the Freeze-Frame styling).
@@ -146,17 +163,21 @@ export function Panel({
   const issueCount = workerDoctor?.count ?? fallback?.diagnostics.length ?? 0;
   const suspended = new Set(store.allInstances().filter((i) => i.suspended).map((i) => i.id));
 
-  // ⌘K / Ctrl+K opens the command palette.
+  // ⌘K / Ctrl+K opens the command palette; ⌘\ toggles page inspect.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
         e.preventDefault();
         setPaletteOpen((v) => !v);
       }
+      if ((e.metaKey || e.ctrlKey) && (e.key === "\\" || e.code === "Backslash") && onToggleInspect) {
+        e.preventDefault();
+        onToggleInspect();
+      }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, []);
+  }, [onToggleInspect]);
 
   useEffect(() => {
     if (!paletteOpen) return;
@@ -184,6 +205,15 @@ export function Panel({
     group: "Timeline",
     run: () => setExplainToken((n) => n + 1),
   });
+  if (onToggleInspect) {
+    commands.push({
+      id: "toggle-inspect",
+      label: inspecting ? "Stop inspecting page" : "Inspect element on page",
+      hint: "⌘\\",
+      group: "Navigate",
+      run: onToggleInspect,
+    });
+  }
   if (onToggleOverlay) {
     commands.push({
       id: "toggle-overlay",
@@ -251,6 +281,17 @@ export function Panel({
           </span>
         )}
         <span className="rl-spacer" />
+        {onToggleInspect && (
+          <button
+            className={`rl-icon-btn${inspecting ? " active" : ""}`}
+            onClick={onToggleInspect}
+            title="Inspect element on page (⌘\\)"
+            aria-label="Inspect element on page"
+            aria-pressed={inspecting}
+          >
+            <IconCrosshair size={14} />
+          </button>
+        )}
         <button
           className="rl-icon-btn"
           onClick={() => setPaletteOpen(true)}

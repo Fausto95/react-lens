@@ -1,25 +1,45 @@
-import { StrictMode, useState, useMemo, useEffect, useRef } from "react";
+import { StrictMode, useState, useMemo, useEffect, useRef, useCallback } from "react";
 import { createRoot } from "react-dom/client";
 import type { ComponentId } from "@react-lens/protocol";
 import { Panel } from "./Panel.js";
 import type { LensRuntime } from "./runtime.js";
 import { createHighlighter } from "./highlighter.js";
 import { createRenderOverlay } from "./renderOverlay.js";
+import { createInspectController } from "./inspectController.js";
 
-// Update Wave bounds — a huge commit must not wash the page purple or run for
-// minutes, and back-to-back replays cancel the wave still in flight.
 const WAVE_MAX_GROUPS = 300;
 const WAVE_MAX_NODES = 400;
 const WAVE_MAX_MS = 1600;
 
-function EmbeddedPanel({ runtime }: { runtime: LensRuntime }) {
+function EmbeddedPanel({
+  runtime,
+  host,
+}: {
+  runtime: LensRuntime;
+  host: HTMLElement;
+}) {
   const [recording, setRecording] = useState(true);
   const [overlayOn, setOverlayOn] = useState(false);
+  const [inspecting, setInspecting] = useState(false);
+  const [pickedId, setPickedId] = useState<ComponentId | null>(null);
   const highlighter = useMemo(() => createHighlighter(), []);
   const overlay = useMemo(() => createRenderOverlay(runtime), [runtime]);
   const waveTimers = useRef<Array<ReturnType<typeof setTimeout>>>([]);
+  const inspect = useMemo(
+    () =>
+      createInspectController({
+        runtime,
+        highlighter,
+        // Sticky pick: keep inspect active so double-click text edit still works.
+        onPick: (pick) => setPickedId(pick.componentId),
+        ignoreRoot: () => host,
+      }),
+    [runtime, highlighter, host],
+  );
+
   useEffect(() => () => highlighter.dispose(), [highlighter]);
   useEffect(() => () => overlay.dispose(), [overlay]);
+  useEffect(() => () => inspect.dispose(), [inspect]);
 
   const cancelWave = () => {
     for (const t of waveTimers.current) clearTimeout(t);
@@ -35,7 +55,6 @@ function EmbeddedPanel({ runtime }: { runtime: LensRuntime }) {
     if (groups.length === 0) return;
     const step = Math.min(140, WAVE_MAX_MS / Math.max(1, groups.length));
     const acc: Node[] = [];
-    // Paint first group immediately so replay feedback isn't delayed a frame.
     acc.push(...groups[0]!);
     highlighter.show(acc);
     groups.forEach((nodes, i) => {
@@ -69,6 +88,15 @@ function EmbeddedPanel({ runtime }: { runtime: LensRuntime }) {
     [runtime],
   );
 
+  const onToggleInspect = useCallback(() => {
+    setInspecting((on) => {
+      const next = !on;
+      if (next) inspect.start();
+      else inspect.stop();
+      return next;
+    });
+  }, [inspect]);
+
   return (
     <Panel
       store={runtime.store}
@@ -76,6 +104,10 @@ function EmbeddedPanel({ runtime }: { runtime: LensRuntime }) {
       recording={recording}
       embedded
       overlayEnabled={overlayOn}
+      inspecting={inspecting}
+      onToggleInspect={onToggleInspect}
+      selectComponent={pickedId}
+      onSelectConsumed={() => setPickedId(null)}
       onToggleOverlay={() => {
         if (overlayOn) overlay.disable();
         else overlay.enable();
@@ -84,7 +116,6 @@ function EmbeddedPanel({ runtime }: { runtime: LensRuntime }) {
       onReplayCommit={replayWave}
       {...(edit ? { edit } : {})}
       onHighlight={(id: ComponentId | null) => {
-        // Don't let tree mouse-leave wipe an in-flight update wave.
         if (id === null) {
           if (waveTimers.current.length > 0) return;
           highlighter.hide();
@@ -111,13 +142,11 @@ export function mountEmbedded(runtime: LensRuntime): () => void {
   const host = document.createElement("div");
   host.id = "react-lens-overlay";
   document.body.appendChild(host);
-  // Keep the panel's own React tree out of the capture (prevents a feedback
-  // loop where rendering the panel produces events that re-render the panel).
   runtime.ignoreContainer(host);
   const root = createRoot(host);
   root.render(
     <StrictMode>
-      <EmbeddedPanel runtime={runtime} />
+      <EmbeddedPanel runtime={runtime} host={host} />
     </StrictMode>,
   );
   return () => {

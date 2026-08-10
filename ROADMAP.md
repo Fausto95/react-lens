@@ -76,6 +76,10 @@ with multiple **projections** rather than a raw fiber tree.
 - ✅ **`source-maps`** — resolve compiled `_debugStack` coords to original source
 - ✅ **`diagnostics` (Doctor v1)** — impact-ranked rules over runtime evidence; inspector section + tree ⚕ badges + issue count
 - ⬜ **Effect debugger** — effect-execution events, run/cleanup counts, loop detection
+- ✅ **Editing in the extension** — panel `edit-setProp` / `edit-setHookState` / `edit-setText` hop to injected `overrideProps` / hook state (parity with embed)
+- ✅ **Page Inspect mode** — crosshair pick (⌘\\), hover highlight + source tooltip, sticky select, inline leaf-text edit (React override then ephemeral DOM badge)
+- ✅ **Open in editor** — Source tab + inspect tooltip → `cursor://` / `vscode://`
+- ✅ **Explain verdicts** — expected vs avoidable, waste share, one actionable next step (still deterministic / no LLM)
 - ⬜ Network, Sessions
 - ⬜ **Agent layer (BYOK)** — deferred. `@react-lens/agent` + provider presets exist; panel UI unwired until answers are more than a restatement of Explain.
 
@@ -105,8 +109,6 @@ with multiple **projections** rather than a raw fiber tree.
   per-render Doctor/verdict pass is now off-thread; the tree build is not).
 - **ui/icons** — foundational extraction done; migrate the remaining panel
   primitives (rows, value view, diff lines) into `ui`.
-- **Editing in the extension** — live prop/state editing is embedded-only;
-  needs a message hop to the injected runtime.
 - ✅ **Website (`apps/site`)** — the site inspects itself: a Vite React SPA that
   boots the runtime and mounts the real panel over its own marketing sections
   (Hero/five-questions, TRACE/GRAPH/DIFF specimens, Install). Follow-up: wire a

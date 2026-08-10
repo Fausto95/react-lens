@@ -1,9 +1,10 @@
 import { createSerializer } from "@react-lens/serializer";
 import { createFiberBridge } from "@react-lens/fiber";
 import { createInstrumentation } from "@react-lens/instrumentation";
-import type { EventsBatchMessage } from "@react-lens/protocol";
+import type { EventsBatchMessage, ComponentId } from "@react-lens/protocol";
 import { PAGE_SOURCE, CONTENT_SOURCE, type ContentToPage } from "../transport.js";
 import { createHighlighter } from "./highlighter.js";
+import { createInspectController, tryReactTextOverride } from "./inspect.js";
 
 /**
  * Runs in the MAIN world at document_start (injected natively via
@@ -18,6 +19,23 @@ const serializer = createSerializer();
 const fiber = createFiberBridge(globalThis);
 const instrumentation = createInstrumentation({ fiber, serializer });
 const highlighter = createHighlighter();
+const inspect = createInspectController({
+  fiber,
+  highlighter,
+  onPick: (pick) => {
+    window.postMessage(
+      {
+        source: PAGE_SOURCE,
+        kind: "inspect-picked",
+        componentId: pick.componentId,
+        name: pick.name,
+        ...(pick.sourceFile ? { sourceFile: pick.sourceFile } : {}),
+        ...(pick.sourceLine != null ? { sourceLine: pick.sourceLine } : {}),
+      },
+      "*",
+    );
+  },
+});
 
 function post(frame: Frame): void {
   window.postMessage({ source: PAGE_SOURCE, kind: "frame", frame }, "*");
@@ -28,10 +46,6 @@ function start(): void {
   instrumentation.start({
     captureDOM: true,
     interactionWindowMs: 200,
-    // Stream only the lightweight tree (events + instances). Full per-render
-    // snapshots — props/hooks/state/DOM — are fetched on demand (see the
-    // snapshot-request handler); streaming them inline melts large apps, whose
-    // single mount commit can serialize tens of MB across postMessage.
     streamSnapshots: false,
     onFrame: (frame) => post(frame),
   });
@@ -41,10 +55,6 @@ function start(): void {
   );
 }
 
-// Begin capturing right away. Do NOT call fiber.install() here first:
-// instrumentation.start() installs the hook only AFTER subscribing to commits,
-// so anything the document_start stub buffered before we loaded (a static app's
-// initial mount) is replayed into a live listener instead of being lost.
 start();
 
 const SOURCE_MAX_BYTES = 2 * 1024 * 1024;
@@ -85,6 +95,24 @@ async function fetchSourceForPanel(requestId: string, url: string): Promise<void
   }
 }
 
+function replyEdit(
+  requestId: string,
+  ok: boolean,
+  extra?: { mode?: "react" | "dom"; error?: string },
+): void {
+  window.postMessage(
+    {
+      source: PAGE_SOURCE,
+      kind: "edit-result",
+      requestId,
+      ok,
+      ...(extra?.mode ? { mode: extra.mode } : {}),
+      ...(extra?.error ? { error: extra.error } : {}),
+    },
+    "*",
+  );
+}
+
 window.addEventListener("message", (event: MessageEvent) => {
   if (event.source !== window) return;
   const data = event.data as ContentToPage | undefined;
@@ -112,19 +140,38 @@ window.addEventListener("message", (event: MessageEvent) => {
     } else highlighter.show(fiber.domNodesOf(data.componentId));
   } else if (data.kind === "replay") {
     replayWave(data.componentIds);
+  } else if (data.kind === "inspect-start") {
+    inspect.start();
+  } else if (data.kind === "inspect-stop") {
+    inspect.stop();
+  } else if (data.kind === "edit-setProp") {
+    const ok = fiber.setProp(data.componentId, data.path, data.value);
+    replyEdit(data.requestId, ok, ok ? { mode: "react" } : { error: "overrideProps failed" });
+  } else if (data.kind === "edit-setHookState") {
+    const ok = fiber.setHookState(data.componentId, data.hookIndex, data.path, data.value);
+    replyEdit(data.requestId, ok, ok ? { mode: "react" } : { error: "overrideHookState failed" });
+  } else if (data.kind === "edit-setText") {
+    const okReact = tryReactTextOverride(fiber, data.componentId, data.text);
+    if (okReact) {
+      replyEdit(data.requestId, true, { mode: "react" });
+      return;
+    }
+    // Ephemeral DOM: set text on host nodes.
+    const nodes = fiber.domNodesOf(data.componentId);
+    const el = nodes.find((n): n is HTMLElement => n instanceof HTMLElement);
+    if (!el) {
+      replyEdit(data.requestId, false, { error: "no DOM host" });
+      return;
+    }
+    el.textContent = data.text;
+    replyEdit(data.requestId, true, { mode: "dom" });
   }
 });
 
-/**
- * Update Wave: flash a commit's components on the page, accumulating so the
- * render fanout builds up visibly. Bounded on every axis so a huge commit (a
- * few thousand components) can't wash the whole page purple or run for minutes,
- * and a new replay cancels any wave still in flight (back-to-back replays).
- */
 let waveTimers: ReturnType<typeof setTimeout>[] = [];
-const WAVE_MAX_GROUPS = 300; // components visualized per wave
-const WAVE_MAX_NODES = 400; // boxes drawn at once (sliding window)
-const WAVE_MAX_MS = 1600; // whole wave finishes within this
+const WAVE_MAX_GROUPS = 300;
+const WAVE_MAX_NODES = 400;
+const WAVE_MAX_MS = 1600;
 
 function cancelWave(): void {
   for (const t of waveTimers) clearTimeout(t);
@@ -136,7 +183,7 @@ function replayWave(ids: ReadonlyArray<number>): void {
   cancelWave();
   const capped = ids.slice(0, WAVE_MAX_GROUPS);
   const groups = capped
-    .map((id) => fiber.domNodesOf(id as never))
+    .map((id) => fiber.domNodesOf(id as ComponentId))
     .filter((nodes) => nodes.length > 0);
   if (groups.length === 0) return;
   const step = Math.min(140, WAVE_MAX_MS / Math.max(1, groups.length));
