@@ -49,6 +49,15 @@ export interface ReactRenderer {
   version?: string;
   bundleType?: number;
   rendererPackageName?: string;
+  /** Dev-only live-edit API (present on react-dom development builds). */
+  overrideProps?: (fiber: Fiber, path: Array<string | number>, value: unknown) => void;
+  overrideHookState?: (
+    fiber: Fiber,
+    id: number,
+    path: Array<string | number>,
+    value: unknown,
+  ) => void;
+  scheduleUpdate?: (fiber: Fiber) => void;
 }
 
 export interface DevToolsHook {

@@ -44,6 +44,17 @@ export interface FiberBridge {
   install(): void;
   /** Exclude a React root's container from capture (e.g. the panel's own UI). */
   ignoreContainer(node: Node): void;
+  /** Whether the renderer exposes the dev-only live-edit API. */
+  canEditValues(): boolean;
+  /** Override a prop at `path` on a component and schedule a re-render. */
+  setProp(id: ComponentId, path: Array<string | number>, value: unknown): boolean;
+  /** Override a hook's state at `path` (hookIndex from the snapshot). */
+  setHookState(
+    id: ComponentId,
+    hookIndex: number,
+    path: Array<string | number>,
+    value: unknown,
+  ): boolean;
   resolveComponent(node: Node): ComponentInstance | null;
   domNodesOf(id: ComponentId): Node[];
   getInstance(id: ComponentId): ComponentInstance | undefined;
@@ -73,10 +84,20 @@ export function createFiberBridge(target: typeof globalThis = globalThis): Fiber
   const ignoredContainers = new Set<Node>();
 
   let reactVersion: string | null = null;
+  let activeHook: DevToolsHook | null = null;
+  // The renderer react-dom passes to inject(), captured directly — some host
+  // hooks (e.g. Vite's Fast Refresh stub) don't store it in `renderers`.
+  let injectedRenderer: ReactRenderer | null = null;
+
+  function captureRenderer(renderer: ReactRenderer): void {
+    injectedRenderer = renderer;
+    if (renderer.version) reactVersion = renderer.version;
+  }
 
   function install(): void {
     const existing = getExistingHook(target);
     if (existing) {
+      activeHook = existing;
       chain(existing);
       return;
     }
@@ -87,7 +108,7 @@ export function createFiberBridge(target: typeof globalThis = globalThis): Fiber
       inject: (renderer) => {
         const id = hook.renderers.size + 1;
         hook.renderers.set(id, renderer);
-        if (renderer.version) reactVersion = renderer.version;
+        captureRenderer(renderer);
         return id;
       },
       onCommitFiberRoot: (_id, root) => handleCommit(root),
@@ -95,15 +116,62 @@ export function createFiberBridge(target: typeof globalThis = globalThis): Fiber
       onPostCommitFiberRoot: () => {},
       _lensChained: false,
     };
+    activeHook = hook;
     setHook(target, hook);
+  }
+
+  /** The renderer that exposes the live-edit API (dev builds only). */
+  function getRenderer(): ReactRenderer | undefined {
+    if (injectedRenderer?.overrideProps || injectedRenderer?.overrideHookState) {
+      return injectedRenderer;
+    }
+    for (const renderer of activeHook?.renderers.values() ?? []) {
+      if (renderer.overrideProps || renderer.overrideHookState) return renderer;
+    }
+    return injectedRenderer ?? undefined;
+  }
+
+  function canEditValues(): boolean {
+    const renderer = getRenderer();
+    return Boolean(renderer?.overrideProps && renderer?.overrideHookState);
+  }
+
+  function setProp(id: ComponentId, path: Array<string | number>, value: unknown): boolean {
+    const fiber = fiberById.get(id);
+    const renderer = getRenderer();
+    if (!fiber || !renderer?.overrideProps) return false;
+    renderer.overrideProps(currentOf(fiber), path, value);
+    return true;
+  }
+
+  function setHookState(
+    id: ComponentId,
+    hookIndex: number,
+    path: Array<string | number>,
+    value: unknown,
+  ): boolean {
+    const fiber = fiberById.get(id);
+    const renderer = getRenderer();
+    if (!fiber || !renderer?.overrideHookState) return false;
+    renderer.overrideHookState(currentOf(fiber), hookIndex, path, value);
+    return true;
+  }
+
+  /** Prefer the committed (current) fiber for edits, not a stale alternate. */
+  function currentOf(fiber: Fiber): Fiber {
+    return fiber;
   }
 
   /** Cooperate with an already-installed hook rather than clobbering it. */
   function chain(existing: DevToolsHook): void {
     if (existing._lensChained) return;
-    for (const r of existing.renderers.values()) {
-      if (r.version) reactVersion = r.version;
-    }
+    // A renderer may already be registered; otherwise capture it at inject time.
+    for (const r of existing.renderers.values()) captureRenderer(r);
+    const originalInject = existing.inject?.bind(existing);
+    existing.inject = (renderer) => {
+      captureRenderer(renderer);
+      return originalInject ? originalInject(renderer) : 0;
+    };
     const originalCommit = existing.onCommitFiberRoot?.bind(existing);
     const originalUnmount = existing.onCommitFiberUnmount?.bind(existing);
     existing.onCommitFiberRoot = (id, root, priority) => {
@@ -262,6 +330,9 @@ export function createFiberBridge(target: typeof globalThis = globalThis): Fiber
   return {
     install,
     ignoreContainer: (node: Node) => ignoredContainers.add(node),
+    canEditValues,
+    setProp,
+    setHookState,
     resolveComponent,
     domNodesOf,
     getInstance,
