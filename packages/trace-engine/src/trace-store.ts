@@ -75,6 +75,8 @@ export class TraceStore {
   private readonly eventsByInteractionId = new Map<InteractionId, LensEvent[]>();
   private readonly commitsById = new Map<CommitId, MutableCommit>();
   private readonly commitOrder: RingBuffer<CommitId>;
+  /** Set when the event ring overwrites a render — commits rebuild on next read/ingest end. */
+  private commitsDirty = false;
   private readonly subscriptions = new Set<Subscription>();
   private readonly ingestObservers = new Set<(batch: EventsBatchMessage["payload"]) => void>();
 
@@ -102,6 +104,7 @@ export class TraceStore {
       if (event.componentId !== undefined) touched.add(event.componentId);
       if (event.interactionId !== undefined) touchedInteractions.add(event.interactionId);
     }
+    if (this.commitsDirty) this.rebuildCommitsFromEvents();
     this.notify(touched, touchedInteractions);
     for (const observer of this.ingestObservers) observer(batch);
   }
@@ -135,7 +138,8 @@ export class TraceStore {
     // Idempotent on renderId: the content-script buffer can replay (e.g. after a
     // panel reconnect), and re-ingesting the same render must not double-count.
     if (event.type === "render" && this.rendersById.has(event.renderId)) return;
-    this.events.push(event);
+    const evicted = this.events.push(event);
+    if (evicted) this.forgetEvent(evicted);
     if (event.type === "render") {
       const buf = this.rendersByComponent.get(event.componentId) ??
         this.createRenderBuffer(event.componentId);
@@ -153,6 +157,38 @@ export class TraceStore {
       list.push(event);
       this.eventsByInteractionId.set(event.interactionId, list);
     }
+  }
+
+  /**
+   * Drop indexes that pointed at an event the ring just overwrote. Commits and
+   * interactions both derive from the live event log — without this, commit
+   * summaries outlive their renders and show up in the timeline idle gutter.
+   */
+  private forgetEvent(event: LensEvent): void {
+    if (event.interactionId !== undefined) {
+      const list = this.eventsByInteractionId.get(event.interactionId);
+      if (list) {
+        const next = list.filter((e) => e.id !== event.id);
+        if (next.length === 0) this.eventsByInteractionId.delete(event.interactionId);
+        else this.eventsByInteractionId.set(event.interactionId, next);
+      }
+    }
+    if (event.type !== "render") return;
+    // Only clear if this renderId still maps to the evicted event (not a newer ingest).
+    if (this.rendersById.get(event.renderId) === event) {
+      this.rendersById.delete(event.renderId);
+    }
+    this.commitsDirty = true;
+  }
+
+  /** Re-derive commit summaries from whatever renders remain in the event ring. */
+  private rebuildCommitsFromEvents(): void {
+    this.commitsById.clear();
+    this.commitOrder.clear();
+    for (const e of this.events.toArray()) {
+      if (e.type === "render") this.recordCommit(e);
+    }
+    this.commitsDirty = false;
   }
 
   private recordCommit(event: RenderEvent): void {
@@ -234,6 +270,7 @@ export class TraceStore {
 
   /** Ordered commits (oldest→newest) for the timeline / time-travel views. */
   commits(): CommitSummary[] {
+    if (this.commitsDirty) this.rebuildCommitsFromEvents();
     return this.commitOrder.toArray().map((id) => {
       const c = this.commitsById.get(id)!;
       return {
@@ -345,6 +382,7 @@ export class TraceStore {
     this.eventsByInteractionId.clear();
     this.commitsById.clear();
     this.commitOrder.clear();
+    this.commitsDirty = false;
     // Wake subscribers (Tree/Inspector/Timeline) so they re-render to empty.
     this.notify(new Set(), new Set());
   }
