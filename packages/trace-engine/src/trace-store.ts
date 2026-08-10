@@ -75,6 +75,7 @@ export class TraceStore {
   private readonly commitsById = new Map<CommitId, MutableCommit>();
   private readonly commitOrder: RingBuffer<CommitId>;
   private readonly subscriptions = new Set<Subscription>();
+  private readonly ingestObservers = new Set<(batch: EventsBatchMessage["payload"]) => void>();
 
   constructor(config?: Partial<TraceStoreConfig>) {
     this.config = { ...DEFAULTS, ...config };
@@ -101,6 +102,32 @@ export class TraceStore {
       if (event.interactionId !== undefined) touchedInteractions.add(event.interactionId);
     }
     this.notify(touched, touchedInteractions);
+    for (const observer of this.ingestObservers) observer(batch);
+  }
+
+  /**
+   * Observe every ingested batch — used to tee frames into the Doctor worker's
+   * mirror store. Distinct from `subscribe`, which only signals that a slice
+   * changed; this carries the raw batch.
+   */
+  onIngest(cb: (batch: EventsBatchMessage["payload"]) => void): Dispose {
+    this.ingestObservers.add(cb);
+    return () => {
+      this.ingestObservers.delete(cb);
+    };
+  }
+
+  /**
+   * One-shot snapshot of everything captured so far, shaped as an ingestable
+   * batch. Lets a late-attaching consumer (the Doctor worker) backfill history
+   * that was ingested before it subscribed.
+   */
+  export(): EventsBatchMessage["payload"] {
+    return {
+      events: this.events.toArray(),
+      snapshots: [...this.snapshots.values()],
+      instances: [...this.instances.values()],
+    };
   }
 
   private addEvent(event: LensEvent): void {

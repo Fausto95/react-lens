@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useRef } from "react";
+import { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import type { TraceStore } from "@react-lens/trace-engine";
 import type { Causality } from "@react-lens/causality";
 import type { ComponentId, CommitId, RenderId } from "@react-lens/protocol";
@@ -7,6 +7,7 @@ import { Inspector, type EditApi } from "./Inspector.js";
 import { Tree } from "./Tree.js";
 import { Timeline } from "./Timeline.js";
 import { diagnoseAll } from "./doctor.js";
+import { createDoctorClient, type DoctorResult } from "./doctorClient.js";
 import { CommandPalette, type Command } from "./CommandPalette.js";
 import { IconLens, IconBolt } from "@react-lens/icons";
 import "./theme.css";
@@ -60,13 +61,29 @@ export function Panel({
     ? new Set(store.commit(frozenCommit)?.componentIds ?? [])
     : null;
 
-  // Doctor: components with at least one diagnostic (for tree badges). The pass
-  // walks every component and runs causality per render, so it's skipped on very
-  // large apps to keep the panel responsive (Task 28 moves it to a worker).
-  const tooLargeForDoctor = stats.components > 800;
-  const { diagnostics, affected } = tooLargeForDoctor
-    ? { diagnostics: [], affected: new Set<ComponentId>() }
-    : diagnoseAll(store, causality);
+  // Doctor: components with at least one diagnostic (for tree badges + count).
+  // The pass walks every component and runs causality per render, so it runs in
+  // a Web Worker mirroring the store — off the panel's main thread. If the
+  // worker can't be created it falls back to a synchronous pass (guarded on very
+  // large apps so the panel stays responsive).
+  const doctorClient = useMemo(() => createDoctorClient(), []);
+  const [workerDoctor, setWorkerDoctor] = useState<DoctorResult | null>(null);
+  useEffect(() => {
+    const client = doctorClient;
+    if (!client) return;
+    const unsubscribe = client.subscribe(setWorkerDoctor);
+    client.ingest(store.export()); // backfill history captured before we attached
+    const off = store.onIngest((batch) => client.ingest(batch));
+    return () => {
+      unsubscribe();
+      off();
+      client.dispose();
+    };
+  }, [doctorClient, store]);
+
+  const fallback = !doctorClient && stats.components <= 2000 ? diagnoseAll(store, causality) : null;
+  const affected = workerDoctor?.affected ?? fallback?.affected ?? new Set<ComponentId>();
+  const issueCount = workerDoctor?.count ?? fallback?.diagnostics.length ?? 0;
   const suspended = new Set(store.allInstances().filter((i) => i.suspended).map((i) => i.id));
 
   // ⌘K / Ctrl+K opens the command palette.
@@ -179,8 +196,8 @@ export function Panel({
         <span>{stats.events} events</span>
         <span>{stats.renders} renders</span>
         <span>{stats.components} components</span>
-        {diagnostics.length > 0 && (
-          <span className="rl-status-issues">⚕ {diagnostics.length} issues</span>
+        {issueCount > 0 && (
+          <span className="rl-status-issues">⚕ {issueCount} issues</span>
         )}
         <span style={{ marginLeft: "auto" }}>
           {embedded ? "embedded" : "devtools"} · protocol v1

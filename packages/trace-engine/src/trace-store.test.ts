@@ -191,3 +191,31 @@ describe("TraceStore — subscriptions", () => {
     expect(cb).not.toHaveBeenCalled();
   });
 });
+
+describe("TraceStore — ingest tee (Doctor worker feed)", () => {
+  it("fires ingest observers with each batch and stops on dispose", () => {
+    const store = new TraceStore();
+    const seen: number[] = [];
+    const off = store.onIngest((b) => seen.push(b.events.length));
+    store.ingest(batch({ events: [renderEvent()] }));
+    store.ingest(batch({ events: [renderEvent(), renderEvent()] }));
+    off();
+    store.ingest(batch({ events: [renderEvent()] }));
+    expect(seen).toEqual([1, 2]);
+  });
+
+  it("export round-trips history into a fresh store", () => {
+    const source = new TraceStore();
+    source.ingest(
+      batch({
+        events: [renderEvent({ componentId: 1 as ComponentId }), renderEvent({ componentId: 2 as ComponentId })],
+        instances: [instance(1, "A"), instance(2, "B")],
+      }),
+    );
+    const mirror = new TraceStore();
+    mirror.ingest(source.export());
+    expect(mirror.stats().components).toBe(2);
+    expect(mirror.renderCount(1 as ComponentId)).toBe(1);
+    expect(mirror.instance(2 as ComponentId)?.name).toBe("B");
+  });
+});
