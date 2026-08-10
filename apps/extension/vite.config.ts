@@ -1,4 +1,3 @@
-import { fileURLToPath } from "node:url";
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import { crx } from "@crxjs/vite-plugin";
@@ -13,7 +12,7 @@ export default defineConfig({
       // oxc-parser isn't browser-bundleable; diagnostics falls back to regex.
       {
         find: "oxc-parser",
-        replacement: fileURLToPath(new URL("./src/oxc-stub.ts", import.meta.url)),
+        replacement: new URL("./src/oxc-stub.ts", import.meta.url).pathname,
       },
     ],
   },

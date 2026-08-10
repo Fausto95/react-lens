@@ -1,4 +1,3 @@
-import { fileURLToPath } from "node:url";
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 
@@ -9,7 +8,7 @@ export default defineConfig({
       // back to regex when the AST parser throws (see src/oxc-stub.ts).
       {
         find: "oxc-parser",
-        replacement: fileURLToPath(new URL("./src/oxc-stub.ts", import.meta.url)),
+        replacement: new URL("./src/oxc-stub.ts", import.meta.url).pathname,
       },
     ],
   },
