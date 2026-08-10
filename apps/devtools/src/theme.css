@@ -74,8 +74,9 @@
   background: var(--rl-bg-raised);
   -webkit-app-region: drag;
 }
-.rl-brand { font-weight: 600; letter-spacing: -0.01em; font-size: 13px; }
-.rl-brand .rl-dot { color: var(--rl-render); }
+.rl-brand { font-weight: 600; letter-spacing: -0.01em; font-size: 13px; display: inline-flex; align-items: center; gap: 6px; }
+.rl-brand-icon { color: var(--rl-render); }
+.rl-overlay-toggle { display: inline-flex; align-items: center; gap: 5px; }
 .rl-topbar .rl-spacer { flex: 1; }
 
 .rl-body { display: grid; grid-template-columns: 1fr 1fr; min-height: 0; }

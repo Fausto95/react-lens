@@ -16,6 +16,8 @@
     "@react-lens/graph": "workspace:*",
     "@react-lens/source-maps": "workspace:*",
     "@react-lens/diagnostics": "workspace:*",
+    "@react-lens/ui": "workspace:*",
+    "@react-lens/icons": "workspace:*",
     "@react-lens/causality": "workspace:*",
     "@react-lens/diff-engine": "workspace:*",
     "@react-lens/instrumentation": "workspace:*",

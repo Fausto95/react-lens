@@ -51,6 +51,9 @@ importers:
       '@react-lens/graph':
         specifier: workspace:*
         version: link:../../packages/graph
+      '@react-lens/icons':
+        specifier: workspace:*
+        version: link:../../packages/icons
       '@react-lens/instrumentation':
         specifier: workspace:*
         version: link:../../packages/instrumentation
@@ -69,6 +72,9 @@ importers:
       '@react-lens/tree':
         specifier: workspace:*
         version: link:../../packages/tree
+      '@react-lens/ui':
+        specifier: workspace:*
+        version: link:../../packages/ui
       react:
         specifier: ^19
         version: 19.2.8
@@ -184,6 +190,15 @@ importers:
         specifier: workspace:*
         version: link:../protocol
 
+  packages/icons:
+    devDependencies:
+      '@types/react':
+        specifier: ^19
+        version: 19.2.18
+      react:
+        specifier: ^19
+        version: 19.2.8
+
   packages/instrumentation:
     dependencies:
       '@react-lens/fiber':
@@ -224,6 +239,15 @@ importers:
       '@react-lens/protocol':
         specifier: workspace:*
         version: link:../protocol
+
+  packages/ui:
+    devDependencies:
+      '@types/react':
+        specifier: ^19
+        version: 19.2.18
+      react:
+        specifier: ^19
+        version: 19.2.8
 
 packages:
 

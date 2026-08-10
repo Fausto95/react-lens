@@ -39,7 +39,7 @@ fiber's hook list). All packages: **46 tests passing**, full `tsc -b` clean.
 - ✅ **`devtools`** — React 19 panel: semantic tree + **single-scroll inspector** (collapsible auto-hiding sections). **Expandable object explorer**, **live-editable primitive props/state** via renderer overrides, and a **DOM section** (captured markup + highlight-on-page)
 - ✅ **`playground`** — React 19 + Compiler app engineered to misbehave; dev overlay mounts the panel
 - ✅ **`extension`** — MV3 shell (stateless background relay, ISOLATED+MAIN content scripts, devtools page, panel); builds clean
-- ⬜ **`ui`** / **`icons`** — extract the panel's components into a keyboard-first design system
+- ✅ **`ui`** / **`icons`** — shared `Section`/`Badge` primitives + a small SVG icon set (`IconLens`/`IconBolt`/…), wired into the panel (foundational extraction; more primitives to migrate)
 
 ## Vertical slices (the demoable milestones)
 
@@ -62,19 +62,25 @@ with multiple **projections** rather than a raw fiber tree.
 - ✅ **⌘K command palette** + structured search language (`renders:>20`, `compiled:false`, `visual-change:false`; parser has 7 tests)
 - ✅ **Compiler detection** — via `fiber.updateQueue.memoCache` (the reliable signal); shown as ◆ badges
 - ✅ **Source locations** — best-effort from React 19 `_debugStack` (creation site)
-- ⬜ **Tree Diff / Freeze Frame / Update Wave** — need timeline + session-recording infra
+- ✅ **Timeline + commit scrubber**, **Freeze Frame**, **Tree Diff**, **Update Wave** — commit-grouped store + panel scrubber
+- ✅ **`source-maps`** — resolve compiled `_debugStack` coords to original source
+- ✅ **`diagnostics` (Doctor v1)** — impact-ranked rules over runtime evidence; inspector section + tree ⚕ badges + issue count
 - ⬜ **Effect debugger** — effect-execution events, run/cleanup counts, loop detection
-- ⬜ **Doctor** (`diagnostics` + `source-maps` via OXC), then Network, Sessions, Agent layer
+- ⬜ Network, Sessions, Agent layer
 
 ## Known follow-ups
 
-- **Source locations are best-effort.** React 19 dropped `_debugSource`; we parse
-  the `_debugStack` creation site, so it points at the JSX usage site and the
-  line reflects the compiled module (offset by the React Compiler transform).
-  Definition-site resolution needs a real source-map step (part of the Doctor slice).
+- **Doctor static rules.** v1 is runtime-evidence only. Static AST rules
+  (inline context value, effect-derives-state, …) need source fetched via
+  `source-maps` + an OXC/AST parse in a worker — the next Doctor layer, which
+  also upgrades source to the definition site.
 - **Tree worker** — virtualization mounts few rows, but grouping/projection/query
-  still run on the main thread; move to a worker for very large apps.
-- Extract `ui`/`icons`; add the Doctor (`diagnostics` + `source-maps`) slice.
+  and the per-render Doctor/verdict passes still run on the main thread; move to
+  a worker for very large apps.
+- **ui/icons** — foundational extraction done; migrate the remaining panel
+  primitives (rows, value view, diff lines) into `ui`.
+- **Editing in the extension** — live prop/state editing is embedded-only;
+  needs a message hop to the injected runtime.
 
 ## North star
 

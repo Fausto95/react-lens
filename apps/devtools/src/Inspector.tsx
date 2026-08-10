@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { Section } from "@react-lens/ui";
 import type { TraceStore } from "@react-lens/trace-engine";
 import type { Causality } from "@react-lens/causality";
 import type { ComponentId, RenderId, RenderSnapshot } from "@react-lens/protocol";
@@ -171,26 +172,3 @@ export function Inspector({
   );
 }
 
-function Section({
-  title,
-  count,
-  defaultOpen,
-  children,
-}: {
-  title: string;
-  count?: number;
-  defaultOpen?: boolean;
-  children: React.ReactNode;
-}) {
-  const [open, setOpen] = useState(defaultOpen ?? false);
-  return (
-    <div className="rl-sec">
-      <button className="rl-sec-head" onClick={() => setOpen((o) => !o)} aria-expanded={open}>
-        <span className="rl-sec-caret">{open ? "▾" : "▸"}</span>
-        <span className="rl-sec-title">{title}</span>
-        {count !== undefined && count > 0 && <span className="rl-sec-count">{count}</span>}
-      </button>
-      {open && <div className="rl-sec-body">{children}</div>}
-    </div>
-  );
-}

@@ -8,6 +8,7 @@ import { Tree } from "./Tree.js";
 import { Timeline } from "./Timeline.js";
 import { diagnoseAll } from "./doctor.js";
 import { CommandPalette, type Command } from "./CommandPalette.js";
+import { IconLens, IconBolt } from "@react-lens/icons";
 import "./theme.css";
 
 export interface PanelProps {
@@ -92,7 +93,7 @@ export function Panel({
       {embedded && <div className="rl-resize-handle" onPointerDown={onResizeStart} />}
       <div className="rl-topbar">
         <span className="rl-brand">
-          <span className="rl-dot">◈</span> React Lens
+          <IconLens className="rl-brand-icon" /> React Lens
         </span>
         <span className="rl-spacer" />
         <button className="rl-btn rl-cmdk-btn" onClick={() => setPaletteOpen(true)} title="Command palette">
@@ -105,7 +106,7 @@ export function Panel({
             title="Toggle render overlay"
             aria-pressed={overlayEnabled}
           >
-            ⚡ Renders
+            <IconBolt size={12} /> Renders
           </button>
         )}
         <button
