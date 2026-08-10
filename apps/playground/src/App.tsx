@@ -79,6 +79,7 @@ function ProductCard({
         borderRadius: 8,
         border: selected ? "2px solid #a78bfa" : "1px solid #e2e5ea",
         background: selected ? "#f5f3ff" : "#fff",
+        color: "#16181d",
         cursor: "pointer",
         font: "inherit",
       }}
