@@ -1,0 +1,73 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1120" height="420" viewBox="0 0 1120 420" role="img" aria-label="React Lens timeline with interaction waterfall">
+  <rect width="1120" height="420" rx="12" fill="#12151a" stroke="#2f3644"/>
+  <!-- Head -->
+  <text x="20" y="28" fill="#99a1b3" font-size="12" font-family="ui-sans-serif, system-ui, sans-serif">3 interactions · 4 commits</text>
+  <text x="980" y="28" fill="#f87171" font-size="11" font-family="ui-sans-serif, system-ui, sans-serif" letter-spacing="0.06em">Ï LIVE</text>
+  <line x1="0" y1="44" x2="1120" y2="44" stroke="#232833"/>
+
+  <!-- Ruler -->
+  <rect x="0" y="44" width="1120" height="28" fill="#0b0d10"/>
+  <g font-size="10" fill="#5f6878" font-family="ui-monospace, SF Mono, Menlo, monospace">
+    <text x="72" y="62">0.00ms</text>
+    <text x="220" y="62">40ms</text>
+    <text x="380" y="62">80ms</text>
+    <text x="540" y="62">120ms</text>
+    <text x="700" y="62">160ms</text>
+    <text x="900" y="62">idle</text>
+  </g>
+
+  <!-- Labels -->
+  <g font-size="9" fill="#5f6878" font-family="ui-sans-serif, system-ui, sans-serif" letter-spacing="0.05em">
+    <text x="14" y="108">INTERACT</text>
+    <text x="14" y="158">COMMITS</text>
+    <text x="14" y="250">COMPS</text>
+  </g>
+
+  <!-- Interaction track -->
+  <rect x="90" y="88" width="200" height="26" rx="6" fill="rgba(96,165,250,0.12)" stroke="rgba(96,165,250,0.35)"/>
+  <text x="102" y="105" fill="#99a1b3" font-size="12" font-family="ui-sans-serif, system-ui, sans-serif">Load</text>
+  <rect x="360" y="88" width="260" height="26" rx="6" fill="rgba(167,139,250,0.16)" stroke="rgba(167,139,250,0.45)"/>
+  <text x="372" y="105" fill="#e6e9ef" font-size="12" font-family="ui-sans-serif, system-ui, sans-serif">Click ProductCard</text>
+  <rect x="680" y="88" width="180" height="26" rx="6" fill="rgba(251,146,60,0.12)" stroke="rgba(251,146,60,0.4)"/>
+  <text x="692" y="105" fill="#e6e9ef" font-size="12" font-family="ui-sans-serif, system-ui, sans-serif">Click Section</text>
+
+  <!-- Commits -->
+  <rect x="120" y="140" width="5" height="28" rx="1" fill="#60a5fa"/>
+  <rect x="390" y="132" width="6" height="36" rx="1" fill="#f87171"/>
+  <rect x="430" y="144" width="4" height="24" rx="1" fill="#a78bfa"/>
+  <rect x="710" y="148" width="4" height="20" rx="1" fill="#a78bfa"/>
+
+  <!-- Idle hatch -->
+  <defs>
+    <pattern id="idle" width="8" height="8" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+      <line x1="0" y1="0" x2="0" y2="8" stroke="#2f3644" stroke-width="2"/>
+    </pattern>
+  </defs>
+  <rect x="880" y="72" width="220" height="320" fill="url(#idle)" opacity="0.55"/>
+
+  <!-- Waterfall -->
+  <rect x="360" y="200" width="240" height="22" rx="5" fill="rgba(167,139,250,0.18)" stroke="rgba(167,139,250,0.4)"/>
+  <text x="372" y="215" fill="#e6e9ef" font-size="11" font-family="ui-sans-serif, system-ui, sans-serif">ProductGrid</text>
+  <text x="540" y="215" fill="#5f6878" font-size="10" font-family="ui-monospace, SF Mono, Menlo, monospace">1.1ms</text>
+  <rect x="370" y="230" width="200" height="22" rx="5" fill="rgba(251,146,60,0.14)" stroke="rgba(251,146,60,0.45)" stroke-dasharray="3 2"/>
+  <text x="382" y="245" fill="#e6e9ef" font-size="11" font-family="ui-sans-serif, system-ui, sans-serif">ProductCard</text>
+  <text x="510" y="245" fill="#fb923c" font-size="10" font-family="ui-monospace, SF Mono, Menlo, monospace">waste</text>
+  <rect x="380" y="260" width="160" height="22" rx="5" fill="rgba(251,146,60,0.1)" stroke="rgba(251,146,60,0.35)" stroke-dasharray="3 2"/>
+  <text x="392" y="275" fill="#e6e9ef" font-size="11" font-family="ui-sans-serif, system-ui, sans-serif">ProductCard</text>
+  <rect x="90" y="200" width="180" height="22" rx="5" fill="rgba(248,113,113,0.16)" stroke="rgba(248,113,113,0.4)"/>
+  <text x="102" y="215" fill="#e6e9ef" font-size="11" font-family="ui-sans-serif, system-ui, sans-serif">App</text>
+  <text x="220" y="215" fill="#5f6878" font-size="10" font-family="ui-monospace, SF Mono, Menlo, monospace">157ms</text>
+  <rect x="100" y="230" width="150" height="22" rx="5" fill="rgba(248,113,113,0.14)" stroke="rgba(248,113,113,0.35)"/>
+  <text x="112" y="245" fill="#e6e9ef" font-size="11" font-family="ui-sans-serif, system-ui, sans-serif">Expensive</text>
+  <text x="200" y="245" fill="#5f6878" font-size="10" font-family="ui-monospace, SF Mono, Menlo, monospace">132ms</text>
+
+  <!-- Playhead -->
+  <line x1="500" y1="44" x2="500" y2="400" stroke="#a78bfa" stroke-width="1.5"/>
+  <rect x="494" y="48" width="12" height="10" rx="2" fill="#a78bfa"/>
+
+  <!-- Footer -->
+  <line x1="0" y1="380" x2="1120" y2="380" stroke="#232833"/>
+  <text x="20" y="404" fill="#99a1b3" font-size="12" font-family="ui-sans-serif, system-ui, sans-serif">Click ProductCard · 12 renders · 8 potentially avoidable</text>
+  <rect x="980" y="388" width="112" height="24" rx="6" fill="rgba(167,139,250,0.14)" stroke="rgba(167,139,250,0.4)"/>
+  <text x="1004" y="404" fill="#a78bfa" font-size="12" font-family="ui-sans-serif, system-ui, sans-serif" font-weight="600">Explain</text>
+</svg>

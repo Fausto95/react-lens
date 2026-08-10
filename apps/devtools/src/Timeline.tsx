@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState, useEffect, useLayoutEffect, useCallback } from "react";
+import { Fragment, useMemo, useRef, useState, useEffect, useLayoutEffect, useCallback } from "react";
 import {
   anomalyStats,
   type AnomalyStats,
@@ -111,7 +111,10 @@ export function Timeline({
   );
   // Auto-fit: stretch active time across the full scroll viewport (no px/ms cap).
   const viewW = viewportW > 0 ? viewportW : 760;
-  const fit = Math.max(0.02, (Math.max(240, viewW) - idleGutters * IDLE_WIDTH) / activeSpan);
+  const fit = Math.max(
+    0.02,
+    (Math.max(240, viewW) - idleGutters * IDLE_WIDTH - INNER_RIGHT_PAD) / activeSpan,
+  );
   const px = scale || fit;
   const model = useMemo(
     () => buildScale(active, bounds.t0, bounds.t1, px, scale ? undefined : viewW),
@@ -617,7 +620,9 @@ export function Timeline({
               <div
                 className="rl-tl-inner"
                 ref={innerRef}
-                style={{ width: Math.max(innerWidth, viewW) }}
+                // Right pad: min-width boxes and floated labels at the session
+                // end must never crop against the scroll edge.
+                style={{ width: Math.max(innerWidth + INNER_RIGHT_PAD, viewW) }}
                 onPointerDown={onPointerDown}
                 onPointerMove={onPointerMove}
                 onPointerUp={onPointerUp}
@@ -1039,83 +1044,111 @@ function PhaseWaterfall({
   const canvasH = PHASE_PAD_Y + packed.trackCount * TRACK_H + 6;
 
   return (
-    <div className="rl-wf-packed" style={{ minHeight: canvasH }}>
-      {packed.phases.map((phase) => {
-        const selected = selectedId === phase.id;
-        const dim = selectedId != null && !selected;
-        return (
-          <div
-            key={phase.id}
-            className={`rl-wf-phase${selected ? " sel" : ""}${dim ? " dim" : ""}`}
-            style={{ left: phase.left, width: Math.max(8, phase.width) }}
-            title={`${phase.label} · ${phase.renderCount} renders · ${phase.barCount} shown`}
-            onPointerDown={(e) => {
-              e.stopPropagation();
-              onSelectInteraction?.(phase.id);
-            }}
-          >
-            <div className="rl-wf-phase-rule" aria-hidden />
-          </div>
-        );
-      })}
-
-      {packed.bars.map((bar) => {
-        const underPlayhead = playheadT >= bar.t0 - 0.25 && playheadT <= bar.t1;
-        const dim = selectedId != null && selectedId !== bar.phaseId;
-        const rgb = componentRgb(bar.id);
-        const fillA = 0.07 + bar.heat * 0.1;
-        const borderA = 0.22 + bar.heat * 0.12;
-        return (
-          <button
-            type="button"
-            key={`${bar.phaseId}-${bar.renderId}`}
-            className={`rl-wf-bar${bar.wasted ? " wasted" : ""}${underPlayhead ? " under-playhead" : ""}${dim ? " dim" : ""}`}
-            style={{
-              left: bar.left,
-              width: bar.width,
-              top: PHASE_PAD_Y + bar.track * TRACK_H,
-              height: BAR_H,
-              ["--rl-wf-fill" as string]: `rgba(${rgb},${fillA})`,
-              ["--rl-wf-border" as string]: `rgba(${rgb},${borderA})`,
-              ["--rl-wf-tick" as string]: `rgba(${rgb},${0.32 + bar.heat * 0.28})`,
-            }}
-            title={`${bar.name} · ${ms(bar.self)} · ${bar.reason}${bar.wasted ? " · no visible change" : ""} · ${bar.phaseLabel}`}
-            onPointerEnter={() => onHighlight?.(bar.id)}
-            onPointerLeave={() => onHighlight?.(selectedComponent ?? null)}
-            onClick={(e) => {
-              e.stopPropagation();
-              onSelectInteraction?.(bar.phaseId);
-              onSelectComponent?.(bar.id);
-              onHighlight?.(bar.id);
-              onSeek?.(bar.t0);
-            }}
-          >
-            <span
-              className="rl-wf-bar-label"
-              style={{
-                transform: `translateX(${stickyLabelShift(bar.left, bar.width, scrollLeft, 12)}px)`,
+    // The outer div is the vertical scroll viewport; the canvas carries the
+    // real content height so deep track stacks scroll instead of clipping and
+    // phase backgrounds span every bar, not just the first viewport-full.
+    <div className="rl-wf-packed">
+      <div className="rl-wf-canvas" style={{ height: canvasH }}>
+        {packed.phases.map((phase) => {
+          const selected = selectedId === phase.id;
+          const dim = selectedId != null && !selected;
+          return (
+            <div
+              key={phase.id}
+              className={`rl-wf-phase${selected ? " sel" : ""}${dim ? " dim" : ""}`}
+              style={{ left: phase.left, width: Math.max(8, phase.width) }}
+              title={`${phase.label} · ${phase.renderCount} renders · ${phase.barCount} shown`}
+              onPointerDown={(e) => {
+                e.stopPropagation();
+                onSelectInteraction?.(phase.id);
               }}
             >
-              {bar.name}
-            </span>
-            {bar.width >= 64 && <span className="rl-wf-bar-ms">{ms(bar.self)}</span>}
-            {onAskAI && bar.self >= SLOW_SELF_MS && bar.width >= 34 && (
-              <span
-                role="button"
-                tabIndex={-1}
-                className="rl-fix-ai rl-wf-fix"
-                title={`Over the frame budget (${ms(bar.self)}) — investigate and fix with AI`}
+              <div className="rl-wf-phase-rule" aria-hidden />
+            </div>
+          );
+        })}
+
+        {packed.bars.map((bar) => {
+          const underPlayhead = playheadT >= bar.t0 - 0.25 && playheadT <= bar.t1;
+          const dim = selectedId != null && selectedId !== bar.phaseId;
+          const rgb = componentRgb(bar.id);
+          const fillA = 0.07 + bar.heat * 0.1;
+          const borderA = 0.22 + bar.heat * 0.12;
+          const top = PHASE_PAD_Y + bar.track * TRACK_H;
+          // Flame-chart labeling: inside when the box fits it, floated after
+          // the box when the track has room, otherwise tooltip-only.
+          const narrow = bar.width < LABEL_MIN_PX;
+          const outsideLabel = narrow && bar.labelRoom >= OUT_LABEL_MIN_ROOM;
+          return (
+            <Fragment key={`${bar.phaseId}-${bar.renderId}`}>
+              <button
+                type="button"
+                className={`rl-wf-bar${narrow ? " narrow" : ""}${bar.wasted ? " wasted" : ""}${underPlayhead ? " under-playhead" : ""}${dim ? " dim" : ""}`}
+                style={{
+                  left: bar.left,
+                  width: bar.width,
+                  top,
+                  height: BAR_H,
+                  ["--rl-wf-fill" as string]: `rgba(${rgb},${fillA})`,
+                  ["--rl-wf-border" as string]: `rgba(${rgb},${borderA})`,
+                  ["--rl-wf-tick" as string]: `rgba(${rgb},${0.32 + bar.heat * 0.28})`,
+                }}
+                title={`${bar.name} · ${ms(bar.self)} · ${bar.reason}${bar.wasted ? " · no visible change" : ""} · ${bar.phaseLabel}`}
+                onPointerEnter={() => onHighlight?.(bar.id)}
+                onPointerLeave={() => onHighlight?.(selectedComponent ?? null)}
                 onClick={(e) => {
                   e.stopPropagation();
-                  onAskAI(renderFixPrompt(bar.name, bar.id as number, bar.renderId as number, bar.self));
+                  onSelectInteraction?.(bar.phaseId);
+                  onSelectComponent?.(bar.id);
+                  onHighlight?.(bar.id);
+                  onSeek?.(bar.t0);
                 }}
               >
-                <IconSparkle size={10} />
-              </span>
-            )}
-          </button>
-        );
-      })}
+                {!narrow && (
+                  <span
+                    className="rl-wf-bar-label"
+                    style={{
+                      transform: `translateX(${stickyLabelShift(bar.left, bar.width, scrollLeft, 12)}px)`,
+                    }}
+                  >
+                    {bar.name}
+                  </span>
+                )}
+                {bar.width >= 64 && <span className="rl-wf-bar-ms">{ms(bar.self)}</span>}
+                {onAskAI && bar.self >= SLOW_SELF_MS && bar.width >= 34 && (
+                  <span
+                    role="button"
+                    tabIndex={-1}
+                    className="rl-fix-ai rl-wf-fix"
+                    title={`Over the frame budget (${ms(bar.self)}) — investigate and fix with AI`}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onAskAI(renderFixPrompt(bar.name, bar.id as number, bar.renderId as number, bar.self));
+                    }}
+                  >
+                    <IconSparkle size={10} />
+                  </span>
+                )}
+              </button>
+              {outsideLabel && (
+                <span
+                  className={`rl-wf-bar-out${dim ? " dim" : ""}`}
+                  style={{
+                    left: bar.left + bar.width + 5,
+                    top,
+                    height: BAR_H,
+                    maxWidth: Math.min(bar.labelRoom, 220),
+                  }}
+                  aria-hidden
+                >
+                  {bar.name}
+                  {bar.labelRoom >= 110 && <span className="rl-wf-bar-out-ms"> · {ms(bar.self)}</span>}
+                </span>
+              )}
+            </Fragment>
+          );
+        })}
+      </div>
     </div>
   );
 }
@@ -1126,6 +1159,12 @@ const BAR_H = 22;
 const PHASE_BAR_CAP = 64;
 /** Minimum clickable width when a render is sub-pixel on the scale. */
 const MIN_BAR_PX = 3;
+/** Below this box width the label moves outside the bar (flame-chart style). */
+const LABEL_MIN_PX = 56;
+/** Minimum free run on the track before an outside label is worth drawing. */
+const OUT_LABEL_MIN_ROOM = 40;
+/** Right-edge breathing room so end-of-session boxes and labels never crop. */
+const INNER_RIGHT_PAD = 90;
 
 /** Keep a bar label in the visible scrollport while the bar itself is on-screen. */
 function stickyLabelShift(
@@ -1156,6 +1195,8 @@ interface PackedBar {
   track: number;
   left: number;
   width: number;
+  /** Free px after this box before the next bar on the same track. */
+  labelRoom: number;
 }
 
 interface PackedPhase {
@@ -1270,11 +1311,26 @@ function packPhaseBars(
         track: packed.track,
         left: item.left,
         width: item.width,
+        labelRoom: Number.POSITIVE_INFINITY,
       });
     }
   }
 
-  return { phases, bars, trackCount: Math.min(trackCount, 16) };
+  // Free run after each box on its track — decides where outside labels fit.
+  const byTrack = new Map<number, PackedBar[]>();
+  for (const bar of bars) {
+    const list = byTrack.get(bar.track) ?? [];
+    list.push(bar);
+    byTrack.set(bar.track, list);
+  }
+  for (const list of byTrack.values()) {
+    list.sort((a, b) => a.left - b.left);
+    for (let i = 0; i < list.length - 1; i++) {
+      list[i]!.labelRoom = Math.max(0, list[i + 1]!.left - (list[i]!.left + list[i]!.width) - 6);
+    }
+  }
+
+  return { phases, bars, trackCount };
 }
 
 /** Assign non-overlapping tracks (greedy). Intervals are display px here. */

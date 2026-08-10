@@ -1,0 +1,61 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="560" viewBox="0 0 960 560" role="img" aria-label="React Lens inspector showing why a ProductCard rendered">
+  <rect width="960" height="560" rx="12" fill="#0b0d10" stroke="#2f3644"/>
+
+  <!-- Tree column -->
+  <rect x="0" y="0" width="340" height="560" fill="#0b0d10"/>
+  <line x1="340" y1="0" x2="340" y2="560" stroke="#232833"/>
+  <text x="16" y="28" fill="#5f6878" font-size="10" font-family="ui-sans-serif, system-ui, sans-serif" letter-spacing="0.08em">TREE</text>
+  <rect x="16" y="44" width="56" height="22" rx="5" fill="rgba(167,139,250,0.14)" stroke="rgba(167,139,250,0.35)"/>
+  <text x="30" y="59" fill="#a78bfa" font-size="11" font-family="ui-sans-serif, system-ui, sans-serif">All</text>
+  <rect x="78" y="44" width="40" height="22" rx="5" fill="#171b22" stroke="#2f3644"/>
+  <text x="90" y="59" fill="#99a1b3" font-size="11" font-family="ui-sans-serif, system-ui, sans-serif">”</text>
+  <rect x="124" y="44" width="58" height="22" rx="5" fill="#171b22" stroke="#2f3644"/>
+  <text x="134" y="59" fill="#99a1b3" font-size="11" font-family="ui-sans-serif, system-ui, sans-serif">Waste</text>
+
+  <g font-family="ui-sans-serif, system-ui, sans-serif" font-size="13">
+    <text x="24" y="100" fill="#99a1b3">¾ Shop</text>
+    <text x="40" y="130" fill="#99a1b3">¾ ProductGrid</text>
+    <rect x="48" y="146" width="268" height="30" rx="6" fill="rgba(167,139,250,0.12)" stroke="rgba(167,139,250,0.4)"/>
+    <text x="64" y="166" fill="#e6e9ef">ProductCard</text>
+    <text x="220" y="166" fill="#fb923c" font-size="11">waste</text>
+    <text x="280" y="166" fill="#5f6878" font-size="11">2×</text>
+    <text x="64" y="200" fill="#99a1b3">ProductCard</text>
+    <text x="64" y="230" fill="#99a1b3">ProductCard</text>
+    <text x="64" y="260" fill="#99a1b3">ProductCard</text>
+    <text x="40" y="294" fill="#99a1b3">Cart</text>
+  </g>
+
+  <!-- Inspector -->
+  <text x="360" y="28" fill="#5f6878" font-size="10" font-family="ui-sans-serif, system-ui, sans-serif" letter-spacing="0.08em">INSPECTOR</text>
+  <text x="360" y="64" fill="#e6e9ef" font-size="20" font-weight="600" font-family="ui-sans-serif, system-ui, sans-serif">ProductCard</text>
+  <text x="500" y="64" fill="#5f6878" font-size="12" font-family="ui-monospace, SF Mono, Menlo, monospace">ProductCard.tsx:18</text>
+
+  <rect x="360" y="80" width="52" height="20" rx="4" fill="rgba(251,146,60,0.14)" stroke="rgba(251,146,60,0.45)"/>
+  <text x="370" y="94" fill="#fb923c" font-size="11" font-family="ui-sans-serif, system-ui, sans-serif">waste</text>
+  <rect x="420" y="80" width="72" height="20" rx="4" fill="rgba(167,139,250,0.12)" stroke="rgba(167,139,250,0.35)"/>
+  <text x="430" y="94" fill="#a78bfa" font-size="11" font-family="ui-sans-serif, system-ui, sans-serif">compiled</text>
+
+  <!-- Why -->
+  <rect x="360" y="120" width="560" height="170" rx="10" fill="#12151a" stroke="#2f3644"/>
+  <text x="380" y="148" fill="#5f6878" font-size="10" font-family="ui-sans-serif, system-ui, sans-serif" letter-spacing="0.06em">WHY</text>
+  <text x="380" y="178" fill="#e6e9ef" font-size="15" font-weight="600" font-family="ui-sans-serif, system-ui, sans-serif">Props changed · onSelect</text>
+  <text x="380" y="208" fill="#99a1b3" font-size="13" font-family="ui-sans-serif, system-ui, sans-serif">Parent passed a new function identity.</text>
+  <text x="380" y="232" fill="#99a1b3" font-size="13" font-family="ui-sans-serif, system-ui, sans-serif">No observable DOM change on this render.</text>
+  <text x="380" y="266" fill="#fb923c" font-size="13" font-weight="600" font-family="ui-sans-serif, system-ui, sans-serif">Potentially avoidable · high confidence</text>
+
+  <!-- Props -->
+  <rect x="360" y="310" width="560" height="210" rx="10" fill="#12151a" stroke="#2f3644"/>
+  <text x="380" y="338" fill="#5f6878" font-size="10" font-family="ui-sans-serif, system-ui, sans-serif" letter-spacing="0.06em">PROPS</text>
+  <g font-family="ui-monospace, SF Mono, Menlo, monospace" font-size="13">
+    <text x="380" y="372" fill="#99a1b3">id</text>
+    <text x="520" y="372" fill="#e6e9ef">1</text>
+    <text x="380" y="404" fill="#99a1b3">name</text>
+    <text x="520" y="404" fill="#4ade80">"MacBook Pro"</text>
+    <text x="380" y="436" fill="#99a1b3">price</text>
+    <text x="520" y="436" fill="#60a5fa">2399</text>
+    <text x="380" y="468" fill="#99a1b3">selected</text>
+    <text x="520" y="468" fill="#a78bfa">true</text>
+    <text x="380" y="500" fill="#f87171">- onSelect</text>
+    <text x="520" y="500" fill="#f87171">’ previous</text>
+  </g>
+</svg>
