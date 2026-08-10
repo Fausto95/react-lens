@@ -50,6 +50,23 @@ export function ms(n: number): string {
 }
 
 /**
+ * Clock-style label for a POSITION on the time axis (ruler ticks, playhead,
+ * PAST offset). Durations keep `ms()`; positions read better in s / m:ss —
+ * "17919ms" is accurate but unreadable, "17.9s" is both.
+ */
+export function timeAxis(n: number): string {
+  if (n < 1000) return `${Math.round(n)}ms`;
+  if (n < 60_000) {
+    const s = n / 1000;
+    return s < 10 ? `${s.toFixed(2)}s` : `${s.toFixed(1)}s`;
+  }
+  const totalSeconds = Math.round(n / 1000);
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${minutes}:${String(seconds).padStart(2, "0")}`;
+}
+
+/**
  * Display form of a source file: drop the origin so an absolute URL
  * (http://host:port/src/App.tsx) reads as a repo-relative path. Source
  * locations keep the full URL so the panel can fetch cross-origin.

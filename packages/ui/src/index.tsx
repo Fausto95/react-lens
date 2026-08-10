@@ -41,6 +41,6 @@ export function Section({
   );
 }
 
-export { formatValue, ms, shortSource } from "./format.js";
+export { formatValue, ms, timeAxis, shortSource } from "./format.js";
 export { ValueView, type EditFn } from "./ValueView.js";
 export { DiffLines } from "./DiffLines.js";

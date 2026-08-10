@@ -2,7 +2,7 @@
   "name": "react-lens",
   "version": "0.0.0",
   "private": true,
-  "description": "React observability for development. See why your React app behaves the way it does.",
+  "description": "Know why every render happened. Dev-time React observability — from interaction to cause to fix.",
   "type": "module",
   "packageManager": "pnpm@9.1.2",
   "engines": {

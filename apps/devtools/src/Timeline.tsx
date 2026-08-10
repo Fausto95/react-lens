@@ -26,7 +26,7 @@ import {
 } from "@react-lens/icons";
 import { SLOW_SELF_MS, renderFixPrompt, commitFixPrompt } from "./perfBudget.js";
 import { useTraceVersion } from "./useLens.js";
-import { ms } from "@react-lens/ui";
+import { ms, timeAxis } from "@react-lens/ui";
 import type { TimeCursor, ABMarks } from "./timeCursor.js";
 import { NarrativeCard } from "./NarrativeCard.js";
 import { diagnoseOne } from "./doctor.js";
@@ -432,18 +432,20 @@ export function Timeline({
     draggingPlayhead.current = false;
   };
 
-  const onWheel = (e: React.WheelEvent) => {
-    const el = scrollRef.current;
-    if (!el) return;
-    if (e.ctrlKey || e.metaKey) {
-      e.preventDefault();
-      const viewportX = e.clientX - el.getBoundingClientRect().left;
+  /**
+   * Rescale while keeping the time under `viewportX` (px from the viewport's
+   * left edge) visually pinned. Wheel zoom anchors at the pointer; the −/+
+   * buttons anchor at the viewport center so the view never jumps away.
+   */
+  const zoomTo = useCallback(
+    (next: number, viewportX: number) => {
+      const el = scrollRef.current;
+      if (!el) return;
+      const clamped = clamp(next, SCALE_MIN, SCALE_MAX);
       const tAnchor = tOfX(el.scrollLeft + viewportX);
-      const factor = e.deltaY < 0 ? 1.2 : 0.8;
-      const next = clamp((scale || fit) * factor, SCALE_MIN, SCALE_MAX);
-      setScale(next);
+      setScale(clamped);
       requestAnimationFrame(() => {
-        const newModel = buildScale(active, bounds.t0, bounds.t1, next);
+        const newModel = buildScale(active, bounds.t0, bounds.t1, clamped);
         const newX = projectX(newModel.segs, clamp(tAnchor, bounds.t0, bounds.t1));
         pendingScrollRef.current = Math.max(0, newX - viewportX);
         // Force layout effect if scale didn't change enough to rebuild; apply now too.
@@ -451,9 +453,38 @@ export function Timeline({
         if (sc) sc.scrollLeft = pendingScrollRef.current;
         pendingScrollRef.current = null;
       });
-    } else {
-      el.scrollLeft += e.deltaX || e.deltaY;
+    },
+    [tOfX, active, bounds.t0, bounds.t1],
+  );
+
+  const zoomButtons = useCallback(
+    (factor: number) => {
+      const el = scrollRef.current;
+      if (!el) return;
+      zoomTo((scale || fit) * factor, el.clientWidth / 2);
+    },
+    [zoomTo, scale, fit],
+  );
+
+  const onWheel = (e: React.WheelEvent) => {
+    const el = scrollRef.current;
+    if (!el) return;
+    if (e.ctrlKey || e.metaKey) {
+      e.preventDefault();
+      const viewportX = e.clientX - el.getBoundingClientRect().left;
+      zoomTo((scale || fit) * (e.deltaY < 0 ? 1.2 : 0.8), viewportX);
+      return;
     }
+    // Over the waterfall lane a vertical wheel scrolls the lane itself; only
+    // translate deltaY→pan when the lane can't move further that way. Without
+    // this the pan fights the native scroll and the last rows feel unreachable.
+    const lane = (e.target as HTMLElement).closest?.(".rl-wf-packed");
+    if (lane && Math.abs(e.deltaY) >= Math.abs(e.deltaX)) {
+      const down = e.deltaY > 0 && lane.scrollTop + lane.clientHeight < lane.scrollHeight - 1;
+      const up = e.deltaY < 0 && lane.scrollTop > 0;
+      if (down || up) return; // let the lane scroll natively
+    }
+    el.scrollLeft += e.deltaX || e.deltaY;
   };
 
   // Non-passive wheel for preventDefault on ctrl-zoom
@@ -552,7 +583,7 @@ export function Timeline({
           <span className="rl-zoom-sep" />
           <button
             className="rl-icon-btn"
-            onClick={() => setScale((s) => clamp((s || fit) * 0.8, SCALE_MIN, SCALE_MAX))}
+            onClick={() => zoomButtons(0.8)}
             title="Zoom out"
             aria-label="Zoom out"
           >
@@ -560,7 +591,7 @@ export function Timeline({
           </button>
           <button
             className="rl-icon-btn"
-            onClick={() => setScale((s) => clamp((s || fit) * 1.25, SCALE_MIN, SCALE_MAX))}
+            onClick={() => zoomButtons(1.25)}
             title="Zoom in"
             aria-label="Zoom in"
           >
@@ -591,7 +622,7 @@ export function Timeline({
         >
           <span className="rl-tl-live-dot" />
           <span className="rl-tl-live-label">
-            {live ? "LIVE" : `PAST · ${ms(cursorT - bounds.t0)}`}
+            {live ? "LIVE" : `PAST · ${timeAxis(cursorT - bounds.t0)}`}
           </span>
         </button>
       </div>
@@ -807,11 +838,11 @@ export function Timeline({
                     innerRef.current?.setPointerCapture(e.pointerId);
                     scrubToClient(e.clientX);
                   }}
-                  title={ms(cursorT - bounds.t0)}
+                  title={timeAxis(cursorT - bounds.t0)}
                 >
                   <span className="rl-tl-playhead-head" />
                   <span className="rl-tl-playhead-stem" />
-                  <span className="rl-tl-playhead-time">{ms(cursorT - bounds.t0)}</span>
+                  <span className="rl-tl-playhead-time">{timeAxis(cursorT - bounds.t0)}</span>
                 </div>
               </div>
             </div>
@@ -1041,7 +1072,8 @@ function PhaseWaterfall({
     return <div className="rl-tl-wf-empty">No component activity yet</div>;
   }
 
-  const canvasH = PHASE_PAD_Y + packed.trackCount * TRACK_H + 6;
+  // Bottom pad clears the outer horizontal scrollbar overlaying the lane.
+  const canvasH = PHASE_PAD_Y + packed.trackCount * TRACK_H + 18;
 
   return (
     // The outer div is the vertical scroll viewport; the canvas carries the
@@ -1572,11 +1604,16 @@ function buildTicks(segs: Seg[], t0: number): Array<{ x: number; major: boolean;
 
   // Label every tick that has room — not only "major" — so each cell gets a time.
   let lastLabelX = -Infinity;
+  let lastLabelText = "";
   for (const tick of ticks) {
     if (tick.x - lastLabelX < 40) continue;
-    tick.label = ms(tick.t - t0);
+    const label = timeAxis(tick.t - t0);
+    // Gutter boundaries sit close in time; identical rounded labels are noise.
+    if (label === lastLabelText) continue;
+    tick.label = label;
     tick.major = true;
     lastLabelX = tick.x;
+    lastLabelText = label;
   }
   return ticks.map(({ x, major, label }) => ({ x, major, label }));
 }
