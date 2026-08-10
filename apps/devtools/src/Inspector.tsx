@@ -4,7 +4,7 @@ import type { Causality } from "@react-lens/causality";
 import type { ComponentId, RenderId, RenderSnapshot } from "@react-lens/protocol";
 import { useTraceVersion } from "./useLens.js";
 import { ms } from "./format.js";
-import { OverviewTab } from "./tabs/OverviewTab.js";
+import { WhySection } from "./tabs/OverviewTab.js";
 import { PropsTab } from "./tabs/PropsTab.js";
 import { StateTab } from "./tabs/StateTab.js";
 import { HooksTab } from "./tabs/HooksTab.js";
@@ -12,18 +12,6 @@ import { ContextTab } from "./tabs/ContextTab.js";
 import { EffectsTab } from "./tabs/EffectsTab.js";
 import { RendersTab } from "./tabs/RendersTab.js";
 import { SourceTab } from "./tabs/SourceTab.js";
-
-const TABS = [
-  "Overview",
-  "Props",
-  "State",
-  "Hooks",
-  "Context",
-  "Effects",
-  "Renders",
-  "Source",
-] as const;
-type Tab = (typeof TABS)[number];
 
 export interface InspectorContext {
   store: TraceStore;
@@ -34,6 +22,11 @@ export interface InspectorContext {
   onSelectRender: (id: RenderId) => void;
 }
 
+/**
+ * Single dense scroll of collapsible sections — no tabs. Sections with no data
+ * for the current component are hidden entirely, so what you see is only what
+ * exists. Order is by debugging priority: why first, then props/state/hooks.
+ */
 export function Inspector({
   store,
   causality,
@@ -46,7 +39,6 @@ export function Inspector({
   useTraceVersion(store, { kind: "component", id: componentId });
   const inst = store.instance(componentId);
   const renders = store.rendersOf(componentId);
-  const [tab, setTab] = useState<Tab>("Overview");
   const [selectedRender, setSelectedRender] = useState<RenderId | null>(null);
 
   const latest = renders.at(-1);
@@ -68,75 +60,91 @@ export function Inspector({
     onSelectRender: setSelectedRender,
   };
 
+  const hooks = snapshot?.hooks ?? [];
+  const propCount = snapshot?.props.k === "object" ? (snapshot.props.entries?.length ?? 0) : 0;
+  const stateCount = hooks.filter((h) => h.kind === "state" || h.kind === "reducer").length;
+  const effectCount = hooks.filter((h) => h.kind === "effect" || h.kind === "layout-effect").length;
+  const contextCount = snapshot?.contexts?.length ?? 0;
+
   return (
     <div className="rl-inspector">
-      <h2>{inst.name}</h2>
+      <div className="rl-insp-head">
+        <h2>{inst.name}</h2>
+        <span className={`rl-badge ${inst.compiler.compiled ? "healthy" : "dim"}`}>
+          {inst.compiler.compiled ? "◆ compiled" : "not compiled"}
+        </span>
+      </div>
       <div className="rl-source">
         {inst.source ? `${inst.source.file}:${inst.source.line}` : "source unavailable"}
         {" · "}
         {store.renderCount(componentId)} renders · {ms(store.selfTimeTotal(componentId))}
       </div>
 
-      <div className="rl-tabs" role="tablist">
-        {TABS.map((t) => (
-          <button
-            key={t}
-            role="tab"
-            aria-selected={tab === t}
-            className={`rl-tab${tab === t ? " active" : ""}`}
-            onClick={() => setTab(t)}
-          >
-            {t}
-            <TabCount tab={t} ctx={ctx} inst={inst} />
-          </button>
-        ))}
-      </div>
+      <Section title="Why this render" defaultOpen>
+        <WhySection ctx={ctx} />
+      </Section>
 
-      <div className="rl-tabpanel">
-        {tab === "Overview" && <OverviewTab ctx={ctx} inst={inst} />}
-        {tab === "Props" && <PropsTab ctx={ctx} />}
-        {tab === "State" && <StateTab ctx={ctx} />}
-        {tab === "Hooks" && <HooksTab ctx={ctx} />}
-        {tab === "Context" && <ContextTab ctx={ctx} />}
-        {tab === "Effects" && <EffectsTab ctx={ctx} />}
-        {tab === "Renders" && <RendersTab ctx={ctx} renders={renders} />}
-        {tab === "Source" && <SourceTab inst={inst} ctx={ctx} />}
-      </div>
+      {propCount > 0 && (
+        <Section title="Props" count={propCount} defaultOpen>
+          <PropsTab ctx={ctx} />
+        </Section>
+      )}
+
+      {stateCount > 0 && (
+        <Section title="State" count={stateCount} defaultOpen>
+          <StateTab ctx={ctx} />
+        </Section>
+      )}
+
+      {hooks.length > 0 && (
+        <Section title="Hooks" count={hooks.length}>
+          <HooksTab ctx={ctx} />
+        </Section>
+      )}
+
+      {contextCount > 0 && (
+        <Section title="Context" count={contextCount}>
+          <ContextTab ctx={ctx} />
+        </Section>
+      )}
+
+      {effectCount > 0 && (
+        <Section title="Effects" count={effectCount}>
+          <EffectsTab ctx={ctx} />
+        </Section>
+      )}
+
+      <Section title="Renders" count={renders.length}>
+        <RendersTab ctx={ctx} renders={renders} />
+      </Section>
+
+      <Section title="Source">
+        <SourceTab inst={inst} ctx={ctx} />
+      </Section>
     </div>
   );
 }
 
-function TabCount({
-  tab,
-  ctx,
-  inst,
+function Section({
+  title,
+  count,
+  defaultOpen,
+  children,
 }: {
-  tab: Tab;
-  ctx: InspectorContext;
-  inst: { name: string };
+  title: string;
+  count?: number;
+  defaultOpen?: boolean;
+  children: React.ReactNode;
 }) {
-  void inst;
-  const snap = ctx.snapshot;
-  let n: number | null = null;
-  switch (tab) {
-    case "Props":
-      n = snap?.props.k === "object" ? (snap.props.entries?.length ?? 0) : null;
-      break;
-    case "Hooks":
-      n = snap?.hooks?.length ?? null;
-      break;
-    case "Context":
-      n = snap?.contexts?.length ?? null;
-      break;
-    case "State":
-      n = snap?.hooks?.filter((h) => h.kind === "state" || h.kind === "reducer").length ?? null;
-      break;
-    case "Effects":
-      n = snap?.hooks?.filter((h) => h.kind === "effect" || h.kind === "layout-effect").length ?? null;
-      break;
-    default:
-      n = null;
-  }
-  if (n === null || n === 0) return null;
-  return <span className="rl-tab-count">{n}</span>;
+  const [open, setOpen] = useState(defaultOpen ?? false);
+  return (
+    <div className="rl-sec">
+      <button className="rl-sec-head" onClick={() => setOpen((o) => !o)} aria-expanded={open}>
+        <span className="rl-sec-caret">{open ? "▾" : "▸"}</span>
+        <span className="rl-sec-title">{title}</span>
+        {count !== undefined && count > 0 && <span className="rl-sec-count">{count}</span>}
+      </button>
+      {open && <div className="rl-sec-body">{children}</div>}
+    </div>
+  );
 }
