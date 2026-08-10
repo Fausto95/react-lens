@@ -108,6 +108,15 @@ export function Timeline({
   };
   useEffect(() => () => cancelAnimationFrame(rafRef.current), []);
 
+  // Reset selection + playback when the trace is cleared (page navigated).
+  useEffect(() => {
+    if (interactions.length === 0) {
+      setSelectedId(null);
+      stop();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [interactions.length]);
+
   const replayInteraction = (it: Interaction) => {
     onReplay?.(it.metrics.componentIds);
     play(it.start, it.end);

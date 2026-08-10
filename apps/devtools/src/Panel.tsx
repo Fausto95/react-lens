@@ -86,6 +86,17 @@ export function Panel({
     };
   }, [doctorClient, store]);
 
+  // The store was cleared (page navigated/reloaded) — return the timeline to
+  // LIVE and drop A/B marks so it doesn't sit at a now-gone historical moment.
+  const empty = stats.events === 0;
+  useEffect(() => {
+    if (empty) {
+      setCursor({ t: 0, mode: "live" });
+      setAB({});
+      setSelected(null);
+    }
+  }, [empty]);
+
   const fallback = !doctorClient && stats.components <= 2000 ? diagnoseAll(store, causality) : null;
   const affected = workerDoctor?.affected ?? fallback?.affected ?? new Set<ComponentId>();
   const issueCount = workerDoctor?.count ?? fallback?.diagnostics.length ?? 0;
