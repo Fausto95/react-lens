@@ -52,8 +52,10 @@ function flush(): void {
   buffer.length = 0;
 }
 
-// Install the hook and begin capturing right away.
-fiber.install();
+// Begin capturing right away. Do NOT call fiber.install() here first:
+// instrumentation.start() installs the hook only AFTER subscribing to commits,
+// so anything the document_start stub buffered before we loaded (a static app's
+// initial mount) is replayed into a live listener instead of being lost.
 start();
 
 window.addEventListener("message", (event: MessageEvent) => {
