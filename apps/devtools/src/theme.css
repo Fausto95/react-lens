@@ -192,7 +192,8 @@
 }
 .rl-tree-row:hover { background: var(--rl-bg-hover); }
 .rl-tree-row.rl-selected { background: var(--rl-bg-active); }
-.rl-caret { width: 12px; color: var(--rl-text-faint); font-size: 9px; cursor: pointer; user-select: none; text-align: center; }
+.rl-caret { width: 16px; color: var(--rl-text-faint); font-size: 12px; cursor: pointer; user-select: none; text-align: center; }
+.rl-caret:hover { color: var(--rl-text); }
 .rl-caret.hidden { visibility: hidden; }
 .rl-tree-name { flex: 1 1 auto; min-width: 0; color: var(--rl-text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .rl-compiler { color: var(--rl-render); font-size: 10px; }
