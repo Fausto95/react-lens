@@ -2,9 +2,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { TraceStore } from "@react-lens/trace-engine";
 import { createCausality } from "@react-lens/causality";
-import type { ComponentId } from "@react-lens/protocol";
+import type { ComponentId, TimeTravelEntry, TimeTravelResult } from "@react-lens/protocol";
 import { Panel, configureSourceFetcher } from "@react-lens/devtools/panel";
-import type { EditApi } from "@react-lens/devtools/panel";
+import type { EditApi, TimeTravelApi } from "@react-lens/devtools/panel";
 import { PANEL_PORT_PREFIX, type EditPrimitive, type PortMessage } from "../transport.js";
 
 /**
@@ -24,6 +24,7 @@ function ExtensionPanel() {
   const pendingEdit = useRef(
     new Map<string, { resolve: (ok: boolean) => void; reject: (err: Error) => void }>(),
   );
+  const pendingTravel = useRef(new Map<string, (result: TimeTravelResult) => void>());
 
   useEffect(() => {
     let disposed = false;
@@ -48,6 +49,13 @@ function ExtensionPanel() {
           pendingEdit.current.delete(msg.requestId);
           if (msg.ok) pending.resolve(true);
           else pending.reject(new Error(msg.error ?? "edit failed"));
+        }
+        if (msg.kind === "time-travel-result") {
+          const pending = pendingTravel.current.get(msg.requestId);
+          if (pending) {
+            pendingTravel.current.delete(msg.requestId);
+            pending({ applied: msg.applied, failed: msg.failed, supported: msg.supported });
+          }
         }
         if (msg.kind === "inspect-picked") {
           setPickedId(msg.componentId);
@@ -158,6 +166,61 @@ function ExtensionPanel() {
     [editRequest],
   );
 
+  /**
+   * Time-travel request over the port. Never rejects — the panel controller
+   * treats applies as fire-and-forget, so failures resolve to a zero result.
+   */
+  const travelRequest = useCallback(
+    (build: (requestId: string) => PortMessage): Promise<TimeTravelResult> => {
+      return new Promise((resolve) => {
+        const nothing: TimeTravelResult = { applied: 0, failed: 0, supported: false };
+        const port = portRef.current;
+        if (!port) {
+          resolve(nothing);
+          return;
+        }
+        const requestId = crypto.randomUUID();
+        pendingTravel.current.set(requestId, resolve);
+        try {
+          port.postMessage(build(requestId));
+        } catch {
+          pendingTravel.current.delete(requestId);
+          resolve(nothing);
+          return;
+        }
+        setTimeout(() => {
+          if (!pendingTravel.current.has(requestId)) return;
+          pendingTravel.current.delete(requestId);
+          resolve(nothing);
+        }, 5_000);
+      });
+    },
+    [],
+  );
+
+  const timeTravel: TimeTravelApi = useMemo(
+    () => ({
+      // The renderer registers only once React loads, so probe (an empty apply
+      // is a no-op page-side) and retry until the page answers supported.
+      supported: async () => {
+        for (let attempt = 0; attempt < 30; attempt++) {
+          const result = await travelRequest((requestId) => ({
+            kind: "time-travel-apply",
+            requestId,
+            entries: [],
+          }));
+          if (result.supported) return true;
+          await new Promise((r) => setTimeout(r, 2_000));
+        }
+        return false;
+      },
+      apply: (entries: TimeTravelEntry[]) =>
+        travelRequest((requestId) => ({ kind: "time-travel-apply", requestId, entries })),
+      goLive: () => travelRequest((requestId) => ({ kind: "time-travel-live", requestId })),
+    }),
+    [travelRequest],
+  );
+
   const onToggleInspect = useCallback(() => {
     setInspecting((on) => {
       const next = !on;
@@ -184,6 +247,7 @@ function ExtensionPanel() {
       onRequestSnapshot={(renderId) => send({ kind: "snapshot-request", renderId })}
       onHighlight={(componentId) => send({ kind: "highlight", componentId })}
       onReplayCommit={(componentIds) => send({ kind: "replay", componentIds })}
+      timeTravel={timeTravel}
     />
   );
 }

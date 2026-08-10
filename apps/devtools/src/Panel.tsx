@@ -25,6 +25,7 @@ import "./theme.css";
 
 export { configureSourceFetcher, getSourceResolver } from "./sourceResolver.js";
 export type { EditApi } from "./Inspector.js";
+export type { TimeTravelApi } from "./timeTravelController.js";
 
 export interface PanelProps {
   store: TraceStore;

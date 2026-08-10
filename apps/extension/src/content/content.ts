@@ -91,6 +91,21 @@ function connect(): void {
         } satisfies ContentToPage,
         "*",
       );
+    } else if (msg.kind === "time-travel-apply") {
+      window.postMessage(
+        {
+          source: CONTENT_SOURCE,
+          kind: "time-travel-apply",
+          requestId: msg.requestId,
+          entries: msg.entries,
+        } satisfies ContentToPage,
+        "*",
+      );
+    } else if (msg.kind === "time-travel-live") {
+      window.postMessage(
+        { source: CONTENT_SOURCE, kind: "time-travel-live", requestId: msg.requestId } satisfies ContentToPage,
+        "*",
+      );
     } else if (msg.kind === "panel-ready") {
       panelReady = true;
       for (const m of buffer) p.postMessage(m);
@@ -99,6 +114,12 @@ function connect(): void {
   p.onDisconnect.addListener(() => {
     port = null;
     panelReady = false;
+    // The panel may have closed mid-scrub — never leave the app stuck in the
+    // past with recording suppressed.
+    window.postMessage(
+      { source: CONTENT_SOURCE, kind: "time-travel-live", requestId: "auto-disconnect" } satisfies ContentToPage,
+      "*",
+    );
     scheduleReconnect();
   });
 }
@@ -151,6 +172,16 @@ window.addEventListener("message", (event: MessageEvent) => {
       name: data.name,
       ...(data.sourceFile ? { sourceFile: data.sourceFile } : {}),
       ...(data.sourceLine != null ? { sourceLine: data.sourceLine } : {}),
+    });
+    return;
+  }
+  if (data.kind === "time-travel-result") {
+    relayLive({
+      kind: "time-travel-result",
+      requestId: data.requestId,
+      applied: data.applied,
+      failed: data.failed,
+      supported: data.supported,
     });
     return;
   }

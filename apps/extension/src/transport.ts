@@ -1,4 +1,9 @@
-import type { EventsBatchMessage, RenderId, ComponentId } from "@react-lens/protocol";
+import type {
+  EventsBatchMessage,
+  RenderId,
+  ComponentId,
+  TimeTravelEntry,
+} from "@react-lens/protocol";
 
 /** Envelope for page(MAIN) ↔ content(ISOLATED) hops over window.postMessage. */
 export const PAGE_SOURCE = "react-lens/page";
@@ -36,6 +41,15 @@ export type PageToContent =
       ok: boolean;
       mode?: "react" | "dom";
       error?: string;
+    }
+  /** Ack for a time-travel apply/go-live (entry ids are JSON-safe numbers). */
+  | {
+      source: typeof PAGE_SOURCE;
+      kind: "time-travel-result";
+      requestId: string;
+      applied: number;
+      failed: number;
+      supported: boolean;
     };
 
 export type ContentToPage =
@@ -69,7 +83,15 @@ export type ContentToPage =
       requestId: string;
       componentId: ComponentId;
       text: string;
-    };
+    }
+  /** Restore each entry's captured state at its renderId (raw values stay page-side). */
+  | {
+      source: typeof CONTENT_SOURCE;
+      kind: "time-travel-apply";
+      requestId: string;
+      entries: TimeTravelEntry[];
+    }
+  | { source: typeof CONTENT_SOURCE; kind: "time-travel-live"; requestId: string };
 
 /** Port protocol for content ↔ background ↔ panel hops. */
 export type PortMessage =
@@ -119,6 +141,15 @@ export type PortMessage =
       ok: boolean;
       mode?: "react" | "dom";
       error?: string;
+    }
+  | { kind: "time-travel-apply"; requestId: string; entries: TimeTravelEntry[] }
+  | { kind: "time-travel-live"; requestId: string }
+  | {
+      kind: "time-travel-result";
+      requestId: string;
+      applied: number;
+      failed: number;
+      supported: boolean;
     };
 
 export const PANEL_PORT_PREFIX = "react-lens/panel:";

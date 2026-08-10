@@ -144,6 +144,18 @@ window.addEventListener("message", (event: MessageEvent) => {
     inspect.start();
   } else if (data.kind === "inspect-stop") {
     inspect.stop();
+  } else if (data.kind === "time-travel-apply") {
+    const result = instrumentation.timeTravel.apply(data.entries);
+    window.postMessage(
+      { source: PAGE_SOURCE, kind: "time-travel-result", requestId: data.requestId, ...result },
+      "*",
+    );
+  } else if (data.kind === "time-travel-live") {
+    const result = instrumentation.timeTravel.goLive();
+    window.postMessage(
+      { source: PAGE_SOURCE, kind: "time-travel-result", requestId: data.requestId, ...result },
+      "*",
+    );
   } else if (data.kind === "edit-setProp") {
     const ok = fiber.setProp(data.componentId, data.path, data.value);
     replyEdit(data.requestId, ok, ok ? { mode: "react" } : { error: "overrideProps failed" });
