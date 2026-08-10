@@ -1,7 +1,18 @@
+import { fileURLToPath } from "node:url";
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 
 export default defineConfig({
+  resolve: {
+    alias: [
+      // oxc-parser (native/WASM) isn't browser-bundleable; diagnostics falls
+      // back to regex when the AST parser throws (see src/oxc-stub.ts).
+      {
+        find: "oxc-parser",
+        replacement: fileURLToPath(new URL("./src/oxc-stub.ts", import.meta.url)),
+      },
+    ],
+  },
   plugins: [
     react({
       // React Compiler on for the playground's OWN source only (DESIGN §1.4).

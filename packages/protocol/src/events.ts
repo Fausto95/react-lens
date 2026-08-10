@@ -76,6 +76,8 @@ export interface EffectEvent extends BaseEvent {
   componentId: ComponentId;
   phase: "run" | "cleanup";
   duration: number;
+  /** Hook index within the component, when known. */
+  hookIndex?: number;
   source?: SourceLocation;
 }
 

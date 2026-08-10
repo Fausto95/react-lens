@@ -131,9 +131,24 @@ export function Inspector({
         <span className={`rl-badge ${inst.compiler.compiled ? "healthy" : "dim"}`}>
           {inst.compiler.compiled ? "◆ compiled" : "not compiled"}
         </span>
-        {inst.underSuspense && (
+        {inst.kind === "server-boundary" && (
+          <span className="rl-badge render" title={rscTitle(inst)}>
+            {inst.rsc?.role === "server-reference"
+              ? "server action"
+              : inst.rsc?.role === "lazy-payload"
+                ? "RSC lazy"
+                : "RSC boundary"}
+            {inst.rsc?.exportName ? ` · ${inst.rsc.exportName}` : ""}
+          </span>
+        )}
+        {inst.kind === "suspense" && (
           <span className={`rl-badge ${inst.suspended ? "warn" : "dim"}`}>
-            ◇ {inst.suspended ? "suspended" : "suspense"}
+            Suspense{inst.suspended ? " · fallback" : ""}
+          </span>
+        )}
+        {inst.underSuspense && inst.kind !== "suspense" && (
+          <span className={`rl-badge ${inst.suspended ? "warn" : "dim"}`}>
+            ◇ {inst.suspended ? "suspended" : "under Suspense"}
           </span>
         )}
         {historical && <span className="rl-badge warn">◷ historical</span>}
@@ -253,5 +268,14 @@ function ABCompare({ diff: d }: { diff: ABDiff }) {
       <DiffLines result={d.state!} />
     </div>
   );
+}
+
+function rscTitle(inst: { rsc?: { role: string; moduleId?: string; exportName?: string } }): string {
+  const r = inst.rsc;
+  if (!r) return "RSC / Flight boundary";
+  const parts = [r.role];
+  if (r.exportName) parts.push(r.exportName);
+  if (r.moduleId) parts.push(r.moduleId);
+  return parts.join(" · ");
 }
 

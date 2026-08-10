@@ -30,6 +30,8 @@ export function Tree({
   frozen,
   doctor,
   suspended,
+  modeHint,
+  onModeHintConsumed,
 }: {
   store: TraceStore;
   causality: Causality;
@@ -42,9 +44,17 @@ export function Tree({
   doctor?: Set<ComponentId>;
   /** Components under a currently-suspended Suspense boundary. */
   suspended?: Set<ComponentId>;
+  /** External request to switch mode (e.g. waste banner → Potential Waste). */
+  modeHint?: TreeMode | null;
+  onModeHintConsumed?: () => void;
 }) {
   const version = useTraceVersion(store, { kind: "global" });
   const [mode, setMode] = useState<TreeMode>("components");
+  useEffect(() => {
+    if (!modeHint) return;
+    setMode(modeHint);
+    onModeHintConsumed?.();
+  }, [modeHint, onModeHintConsumed]);
   const [query, setQuery] = useState("");
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   // Repeated-component groups (`g:*`) start collapsed so `Row ×600` shows as one
@@ -240,6 +250,9 @@ function TreeRow({
           <>
             <span className="rl-tree-name">{node.datum.name}</span>
             {inFrozen && <span className="rl-frozen-dot" title="Rendered in the frozen commit" />}
+            {node.datum.kind === "server-boundary" && (
+              <span className="rl-server-mark" title="RSC / Flight client reference">◈</span>
+            )}
             {suspended?.has(node.id) && <span className="rl-suspense-mark" title="Suspended">◇</span>}
             {doctor?.has(node.id) && <span className="rl-doc-mark" title="Doctor issue">⚕</span>}
             {node.datum.compiled && <span className="rl-compiler" title="React Compiler optimized">◆</span>}
@@ -290,6 +303,7 @@ function buildData(store: TraceStore, causality: Causality, mode: TreeMode): Com
         compiled: i.compiler.compiled,
         observableChange: verdictOf(store, causality, i.id),
         ...(i.parentId !== undefined ? { parentId: i.parentId } : {}),
+        ...(i.kind && i.kind !== "component" ? { kind: i.kind } : {}),
       };
       void needVerdict;
       return datum;

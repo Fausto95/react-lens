@@ -2,7 +2,7 @@ import { useMemo, useState, useEffect } from "react";
 import type { TraceStore } from "@react-lens/trace-engine";
 import type { Causality } from "@react-lens/causality";
 import type { ComponentId } from "@react-lens/protocol";
-import { analyzeSource, type Diagnostic, type StaticFinding } from "@react-lens/diagnostics";
+import { analyzeSource, analyzeSourceSmart, type Diagnostic, type StaticFinding } from "@react-lens/diagnostics";
 import { diagnoseOne } from "./doctor.js";
 import { sourceResolver } from "./sourceResolver.js";
 
@@ -14,8 +14,7 @@ export interface DoctorResult {
 
 /**
  * Combines runtime diagnostics (sync) with static findings from the component's
- * original source (async, via source maps). The Inspector uses `total` to
- * decide whether to show the Doctor section; the DoctorTab renders both.
+ * original source (async). Prefers oxc AST analysis; falls back to regex.
  */
 export function useDoctor(
   store: TraceStore,
@@ -35,9 +34,18 @@ export function useDoctor(
       return;
     }
     let alive = true;
-    sourceResolver
-      .sourceContent(inst.source.file)
-      .then((src) => alive && setStaticFindings(src ? analyzeSource(src.content) : []))
+    const compiled = inst.source;
+    Promise.all([sourceResolver.resolve(compiled), sourceResolver.sourceContent(compiled.file)])
+      .then(async ([original, src]) => {
+        if (!alive) return;
+        if (!src) {
+          setStaticFindings([]);
+          return;
+        }
+        const file = original?.file ?? src.path;
+        const findings = await analyzeSourceSmart(src.content, { name: inst.name, file }, analyzeSource);
+        if (alive) setStaticFindings(findings);
+      })
       .catch(() => alive && setStaticFindings([]));
     return () => {
       alive = false;

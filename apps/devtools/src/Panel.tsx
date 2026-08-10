@@ -10,7 +10,15 @@ import { diagnoseAll } from "./doctor.js";
 import { createDoctorClient, type DoctorResult } from "./doctorClient.js";
 import { CommandPalette, type Command } from "./CommandPalette.js";
 import type { TimeCursor, ABMarks } from "./timeCursor.js";
-import { IconLens, IconBolt, IconSearch, IconDoctor } from "@react-lens/icons";
+import { IconLens, IconBolt, IconSearch, IconDoctor, IconDownload, IconUpload } from "@react-lens/icons";
+import {
+  downloadSession,
+  importSessionFromFile,
+  listRecentSessions,
+  loadSessionFromIdb,
+  importSession,
+} from "./session.js";
+import { WasteBanner } from "./WasteBanner.js";
 import "./theme.css";
 
 export interface PanelProps {
@@ -52,6 +60,11 @@ export function Panel({
   useTraceVersion(store, { kind: "global" });
   const [selected, setSelected] = useState<ComponentId | null>(null);
   const [paletteOpen, setPaletteOpen] = useState(false);
+  const [treeModeHint, setTreeModeHint] = useState<"waste" | null>(null);
+  const [recentSessions, setRecentSessions] = useState<
+    Array<{ id: string; title: string; eventCount: number }>
+  >([]);
+  const importRef = useRef<HTMLInputElement>(null);
   // Global time cursor + A/B marks (redesign §6, §28) — the temporal spine
   // shared by the Timeline, Tree, and Inspector.
   const [cursor, setCursor] = useState<TimeCursor>({ t: 0, mode: "live" });
@@ -114,6 +127,11 @@ export function Panel({
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
+  useEffect(() => {
+    if (!paletteOpen) return;
+    void listRecentSessions().then(setRecentSessions);
+  }, [paletteOpen]);
+
   const commands: Command[] = [];
   if (onToggleOverlay) {
     commands.push({
@@ -129,6 +147,34 @@ export function Panel({
       label: recording ? "Pause recording" : "Start recording",
       hint: "R",
       run: onToggleRecording,
+    });
+  }
+  commands.push({
+    id: "export-session",
+    label: "Export session",
+    hint: "↓",
+    run: () => downloadSession(store),
+  });
+  commands.push({
+    id: "import-session",
+    label: "Import session",
+    hint: "↑",
+    run: () => importRef.current?.click(),
+  });
+  for (const entry of recentSessions) {
+    commands.push({
+      id: `session:${entry.id}`,
+      label: `Open · ${entry.title}`,
+      hint: `${entry.eventCount} ev`,
+      run: () => {
+        void loadSessionFromIdb(entry.id).then((file) => {
+          if (!file) return;
+          importSession(store, file);
+          setSelected(null);
+          setCursor({ t: 0, mode: "live" });
+          setAB({});
+        });
+      },
     });
   }
 
@@ -151,6 +197,42 @@ export function Panel({
         >
           <IconSearch size={14} />
         </button>
+        <button
+          className="rl-icon-btn"
+          onClick={() => downloadSession(store)}
+          title="Export session"
+          aria-label="Export session"
+        >
+          <IconDownload size={14} />
+        </button>
+        <button
+          className="rl-icon-btn"
+          onClick={() => importRef.current?.click()}
+          title="Import session"
+          aria-label="Import session"
+        >
+          <IconUpload size={14} />
+        </button>
+        <input
+          ref={importRef}
+          type="file"
+          accept="application/json,.json,.lens.json"
+          hidden
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            e.target.value = "";
+            if (!file) return;
+            void importSessionFromFile(store, file)
+              .then(() => {
+                setSelected(null);
+                setCursor({ t: 0, mode: "live" });
+                setAB({});
+              })
+              .catch(() => {
+                /* invalid file — ignore for MVP */
+              });
+          }}
+        />
         {onToggleOverlay && (
           <button
             className={`rl-icon-btn${overlayEnabled ? " active" : ""}`}
@@ -173,6 +255,15 @@ export function Panel({
         </button>
       </div>
 
+      <WasteBanner
+        store={store}
+        causality={causality}
+        onInspect={({ worstId }) => {
+          setTreeModeHint("waste");
+          if (worstId) setSelected(worstId);
+        }}
+      />
+
       <div className="rl-body" ref={bodyRef} style={{ gridTemplateColumns: `${splitPct}% 6px 1fr` }}>
         <div className="rl-pane rl-pane-tree">
           <div className="rl-pane-title">Tree</div>
@@ -184,6 +275,8 @@ export function Panel({
             onHover={onHighlight}
             doctor={affected}
             suspended={suspended}
+            modeHint={treeModeHint}
+            onModeHintConsumed={() => setTreeModeHint(null)}
             {...(frozenSet ? { frozen: frozenSet } : {})}
           />
         </div>
@@ -224,6 +317,9 @@ export function Panel({
         <span>{stats.events} events</span>
         <span>{stats.renders} renders</span>
         <span>{stats.components} components</span>
+        {suspended.size > 0 && (
+          <span className="rl-status-suspended">◇ {suspended.size} suspended</span>
+        )}
         {issueCount > 0 && (
           <span className="rl-status-issues">
             <IconDoctor size={12} /> {issueCount} issues

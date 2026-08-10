@@ -226,3 +226,25 @@ export function IconMarkB(props: IconProps) {
     </Svg>
   );
 }
+
+/** Export / download session. */
+export function IconDownload(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <path d="M8 2.5v8" />
+      <path d="m4.5 7.5 3.5 3.5 3.5-3.5" />
+      <path d="M3 12.5h10" />
+    </Svg>
+  );
+}
+
+/** Import / upload session. */
+export function IconUpload(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <path d="M8 12.5v-8" />
+      <path d="m4.5 7.5 3.5-3.5 3.5 3.5" />
+      <path d="M3 12.5h10" />
+    </Svg>
+  );
+}

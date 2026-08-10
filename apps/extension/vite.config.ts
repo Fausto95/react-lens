@@ -1,3 +1,4 @@
+import { fileURLToPath } from "node:url";
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import { crx } from "@crxjs/vite-plugin";
@@ -7,6 +8,15 @@ import manifest from "./src/manifest.json";
 // classic-script bundling required for the MAIN- and ISOLATED-world content
 // scripts.
 export default defineConfig({
+  resolve: {
+    alias: [
+      // oxc-parser isn't browser-bundleable; diagnostics falls back to regex.
+      {
+        find: "oxc-parser",
+        replacement: fileURLToPath(new URL("./src/oxc-stub.ts", import.meta.url)),
+      },
+    ],
+  },
   plugins: [react(), crx({ manifest: manifest as never })],
   build: {
     target: "chrome116",

@@ -3,7 +3,14 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "exports": { ".": "./src/index.ts" },
-  "dependencies": { "@react-lens/protocol": "workspace:*" },
-  "scripts": { "typecheck": "tsc --noEmit" }
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@react-lens/protocol": "workspace:*",
+    "oxc-parser": "^0.144.0"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  }
 }

@@ -1,6 +1,7 @@
 import type {
   LensEvent,
   RenderEvent,
+  EffectEvent,
   RenderReason,
   InteractionEvent,
   ComponentId,
@@ -9,10 +10,13 @@ import type {
   RenderId,
   EventId,
   InteractionId,
+  EffectId,
   EventsBatchMessage,
+  HookSnapshot,
+  SerializedValue,
 } from "@react-lens/protocol";
 import { createIdFactory } from "@react-lens/protocol";
-import type { HookSnapshot, ContextSnapshot, SerializedValue } from "@react-lens/protocol";
+import type { ContextSnapshot } from "@react-lens/protocol";
 import type { FiberBridge, CommitObservation, RenderDetail, RawHook } from "@react-lens/fiber";
 import { inspectHooks, inspectContexts, inspectClassState } from "@react-lens/fiber";
 import type { Serializer } from "@react-lens/serializer";
@@ -63,10 +67,12 @@ export function createInstrumentation(deps: {
   const nextEventId = createIdFactory<EventId>();
   const nextRenderId = createIdFactory<RenderId>();
   const nextInteractionId = createIdFactory<InteractionId>();
+  const nextEffectId = createIdFactory<EffectId>();
 
   let recording = false;
   let config: CaptureConfig | null = null;
   let disposeCommit: (() => void) | null = null;
+  let disposePostCommit: (() => void) | null = null;
   const listenerCleanups: Array<() => void> = [];
 
   // Pending frame buffer — batched, never one message per event.
@@ -103,6 +109,7 @@ export function createInstrumentation(deps: {
     // initial-mount tree). Installing first would fire that replay into no
     // listener and lose the mounted tree entirely.
     disposeCommit = fiber.onCommit(handleCommit);
+    disposePostCommit = fiber.onPostCommit(handlePostCommit);
     fiber.install();
     attachInteractionListeners();
     windowStart = now();
@@ -113,6 +120,8 @@ export function createInstrumentation(deps: {
     recording = false;
     disposeCommit?.();
     disposeCommit = null;
+    disposePostCommit?.();
+    disposePostCommit = null;
     for (const cleanup of listenerCleanups) cleanup();
     listenerCleanups.length = 0;
     flush();
@@ -224,6 +233,36 @@ export function createInstrumentation(deps: {
       snapshot.deps = h.deps === null ? null : h.deps.map((d) => serializer.serialize(d));
     }
     return snapshot;
+  }
+
+  /** Timed effect runs/cleanups from fiber.create wraps, flushed after passives. */
+  function handlePostCommit(obs: {
+    effects: Array<{
+      componentId: ComponentId;
+      hookIndex: number;
+      phase: "run" | "cleanup";
+      duration: number;
+      timestamp: number;
+    }>;
+  }): void {
+    if (!recording || !config) return;
+    if (obs.effects.length === 0) return;
+    const interactionId = activeInteractionId();
+    for (const e of obs.effects) {
+      const event: EffectEvent = {
+        id: nextEventId(),
+        type: "effect",
+        timestamp: e.timestamp,
+        componentId: e.componentId,
+        effectId: nextEffectId(),
+        phase: e.phase,
+        duration: e.duration,
+        hookIndex: e.hookIndex,
+        ...(interactionId !== null ? { interactionId } : {}),
+      };
+      pendingEvents.push(event);
+    }
+    scheduleFlush();
   }
 
   /** Combine state-bearing hooks (or class state) into one value for diffing. */

@@ -25,6 +25,7 @@ import {
   SuspenseComponent,
   PERFORMED_WORK,
 } from "./react-internals.js";
+import { wrapEffectsForTiming, type TimedEffect } from "./effect-timing.js";
 
 export type Dispose = () => void;
 
@@ -65,6 +66,14 @@ export interface FiberBridge {
   reactVersion(): string | null;
   onCommit(cb: (commit: CommitObservation) => void): Dispose;
   onUnmount(cb: (id: ComponentId) => void): Dispose;
+  /** Fired after passive effects flush; carries timed effect observations. */
+  onPostCommit(cb: (obs: PostCommitObservation) => void): Dispose;
+}
+
+export interface PostCommitObservation {
+  rootId: RootId;
+  timestamp: number;
+  effects: import("./effect-timing.js").TimedEffect[];
 }
 
 export function createFiberBridge(target: typeof globalThis = globalThis): FiberBridge {
@@ -84,7 +93,11 @@ export function createFiberBridge(target: typeof globalThis = globalThis): Fiber
 
   const commitListeners = new Set<(commit: CommitObservation) => void>();
   const unmountListeners = new Set<(id: ComponentId) => void>();
+  const postCommitListeners = new Set<(obs: PostCommitObservation) => void>();
   const ignoredContainers = new Set<Node>();
+  /** Effect timings collected between commit and post-commit for the active root. */
+  let pendingEffectTimings: TimedEffect[] = [];
+  let pendingPostCommitRootId: RootId | null = null;
 
   let reactVersion: string | null = null;
   let activeHook: DevToolsHook | null = null;
@@ -116,7 +129,7 @@ export function createFiberBridge(target: typeof globalThis = globalThis): Fiber
       },
       onCommitFiberRoot: (_id, root) => handleCommit(root),
       onCommitFiberUnmount: (_id, fiber) => handleUnmount(fiber),
-      onPostCommitFiberRoot: () => {},
+      onPostCommitFiberRoot: (_id, root) => handlePostCommit(root),
       _lensChained: false,
     };
     activeHook = hook;
@@ -185,6 +198,7 @@ export function createFiberBridge(target: typeof globalThis = globalThis): Fiber
     // would grow its queue forever. A real peer hook, though, must keep working.
     const originalCommit = isStub ? undefined : existing.onCommitFiberRoot?.bind(existing);
     const originalUnmount = isStub ? undefined : existing.onCommitFiberUnmount?.bind(existing);
+    const originalPost = isStub ? undefined : existing.onPostCommitFiberRoot?.bind(existing);
     existing.onCommitFiberRoot = (id, root, priority) => {
       originalCommit?.(id, root, priority);
       handleCommit(root);
@@ -192,6 +206,10 @@ export function createFiberBridge(target: typeof globalThis = globalThis): Fiber
     existing.onCommitFiberUnmount = (id, fiber) => {
       originalUnmount?.(id, fiber);
       handleUnmount(fiber);
+    };
+    existing.onPostCommitFiberRoot = (id, root) => {
+      originalPost?.(id, root);
+      handlePostCommit(root);
     };
     existing._lensChained = true;
 
@@ -252,21 +270,54 @@ export function createFiberBridge(target: typeof globalThis = globalThis): Fiber
   function buildInstance(fiber: Fiber, rootId: RootId): ComponentInstance {
     const id = idOf(fiber);
     const parentFiber = nearestComponentAncestor(fiber.return);
+    const kind = detectKind(fiber);
     const instance: ComponentInstance = {
       id,
       type: typeOf(fiber),
-      name: displayNameOf(fiber),
+      name: kind === "suspense" ? "Suspense" : displayNameOf(fiber),
       rootId,
       compiler: detectCompilerStatus(fiber),
+      kind,
     };
+    const rsc = flightMeta(fiber.elementType) ?? flightMeta(fiber.type);
+    if (rsc) instance.rsc = rsc;
     if (parentFiber) instance.parentId = idOf(parentFiber);
     const source = sourceOf(fiber);
     if (source) instance.source = source;
     const suspense = suspenseOf(fiber);
-    if (suspense.under) {
+    if (suspense.under && suspense.boundary) {
       instance.underSuspense = true;
       if (suspense.suspended) instance.suspended = true;
+      // Register the boundary as its own instance so Relations / badges can name it.
+      const boundary = buildBoundaryInstance(suspense.boundary, rootId, suspense.suspended);
+      instance.suspenseBoundaryId = boundary.id;
     }
+    instanceById.set(id, instance);
+    fiberById.set(id, fiber);
+    return instance;
+  }
+
+  function buildBoundaryInstance(
+    fiber: Fiber,
+    rootId: RootId,
+    suspended: boolean,
+  ): ComponentInstance {
+    const id = idOf(fiber);
+    const existing = instanceById.get(id);
+    if (existing) {
+      existing.suspended = suspended;
+      existing.kind = "suspense";
+      return existing;
+    }
+    const instance: ComponentInstance = {
+      id,
+      type: typeOf(fiber),
+      name: "Suspense",
+      rootId,
+      compiler: { compiled: false, memoized: false },
+      kind: "suspense",
+      suspended,
+    };
     instanceById.set(id, instance);
     fiberById.set(id, fiber);
     return instance;
@@ -288,6 +339,11 @@ export function createFiberBridge(target: typeof globalThis = globalThis): Fiber
 
     if (rendered.length === 0) return;
 
+    // Wrap passive effect create/destroy so post-commit can report real durations.
+    pendingEffectTimings = [];
+    pendingPostCommitRootId = rootId;
+    wrapEffectsForTiming(root.current, idOf, pendingEffectTimings);
+
     const observation: CommitObservation = {
       commitId: nextCommitId(),
       rootId,
@@ -296,6 +352,21 @@ export function createFiberBridge(target: typeof globalThis = globalThis): Fiber
       details,
     };
     for (const cb of commitListeners) cb(observation);
+  }
+
+  function handlePostCommit(root: FiberRoot): void {
+    if (isIgnoredRoot(root)) return;
+    const effects = pendingEffectTimings;
+    const rootId = pendingPostCommitRootId ?? rootIdOf(root);
+    pendingEffectTimings = [];
+    pendingPostCommitRootId = null;
+    if (effects.length === 0 && postCommitListeners.size === 0) return;
+    const obs: PostCommitObservation = {
+      rootId,
+      timestamp: now(),
+      effects: effects.slice(),
+    };
+    for (const cb of postCommitListeners) cb(obs);
   }
 
   function handleUnmount(fiber: Fiber): void {
@@ -344,6 +415,11 @@ export function createFiberBridge(target: typeof globalThis = globalThis): Fiber
     return () => unmountListeners.delete(cb);
   }
 
+  function onPostCommit(cb: (obs: PostCommitObservation) => void): Dispose {
+    postCommitListeners.add(cb);
+    return () => postCommitListeners.delete(cb);
+  }
+
   function isIgnoredRoot(root: FiberRoot): boolean {
     if (ignoredContainers.size === 0) return false;
     const container = (root.current.stateNode as { containerInfo?: Node } | null)?.containerInfo;
@@ -371,6 +447,7 @@ export function createFiberBridge(target: typeof globalThis = globalThis): Fiber
     reactVersion: () => reactVersion,
     onCommit,
     onUnmount,
+    onPostCommit,
   };
 
   // ── helpers ──────────────────────────────────────────────────────────────
@@ -474,16 +551,61 @@ function nearestComponentAncestor(fiber: Fiber | null): Fiber | null {
  * that boundary is currently showing its fallback (React stores a non-null
  * memoizedState on a suspended Suspense fiber).
  */
-function suspenseOf(fiber: Fiber): { under: boolean; suspended: boolean } {
+function suspenseOf(
+  fiber: Fiber,
+): { under: boolean; suspended: boolean; boundary: Fiber | null } {
   let node: Fiber | null = fiber.return;
   let guard = 0;
   while (node && guard++ < 1000) {
     if (node.tag === SuspenseComponent) {
-      return { under: true, suspended: node.memoizedState != null };
+      return { under: true, suspended: node.memoizedState != null, boundary: node };
     }
     node = node.return;
   }
-  return { under: false, suspended: false };
+  return { under: false, suspended: false, boundary: null };
+}
+
+/** Heuristic role for Suspense / RSC client & server references. */
+function detectKind(fiber: Fiber): NonNullable<ComponentInstance["kind"]> {
+  if (fiber.tag === SuspenseComponent) return "suspense";
+  const candidates = [fiber.elementType, fiber.type];
+  for (const t of candidates) {
+    const role = flightRole(t);
+    if (role) return "server-boundary";
+  }
+  return "component";
+}
+
+const CLIENT_REF = Symbol.for("react.client.reference");
+const SERVER_REF = Symbol.for("react.server.reference");
+const LAZY = Symbol.for("react.lazy");
+
+function flightRole(
+  t: unknown,
+): "client-reference" | "server-reference" | "lazy-payload" | null {
+  if (!t || (typeof t !== "object" && typeof t !== "function")) return null;
+  const o = t as Record<string | symbol, unknown>;
+  const typeOf = o["$$typeof"];
+  if (typeOf === CLIENT_REF) return "client-reference";
+  if (typeOf === SERVER_REF) return "server-reference";
+  if (typeOf === LAZY && ("_payload" in o || "$$id" in o)) return "lazy-payload";
+  // Bundler-shaped client refs without a recognizable symbol (older Next).
+  if ("$$typeof" in o && ("$$id" in o || "$$async" in o || "$$bundles" in o || "$$name" in o)) {
+    return "client-reference";
+  }
+  return null;
+}
+
+function flightMeta(t: unknown): ComponentInstance["rsc"] | undefined {
+  const role = flightRole(t);
+  if (!role) return undefined;
+  if (!t || typeof t !== "object") return { role };
+  const o = t as Record<string, unknown>;
+  return {
+    role,
+    ...(typeof o.$$id === "string" ? { moduleId: o.$$id } : {}),
+    ...(typeof o.$$name === "string" ? { exportName: o.$$name } : {}),
+  };
 }
 
 function sourceOf(fiber: Fiber): SourceLocation | undefined {

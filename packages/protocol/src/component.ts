@@ -26,10 +26,24 @@ export interface ComponentInstance {
   rootId: RootId;
   source?: SourceLocation;
   compiler: CompilerStatus;
+  /**
+   * Structural role when not a plain client component:
+   * - suspense — a <Suspense> boundary
+   * - server-boundary — Flight/RSC client or server reference (heuristic)
+   */
+  kind?: "component" | "suspense" | "server-boundary";
+  /** Flight/RSC metadata when `kind` is server-boundary. */
+  rsc?: {
+    role: "client-reference" | "server-reference" | "lazy-payload";
+    moduleId?: string;
+    exportName?: string;
+  };
   /** Sits under a <Suspense> boundary. */
   underSuspense?: boolean;
   /** The nearest Suspense boundary is currently showing its fallback. */
   suspended?: boolean;
+  /** Nearest Suspense boundary's component id, when under one. */
+  suspenseBoundaryId?: ComponentId;
 }
 
 /** A single React commit pass. Cheap: ids + timing, never serialized data. */

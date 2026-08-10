@@ -14,6 +14,8 @@ export interface ComponentDatum {
    * unknown. Drives the Changed / Potential-Waste projections.
    */
   observableChange?: boolean | null;
+  /** Structural role from the fiber bridge (Suspense / RSC boundary). */
+  kind?: "component" | "suspense" | "server-boundary";
 }
 
 export type SemanticNode = ComponentNode | GroupNode;

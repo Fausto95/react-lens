@@ -101,6 +101,10 @@ with multiple **projections** rather than a raw fiber tree.
   primitives (rows, value view, diff lines) into `ui`.
 - **Editing in the extension** — live prop/state editing is embedded-only;
   needs a message hop to the injected runtime.
+- ✅ **Website (`apps/site`)** — the site inspects itself: a Vite React SPA that
+  boots the runtime and mounts the real panel over its own marketing sections
+  (Hero/five-questions, TRACE/GRAPH/DIFF specimens, Install). Follow-up: wire a
+  static deploy (GH Pages/Vercel) and add prerendered meta for SEO.
 
 ## North star
 

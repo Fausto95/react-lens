@@ -16,7 +16,9 @@
     "lint": "tsc -b --noEmit || true",
     "dev:playground": "pnpm --filter @react-lens/playground dev",
     "dev:devtools": "pnpm --filter @react-lens/devtools dev",
-    "build:extension": "pnpm --filter @react-lens/extension build"
+    "dev:site": "pnpm --filter @react-lens/site dev",
+    "build:extension": "pnpm --filter @react-lens/extension build",
+    "build:site": "pnpm --filter @react-lens/site build"
   },
   "devDependencies": {
     "@types/react": "^19",
