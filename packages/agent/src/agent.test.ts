@@ -15,7 +15,7 @@ import type {
 
 describe("agent tools", () => {
   it("exposes a closed tool set", () => {
-    expect(SYSTEM_PROMPT).toMatch(/Lens IDs/);
+    expect(SYSTEM_PROMPT).toMatch(/Lens ID/);
     expect(TOOL_DEFINITIONS.map((t) => t.function.name)).toEqual([
       "explain_interaction",
       "query_trace",
