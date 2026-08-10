@@ -1,0 +1,10 @@
+{
+  "files": [],
+  "references": [
+    { "path": "./packages/protocol" },
+    { "path": "./packages/serializer" },
+    { "path": "./packages/diff-engine" },
+    { "path": "./packages/trace-engine" },
+    { "path": "./packages/causality" }
+  ]
+}
