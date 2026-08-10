@@ -45,6 +45,7 @@ export function Panel({
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [frozenCommit, setFrozenCommit] = useState<CommitId | null>(null);
   const { width, onResizeStart } = useDockResize(embedded);
+  const { splitPct, bodyRef, onSplitStart } = usePaneSplit();
   const stats = store.stats();
 
   // Freeze Frame: the component set that rendered in the frozen commit.
@@ -54,6 +55,7 @@ export function Panel({
 
   // Doctor: components with at least one diagnostic (for tree badges).
   const { diagnostics, affected } = diagnoseAll(store, causality);
+  const suspended = new Set(store.allInstances().filter((i) => i.suspended).map((i) => i.id));
 
   // ⌘K / Ctrl+K opens the command palette.
   useEffect(() => {
@@ -120,7 +122,7 @@ export function Panel({
         </button>
       </div>
 
-      <div className="rl-body">
+      <div className="rl-body" ref={bodyRef} style={{ gridTemplateColumns: `${splitPct}% 6px 1fr` }}>
         <div className="rl-pane rl-pane-tree">
           <div className="rl-pane-title">Tree</div>
           <Tree
@@ -130,9 +132,12 @@ export function Panel({
             onSelect={setSelected}
             onHover={onHighlight}
             doctor={affected}
+            suspended={suspended}
             {...(frozenSet ? { frozen: frozenSet } : {})}
           />
         </div>
+
+        <div className="rl-resizer" onPointerDown={onSplitStart} title="Drag to resize" />
 
         <div className="rl-pane">
           <div className="rl-pane-title">Inspector</div>
@@ -179,6 +184,45 @@ export function Panel({
       )}
     </div>
   );
+}
+
+/** Draggable split between the tree and inspector panes. */
+function usePaneSplit(): {
+  splitPct: number;
+  bodyRef: React.RefObject<HTMLDivElement | null>;
+  onSplitStart: (e: React.PointerEvent) => void;
+} {
+  const [splitPct, setSplitPct] = useState(50);
+  const bodyRef = useRef<HTMLDivElement>(null);
+  const dragging = useRef(false);
+
+  useEffect(() => {
+    const move = (e: PointerEvent) => {
+      if (!dragging.current || !bodyRef.current) return;
+      const r = bodyRef.current.getBoundingClientRect();
+      const pct = ((e.clientX - r.left) / r.width) * 100;
+      setSplitPct(Math.max(22, Math.min(78, pct)));
+    };
+    const up = () => {
+      if (!dragging.current) return;
+      dragging.current = false;
+      document.body.style.userSelect = "";
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+    return () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+    };
+  }, []);
+
+  const onSplitStart = useCallback((e: React.PointerEvent) => {
+    e.preventDefault();
+    dragging.current = true;
+    document.body.style.userSelect = "none";
+  }, []);
+
+  return { splitPct, bodyRef, onSplitStart };
 }
 
 const MIN_WIDTH = 320;

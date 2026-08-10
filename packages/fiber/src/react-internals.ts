@@ -14,6 +14,7 @@ export const HostComponent = 5;
 export const HostText = 6;
 export const ContextProvider = 10;
 export const ForwardRef = 11;
+export const SuspenseComponent = 13;
 export const MemoComponent = 14;
 export const SimpleMemoComponent = 15;
 

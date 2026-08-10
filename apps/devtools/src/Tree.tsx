@@ -29,6 +29,7 @@ export function Tree({
   onHover,
   frozen,
   doctor,
+  suspended,
 }: {
   store: TraceStore;
   causality: Causality;
@@ -39,11 +40,16 @@ export function Tree({
   frozen?: Set<ComponentId>;
   /** Components with at least one Doctor diagnostic. */
   doctor?: Set<ComponentId>;
+  /** Components under a currently-suspended Suspense boundary. */
+  suspended?: Set<ComponentId>;
 }) {
   const version = useTraceVersion(store, { kind: "global" });
   const [mode, setMode] = useState<TreeMode>("components");
   const [query, setQuery] = useState("");
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+  // Repeated-component groups (`g:*`) start collapsed so `Row ×600` shows as one
+  // row until opened; component nodes start expanded (unless in `collapsed`).
+  const [openGroups, setOpenGroups] = useState<Set<string>>(new Set());
 
   const data = useMemo(
     () => buildData(store, causality, mode),
@@ -61,10 +67,16 @@ export function Tree({
 
   const allKeys = useMemo(() => collectKeys(roots), [roots]);
   const expanded = useMemo(() => {
-    const set = new Set(allKeys);
-    for (const key of collapsed) set.delete(key);
+    const set = new Set<string>();
+    for (const key of allKeys) {
+      if (key.startsWith("g:")) {
+        if (openGroups.has(key)) set.add(key);
+      } else if (!collapsed.has(key)) {
+        set.add(key);
+      }
+    }
     return set;
-  }, [allKeys, collapsed]);
+  }, [allKeys, collapsed, openGroups]);
 
   const rows = useMemo(() => flatten(roots, expanded), [roots, expanded]);
   const maxSelf = useMemo(() => Math.max(1, ...rows.map((r) => rowSelfTime(r))), [rows]);
@@ -90,13 +102,15 @@ export function Tree({
   const endIndex = Math.min(rows.length, Math.ceil((scrollTop + viewport) / ROW_H) + OVERSCAN);
   const windowed = rows.slice(startIndex, endIndex);
 
-  const toggle = (key: string) =>
-    setCollapsed((prev) => {
+  const toggle = (key: string) => {
+    const setter = key.startsWith("g:") ? setOpenGroups : setCollapsed;
+    setter((prev) => {
       const next = new Set(prev);
       if (next.has(key)) next.delete(key);
       else next.add(key);
       return next;
     });
+  };
 
   return (
     <div className="rl-tree" onMouseLeave={() => onHover?.(null)}>
@@ -147,6 +161,7 @@ export function Tree({
                   onHover={onHover}
                   frozen={frozen}
                   doctor={doctor}
+                  suspended={suspended}
                 />
               ))}
             </div>
@@ -166,6 +181,7 @@ function TreeRow({
   onHover,
   frozen,
   doctor,
+  suspended,
 }: {
   row: VisibleRow;
   maxSelf: number;
@@ -175,6 +191,7 @@ function TreeRow({
   onHover?: (id: ComponentId | null) => void;
   frozen?: Set<ComponentId>;
   doctor?: Set<ComponentId>;
+  suspended?: Set<ComponentId>;
 }) {
   const { node, depth, expandable, expanded } = row;
   const self = rowSelfTime(row);
@@ -209,6 +226,7 @@ function TreeRow({
         <>
           <span className="rl-tree-name">{node.datum.name}</span>
           {inFrozen && <span className="rl-frozen-dot" title="Rendered in the frozen commit" />}
+          {suspended?.has(node.id) && <span className="rl-suspense-mark" title="Suspended">◇</span>}
           {doctor?.has(node.id) && <span className="rl-doc-mark" title="Doctor issue">⚕</span>}
           {node.datum.compiled && <span className="rl-compiler" title="React Compiler optimized">◆</span>}
           {node.datum.observableChange === false && (

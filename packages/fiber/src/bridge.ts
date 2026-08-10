@@ -22,6 +22,7 @@ import {
   findCurrentFiber,
   HostComponent,
   HostRoot,
+  SuspenseComponent,
   PERFORMED_WORK,
 } from "./react-internals.js";
 
@@ -236,6 +237,11 @@ export function createFiberBridge(target: typeof globalThis = globalThis): Fiber
     if (parentFiber) instance.parentId = idOf(parentFiber);
     const source = sourceOf(fiber);
     if (source) instance.source = source;
+    const suspense = suspenseOf(fiber);
+    if (suspense.under) {
+      instance.underSuspense = true;
+      if (suspense.suspended) instance.suspended = true;
+    }
     instanceById.set(id, instance);
     fiberById.set(id, fiber);
     return instance;
@@ -430,6 +436,23 @@ function nearestComponentAncestor(fiber: Fiber | null): Fiber | null {
     node = node.return;
   }
   return null;
+}
+
+/**
+ * Nearest <Suspense> ancestor: whether the component is under one, and whether
+ * that boundary is currently showing its fallback (React stores a non-null
+ * memoizedState on a suspended Suspense fiber).
+ */
+function suspenseOf(fiber: Fiber): { under: boolean; suspended: boolean } {
+  let node: Fiber | null = fiber.return;
+  let guard = 0;
+  while (node && guard++ < 1000) {
+    if (node.tag === SuspenseComponent) {
+      return { under: true, suspended: node.memoizedState != null };
+    }
+    node = node.return;
+  }
+  return { under: false, suspended: false };
 }
 
 function sourceOf(fiber: Fiber): SourceLocation | undefined {

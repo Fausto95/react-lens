@@ -26,6 +26,10 @@ export interface ComponentInstance {
   rootId: RootId;
   source?: SourceLocation;
   compiler: CompilerStatus;
+  /** Sits under a <Suspense> boundary. */
+  underSuspense?: boolean;
+  /** The nearest Suspense boundary is currently showing its fallback. */
+  suspended?: boolean;
 }
 
 /** A single React commit pass. Cheap: ids + timing, never serialized data. */

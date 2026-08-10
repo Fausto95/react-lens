@@ -104,6 +104,11 @@ export function Inspector({
         <span className={`rl-badge ${inst.compiler.compiled ? "healthy" : "dim"}`}>
           {inst.compiler.compiled ? "◆ compiled" : "not compiled"}
         </span>
+        {inst.underSuspense && (
+          <span className={`rl-badge ${inst.suspended ? "warn" : "dim"}`}>
+            ◇ {inst.suspended ? "suspended" : "suspense"}
+          </span>
+        )}
       </div>
       <div className="rl-source">
         {inst.source ? `${inst.source.file}:${inst.source.line}` : "source unavailable"}
