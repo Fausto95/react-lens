@@ -12,6 +12,8 @@ import {
 } from "@react-lens/tree";
 import { useTraceVersion } from "./useLens.js";
 import { ms } from "@react-lens/ui";
+import { IconSparkle } from "@react-lens/icons";
+import { SLOW_SELF_MS, componentFixPrompt } from "./perfBudget.js";
 
 type TreeMode = "components" | "changed" | "waste";
 
@@ -27,6 +29,7 @@ export function Tree({
   selected,
   onSelect,
   onHover,
+  onAskAI,
   frozen,
   doctor,
   suspended,
@@ -38,6 +41,8 @@ export function Tree({
   selected: ComponentId | null;
   onSelect: (id: ComponentId) => void;
   onHover?: (id: ComponentId | null) => void;
+  /** Inline "Fix with AI" on rows over the frame budget. */
+  onAskAI?: (question: string) => void;
   /** Freeze Frame: component ids that rendered in the frozen commit. */
   frozen?: Set<ComponentId>;
   /** Components with at least one Doctor diagnostic. */
@@ -182,6 +187,7 @@ export function Tree({
                   onSelect={onSelect}
                   onToggle={toggle}
                   onHover={onHover}
+                  {...(onAskAI ? { onAskAI } : {})}
                   frozen={frozen}
                   doctor={doctor}
                   suspended={suspended}
@@ -203,6 +209,7 @@ function TreeRow({
   onSelect,
   onToggle,
   onHover,
+  onAskAI,
   frozen,
   doctor,
   suspended,
@@ -214,6 +221,7 @@ function TreeRow({
   onSelect: (id: ComponentId) => void;
   onToggle: (key: string) => void;
   onHover?: (id: ComponentId | null) => void;
+  onAskAI?: (question: string) => void;
   frozen?: Set<ComponentId>;
   doctor?: Set<ComponentId>;
   suspended?: Set<ComponentId>;
@@ -277,6 +285,26 @@ function TreeRow({
         )}
       </div>
 
+      {node.kind === "component" && onAskAI && self >= SLOW_SELF_MS && (
+        <span
+          role="button"
+          tabIndex={0}
+          className="rl-fix-ai"
+          title={`Over the frame budget (${ms(self)} self) — investigate and fix with AI`}
+          onClick={(e) => {
+            e.stopPropagation();
+            onAskAI(componentFixPrompt(node.datum.name, node.id as number, self, rowRenders(row)));
+          }}
+          onKeyDown={(e) => {
+            if (e.key !== "Enter" && e.key !== " ") return;
+            e.preventDefault();
+            e.stopPropagation();
+            onAskAI(componentFixPrompt(node.datum.name, node.id as number, self, rowRenders(row)));
+          }}
+        >
+          <IconSparkle size={11} />
+        </span>
+      )}
       <span
         className="rl-tree-stats"
         title={`${rowRenders(row)}×${self > 0 ? ` · ${ms(self)}` : ""}`}

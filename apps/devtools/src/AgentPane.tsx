@@ -41,6 +41,7 @@ export function AgentPane({
   causality,
   settings,
   settingsVersion = 0,
+  askRequest = null,
   onClose,
   onOpenSettings,
   onSelectComponent,
@@ -52,6 +53,8 @@ export function AgentPane({
   settings: AgentSettings | null;
   /** Bump to reset the conversation (e.g. after saving settings). */
   settingsVersion?: number;
+  /** Inline "Fix with AI": a pre-built question to auto-ask (token dedupes). */
+  askRequest?: { token: number; question: string } | null;
   onClose: () => void;
   onOpenSettings: () => void;
   onSelectComponent?: (id: ComponentId) => void;
@@ -108,6 +111,7 @@ export function AgentPane({
       const cfg = settings ?? (await loadAgentSettings());
       if (PROVIDER_PRESETS[cfg.provider].keyRequired && !cfg.apiKey.trim()) {
         setError("Add an API key in Settings (BYOK).");
+        setInput(q); // keep the question staged for after the key is saved
         return;
       }
       if (!sessionRef.current) {
@@ -156,6 +160,16 @@ export function AgentPane({
     },
     [handlers, running, settings, store],
   );
+
+  // Inline "Fix with AI" entry points (tree rows, timeline bars) auto-ask.
+  // If a run is already in flight, stage the question in the input instead.
+  const consumedAsk = useRef(0);
+  useEffect(() => {
+    if (!open || !askRequest || askRequest.token === consumedAsk.current) return;
+    consumedAsk.current = askRequest.token;
+    if (running) setInput(askRequest.question);
+    else void ask(askRequest.question);
+  }, [open, askRequest, running, ask]);
 
   const onCitation = useCallback(
     (ref: CitationRef | LensRef) => {

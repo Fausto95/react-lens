@@ -106,6 +106,11 @@ export function Panel({
   const [agentOpen, setAgentOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsVersion, setSettingsVersion] = useState(0);
+  const [agentAsk, setAgentAsk] = useState<{ token: number; question: string } | null>(null);
+  const askAI = useCallback((question: string) => {
+    setAgentOpen(true);
+    setAgentAsk((prev) => ({ token: (prev?.token ?? 0) + 1, question }));
+  }, []);
   const { width, onResizeStart } = useDockResize(embedded);
   const { splitPct, bodyRef, onSplitStart } = usePaneSplit();
   const stats = store.stats();
@@ -455,6 +460,7 @@ export function Panel({
             suspended={suspended}
             modeHint={treeModeHint}
             onModeHintConsumed={() => setTreeModeHint(null)}
+            onAskAI={askAI}
             {...(frozenSet ? { frozen: frozenSet } : {})}
           />
         </div>
@@ -494,6 +500,7 @@ export function Panel({
         onSelectComponent={setSelected}
         selectedComponent={selected}
         explainToken={explainToken}
+        onAskAI={askAI}
         {...(onHighlight ? { onHighlight } : {})}
         {...(onReplayCommit ? { onReplay: onReplayCommit } : {})}
         {...(timeTravel
@@ -549,6 +556,7 @@ export function Panel({
         causality={causality}
         settings={null}
         settingsVersion={settingsVersion}
+        askRequest={agentAsk}
         onClose={() => setAgentOpen(false)}
         onOpenSettings={() => setSettingsOpen(true)}
         onSelectComponent={setSelected}

@@ -1546,3 +1546,46 @@
   font-family: var(--rl-mono); font-size: 11px; line-height: 1.5; color: var(--rl-text);
   background: var(--rl-bg);
 }
+
+/* Suggested questions in the empty assistant */
+.rl-agent-suggest {
+  -webkit-app-region: no-drag;
+  font: inherit; font-size: 12px; text-align: left;
+  background: var(--rl-bg-raised); border: 1px solid var(--rl-border);
+  color: var(--rl-text-dim); border-radius: 8px; padding: 8px 10px; cursor: pointer;
+  transition: background 120ms ease, color 120ms ease, border-color 120ms ease;
+}
+.rl-agent-suggest:hover {
+  background: var(--rl-bg-hover); color: var(--rl-text); border-color: var(--rl-border-strong);
+}
+/* Ask / Stop buttons in the composer share the toolbar button look */
+.rl-agent-ask .rl-btn {
+  -webkit-app-region: no-drag;
+  font: inherit; font-size: 11px; font-weight: 500;
+  border: 1px solid var(--rl-border-strong); background: var(--rl-bg-hover);
+  color: var(--rl-text-dim); padding: 5px 12px; border-radius: 6px; cursor: pointer;
+}
+.rl-agent-ask .rl-btn:hover:not(:disabled) { color: var(--rl-text); background: var(--rl-bg-active); }
+.rl-agent-ask .rl-btn.primary { color: var(--rl-text); border-color: rgba(167, 139, 250, 0.4); background: rgba(167, 139, 250, 0.14); }
+.rl-agent-ask .rl-btn:disabled { opacity: 0.45; cursor: default; }
+
+/* Inline "Fix with AI" sparkle (tree rows + waterfall bars over budget) */
+.rl-fix-ai {
+  -webkit-app-region: no-drag;
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 16px; height: 16px; border-radius: 5px; flex: 0 0 auto;
+  color: var(--rl-render); cursor: pointer; opacity: 0;
+  transition: opacity 100ms ease, background 100ms ease;
+}
+.rl-tree-row:hover .rl-fix-ai, .rl-fix-ai:focus-visible { opacity: 1; }
+.rl-fix-ai:hover { background: rgba(167, 139, 250, 0.18); }
+.rl-wf-fix {
+  position: absolute; right: 2px; top: 50%; transform: translateY(-50%);
+  background: var(--rl-bg-raised);
+}
+.rl-wf-bar:hover .rl-wf-fix { opacity: 1; }
+.rl-tl-card-actions .rl-btn.rl-btn-ai {
+  display: inline-flex; align-items: center; gap: 5px;
+  color: var(--rl-render); border-color: rgba(167, 139, 250, 0.35);
+}
+.rl-tl-card-actions .rl-btn.rl-btn-ai:hover { background: rgba(167, 139, 250, 0.14); color: var(--rl-render); }

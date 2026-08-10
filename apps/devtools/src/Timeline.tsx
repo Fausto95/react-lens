@@ -20,7 +20,9 @@ import {
   IconRewind,
   IconSkipBack,
   IconSkipForward,
+  IconSparkle,
 } from "@react-lens/icons";
+import { SLOW_SELF_MS, renderFixPrompt, commitFixPrompt } from "./perfBudget.js";
 import { useTraceVersion } from "./useLens.js";
 import { ms } from "@react-lens/ui";
 import type { TimeCursor, ABMarks } from "./timeCursor.js";
@@ -52,6 +54,7 @@ export function Timeline({
   travel,
   onSelectComponent,
   onHighlight,
+  onAskAI,
   selectedComponent = null,
   explainToken = 0,
 }: {
@@ -67,6 +70,8 @@ export function Timeline({
   onSelectComponent?: (id: ComponentId) => void;
   /** Highlight DOM hosts on the page (same as tree hover). */
   onHighlight?: (id: ComponentId | null) => void;
+  /** Inline "Fix with AI" on renders/commits over the frame budget. */
+  onAskAI?: (question: string) => void;
   /** Currently selected component — keeps page highlight sticky after a bar click. */
   selectedComponent?: ComponentId | null;
   /** Increment to open Explain for the current selection (⌘K). */
@@ -654,6 +659,7 @@ export function Timeline({
                     onSelectComponent={onSelectComponent}
                     onHighlight={onHighlight}
                     selectedComponent={selectedComponent}
+                    {...(onAskAI ? { onAskAI } : {})}
                     onSeek={(t) => onCursor({ t, mode: "historical" })}
                     onSelectInteraction={(id) => {
                       setSelectedId(id);
@@ -731,6 +737,7 @@ export function Timeline({
           onSelectComponent={onSelectComponent}
           onCursor={onCursor}
           explainToken={explainToken}
+          {...(onAskAI ? { onAskAI } : {})}
         />
       )}
     </div>
@@ -746,6 +753,7 @@ function SelectionStrip({
   onSelectComponent,
   onCursor,
   explainToken,
+  onAskAI,
 }: {
   store: TraceStore;
   interaction: Interaction | null;
@@ -755,6 +763,7 @@ function SelectionStrip({
   onSelectComponent?: (id: ComponentId) => void;
   onCursor: (c: TimeCursor) => void;
   explainToken: number;
+  onAskAI?: (question: string) => void;
 }) {
   const changed = useMemo(
     () => (interaction ? changedCount(interaction, causality) : null),
@@ -841,16 +850,48 @@ function SelectionStrip({
             </span>
           )}
         </div>
-        {interaction && (
+        {(interaction || anomalyCommit) && (
           <div className="rl-tl-card-actions" role="toolbar" aria-label="Selection actions">
-            <button
-              className={`rl-btn${explainOpen ? " primary" : ""}`}
-              onClick={() => setExplainOpen((v) => !v)}
-              title="Explain this interaction (why it cost what it cost)"
-              aria-pressed={explainOpen}
-            >
-              Explain
-            </button>
+            {interaction && (
+              <button
+                className={`rl-btn${explainOpen ? " primary" : ""}`}
+                onClick={() => setExplainOpen((v) => !v)}
+                title="Explain this interaction (why it cost what it cost)"
+                aria-pressed={explainOpen}
+              >
+                Explain
+              </button>
+            )}
+            {onAskAI &&
+              (anomalyCommit ? (
+                <button
+                  className="rl-btn rl-btn-ai"
+                  onClick={() =>
+                    onAskAI(
+                      commitFixPrompt(
+                        anomalyCommit.commitId as number,
+                        anomalyCommit.totalSelfTime,
+                        anomalyCommit.componentIds.length,
+                      ),
+                    )
+                  }
+                  title="Investigate this outlier commit and propose a fix"
+                >
+                  <IconSparkle size={11} /> Fix with AI
+                </button>
+              ) : interaction && interaction.metrics.reactDuration >= SLOW_SELF_MS ? (
+                <button
+                  className="rl-btn rl-btn-ai"
+                  onClick={() =>
+                    onAskAI(
+                      `Interaction "${interaction.label}" [interaction:${interaction.id}] spent ${Math.round(interaction.metrics.reactDuration)}ms in React across ${interaction.metrics.renderCount} renders — find the bottleneck and propose a concrete fix.`,
+                    )
+                  }
+                  title="Over the frame budget — investigate and fix with AI"
+                >
+                  <IconSparkle size={11} /> Fix with AI
+                </button>
+              ) : null)}
           </div>
         )}
       </div>
@@ -882,6 +923,7 @@ function PhaseWaterfall({
   onHighlight,
   selectedComponent = null,
   onSelectInteraction,
+  onAskAI,
   onSeek,
 }: {
   store: TraceStore;
@@ -894,6 +936,7 @@ function PhaseWaterfall({
   onHighlight?: (id: ComponentId | null) => void;
   selectedComponent?: ComponentId | null;
   onSelectInteraction?: (id: string) => void;
+  onAskAI?: (question: string) => void;
   onSeek?: (t: number) => void;
 }) {
   const packed = useMemo(
@@ -961,6 +1004,20 @@ function PhaseWaterfall({
           >
             <span className="rl-wf-bar-label">{bar.name}</span>
             {bar.width >= 64 && <span className="rl-wf-bar-ms">{ms(bar.self)}</span>}
+            {onAskAI && bar.self >= SLOW_SELF_MS && bar.width >= 34 && (
+              <span
+                role="button"
+                tabIndex={-1}
+                className="rl-fix-ai rl-wf-fix"
+                title={`Over the frame budget (${ms(bar.self)}) — investigate and fix with AI`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onAskAI(renderFixPrompt(bar.name, bar.id as number, bar.renderId as number, bar.self));
+                }}
+              >
+                <IconSparkle size={10} />
+              </span>
+            )}
           </button>
         );
       })}
