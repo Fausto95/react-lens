@@ -390,9 +390,13 @@ export function createFiberBridge(target: typeof globalThis = globalThis): Fiber
     const fiber = fiberById.get(id);
     if (!fiber) return [];
     const nodes: Node[] = [];
-    traverse(fiber, (f) => {
-      if (f.tag === HostComponent && f.stateNode instanceof Node) nodes.push(f.stateNode);
-    }, /* stopAtHost */ true);
+    const collect = (stopAtHost: boolean) => {
+      traverse(fiber, (f) => {
+        if (f.tag === HostComponent && f.stateNode instanceof Node) nodes.push(f.stateNode);
+      }, stopAtHost);
+    };
+    collect(true);
+    if (nodes.length === 0) collect(false);
     return nodes;
   }
 

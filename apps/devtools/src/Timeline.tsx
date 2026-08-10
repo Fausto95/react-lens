@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState, useEffect, useCallback } from "react";
+import { useMemo, useRef, useState, useEffect, useLayoutEffect, useCallback } from "react";
 import type { TraceStore, Interaction, CommitSummary } from "@react-lens/trace-engine";
 import type { Causality } from "@react-lens/causality";
 import type { ComponentId, RenderEvent } from "@react-lens/protocol";
@@ -189,11 +189,18 @@ export function Timeline({
 
   const selected = interactions.find((i) => i.id === selectedId) ?? null;
 
-  // Keep a selection so the Components lane isn't empty after the first event.
+  // Seed / repair selection, but honor an intentional clear (selectedId === null).
+  const prevInteractionCount = useRef(0);
   useEffect(() => {
-    if (selectedId && interactions.some((i) => i.id === selectedId)) return;
-    const latest = interactions.at(-1);
-    if (latest) setSelectedId(latest.id);
+    const n = interactions.length;
+    if (n === 0) {
+      setSelectedId(null);
+    } else if (prevInteractionCount.current === 0 && selectedId == null) {
+      setSelectedId(interactions.at(-1)!.id);
+    } else if (selectedId != null && !interactions.some((i) => i.id === selectedId)) {
+      setSelectedId(interactions.at(-1)?.id ?? null);
+    }
+    prevInteractionCount.current = n;
   }, [interactions, selectedId]);
 
   const selectAt = useCallback(
@@ -273,21 +280,21 @@ export function Timeline({
       stop();
       return;
     }
-    if (selected) {
-      const from =
-        cursor.mode === "historical" && cursor.t >= selected.start && cursor.t < selected.end - 0.5
-          ? cursor.t
-          : selected.start;
-      play(from, selected.end, true);
-    } else {
-      const from = cursor.mode === "historical" ? cursor.t : bounds.t0;
-      play(from, bounds.t1, false);
-    }
-  }, [playing, stop, selected, play, cursor, bounds]);
+    // Transport play always scrubs the whole session (selection strip replays a clip).
+    const from = cursor.mode === "historical" ? cursor.t : bounds.t0;
+    const ids = sessionComponentIds(commits);
+    if (ids.length > 0) onReplay?.(ids);
+    play(from, bounds.t1, false);
+  }, [playing, stop, play, cursor, bounds, commits, onReplay]);
 
   const replayInteraction = (it: Interaction) => {
-    onReplay?.(it.metrics.componentIds);
-    play(it.start, it.end);
+    const ids =
+      it.metrics.componentIds.length > 0
+        ? it.metrics.componentIds
+        : uniqueComponentIds(it.renderIds.map((id) => store.getRender(id)?.componentId));
+    if (ids.length > 0) onReplay?.(ids);
+    setSelectedId(it.id);
+    play(it.start, it.end, false);
   };
 
   // Keyboard: T, L, [ ], Space, arrows
@@ -416,8 +423,8 @@ export function Timeline({
           <button
             className={`rl-icon-btn${playing ? " active" : ""}`}
             onClick={togglePlay}
-            title={playing ? "Pause (Space)" : selected ? "Play selection (Space)" : "Play from playhead (Space)"}
-            aria-label={playing ? "Pause" : "Play"}
+            title={playing ? "Pause (Space)" : "Play session from playhead (Space)"}
+            aria-label={playing ? "Pause" : "Play session"}
           >
             {playing ? <IconPause size={12} /> : <IconPlay size={12} />}
           </button>
@@ -538,6 +545,10 @@ export function Timeline({
                         title={`${it.label} · ${ms(it.metrics.totalDuration)} · ${it.metrics.renderCount} renders`}
                         onPointerDown={(e) => {
                           e.stopPropagation();
+                          if (selectedId === it.id) {
+                            setSelectedId(null);
+                            return;
+                          }
                           setSelectedId(it.id);
                           onCursor({ t: it.start, mode: "historical" });
                         }}
@@ -600,6 +611,7 @@ export function Timeline({
                       causality={causality}
                       interaction={selected}
                       playheadT={cursorT}
+                      xOf={xOf}
                       onSelectComponent={onSelectComponent}
                     />
                   ) : (
@@ -759,8 +771,8 @@ function SelectionStrip({
           <button
             className="rl-icon-btn primary"
             onClick={() => onReplay(interaction)}
-            title="Replay interaction"
-            aria-label="Replay interaction"
+            title="Replay interaction on page"
+            aria-label="Replay interaction on page"
           >
             <IconPlay size={12} />
           </button>
@@ -770,29 +782,36 @@ function SelectionStrip({
   );
 }
 
+/**
+ * Ranked component tracks for the selected interaction. Name gutter stays
+ * pinned while panning time; heat clips share session xOf with other lanes.
+ */
 function ComponentWaterfall({
   store,
   causality,
   interaction,
   playheadT,
+  xOf,
   onSelectComponent,
 }: {
   store: TraceStore;
   causality: Causality;
   interaction: Interaction;
   playheadT: number;
+  xOf: (t: number) => number;
   onSelectComponent?: (id: ComponentId) => void;
 }) {
+  const rootRef = useRef<HTMLDivElement>(null);
+
   const rows = useMemo(() => {
     const renders = interaction.renderIds
       .map((id) => store.getRender(id))
       .filter((r): r is RenderEvent => r != null)
       .sort((a, b) => b.selfDuration - a.selfDuration)
       .slice(0, WATERFALL_MAX);
-    const span = Math.max(1, interaction.end - interaction.start);
     const maxSelf = Math.max(1, ...renders.map((r) => r.selfDuration));
     let whyChecked = 0;
-    return renders.map((r) => {
+    return renders.map((r, rank) => {
       let wasted = false;
       if (whyChecked < WHY_CAP) {
         whyChecked++;
@@ -803,32 +822,52 @@ function ComponentWaterfall({
         }
       }
       const reason = r.reasons[0]?.type ?? "render";
-      const tEnd = r.timestamp + Math.max(r.selfDuration, 0.05);
+      const t0 = r.timestamp;
+      const t1 = r.timestamp + Math.max(r.selfDuration, 0.05);
+      const x0 = xOf(t0);
+      const x1 = xOf(t1);
       return {
         id: r.componentId,
         name: store.instance(r.componentId)?.name ?? `#${r.componentId}`,
-        leftPct: ((r.timestamp - interaction.start) / span) * 100,
-        widthPct: Math.max(0.8, (r.selfDuration / span) * 100),
+        rank: rank + 1,
+        left: x0,
+        width: Math.max(4, x1 - x0),
         self: r.selfDuration,
         heat: r.selfDuration / maxSelf,
         wasted,
         reason,
-        t0: r.timestamp,
-        t1: tEnd,
+        t0,
+        t1,
       };
     });
-  }, [store, causality, interaction]);
+  }, [store, causality, interaction, xOf]);
+
+  // Pin gutters via DOM (not React state) so panning 60+ rows stays cheap.
+  useLayoutEffect(() => {
+    const root = rootRef.current;
+    const scroller = root?.closest(".rl-tl-scroll");
+    if (!root || !scroller) return;
+    const sync = () => {
+      const transform = `translateX(${scroller.scrollLeft}px)`;
+      root.querySelectorAll<HTMLElement>("[data-rl-pin]").forEach((el) => {
+        el.style.transform = transform;
+      });
+    };
+    sync();
+    scroller.addEventListener("scroll", sync, { passive: true });
+    return () => scroller.removeEventListener("scroll", sync);
+  }, [interaction.id, rows]);
 
   if (rows.length === 0) {
     return <div className="rl-tl-wf-empty">No renders in this interaction</div>;
   }
 
   return (
-    <div className="rl-wf rl-wf-lane">
-      <div className="rl-wf-cols" aria-hidden>
-        <span className="rl-wf-col-name">Component</span>
-        <span className="rl-wf-col-track" />
-        <span className="rl-wf-col-ms">self</span>
+    <div className="rl-wf" ref={rootRef}>
+      <div className="rl-wf-head">
+        <span className="rl-wf-head-sticky" data-rl-pin>
+          {rows.length} ranked by self
+        </span>
       </div>
       <div className="rl-wf-rows">
         {rows.map((row, i) => {
@@ -841,19 +880,24 @@ function ComponentWaterfall({
               title={`${row.name} · ${ms(row.self)} · ${row.reason}${row.wasted ? " · no visible change" : ""}`}
               onClick={() => onSelectComponent?.(row.id)}
             >
-              <span className="rl-wf-name">{row.name}</span>
-              <span className="rl-wf-track">
+              <span className="rl-wf-canvas" aria-hidden>
                 <span
-                  className="rl-wf-bar"
+                  className="rl-wf-clip"
                   style={{
-                    left: `${row.leftPct}%`,
-                    width: `${row.widthPct}%`,
+                    left: row.left,
+                    width: row.width,
                     background: heatColor(row.self),
                     opacity: 0.55 + row.heat * 0.45,
+                    height: `${6 + Math.round(row.heat * 6)}px`,
                   }}
                 />
               </span>
-              <span className="rl-wf-ms">{ms(row.self)}</span>
+              <span className="rl-wf-gutter" data-rl-pin>
+                <span className="rl-wf-rank">#{row.rank}</span>
+                <span className="rl-wf-name">{row.name}</span>
+                {row.wasted && <span className="rl-wf-pip" title="No observable change" />}
+                <span className="rl-wf-ms">{ms(row.self)}</span>
+              </span>
             </button>
           );
         })}
@@ -1088,6 +1132,31 @@ function nearest(interactions: Interaction[], t: number): Interaction | null {
 
 function clamp(v: number, lo: number, hi: number): number {
   return Math.max(lo, Math.min(hi, v));
+}
+
+/** Chronological unique component ids across commits (session replay order). */
+function sessionComponentIds(commits: CommitSummary[]): ComponentId[] {
+  const out: ComponentId[] = [];
+  const seen = new Set<ComponentId>();
+  for (const c of commits) {
+    for (const id of c.componentIds) {
+      if (seen.has(id)) continue;
+      seen.add(id);
+      out.push(id);
+    }
+  }
+  return out;
+}
+
+function uniqueComponentIds(ids: Array<ComponentId | undefined>): ComponentId[] {
+  const out: ComponentId[] = [];
+  const seen = new Set<ComponentId>();
+  for (const id of ids) {
+    if (id === undefined || seen.has(id)) continue;
+    seen.add(id);
+    out.push(id);
+  }
+  return out;
 }
 
 const CHANGED_CAP = 800;

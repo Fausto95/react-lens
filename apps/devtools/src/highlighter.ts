@@ -20,7 +20,7 @@ export function createHighlighter(): Highlighter {
       position: "fixed",
       inset: "0",
       pointerEvents: "none",
-      zIndex: "2147482999",
+      zIndex: "2147483640",
       display: "none",
     } satisfies Partial<CSSStyleDeclaration>);
     document.body.appendChild(el);
@@ -51,9 +51,10 @@ export function createHighlighter(): Highlighter {
       top: `${r.top}px`,
       width: `${r.width}px`,
       height: `${r.height}px`,
-      background: "rgba(167,139,250,0.22)",
-      outline: "1px solid rgba(167,139,250,0.9)",
+      background: "rgba(167,139,250,0.28)",
+      outline: "2px solid rgba(167,139,250,0.95)",
       borderRadius: "2px",
+      boxShadow: "0 0 0 1px rgba(167,139,250,0.35)",
     } satisfies Partial<CSSStyleDeclaration>);
     return b;
   }

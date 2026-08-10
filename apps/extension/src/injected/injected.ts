@@ -66,8 +66,10 @@ window.addEventListener("message", (event: MessageEvent) => {
       "*",
     );
   } else if (data.kind === "highlight") {
-    if (data.componentId === null) highlighter.hide();
-    else highlighter.show(fiber.domNodesOf(data.componentId));
+    if (data.componentId === null) {
+      if (waveTimers.length > 0) return;
+      highlighter.hide();
+    } else highlighter.show(fiber.domNodesOf(data.componentId));
   } else if (data.kind === "replay") {
     replayWave(data.componentIds);
   }
@@ -93,18 +95,23 @@ function cancelWave(): void {
 function replayWave(ids: ReadonlyArray<number>): void {
   cancelWave();
   const capped = ids.slice(0, WAVE_MAX_GROUPS);
-  const groups = capped.map((id) => fiber.domNodesOf(id as never));
-  const step = Math.min(110, WAVE_MAX_MS / Math.max(1, capped.length));
+  const groups = capped
+    .map((id) => fiber.domNodesOf(id as never))
+    .filter((nodes) => nodes.length > 0);
+  if (groups.length === 0) return;
+  const step = Math.min(140, WAVE_MAX_MS / Math.max(1, groups.length));
   const acc: Node[] = [];
-  capped.forEach((_, i) => {
+  acc.push(...groups[0]!);
+  highlighter.show(acc);
+  groups.forEach((nodes, i) => {
+    if (i === 0) return;
     waveTimers.push(
       setTimeout(() => {
-        const nodes = groups[i];
-        if (nodes) acc.push(...nodes);
+        acc.push(...nodes);
         if (acc.length > WAVE_MAX_NODES) acc.splice(0, acc.length - WAVE_MAX_NODES);
         highlighter.show(acc);
       }, i * step),
     );
   });
-  waveTimers.push(setTimeout(cancelWave, capped.length * step + 500));
+  waveTimers.push(setTimeout(cancelWave, groups.length * step + 800));
 }

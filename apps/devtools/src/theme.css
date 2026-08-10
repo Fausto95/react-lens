@@ -659,13 +659,13 @@
   align-items: flex-start !important; padding-top: 10px !important;
   border-bottom: none;
 }
-.rl-tl-compact .rl-tl-label-wf { height: 108px !important; }
-.rl-tl-expanded .rl-tl-label-wf { height: 168px !important; }
+.rl-tl-compact .rl-tl-label-wf { height: 140px !important; }
+.rl-tl-expanded .rl-tl-label-wf { height: 200px !important; }
 
 .rl-tl-scroll { position: relative; flex: 1 1 auto; min-width: 0; overflow-x: auto; overflow-y: hidden; }
 .rl-tl-collapsed .rl-tl-scroll { display: none; }
-.rl-tl-compact .rl-tl-scroll { height: 192px; }
-.rl-tl-expanded .rl-tl-scroll { height: 252px; }
+.rl-tl-compact .rl-tl-scroll { height: 224px; }
+.rl-tl-expanded .rl-tl-scroll { height: 284px; }
 .rl-tl-scroll::-webkit-scrollbar { height: 8px; }
 .rl-tl-scroll::-webkit-scrollbar-thumb { background: var(--rl-border-strong); border-radius: 4px; }
 
@@ -692,8 +692,8 @@
   flex: 1 1 auto; min-height: 0; overflow: hidden;
   display: flex; flex-direction: column; border-bottom: none;
 }
-.rl-tl-compact .rl-tl-track-wf { height: 108px; flex: 0 0 108px; }
-.rl-tl-expanded .rl-tl-track-wf { height: 168px; flex: 0 0 168px; }
+.rl-tl-compact .rl-tl-track-wf { height: 160px; flex: 0 0 160px; }
+.rl-tl-expanded .rl-tl-track-wf { height: 260px; flex: 0 0 260px; }
 
 .rl-tl-int {
   position: absolute; top: 3px; height: 24px; min-width: 3px;
@@ -846,45 +846,155 @@
   margin-left: 1px;
 }
 
-.rl-wf { border-top: none; max-height: none; overflow: hidden; flex: 1; min-height: 0; display: flex; flex-direction: column; }
-.rl-wf-lane { height: 100%; }
-.rl-wf-cols {
-  display: flex; align-items: center; gap: 6px; height: 18px; flex: 0 0 18px;
-  padding: 0 8px; font-size: 9px; text-transform: uppercase; letter-spacing: 0.04em;
-  color: var(--rl-text-faint); border-bottom: 1px solid rgba(35,40,51,0.35);
+.rl-wf {
+  position: relative;
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
-.rl-wf-col-name { flex: 0 0 110px; }
-.rl-wf-col-track { flex: 1; }
-.rl-wf-col-ms { flex: 0 0 40px; text-align: right; }
-.rl-wf-rows { display: flex; flex-direction: column; overflow-y: auto; flex: 1; min-height: 0; }
+.rl-wf-head {
+  flex: 0 0 18px;
+  height: 18px;
+  position: relative;
+  border-bottom: 1px solid rgba(35,40,51,0.35);
+}
+.rl-wf-head-sticky {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 3;
+  display: inline-flex;
+  align-items: center;
+  height: 100%;
+  padding: 0 12px;
+  width: 168px;
+  box-sizing: border-box;
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--rl-text-faint);
+  background: var(--rl-bg-raised);
+  border-right: 1px solid rgba(35,40,51,0.45);
+  will-change: transform;
+  overflow: hidden;
+  white-space: nowrap;
+}
+.rl-wf-rows {
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  overflow-x: hidden;
+  flex: 1;
+  min-height: 0;
+}
 .rl-wf-row {
   -webkit-app-region: no-drag;
-  display: flex; align-items: center; gap: 6px; height: 20px;
-  padding: 0 8px; width: 100%; box-sizing: border-box;
-  background: transparent; border: none; color: inherit; font: inherit; cursor: pointer; text-align: left;
+  position: relative;
+  display: block;
+  /* Must not shrink — otherwise 60+ rows collapse into an illegible stack. */
+  flex: 0 0 28px;
+  height: 28px;
+  min-height: 28px;
+  width: 100%;
+  padding: 0;
+  margin: 0;
+  box-sizing: border-box;
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid rgba(35,40,51,0.25);
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  text-align: left;
+  overflow: hidden;
 }
-.rl-wf-row:nth-child(even) { background: rgba(255,255,255,0.015); }
 .rl-wf-row:hover { background: var(--rl-bg-hover); }
-.rl-wf-row.wasted .rl-wf-bar { box-shadow: 0 0 0 1px var(--rl-suspicious); }
 .rl-wf-row.under-playhead {
   background: rgba(167, 139, 250, 0.1);
   box-shadow: inset 2px 0 0 var(--rl-render);
 }
-.rl-wf-name {
-  flex: 0 0 110px; font-size: 11px; color: var(--rl-text-dim);
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+.rl-wf-canvas {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
 }
-.rl-wf-track { position: relative; flex: 1; height: 6px; background: rgba(255,255,255,0.03); border-radius: 2px; min-width: 0; }
-.rl-wf-bar { position: absolute; top: 0; height: 100%; min-width: 2px; border-radius: 2px; }
+.rl-wf-clip {
+  position: absolute;
+  bottom: 7px;
+  height: 8px;
+  min-width: 4px;
+  max-height: 12px;
+  border-radius: 2px;
+  box-sizing: border-box;
+}
+.rl-wf-row.wasted .rl-wf-clip {
+  box-shadow: 0 0 0 1px var(--rl-suspicious);
+}
+.rl-wf-gutter {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 100%;
+  width: 168px;
+  padding: 0 10px 0 12px;
+  box-sizing: border-box;
+  background: var(--rl-bg-raised);
+  border-right: 1px solid rgba(35,40,51,0.45);
+  pointer-events: none;
+  will-change: transform;
+  overflow: hidden;
+}
+.rl-wf-row:hover .rl-wf-gutter {
+  background: var(--rl-bg-hover);
+}
+.rl-wf-row.under-playhead .rl-wf-gutter {
+  background: color-mix(in srgb, var(--rl-bg-raised) 88%, var(--rl-render));
+  box-shadow: inset 2px 0 0 var(--rl-render);
+}
+.rl-wf-rank {
+  flex: 0 0 auto;
+  font-size: 9px;
+  font-variant-numeric: tabular-nums;
+  color: var(--rl-text-faint);
+  min-width: 22px;
+}
+.rl-wf-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 11px;
+  color: var(--rl-text-dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.rl-wf-row:hover .rl-wf-name { color: var(--rl-text); }
+.rl-wf-pip {
+  flex: 0 0 auto;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--rl-suspicious);
+}
 .rl-wf-ms {
-  flex: 0 0 40px; font-size: 10px; color: var(--rl-text-faint);
-  font-variant-numeric: tabular-nums; text-align: right;
+  flex: 0 0 auto;
+  font-size: 10px;
+  color: var(--rl-text-faint);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  min-width: 36px;
 }
 
 @container timeline (max-width: 640px) {
   .rl-tl-card-dim { display: none; }
   .rl-tl-sub { max-width: 120px; }
-  .rl-wf-name, .rl-wf-col-name { flex-basis: 72px; flex: 0 0 72px; }
+  .rl-wf-gutter,
+  .rl-wf-head-sticky { width: 128px; }
 }
 
 .rl-ab { display: flex; flex-direction: column; gap: 4px; }

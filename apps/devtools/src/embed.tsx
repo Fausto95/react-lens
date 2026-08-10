@@ -29,20 +29,26 @@ function EmbeddedPanel({ runtime }: { runtime: LensRuntime }) {
   const replayWave = (ids: ComponentId[]) => {
     cancelWave();
     const capped = ids.slice(0, WAVE_MAX_GROUPS);
-    const groups = capped.map((id) => runtime.domNodesOf(id));
-    const step = Math.min(110, WAVE_MAX_MS / Math.max(1, capped.length));
+    const groups = capped
+      .map((id) => runtime.domNodesOf(id))
+      .filter((nodes) => nodes.length > 0);
+    if (groups.length === 0) return;
+    const step = Math.min(140, WAVE_MAX_MS / Math.max(1, groups.length));
     const acc: Node[] = [];
-    capped.forEach((_, i) => {
+    // Paint first group immediately so replay feedback isn't delayed a frame.
+    acc.push(...groups[0]!);
+    highlighter.show(acc);
+    groups.forEach((nodes, i) => {
+      if (i === 0) return;
       waveTimers.current.push(
         setTimeout(() => {
-          const nodes = groups[i];
-          if (nodes) acc.push(...nodes);
+          acc.push(...nodes);
           if (acc.length > WAVE_MAX_NODES) acc.splice(0, acc.length - WAVE_MAX_NODES);
           highlighter.show(acc);
         }, i * step),
       );
     });
-    waveTimers.current.push(setTimeout(cancelWave, capped.length * step + 500));
+    waveTimers.current.push(setTimeout(cancelWave, groups.length * step + 800));
   };
   useEffect(() => () => cancelWave(), []); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -78,8 +84,13 @@ function EmbeddedPanel({ runtime }: { runtime: LensRuntime }) {
       onReplayCommit={replayWave}
       {...(edit ? { edit } : {})}
       onHighlight={(id: ComponentId | null) => {
-        if (id === null) highlighter.hide();
-        else highlighter.show(runtime.domNodesOf(id));
+        // Don't let tree mouse-leave wipe an in-flight update wave.
+        if (id === null) {
+          if (waveTimers.current.length > 0) return;
+          highlighter.hide();
+          return;
+        }
+        highlighter.show(runtime.domNodesOf(id));
       }}
       onToggleRecording={() => {
         if (recording) runtime.stop();
