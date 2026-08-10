@@ -41,6 +41,9 @@ function ExtensionPanel() {
       onRequestSnapshot={(renderId) =>
         portRef.current?.postMessage({ kind: "snapshot-request", renderId } satisfies PortMessage)
       }
+      onHighlight={(componentId) =>
+        portRef.current?.postMessage({ kind: "highlight", componentId } satisfies PortMessage)
+      }
     />
   );
 }

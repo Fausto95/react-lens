@@ -47,6 +47,9 @@ function connect(): void {
     } else if (msg.kind === "snapshot-request") {
       const toPage: ContentToPage = { source: CONTENT_SOURCE, kind: "snapshot-request", renderId: msg.renderId };
       window.postMessage(toPage, "*");
+    } else if (msg.kind === "highlight") {
+      const toPage: ContentToPage = { source: CONTENT_SOURCE, kind: "highlight", componentId: msg.componentId };
+      window.postMessage(toPage, "*");
     } else if (msg.kind === "panel-ready") {
       // A panel is listening: replay everything captured so far, then stream.
       panelReady = true;

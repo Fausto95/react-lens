@@ -3,6 +3,7 @@ import { createFiberBridge } from "@react-lens/fiber";
 import { createInstrumentation } from "@react-lens/instrumentation";
 import type { EventsBatchMessage } from "@react-lens/protocol";
 import { PAGE_SOURCE, CONTENT_SOURCE, type ContentToPage } from "../transport.js";
+import { createHighlighter } from "./highlighter.js";
 
 /**
  * Runs in the MAIN world at document_start (injected natively via
@@ -16,36 +17,14 @@ type Frame = EventsBatchMessage["payload"];
 const serializer = createSerializer();
 const fiber = createFiberBridge(globalThis);
 const instrumentation = createInstrumentation({ fiber, serializer });
-
-// Reversible diagnostic surface, readable from the page console as
-// `window.__REACT_LENS_DEBUG__`.
-interface LensDebug {
-  stubPresent: boolean;
-  chained: boolean;
-  framesProduced: number;
-  totalInstances: number;
-  framesPosted: number;
-}
-const debug: LensDebug = {
-  stubPresent: false,
-  chained: false,
-  framesProduced: 0,
-  totalInstances: 0,
-  framesPosted: 0,
-};
-(globalThis as unknown as { __REACT_LENS_DEBUG__: LensDebug }).__REACT_LENS_DEBUG__ = debug;
+const highlighter = createHighlighter();
 
 function post(frame: Frame): void {
-  debug.framesPosted++;
   window.postMessage({ source: PAGE_SOURCE, kind: "frame", frame }, "*");
 }
 
 function start(): void {
   if (instrumentation.isRecording()) return;
-  const hook = (globalThis as unknown as {
-    __REACT_DEVTOOLS_GLOBAL_HOOK__?: { _lensStub?: boolean; _lensChained?: boolean };
-  }).__REACT_DEVTOOLS_GLOBAL_HOOK__;
-  debug.stubPresent = hook?._lensStub === true;
   instrumentation.start({
     captureDOM: true,
     interactionWindowMs: 200,
@@ -54,13 +33,8 @@ function start(): void {
     // snapshot-request handler); streaming them inline melts large apps, whose
     // single mount commit can serialize tens of MB across postMessage.
     streamSnapshots: false,
-    onFrame: (frame) => {
-      debug.framesProduced++;
-      debug.totalInstances += frame.instances.length;
-      post(frame);
-    },
+    onFrame: (frame) => post(frame),
   });
-  debug.chained = hook?._lensChained === true;
   window.postMessage(
     { source: PAGE_SOURCE, kind: "hello", reactVersion: fiber.reactVersion() },
     "*",
@@ -91,5 +65,8 @@ window.addEventListener("message", (event: MessageEvent) => {
       },
       "*",
     );
+  } else if (data.kind === "highlight") {
+    if (data.componentId === null) highlighter.hide();
+    else highlighter.show(fiber.domNodesOf(data.componentId));
   }
 });

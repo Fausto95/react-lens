@@ -1,4 +1,4 @@
-import type { EventsBatchMessage, RenderId } from "@react-lens/protocol";
+import type { EventsBatchMessage, RenderId, ComponentId } from "@react-lens/protocol";
 
 /** Envelope for page(MAIN) ↔ content(ISOLATED) hops over window.postMessage. */
 export const PAGE_SOURCE = "react-lens/page";
@@ -14,7 +14,9 @@ export type ContentToPage =
   | { source: typeof CONTENT_SOURCE; kind: "record"; recording: boolean }
   // Panel asked for the heavy snapshot of a specific render (built lazily,
   // since snapshots aren't streamed inline for large apps).
-  | { source: typeof CONTENT_SOURCE; kind: "snapshot-request"; renderId: RenderId };
+  | { source: typeof CONTENT_SOURCE; kind: "snapshot-request"; renderId: RenderId }
+  // Panel hovered/selected a component: paint (id) or clear (null) its overlay.
+  | { source: typeof CONTENT_SOURCE; kind: "highlight"; componentId: ComponentId | null };
 
 /** Port protocol for content ↔ background ↔ panel hops. */
 export type PortMessage =
@@ -28,7 +30,9 @@ export type PortMessage =
   // panel → page: fetch one render's heavy snapshot on demand.
   | { kind: "snapshot-request"; renderId: RenderId }
   // page → panel: the requested snapshot, ingested into the trace store.
-  | { kind: "snapshot"; frame: EventsBatchMessage["payload"] };
+  | { kind: "snapshot"; frame: EventsBatchMessage["payload"] }
+  // panel → page: paint (id) or clear (null) a component's DOM overlay.
+  | { kind: "highlight"; componentId: ComponentId | null };
 
 export const PANEL_PORT_PREFIX = "react-lens/panel:";
 export const PAGE_PORT_NAME = "react-lens/page";
