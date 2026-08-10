@@ -679,24 +679,6 @@
 }
 .rl-tl-nav { display: flex; align-items: center; gap: 2px; flex: 0 0 auto; }
 .rl-tl-nav .rl-icon-btn { width: 24px; height: 24px; }
-.rl-tl-play-sel {
-  position: relative;
-}
-.rl-tl-play-sel .rl-tl-play-sel-mark {
-  position: absolute;
-  left: 5px;
-  right: 5px;
-  bottom: 3px;
-  height: 1.5px;
-  border-radius: 1px;
-  background: currentColor;
-  opacity: 0.55;
-  pointer-events: none;
-}
-.rl-tl-play-sel:disabled {
-  opacity: 0.35;
-  cursor: not-allowed;
-}
 .rl-zoom-sep { width: 1px; height: 14px; background: var(--rl-border-strong); margin: 0 3px; }
 .rl-tl-fit-glyph { font-size: 11px; line-height: 1; }
 

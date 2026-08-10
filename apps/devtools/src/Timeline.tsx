@@ -288,26 +288,13 @@ export function Timeline({
       stop();
       return;
     }
-    // Transport play scrubs the whole session and flashes an update wave.
+    // Scrub forward from the playhead (or session start when live) and flash an update wave
+    // for only the components that commit from that point onward.
     const from = cursor.mode === "historical" ? cursor.t : bounds.t0;
-    const ids = sessionComponentIds(commits);
+    const ids = sessionComponentIds(commits, from);
     if (ids.length > 0) onReplay?.(ids);
     play(from, bounds.t1, false);
   }, [playing, stop, play, cursor, bounds, commits, onReplay]);
-
-  const playSelection = useCallback(() => {
-    if (playing) {
-      stop();
-      return;
-    }
-    if (!selected) return;
-    const ids =
-      selected.metrics.componentIds.length > 0
-        ? selected.metrics.componentIds
-        : uniqueComponentIds(selected.renderIds.map((id) => store.getRender(id)?.componentId));
-    if (ids.length > 0) onReplay?.(ids);
-    play(selected.start, selected.end, false);
-  }, [playing, stop, selected, store, onReplay, play]);
 
   // Keyboard: T, L, [ ], Space, arrows
   useEffect(() => {
@@ -435,26 +422,10 @@ export function Timeline({
           <button
             className={`rl-icon-btn${playing ? " active" : ""}`}
             onClick={togglePlay}
-            title={playing ? "Pause (Space)" : "Play session from playhead (Space)"}
-            aria-label={playing ? "Pause" : "Play session"}
+            title={playing ? "Pause (Space)" : "Play from playhead (Space)"}
+            aria-label={playing ? "Pause" : "Play from playhead"}
           >
             {playing ? <IconPause size={12} /> : <IconPlay size={12} />}
-          </button>
-          <button
-            className="rl-icon-btn rl-tl-play-sel"
-            onClick={playSelection}
-            disabled={!selected}
-            title={
-              selected
-                ? playing
-                  ? "Pause"
-                  : `Play selected · ${selected.label}`
-                : "Select an interaction to play"
-            }
-            aria-label={selected ? "Play selected interaction" : "Play selected interaction (none selected)"}
-          >
-            <IconPlay size={11} />
-            <span className="rl-tl-play-sel-mark" aria-hidden />
           </button>
           <button
             className="rl-icon-btn"
@@ -1067,20 +1038,24 @@ function packPhaseBars(
 
     if (ranked.length === 0) continue;
 
-    const maxSelf = Math.max(1e-6, ...ranked.map((a) => a.self));
+    const maxSelf = Math.max(0, ...ranked.map((a) => a.self));
     const act0 = Math.min(...ranked.map((a) => a.t0));
     const act1 = Math.max(...ranked.map((a) => a.t1));
     const actSpan = Math.max(act1 - act0, 1e-6);
 
     const pad = Math.min(6, phaseWidth * 0.04);
     const innerW = Math.max(4, phaseWidth - pad * 2);
+    const n = ranked.length;
+    // Lone / sparse phases should use the column — don't leave a truncated chip
+    // in a sea of empty track (zero-cost renders used to collapse to MIN_BAR_PX).
+    const shareFloor =
+      n === 1
+        ? innerW * 0.92
+        : Math.min(innerW, Math.max(MIN_BAR_PX, innerW / (n + 0.75)));
 
     const laid = ranked.map((item) => {
-      const heat = item.self / maxSelf;
-      const width = Math.min(
-        innerW,
-        Math.max(Math.min(MIN_BAR_PX, innerW), heat * innerW * 0.92),
-      );
+      const heat = maxSelf <= 0 ? 1 : item.self / maxSelf;
+      const width = Math.min(innerW, Math.max(shareFloor, heat * innerW * 0.92));
       const rel = (item.t0 - act0) / actSpan;
       const maxLeft = innerW - width;
       const left = phaseLeft + pad + Math.max(0, Math.min(Math.max(0, maxLeft), rel * maxLeft));
@@ -1381,27 +1356,17 @@ function clamp(v: number, lo: number, hi: number): number {
   return Math.max(lo, Math.min(hi, v));
 }
 
-/** Chronological unique component ids across commits (session replay order). */
-function sessionComponentIds(commits: CommitSummary[]): ComponentId[] {
+/** Chronological unique component ids across commits from `fromT` onward. */
+function sessionComponentIds(commits: CommitSummary[], fromT = -Infinity): ComponentId[] {
   const out: ComponentId[] = [];
   const seen = new Set<ComponentId>();
   for (const c of commits) {
+    if (c.timestamp + 0.01 < fromT) continue;
     for (const id of c.componentIds) {
       if (seen.has(id)) continue;
       seen.add(id);
       out.push(id);
     }
-  }
-  return out;
-}
-
-function uniqueComponentIds(ids: Array<ComponentId | undefined>): ComponentId[] {
-  const out: ComponentId[] = [];
-  const seen = new Set<ComponentId>();
-  for (const id of ids) {
-    if (id === undefined || seen.has(id)) continue;
-    seen.add(id);
-    out.push(id);
   }
   return out;
 }
