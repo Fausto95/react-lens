@@ -6,8 +6,6 @@ type Path = Array<string | number>;
 /** Confidence that a function change is behaviorally meaningful: unknown. */
 const FN_CONFIDENCE = 0.5;
 
-const REFISH = new Set(["object", "array", "map", "set"]);
-
 /**
  * Recursively compares two serialized values, emitting a flat list of changes
  * keyed by path. Emits a single entry for leaves; for containers, emits a
@@ -87,6 +85,9 @@ export function compareValue(
     case "set":
       // Structural map/set diff is deferred; report reference change only.
       return [{ path, kind: "REFERENCE_ONLY_CHANGED", before, after, confidence: 1 }];
+    default:
+      // Exhaustive over SerializedValue["k"]; keeps the compiler satisfied.
+      return [{ path, kind: "UNCHANGED", confidence: 1 }];
   }
 }
 

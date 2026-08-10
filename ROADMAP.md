@@ -19,14 +19,16 @@ Legend: ✅ done · 🚧 in progress · ⬜ not started
 - ✅ **`protocol`** — branded IDs, `SerializedValue`, `LensEvent`, messages, snapshots
 - ✅ **`serializer`** — safe serialization, reference-identity table, never-throw (16 tests)
 - ✅ **`diff-engine`** — universal diff, value + DOM, `ChangeKind` classification (12 tests)
-- 🚧 **`trace-engine`** — normalized event log, ring buffers, queries, subscriptions
-- ⬜ **`causality`** — reconstruct `causedBy`, why-did-this-render (3 levels), confidence
+- ✅ **`trace-engine`** — normalized log, ring buffers, per-component history, subscriptions (10 tests)
+- ✅ **`causality`** — why-did-this-render (3 levels), confidence, no-observable-change verdict (5 tests)
 - ⬜ **`diagnostics`** — Doctor rules over `(ast, runtimeEvidence)` via OXC (interface first, rules later)
 - ⬜ **`source-maps`** — runtime component ↔ source location
 
+Core pure packages total: **43 tests passing**, full `tsc -b` clean.
+
 ## Page-side (runs in the inspected page)
 
-- ⬜ **`fiber`** — owned React hook, DOM↔Fiber↔Component, commit capture, compiler status
+- 🚧 **`fiber`** — owned React hook, DOM↔Fiber↔Component, commit capture, compiler status
 - ⬜ **`instrumentation`** — commit + browser events → `LensEvent`, batching, overhead budget
 
 ## Apps
