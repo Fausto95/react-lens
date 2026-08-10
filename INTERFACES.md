@@ -156,6 +156,15 @@ interface DOMNodeSnapshot {
 }
 ```
 
+### Time travel
+
+```ts
+// The panel never sends values — only which render's captured raw state the
+// page should restore (DESIGN §10.5).
+interface TimeTravelEntry { componentId: ComponentId; renderId: RenderId; }
+interface TimeTravelResult { applied: number; failed: number; supported: boolean; }
+```
+
 ---
 
 ## serializer
@@ -228,6 +237,14 @@ interface FiberBridge {
   // Commit callbacks. Cheap: hand back ids + timing, not serialized data.
   onCommit(cb: (commit: CommitInfo) => void): Dispose;
   onUnmount(cb: (id: ComponentId) => void): Dispose;
+
+  // Live edit / time travel (dev-build renderer only; see DESIGN §10.5).
+  canEditValues(): boolean;
+  setProp(id: ComponentId, path: Array<string | number>, value: unknown): boolean;
+  setHookState(id: ComponentId, hookIndex: number, path: Array<string | number>, value: unknown): boolean;
+  setClassState(id: ComponentId, state: unknown): boolean;
+  hasFiber(id: ComponentId): boolean;
+  captureLiveState(id: ComponentId): LiveState | undefined; // raw refs, baseline + shape guard
 }
 
 type Dispose = () => void;
@@ -251,12 +268,22 @@ interface Instrumentation {
   start(config: CaptureConfig): void;
   stop(): void;
   isRecording(): boolean;
+  snapshot(renderId: RenderId): RenderSnapshot | undefined; // on-demand (large apps)
+  timeTravel: TimeTravelController;  // page-side raw-state history (DESIGN §10.5)
+}
+
+interface TimeTravelController {
+  supported(): boolean;              // renderer exposes the override API
+  isActive(): boolean;               // events suppressed while true
+  apply(entries: TimeTravelEntry[]): TimeTravelResult;
+  goLive(): TimeTravelResult;        // restore baselines, resume recording
 }
 
 interface CaptureConfig {
   captureDOM: boolean;              // v1: true
   ringBuffer: { maxEvents: number; maxRendersPerComponent: number };
   serialize: Partial<SerializeOptions>;
+  captureStateHistory?: boolean;    // raw time-travel history (default true)
   onFrame: (frame: EventsBatch) => void;   // wired to postMessage transport
 }
 
@@ -286,11 +313,22 @@ interface TraceStore {
   snapshot(renderId: RenderId): RenderSnapshot | undefined;
   instance(id: ComponentId): ComponentInstance | undefined;
 
+  // Historical resolution (time travel).
+  renderAtOrBefore(id: ComponentId, t: number): RenderEvent | undefined;
+  snapshotAtOrBefore(id: ComponentId, t: number): RenderSnapshot | undefined;
+  commitAt(t: number): CommitSummary | undefined;
+
   // Narrow subscriptions — panel subscribes to slices, not the whole log.
   subscribe(sel: TraceSelector, cb: () => void): Dispose;
 
   stats(): { events: number; renders: number; bytesApprox: number };
 }
+
+// Pure apply-set computation for real time travel (DESIGN §10.5):
+// which (component, render) pairs constitute the page state at time t,
+// and the delta against what was last applied.
+function applySetAt(store: TraceStore, t: number): Map<ComponentId, RenderId>;
+function diffApplySet(prev: ReadonlyMap<ComponentId, RenderId>, next: ReadonlyMap<ComponentId, RenderId>): TimeTravelEntry[];
 
 type TraceSelector =
   | { kind: "component"; id: ComponentId }

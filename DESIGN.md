@@ -249,6 +249,44 @@ pure, test-first (red before green, tests in a separate commit).
 
 ---
 
+## 10.5 Time travel — raw values stay page-side
+
+Scrubbing the timeline playhead restores the inspected app's real state (Redux
+DevTools semantics), not a re-enactment. Three decisions make it sound:
+
+1. **Raw values never leave the page.** `SerializedValue` is lossy by design
+   and has no inverse. Instead, the page-side instrumentation keeps a bounded
+   ring (`renderId → raw state/reducer hook values + class state`, 5000
+   entries, references not clones, dev builds only). The panel computes only
+   *which* `(componentId, renderId)` pairs constitute time t —
+   `applySetAt(store, t)` over `renderAtOrBefore` — and sends that apply set;
+   the page looks up raw values and writes them back via the renderer's
+   dev-only `overrideHookState` (empty path = whole-value replace, raw
+   hook-list index) and, for classes, fiber `memoizedState`/`baseState`
+   rewrite + `forceUpdate`.
+
+2. **Recording pauses while traveling** (suppressed at the instrumentation
+   source, not tag-and-filtered). The restore flush commits through the same
+   reconciler the bridge observes, in a microtask *after* the apply loop — a
+   per-call flag can't mark it. A mode flag can: while active, no commit or
+   effect events are emitted, so the timeline stays frozen and there is no
+   feedback loop. Go-live restores per-component live baselines captured on
+   first touch, then resumes recording one macrotask later.
+
+3. **Deltas only.** The panel controller rAF-coalesces scrub positions and
+   diffs the apply set against what was last applied (`diffApplySet`), so a
+   drag re-applies just the components whose target render changed.
+
+Known limits (documented in the toggle tooltip): only `useState`/`useReducer`/
+class state rewinds — not refs, external stores (`useSyncExternalStore`),
+module state, uncontrolled inputs, or server state; effects re-run against
+rewound values; components mounted after t stay mounted (the tree dims them);
+production React builds have no override API, so the toggle is disabled. In
+the extension, the content script auto-sends go-live when the panel port
+disconnects so a closed panel never leaves the app in the past.
+
+---
+
 ## 11. Stack
 
 TypeScript (strict; no `any` in public APIs, `unknown` + narrow), React 19 +

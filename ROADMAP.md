@@ -72,7 +72,16 @@ with multiple **projections** rather than a raw fiber tree.
   historical Inspector (◷); A/B marks → Compare diff; compressed idle gaps; anomaly
   markers; play mode + whole-timeline/scoped replay; per-component render waterfall
   (expanded). Deferred to later phases: Canvas/worker-LOD, screenshots/thumbnails, full
-  track stack, Instant Replay, tree-topology patches, session compare/HMR/story mode.
+  track stack, tree-topology patches, session compare/HMR/story mode.
+- ✅ **Real time travel** (supersedes "Instant Replay") — scrubbing the playhead
+  restores the page's actual state, Redux-DevTools-style: page-side raw-state ring
+  (`instrumentation.timeTravel`, dev builds only) applied via `overrideHookState`/class
+  `forceUpdate`; panel computes delta apply-sets (`applySetAt`/`diffApplySet`); recording
+  pauses while traveling; go-live restores live baselines. Timeline rewind toggle (on by
+  default when supported), purple playhead while driving the page, Space-play = true
+  state replay. Extension channel with auto-go-live on panel disconnect. Limits: state/
+  reducer/class state only (no refs/external stores/uncontrolled inputs), effects re-run,
+  no unmount of later-born components (DESIGN §10.5).
 - ✅ **`source-maps`** — resolve compiled `_debugStack` coords to original source
 - ✅ **`diagnostics` (Doctor v1)** — impact-ranked rules over runtime evidence; inspector section + tree ⚕ badges + issue count
 - ⬜ **Effect debugger** — effect-execution events, run/cleanup counts, loop detection
