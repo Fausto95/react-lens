@@ -60,7 +60,10 @@ export function inspectHooks(fiber: Fiber): RawHook[] {
   let index = 0;
   // Guard against corrupt/cyclic lists.
   while (node && index < 200) {
-    hooks.push(classify(node, index));
+    // Skip the React Compiler's memo-cache hook — it's plumbing, not a user hook.
+    if (!isMemoCache(node.memoizedState)) {
+      hooks.push(classify(node, index));
+    }
     node = node.next;
     index++;
   }
@@ -161,6 +164,10 @@ function isRefLike(state: unknown): boolean {
     "current" in state &&
     Object.keys(state as object).length === 1
   );
+}
+
+function isMemoCache(state: unknown): boolean {
+  return Array.isArray(state) && state.some((x) => x === REACT_MEMO_CACHE_SENTINEL);
 }
 
 function isMemoTuple(state: unknown): boolean {

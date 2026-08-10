@@ -436,25 +436,14 @@ function sourceOf(fiber: Fiber): SourceLocation | undefined {
 }
 
 /**
- * Best-effort React Compiler detection. React 19 does not yet expose a stable
- * public marker; we look for the memo-cache hook signature the Compiler emits.
- * When unknown we report `compiled: false` rather than guessing (DESIGN §7).
+ * React Compiler detection. The compiler emits `useMemoCache`, which stores its
+ * cache on `fiber.updateQueue.memoCache` — a reliable, direct signal that the
+ * component was compiled. When absent we report `compiled: false` (DESIGN §7).
  */
 function detectCompilerStatus(fiber: Fiber): CompilerStatus {
-  const state = fiber.memoizedState as { memoizedState?: unknown } | null;
-  // The compiler's useMemoCache stores a fixed-size array as the first hook.
-  const firstHookValue = state?.memoizedState;
-  const compiled = Array.isArray(firstHookValue) && "$" in (firstHookValue as object) === false
-    ? looksLikeMemoCache(firstHookValue as unknown[])
-    : false;
+  const queue = fiber.updateQueue as { memoCache?: unknown } | null;
+  const compiled = queue != null && queue.memoCache != null;
   return { compiled, memoized: compiled };
-}
-
-function looksLikeMemoCache(arr: unknown[]): boolean {
-  // useMemoCache initializes every slot to a shared sentinel symbol.
-  if (arr.length === 0) return false;
-  const sentinel = arr[0];
-  return typeof sentinel === "symbol" || arr.every((x) => x === arr[0]);
 }
 
 function traverse(root: Fiber, visit: (f: Fiber) => void, stopAtHost = false): void {

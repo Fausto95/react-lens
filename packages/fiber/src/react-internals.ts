@@ -30,6 +30,7 @@ export interface Fiber {
   memoizedProps: unknown;
   memoizedState: unknown;
   pendingProps: unknown;
+  updateQueue: unknown;
   dependencies: unknown;
   flags: number;
   alternate: Fiber | null;
