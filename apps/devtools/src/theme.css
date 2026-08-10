@@ -333,6 +333,7 @@
 }
 .rl-btn:hover { background: var(--rl-bg-active); }
 .rl-btn.rec.active { color: var(--rl-severe); border-color: var(--rl-severe); }
+.rl-overlay-toggle.active { color: var(--rl-render); border-color: rgba(167,139,250,0.5); background: rgba(167,139,250,0.12); }
 
 /* Recording toggle — pill with a pulsing dot when live */
 .rl-rec {

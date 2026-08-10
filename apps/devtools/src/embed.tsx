@@ -4,11 +4,15 @@ import type { ComponentId } from "@react-lens/protocol";
 import { Panel } from "./Panel.js";
 import type { LensRuntime } from "./runtime.js";
 import { createHighlighter } from "./highlighter.js";
+import { createRenderOverlay } from "./renderOverlay.js";
 
 function EmbeddedPanel({ runtime }: { runtime: LensRuntime }) {
   const [recording, setRecording] = useState(true);
+  const [overlayOn, setOverlayOn] = useState(false);
   const highlighter = useMemo(() => createHighlighter(), []);
+  const overlay = useMemo(() => createRenderOverlay(runtime), [runtime]);
   useEffect(() => () => highlighter.dispose(), [highlighter]);
+  useEffect(() => () => overlay.dispose(), [overlay]);
 
   const edit = useMemo(
     () =>
@@ -33,6 +37,12 @@ function EmbeddedPanel({ runtime }: { runtime: LensRuntime }) {
       causality={runtime.causality}
       recording={recording}
       embedded
+      overlayEnabled={overlayOn}
+      onToggleOverlay={() => {
+        if (overlayOn) overlay.disable();
+        else overlay.enable();
+        setOverlayOn((v) => !v);
+      }}
       {...(edit ? { edit } : {})}
       onHighlight={(id: ComponentId | null) => {
         if (id === null) highlighter.hide();

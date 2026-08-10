@@ -1,5 +1,5 @@
 import { createSerializer } from "@react-lens/serializer";
-import { createFiberBridge } from "@react-lens/fiber";
+import { createFiberBridge, type CommitObservation, type Dispose } from "@react-lens/fiber";
 import { createInstrumentation, type Instrumentation } from "@react-lens/instrumentation";
 import { TraceStore } from "@react-lens/trace-engine";
 import { createCausality, type Causality } from "@react-lens/causality";
@@ -13,6 +13,8 @@ export interface LensRuntime {
   ignoreContainer(node: Node): void;
   /** Live DOM nodes for a component — used for page highlighting (embedded). */
   domNodesOf(id: ComponentId): Node[];
+  /** Subscribe to commits (for the render overlay). Embedded only. */
+  onCommit(cb: (commit: CommitObservation) => void): Dispose;
   /** Whether live value editing is available (dev-build renderer). */
   canEditValues(): boolean;
   setProp(id: ComponentId, path: Array<string | number>, value: unknown): boolean;
@@ -48,6 +50,7 @@ export function createEmbeddedRuntime(): LensRuntime {
     instrumentation,
     ignoreContainer: (node) => fiber.ignoreContainer(node),
     domNodesOf: (id) => fiber.domNodesOf(id),
+    onCommit: (cb) => fiber.onCommit(cb),
     canEditValues: () => fiber.canEditValues(),
     setProp: (id, path, value) => fiber.setProp(id, path, value),
     setHookState: (id, hookIndex, path, value) => fiber.setHookState(id, hookIndex, path, value),

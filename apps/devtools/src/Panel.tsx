@@ -17,6 +17,9 @@ export interface PanelProps {
   onHighlight?: (id: ComponentId | null) => void;
   /** Live value editing; omit to make the inspector read-only. */
   edit?: EditApi;
+  /** Render-overlay toggle (embedded only). */
+  overlayEnabled?: boolean;
+  onToggleOverlay?: () => void;
 }
 
 export function Panel({
@@ -27,6 +30,8 @@ export function Panel({
   embedded,
   onHighlight,
   edit,
+  overlayEnabled,
+  onToggleOverlay,
 }: PanelProps) {
   useTraceVersion(store, { kind: "global" });
   const [selected, setSelected] = useState<ComponentId | null>(null);
@@ -44,6 +49,16 @@ export function Panel({
           <span className="rl-dot">◈</span> React Lens
         </span>
         <span className="rl-spacer" />
+        {onToggleOverlay && (
+          <button
+            className={`rl-btn rl-overlay-toggle${overlayEnabled ? " active" : ""}`}
+            onClick={onToggleOverlay}
+            title="Toggle render overlay"
+            aria-pressed={overlayEnabled}
+          >
+            ⚡ Renders
+          </button>
+        )}
         <button
           className={`rl-rec${recording ? " active" : ""}`}
           onClick={onToggleRecording}
