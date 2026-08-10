@@ -187,7 +187,10 @@ describe("streaming", () => {
   });
 
   it("anthropic: emits text deltas and accumulates input_json_delta", async () => {
-    const ev = (type: string, data: unknown) => `event: ${type}\ndata: ${JSON.stringify(data)}\n\n`;
+    // Real Anthropic SSE carries the event type in both the `event:` line and
+    // the JSON payload's `type` field; the parser reads the latter.
+    const ev = (type: string, data: Record<string, unknown>) =>
+      `event: ${type}\ndata: ${JSON.stringify({ type, ...data })}\n\n`;
     mockFetchOnce(
       sseResponse([
         ev("message_start", { message: {} }),
