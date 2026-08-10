@@ -40,6 +40,8 @@ export interface Fiber {
   treeBaseDuration?: number;
   _debugSource?: { fileName: string; lineNumber: number; columnNumber?: number };
   _debugOwner?: Fiber | null;
+  /** React 19: an Error capturing the element's JSX creation site. */
+  _debugStack?: unknown;
 }
 
 export interface FiberRoot {

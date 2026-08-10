@@ -430,8 +430,40 @@ function nearestComponentAncestor(fiber: Fiber | null): Fiber | null {
 }
 
 function sourceOf(fiber: Fiber): SourceLocation | undefined {
+  // Older React exposed _debugSource directly (the definition site).
   const dbg = fiber._debugSource;
   if (dbg) return { file: dbg.fileName, line: dbg.lineNumber, column: dbg.columnNumber ?? 0 };
+  // React 19: parse the JSX creation site out of the captured _debugStack.
+  const stack = stackString(fiber._debugStack);
+  if (stack) return parseStackSource(stack);
+  return undefined;
+}
+
+function stackString(debugStack: unknown): string | undefined {
+  if (typeof debugStack === "string") return debugStack;
+  if (debugStack && typeof debugStack === "object" && "stack" in debugStack) {
+    const s = (debugStack as { stack?: unknown }).stack;
+    return typeof s === "string" ? s : undefined;
+  }
+  return undefined;
+}
+
+const SKIP_FRAME = /node_modules|react-dom|\breact\b\/|\/@|react_|chunk-|react-refresh|<anonymous>/;
+
+/** Best-effort: first app-owned frame in a captured stack → file:line:col. */
+function parseStackSource(stack: string): SourceLocation | undefined {
+  for (const line of stack.split("\n")) {
+    if (SKIP_FRAME.test(line)) continue;
+    const m = /\(?((?:https?:\/\/[^\s)]+?)|(?:\/[^\s)]+?)):(\d+):(\d+)\)?\s*$/.exec(line);
+    if (!m) continue;
+    let file = m[1]!;
+    try {
+      file = new URL(file).pathname;
+    } catch {
+      // already a path
+    }
+    return { file: file.split("?")[0]!, line: Number(m[2]), column: Number(m[3]) };
+  }
   return undefined;
 }
 

@@ -56,22 +56,24 @@ The expanded plan reframes the tree as the centerpiece: one unified graph engine
 with multiple **projections** rather than a raw fiber tree.
 
 - ✅ **`tree`** — semantic ownership tree, repeated-component grouping, ancestor-preserving projection filter, flatten to virtual rows (6 tests)
-- ✅ **Tree pane** — Components / Changed / Potential-Waste modes, flame bars + telemetry, expand/collapse, selection→inspector, **bidirectional hover→page highlight**, resizable dock
-- ⬜ **`graph`** — unified `GraphNode`/`GraphEdge` model + more projections (causality, dependencies, context, queries); Focus Lens, Tree Diff, Freeze Frame, Update Wave
-- ⬜ **Row virtualization + tree worker** — needed for 10k+ node apps (current pane renders all visible rows directly)
-- ⬜ **Render overlay** on the page (React-Scan-style heat + counts)
-- ⬜ **⌘K command palette** + structured search language (`renders:>20`, `context:X`, `visual-change:false`)
+- ✅ **Tree pane** — Components / Changed / Potential-Waste modes, flame bars + telemetry, expand/collapse, selection→inspector, **bidirectional hover→page highlight**, resizable dock, **row virtualization**
+- ✅ **`graph`** — unified `GraphNode`/`GraphEdge` model + ownership/causality/context projections, `focus()` Focus Lens (7 tests); wired into a Relations inspector section with click-to-navigate
+- ✅ **Render overlay** — React-Scan-style heat flashes + cumulative counts, `⚡ Renders` toggle
+- ✅ **⌘K command palette** + structured search language (`renders:>20`, `compiled:false`, `visual-change:false`; parser has 7 tests)
+- ✅ **Compiler detection** — via `fiber.updateQueue.memoCache` (the reliable signal); shown as ◆ badges
+- ✅ **Source locations** — best-effort from React 19 `_debugStack` (creation site)
+- ⬜ **Tree Diff / Freeze Frame / Update Wave** — need timeline + session-recording infra
 - ⬜ **Effect debugger** — effect-execution events, run/cleanup counts, loop detection
 - ⬜ **Doctor** (`diagnostics` + `source-maps` via OXC), then Network, Sessions, Agent layer
 
 ## Known follow-ups
 
-- **Compiler detection.** The playground has the React Compiler enabled, yet
-  the panel reports components as "not compiled". Either the babel plugin isn't
-  transforming or the memo-cache heuristic in `fiber` is too weak — investigate
-  (DESIGN §7 flagged this risk). Until resolved, compiled status is best-effort.
-- **`_debugSource`** is absent in React 19 production-ish builds, so source
-  locations may be unavailable; needs a source-map path.
+- **Source locations are best-effort.** React 19 dropped `_debugSource`; we parse
+  the `_debugStack` creation site, so it points at the JSX usage site and the
+  line reflects the compiled module (offset by the React Compiler transform).
+  Definition-site resolution needs a real source-map step (part of the Doctor slice).
+- **Tree worker** — virtualization mounts few rows, but grouping/projection/query
+  still run on the main thread; move to a worker for very large apps.
 - Extract `ui`/`icons`; add the Doctor (`diagnostics` + `source-maps`) slice.
 
 ## North star
