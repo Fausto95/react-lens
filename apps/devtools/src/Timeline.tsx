@@ -385,53 +385,6 @@ export function Timeline({
     play(from, bounds.t1, false);
   }, [playing, stop, play, cursor, bounds, commits, onReplay, travel?.on]);
 
-  // Keyboard: T, L, F, [ ], Space, arrows
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      const el = document.activeElement;
-      if (el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA")) return;
-      if (e.metaKey || e.ctrlKey || e.altKey) return;
-      if (e.key === "t" || e.key === "T") setMode((m) => NEXT_MODE[m]);
-      else if (e.key === "l" || e.key === "L") onCursor({ t: bounds.t1, mode: "live" });
-      else if (e.key === "f" || e.key === "F") {
-        if (selected) fitSelection(selected);
-        else fitSession();
-      } else if (e.key === "[") stepInteraction(-1);
-      else if (e.key === "]") stepInteraction(1);
-      else if (e.key === " " || e.code === "Space") {
-        e.preventDefault();
-        togglePlay();
-      } else if (e.key === "ArrowLeft") {
-        e.preventDefault();
-        stepCommit(-1);
-      } else if (e.key === "ArrowRight") {
-        e.preventDefault();
-        stepCommit(1);
-      }
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [bounds.t1, onCursor, stepInteraction, stepCommit, togglePlay, selected, fitSelection, fitSession]);
-
-  const onPointerDown = (e: React.PointerEvent) => {
-    if (e.button !== 0) return;
-    if ((e.target as HTMLElement).closest(".rl-tl-playhead")) return;
-    if ((e.target as HTMLElement).closest(".rl-tl-bar-hit")) return;
-    if ((e.target as HTMLElement).closest(".rl-tl-int")) return;
-    if (e.altKey) return onSetAB({ ...ab, a: snapT(tOfClient(e.clientX)) });
-    if (e.shiftKey) return onSetAB({ ...ab, b: snapT(tOfClient(e.clientX)) });
-    scrubbing.current = true;
-    innerRef.current?.setPointerCapture(e.pointerId);
-    scrubToClient(e.clientX);
-  };
-  const onPointerMove = (e: React.PointerEvent) => {
-    if (scrubbing.current || draggingPlayhead.current) scrubToClient(e.clientX);
-  };
-  const onPointerUp = () => {
-    scrubbing.current = false;
-    draggingPlayhead.current = false;
-  };
-
   /**
    * Rescale while keeping the time under `viewportX` (px from the viewport's
    * left edge) visually pinned. Wheel zoom anchors at the pointer; the −/+
@@ -465,6 +418,56 @@ export function Timeline({
     },
     [zoomTo, scale, fit],
   );
+
+
+  // Keyboard: T, L, F, [ ], Space, arrows
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const el = document.activeElement;
+      if (el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA")) return;
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      if (e.key === "t" || e.key === "T") setMode((m) => NEXT_MODE[m]);
+      else if (e.key === "l" || e.key === "L") onCursor({ t: bounds.t1, mode: "live" });
+      else if (e.key === "f" || e.key === "F") {
+        if (selected) fitSelection(selected);
+        else fitSession();
+      } else if (e.key === "[") stepInteraction(-1);
+      else if (e.key === "]") stepInteraction(1);
+      else if (e.key === "+" || e.key === "=") zoomButtons(1.25);
+      else if (e.key === "-" || e.key === "_") zoomButtons(0.8);
+      else if (e.key === " " || e.code === "Space") {
+        e.preventDefault();
+        togglePlay();
+      } else if (e.key === "ArrowLeft") {
+        e.preventDefault();
+        stepCommit(-1);
+      } else if (e.key === "ArrowRight") {
+        e.preventDefault();
+        stepCommit(1);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [bounds.t1, onCursor, stepInteraction, stepCommit, togglePlay, selected, fitSelection, fitSession, zoomButtons]);
+
+  const onPointerDown = (e: React.PointerEvent) => {
+    if (e.button !== 0) return;
+    if ((e.target as HTMLElement).closest(".rl-tl-playhead")) return;
+    if ((e.target as HTMLElement).closest(".rl-tl-bar-hit")) return;
+    if ((e.target as HTMLElement).closest(".rl-tl-int")) return;
+    if (e.altKey) return onSetAB({ ...ab, a: snapT(tOfClient(e.clientX)) });
+    if (e.shiftKey) return onSetAB({ ...ab, b: snapT(tOfClient(e.clientX)) });
+    scrubbing.current = true;
+    innerRef.current?.setPointerCapture(e.pointerId);
+    scrubToClient(e.clientX);
+  };
+  const onPointerMove = (e: React.PointerEvent) => {
+    if (scrubbing.current || draggingPlayhead.current) scrubToClient(e.clientX);
+  };
+  const onPointerUp = () => {
+    scrubbing.current = false;
+    draggingPlayhead.current = false;
+  };
 
   const onWheel = (e: React.WheelEvent) => {
     const el = scrollRef.current;
@@ -627,6 +630,20 @@ export function Timeline({
         </button>
       </div>
 
+      {mode !== "collapsed" && interactions.length > 0 && innerWidth + INNER_RIGHT_PAD > viewW * 1.2 && (
+        <Minimap
+          interactions={interactions}
+          commits={commits}
+          anomaly={anomaly}
+          bounds={bounds}
+          viewStart={tOfX(scrollLeft)}
+          viewEnd={tOfX(scrollLeft + viewW)}
+          onSeekView={(t) => {
+            const el = scrollRef.current;
+            if (el) el.scrollLeft = Math.max(0, xOf(clamp(t, bounds.t0, bounds.t1)) - viewW / 2);
+          }}
+        />
+      )}
       {mode !== "collapsed" &&
         (interactions.length === 0 ? (
           <div className="rl-tl-empty">No activity yet — interact with the page.</div>
@@ -866,6 +883,84 @@ export function Timeline({
   );
 }
 
+/**
+ * Session overview strip shown when zoomed in past one viewport: linear time
+ * (no gutter compression), interaction spans + anomaly ticks, and a draggable
+ * window mirroring the visible range of the compressed scale below it.
+ */
+function Minimap({
+  interactions,
+  commits,
+  anomaly,
+  bounds,
+  viewStart,
+  viewEnd,
+  onSeekView,
+}: {
+  interactions: Interaction[];
+  commits: CommitSummary[];
+  anomaly: AnomalyStats;
+  bounds: { t0: number; t1: number };
+  viewStart: number;
+  viewEnd: number;
+  onSeekView: (t: number) => void;
+}) {
+  const span = Math.max(1, bounds.t1 - bounds.t0);
+  const pct = (t: number) => `${clamp(((t - bounds.t0) / span) * 100, 0, 100)}%`;
+  const dragging = useRef(false);
+  const seek = (e: React.PointerEvent) => {
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    const frac = clamp((e.clientX - rect.left) / Math.max(1, rect.width), 0, 1);
+    onSeekView(bounds.t0 + frac * span);
+  };
+  return (
+    <div
+      className="rl-tl-minimap"
+      title="Session overview — drag to move the view"
+      onPointerDown={(e) => {
+        dragging.current = true;
+        seek(e);
+        try {
+          (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+        } catch {
+          /* synthetic/exotic pointers may have no capturable id */
+        }
+      }}
+      onPointerMove={(e) => {
+        if (dragging.current) seek(e);
+      }}
+      onPointerUp={() => {
+        dragging.current = false;
+      }}
+    >
+      {interactions.map((it) => (
+        <span
+          key={it.id}
+          className="rl-tl-mini-int"
+          style={{
+            left: pct(it.start),
+            width: `${clamp(((it.end - it.start) / span) * 100, 0.4, 100)}%`,
+          }}
+        />
+      ))}
+      {commits.map((c) => (
+        <span
+          key={c.commitId}
+          className={`rl-tl-mini-commit${anomaly.isAnomaly(c) ? " anomaly" : ""}`}
+          style={{ left: pct(c.timestamp) }}
+        />
+      ))}
+      <span
+        className="rl-tl-mini-window"
+        style={{
+          left: pct(viewStart),
+          width: `${clamp(((viewEnd - viewStart) / span) * 100, 1, 100)}%`,
+        }}
+      />
+    </div>
+  );
+}
+
 function SelectionStrip({
   store,
   interaction,
@@ -1067,13 +1162,42 @@ function PhaseWaterfall({
     () => packPhaseBars(store, causality, interactions, xOf),
     [store, causality, interactions, xOf],
   );
+  // Phases the user opened past the track cap (mount bursts pack ~60 deep).
+  const [expandedPhases, setExpandedPhases] = useState<ReadonlySet<string>>(new Set());
 
   if (interactions.length === 0 || packed.bars.length === 0) {
     return <div className="rl-tl-wf-empty">No component activity yet</div>;
   }
 
+  // Per-phase depth and overflow (tracks are assigned per phase by greedyPack).
+  const depthByPhase = new Map<string, number>();
+  const hiddenByPhase = new Map<string, number>();
+  for (const bar of packed.bars) {
+    depthByPhase.set(bar.phaseId, Math.max(depthByPhase.get(bar.phaseId) ?? 0, bar.track + 1));
+    if (bar.track >= TRACK_CAP) {
+      hiddenByPhase.set(bar.phaseId, (hiddenByPhase.get(bar.phaseId) ?? 0) + 1);
+    }
+  }
+  const visibleTracks = (phaseId: string): number => {
+    const depth = depthByPhase.get(phaseId) ?? 0;
+    return expandedPhases.has(phaseId) ? depth : Math.min(depth, TRACK_CAP);
+  };
+  const barVisible = (bar: PackedBar): boolean =>
+    bar.track < TRACK_CAP || expandedPhases.has(bar.phaseId);
+  const togglePhaseDepth = (phaseId: string) =>
+    setExpandedPhases((prev) => {
+      const next = new Set(prev);
+      if (next.has(phaseId)) next.delete(phaseId);
+      else next.add(phaseId);
+      return next;
+    });
+  const displayTracks = Math.max(
+    1,
+    ...packed.phases.map((p) => visibleTracks(p.id) + (hiddenByPhase.has(p.id) ? 1 : 0)),
+  );
+
   // Bottom pad clears the outer horizontal scrollbar overlaying the lane.
-  const canvasH = PHASE_PAD_Y + packed.trackCount * TRACK_H + 18;
+  const canvasH = PHASE_PAD_Y + displayTracks * TRACK_H + 18;
 
   return (
     // The outer div is the vertical scroll viewport; the canvas carries the
@@ -1100,7 +1224,33 @@ function PhaseWaterfall({
           );
         })}
 
+        {packed.phases.map((phase) => {
+          const hidden = hiddenByPhase.get(phase.id);
+          if (!hidden) return null;
+          const open = expandedPhases.has(phase.id);
+          return (
+            <button
+              key={`more-${phase.id}`}
+              type="button"
+              className="rl-wf-more"
+              style={{
+                left: phase.left + 2,
+                top: PHASE_PAD_Y + visibleTracks(phase.id) * TRACK_H,
+                height: BAR_H,
+              }}
+              onClick={(e) => {
+                e.stopPropagation();
+                togglePhaseDepth(phase.id);
+              }}
+              title={open ? "Collapse to the top rows" : `${hidden} more renders in ${phase.label}`}
+            >
+              {open ? "− show less" : `+${hidden} more`}
+            </button>
+          );
+        })}
+
         {packed.bars.map((bar) => {
+          if (!barVisible(bar)) return null;
           const underPlayhead = playheadT >= bar.t0 - 0.25 && playheadT <= bar.t1;
           const dim = selectedId != null && selectedId !== bar.phaseId;
           const rgb = componentRgb(bar.id);
@@ -1197,6 +1347,8 @@ const LABEL_MIN_PX = 56;
 const OUT_LABEL_MIN_ROOM = 40;
 /** Right-edge breathing room so end-of-session boxes and labels never crop. */
 const INNER_RIGHT_PAD = 90;
+/** Rows shown per phase before a "+N more" expander (mount bursts pack deep). */
+const TRACK_CAP = 8;
 
 /** Keep a bar label in the visible scrollport while the bar itself is on-screen. */
 function stickyLabelShift(

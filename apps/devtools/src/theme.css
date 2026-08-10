@@ -1613,3 +1613,40 @@
   color: var(--rl-text-faint); font-size: 10px;
   font-variant-numeric: tabular-nums;
 }
+
+/* Waterfall depth expander (+N more) */
+.rl-wf-more {
+  -webkit-app-region: no-drag;
+  position: absolute; z-index: 3;
+  display: inline-flex; align-items: center;
+  padding: 0 8px; border-radius: 6px;
+  font: inherit; font-size: 10px; font-family: var(--rl-mono);
+  color: var(--rl-text-dim); cursor: pointer;
+  background: var(--rl-bg-raised);
+  border: 1px dashed var(--rl-border-strong);
+}
+.rl-wf-more:hover { color: var(--rl-text); background: var(--rl-bg-hover); }
+
+/* Session minimap (visible when zoomed past one viewport) */
+.rl-tl-minimap {
+  position: relative; height: 20px; margin: 2px 8px 4px;
+  border: 1px solid var(--rl-border); border-radius: 6px;
+  background: var(--rl-bg); overflow: hidden; cursor: grab;
+  touch-action: none; flex: 0 0 auto;
+}
+.rl-tl-minimap:active { cursor: grabbing; }
+.rl-tl-mini-int {
+  position: absolute; top: 5px; bottom: 5px; min-width: 2px;
+  background: rgba(96, 165, 250, 0.28); border-radius: 2px; pointer-events: none;
+}
+.rl-tl-mini-commit {
+  position: absolute; top: 3px; bottom: 3px; width: 2px;
+  background: rgba(74, 222, 128, 0.5); pointer-events: none;
+}
+.rl-tl-mini-commit.anomaly { background: var(--rl-severe); }
+.rl-tl-mini-window {
+  position: absolute; top: 0; bottom: 0;
+  border: 1px solid rgba(167, 139, 250, 0.65);
+  background: rgba(167, 139, 250, 0.1);
+  border-radius: 5px; pointer-events: none;
+}
