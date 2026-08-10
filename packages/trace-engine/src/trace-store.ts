@@ -10,6 +10,7 @@ import type {
   EventsBatchMessage,
 } from "@react-lens/protocol";
 import { RingBuffer } from "./ring-buffer.js";
+import { buildInteractions, type Interaction } from "./interactions.js";
 
 /** A single commit pass: which components rendered, when. */
 export interface CommitSummary {
@@ -247,6 +248,42 @@ export class TraceStore {
 
   commit(commitId: CommitId): CommitSummary | undefined {
     return this.commits().find((c) => c.commitId === commitId);
+  }
+
+  /** Interaction-first view of the session (redesign §1-2). */
+  interactions(): Interaction[] {
+    return buildInteractions(this.events.toArray(), (id) => this.instances.get(id)?.name);
+  }
+
+  // ── Time travel (historical resolution) ─────────────────────────────────────
+
+  /** Latest render of a component at or before timestamp `t`. */
+  renderAtOrBefore(id: ComponentId, t: number): RenderEvent | undefined {
+    const renders = this.rendersByComponent.get(id)?.toArray();
+    if (!renders) return undefined;
+    let best: RenderEvent | undefined;
+    for (const r of renders) {
+      if (r.timestamp <= t) best = r; // renders are oldest→newest
+      else break;
+    }
+    return best;
+  }
+
+  /** Snapshot for the render at or before `t` (may be undefined if not retained). */
+  snapshotAtOrBefore(id: ComponentId, t: number): RenderSnapshot | undefined {
+    const render = this.renderAtOrBefore(id, t);
+    return render ? this.snapshots.get(render.renderId) : undefined;
+  }
+
+  /** Nearest commit at or before `t` — the commit whose state the cursor shows. */
+  commitAt(t: number): CommitSummary | undefined {
+    const commits = this.commits(); // oldest→newest
+    let best: CommitSummary | undefined;
+    for (const c of commits) {
+      if (c.timestamp <= t) best = c;
+      else break;
+    }
+    return best;
   }
 
   stats(): { events: number; renders: number; snapshots: number; components: number } {
