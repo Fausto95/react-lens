@@ -63,6 +63,12 @@ with multiple **projections** rather than a raw fiber tree.
 - ✅ **Compiler detection** — via `fiber.updateQueue.memoCache` (the reliable signal); shown as ◆ badges
 - ✅ **Source locations** — best-effort from React 19 `_debugStack` (creation site)
 - ✅ **Timeline + commit scrubber**, **Freeze Frame**, **Tree Diff**, **Update Wave** — commit-grouped store + panel scrubber
+- ✅ **Timeline redesign (time-travel MVP-1)** — interaction-first colored blocks over a
+  log-scaled heat track; global time cursor (Timeline/Tree/Inspector) with LIVE/PAST +
+  historical Inspector (◷); A/B marks → Compare diff; compressed idle gaps; anomaly
+  markers; play mode + whole-timeline/scoped replay; per-component render waterfall
+  (expanded). Deferred to later phases: Canvas/worker-LOD, screenshots/thumbnails, full
+  track stack, Instant Replay, tree-topology patches, session compare/HMR/story mode.
 - ✅ **`source-maps`** — resolve compiled `_debugStack` coords to original source
 - ✅ **`diagnostics` (Doctor v1)** — impact-ranked rules over runtime evidence; inspector section + tree ⚕ badges + issue count
 - ⬜ **Effect debugger** — effect-execution events, run/cleanup counts, loop detection
