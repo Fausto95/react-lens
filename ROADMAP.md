@@ -83,9 +83,14 @@ with multiple **projections** rather than a raw fiber tree.
   (inline context value, effect-derives-state, …) need source fetched via
   `source-maps` + an OXC/AST parse in a worker — the next Doctor layer, which
   also upgrades source to the definition site.
+- ✅ **Doctor worker** — the all-components Doctor pass (`diagnoseAll`, causality
+  per render) now runs in a Web Worker mirroring the store via `TraceStore.onIngest`
+  + `export()`; the panel consumes `{count, affected}` async and the old
+  800-component guard is gone. Falls back to a synchronous pass if the worker
+  can't spawn.
 - **Tree worker** — virtualization mounts few rows, but grouping/projection/query
-  and the per-render Doctor/verdict passes still run on the main thread; move to
-  a worker for very large apps.
+  still run on the main thread; move to a worker for very large apps (the
+  per-render Doctor/verdict pass is now off-thread; the tree build is not).
 - **ui/icons** — foundational extraction done; migrate the remaining panel
   primitives (rows, value view, diff lines) into `ui`.
 - **Editing in the extension** — live prop/state editing is embedded-only;
