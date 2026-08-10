@@ -21,6 +21,7 @@ import type { FiberBridge, CommitObservation, RenderDetail, RawHook } from "@rea
 import { inspectHooks, inspectContexts, inspectClassState } from "@react-lens/fiber";
 import type { Serializer } from "@react-lens/serializer";
 import { snapshotDom } from "./dom-snapshot.js";
+import { createTimeTravel, type TimeTravelController } from "./time-travel.js";
 
 export interface CaptureConfig {
   captureDOM: boolean;
@@ -35,6 +36,11 @@ export interface CaptureConfig {
    * lazily via `snapshot(renderId)`. Defaults to true.
    */
   streamSnapshots?: boolean;
+  /**
+   * Keep raw state references per render for time travel (dev builds only).
+   * Opt-out for memory-sensitive pages. Defaults to true.
+   */
+  captureStateHistory?: boolean;
   /** Optional overhead telemetry sink. */
   onOverhead?: (report: { cpuPercent: number; bytesApprox: number; eventsPerSec: number }) => void;
 }
@@ -55,6 +61,8 @@ export interface Instrumentation {
    * the selected render's detail lazily. Returns undefined once evicted.
    */
   snapshot(renderId: RenderId): RenderSnapshot | undefined;
+  /** Page-side time travel: apply/goLive raw state captured per render. */
+  timeTravel: TimeTravelController;
 }
 
 const INTERACTION_EVENTS = ["click", "keydown", "submit"] as const;
@@ -82,6 +90,8 @@ export function createInstrumentation(deps: {
   let flushScheduled = false;
 
   let currentInteraction: { id: InteractionId; until: number } | null = null;
+
+  const timeTravel = createTimeTravel({ fiber });
 
   // Retained render details for on-demand snapshot building when snapshots
   // aren't streamed inline. Bounded ring: recent renders only.
@@ -124,6 +134,7 @@ export function createInstrumentation(deps: {
     disposePostCommit = null;
     for (const cleanup of listenerCleanups) cleanup();
     listenerCleanups.length = 0;
+    timeTravel.clear();
     flush();
   }
 
@@ -133,6 +144,10 @@ export function createInstrumentation(deps: {
 
   function handleCommit(commit: CommitObservation): void {
     if (!recording || !config) return;
+    // A time-travel apply flushes through the same reconciler this bridge
+    // observes. While traveling, nothing enters the event log — neither the
+    // synthetic restore commits nor interactions with the rewound UI.
+    if (timeTravel.isActive()) return;
     const t0 = now();
     const renderedSet = new Set(commit.rendered);
     const interactionId = activeInteractionId();
@@ -164,6 +179,9 @@ export function createInstrumentation(deps: {
         pendingSnapshots.push(buildSnapshot(id, renderId, detail, commit.timestamp));
       } else {
         retain(renderId, id, detail, commit.timestamp);
+      }
+      if (config.captureStateHistory !== false) {
+        timeTravel.capture(renderId, id, detail.fiber);
       }
     }
 
@@ -246,6 +264,7 @@ export function createInstrumentation(deps: {
     }>;
   }): void {
     if (!recording || !config) return;
+    if (timeTravel.isActive()) return;
     if (obs.effects.length === 0) return;
     const interactionId = activeInteractionId();
     for (const e of obs.effects) {
@@ -387,7 +406,7 @@ export function createInstrumentation(deps: {
     windowStart = now();
   }
 
-  return { start, stop, isRecording, snapshot };
+  return { start, stop, isRecording, snapshot, timeTravel };
 }
 
 function approxBytes(frame: EventsBatchMessage["payload"]): number {

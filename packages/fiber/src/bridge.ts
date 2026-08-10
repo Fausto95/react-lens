@@ -27,6 +27,7 @@ import {
   PERFORMED_WORK,
 } from "./react-internals.js";
 import { wrapEffectsForTiming, type TimedEffect } from "./effect-timing.js";
+import { captureStateHooks, inspectClassState, type CapturedHookState } from "./inspect.js";
 
 export type Dispose = () => void;
 
@@ -68,6 +69,12 @@ export interface FiberBridge {
   setClassState(id: ComponentId, state: unknown): boolean;
   /** Whether the component still has a live fiber (i.e. is mounted). */
   hasFiber(id: ComponentId): boolean;
+  /**
+   * Raw state of the live (committed) fiber: state/reducer hook values by raw
+   * index, or the class instance's state. Used as the go-live baseline and as
+   * a hook-shape guard before overriding.
+   */
+  captureLiveState(id: ComponentId): LiveState | undefined;
   resolveComponent(node: Node): ComponentInstance | null;
   domNodesOf(id: ComponentId): Node[];
   getInstance(id: ComponentId): ComponentInstance | undefined;
@@ -77,6 +84,12 @@ export interface FiberBridge {
   onUnmount(cb: (id: ComponentId) => void): Dispose;
   /** Fired after passive effects flush; carries timed effect observations. */
   onPostCommit(cb: (obs: PostCommitObservation) => void): Dispose;
+}
+
+export interface LiveState {
+  hooks: CapturedHookState[];
+  /** Present only for class components. */
+  classState?: unknown;
 }
 
 export interface PostCommitObservation {
@@ -210,6 +223,16 @@ export function createFiberBridge(target: typeof globalThis = globalThis): Fiber
 
   function hasFiber(id: ComponentId): boolean {
     return fiberById.has(id);
+  }
+
+  function captureLiveState(id: ComponentId): LiveState | undefined {
+    const fiber = fiberById.get(id);
+    if (!fiber) return undefined;
+    const current = currentOf(fiber);
+    if (current.tag === ClassComponent) {
+      return { hooks: [], classState: inspectClassState(current) };
+    }
+    return { hooks: captureStateHooks(current) };
   }
 
   /** Prefer the committed (current) fiber for edits, not a stale alternate. */
@@ -485,6 +508,7 @@ export function createFiberBridge(target: typeof globalThis = globalThis): Fiber
     setHookState,
     setClassState,
     hasFiber,
+    captureLiveState,
     resolveComponent,
     domNodesOf,
     getInstance,

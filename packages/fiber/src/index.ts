@@ -1,6 +1,7 @@
 export { createFiberBridge } from "./bridge.js";
 export type {
   FiberBridge,
+  LiveState,
   CommitObservation,
   PostCommitObservation,
   RenderDetail,
