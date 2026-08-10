@@ -78,3 +78,68 @@ describe("bridge chains the document_start stub and replays its buffer", () => {
     expect(queue.length).toBe(0);
   });
 });
+
+describe("multiple bridges share one hook", () => {
+  it("a bridge installed after another still receives commits", async () => {
+    // The real-world shape of this: the extension's injected bridge chains the
+    // hook at document_start, then the page's embedded runtime installs its own
+    // bridge. Both must observe commits — the guard must not be a flag on the
+    // shared hook, or the first bridge makes every later one deaf.
+    document.body.innerHTML = "<div id='root2'></div>";
+    const React = await import("react");
+    const { createRoot } = await import("react-dom/client");
+
+    const first = createFiberBridge(globalThis); // e.g. the extension's bridge
+    first.install();
+    const second = createFiberBridge(globalThis); // e.g. the embedded runtime
+    second.install();
+
+    const seenByFirst: string[] = [];
+    const seenBySecond: string[] = [];
+    const nameInto = (bridge: ReturnType<typeof createFiberBridge>, out: string[]) =>
+      bridge.onCommit((commit) => {
+        for (const id of commit.rendered) {
+          const inst = bridge.getInstance(id);
+          if (inst) out.push(inst.name);
+        }
+      });
+    nameInto(first, seenByFirst);
+    nameInto(second, seenBySecond);
+
+    function Leaf() {
+      return React.createElement("em", null, "leaf");
+    }
+    const root = createRoot(document.getElementById("root2")!);
+    await React.act(async () => {
+      root.render(React.createElement(Leaf));
+    });
+
+    expect(seenByFirst).toContain("Leaf");
+    expect(seenBySecond).toContain("Leaf");
+  });
+
+  it("installing the same bridge twice does not duplicate commits", async () => {
+    document.body.innerHTML = "<div id='root3'></div>";
+    const React = await import("react");
+    const { createRoot } = await import("react-dom/client");
+
+    const bridge = createFiberBridge(globalThis);
+    bridge.install();
+    bridge.install();
+
+    let commits = 0;
+    bridge.onCommit(() => {
+      commits += 1;
+    });
+
+    function Once() {
+      return React.createElement("i", null, "once");
+    }
+    const root = createRoot(document.getElementById("root3")!);
+    await React.act(async () => {
+      root.render(React.createElement(Once));
+    });
+
+    expect(commits).toBe(1);
+  });
+});
