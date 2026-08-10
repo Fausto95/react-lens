@@ -1,4 +1,4 @@
-import type { ComponentId, RenderId, RenderEvent } from "@react-lens/protocol";
+import type { ComponentId, RenderId, RenderEvent, HookSnapshot } from "@react-lens/protocol";
 import type { TraceStore } from "@react-lens/trace-engine";
 import type { Causality } from "@react-lens/causality";
 import { diff } from "@react-lens/diff-engine";
@@ -118,6 +118,19 @@ export function createToolHandlers(deps: {
       const before = store.snapshot(beforeRenderId as RenderId);
       const after = store.snapshot(afterRenderId as RenderId);
       if (!before || !after) return { error: "missing snapshot" };
+      // Hooks are HookSnapshot[] rows, not a SerializedValue tree — the value
+      // differ would walk them as opaque objects. Compare per hook index.
+      if (kind === "hooks") {
+        if (!before.hooks || !after.hooks) return { error: "snapshot missing hooks" };
+        const hooks = diffHooks(before.hooks, after.hooks);
+        return {
+          kind,
+          beforeRenderId,
+          afterRenderId,
+          hooks,
+          changeCount: hooks.filter((h) => h.valueChanged || h.depsChanged).length,
+        };
+      }
       const left = pick(before, kind);
       const right = pick(after, kind);
       if (left === undefined || right === undefined) {
@@ -168,6 +181,36 @@ export function createToolHandlers(deps: {
       };
     },
   };
+}
+
+/** Align two hook lists by index and report value/deps changes per slot. */
+function diffHooks(
+  before: HookSnapshot[],
+  after: HookSnapshot[],
+): Array<{ index: number; hookKind: string; valueChanged: boolean; depsChanged: boolean }> {
+  const byIndex = new Map(before.map((h) => [h.index, h]));
+  return after.map((h) => {
+    const prev = byIndex.get(h.index);
+    return {
+      index: h.index,
+      hookKind: h.kind,
+      valueChanged: prev !== undefined && !sameSerialized(prev.value, h.value),
+      depsChanged: prev !== undefined && !sameDeps(prev.deps, h.deps),
+    };
+  });
+}
+
+function sameSerialized(a: unknown, b: unknown): boolean {
+  return JSON.stringify(a) === JSON.stringify(b);
+}
+
+function sameDeps(
+  a: HookSnapshot["deps"],
+  b: HookSnapshot["deps"],
+): boolean {
+  if (a == null || b == null) return a == b; // null and undefined both mean "no deps"
+  if (a.length !== b.length) return false;
+  return a.every((v, i) => sameSerialized(v, b[i]));
 }
 
 function pick(
