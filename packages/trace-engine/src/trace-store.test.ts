@@ -192,6 +192,59 @@ describe("TraceStore — subscriptions", () => {
   });
 });
 
+describe("TraceStore — time travel", () => {
+  it("resolves the render/snapshot at or before a timestamp", () => {
+    const store = new TraceStore();
+    const c = 7 as ComponentId;
+    store.ingest(
+      batch({
+        events: [
+          renderEvent({ componentId: c, renderId: 10 as RenderId, timestamp: 100 }),
+          renderEvent({ componentId: c, renderId: 11 as RenderId, timestamp: 200 }),
+          renderEvent({ componentId: c, renderId: 12 as RenderId, timestamp: 300 }),
+        ],
+        snapshots: [
+          { renderId: 11 as RenderId, componentId: c, timestamp: 200, props: { k: "undefined" } },
+        ],
+      }),
+    );
+    expect(store.renderAtOrBefore(c, 50)).toBeUndefined();
+    expect(store.renderAtOrBefore(c, 250)?.renderId).toBe(11 as RenderId);
+    expect(store.renderAtOrBefore(c, 999)?.renderId).toBe(12 as RenderId);
+    // Snapshot only retained for render 11.
+    expect(store.snapshotAtOrBefore(c, 250)?.renderId).toBe(11 as RenderId);
+    expect(store.snapshotAtOrBefore(c, 999)).toBeUndefined();
+  });
+
+  it("finds the nearest commit at or before a timestamp", () => {
+    const store = new TraceStore();
+    store.ingest(
+      batch({
+        events: [
+          renderEvent({ commitId: 1 as CommitId, timestamp: 100 }),
+          renderEvent({ commitId: 2 as CommitId, timestamp: 250 }),
+        ],
+      }),
+    );
+    expect(store.commitAt(50)).toBeUndefined();
+    expect(store.commitAt(200)?.commitId).toBe(1 as CommitId);
+    expect(store.commitAt(999)?.commitId).toBe(2 as CommitId);
+  });
+
+  it("derives interactions from the event log", () => {
+    const store = new TraceStore();
+    store.ingest(
+      batch({
+        events: [renderEvent({ componentId: 1 as ComponentId, timestamp: 1 })],
+        instances: [instance(1, "App")],
+      }),
+    );
+    const interactions = store.interactions();
+    expect(interactions).toHaveLength(1);
+    expect(interactions[0]!.kind).toBe("load");
+  });
+});
+
 describe("TraceStore — ingest tee (Doctor worker feed)", () => {
   it("fires ingest observers with each batch and stops on dispose", () => {
     const store = new TraceStore();
