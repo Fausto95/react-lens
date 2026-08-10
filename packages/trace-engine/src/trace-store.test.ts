@@ -158,6 +158,22 @@ describe("TraceStore — subscriptions", () => {
     expect(cb).toHaveBeenCalledTimes(1);
   });
 
+  it("notifies a component subscriber when its snapshot arrives with no events", () => {
+    // On-demand snapshots (large-app path) ingest in a snapshot-only batch;
+    // the inspector must still re-render to read them.
+    const store = new TraceStore();
+    const cb = vi.fn();
+    store.subscribe({ kind: "component", id: 7 as ComponentId }, cb);
+    store.ingest(
+      batch({
+        snapshots: [
+          { renderId: 99 as RenderId, componentId: 7 as ComponentId, timestamp: 1, props: { k: "undefined" } },
+        ],
+      }),
+    );
+    expect(cb).toHaveBeenCalledTimes(1);
+  });
+
   it("global subscribers fire on any ingest", () => {
     const store = new TraceStore();
     const cb = vi.fn();

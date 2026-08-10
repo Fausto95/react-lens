@@ -87,11 +87,14 @@ export class TraceStore {
     for (const instance of batch.instances) {
       this.instances.set(instance.id, instance);
     }
-    for (const snapshot of batch.snapshots) {
-      this.addSnapshot(snapshot);
-    }
     const touched = new Set<ComponentId>();
     const touchedInteractions = new Set<InteractionId>();
+    for (const snapshot of batch.snapshots) {
+      this.addSnapshot(snapshot);
+      // On-demand snapshots arrive in their own batch with no events; mark the
+      // component touched so subscribers (the Inspector) re-render and read it.
+      touched.add(snapshot.componentId);
+    }
     for (const event of batch.events) {
       this.addEvent(event);
       if (event.componentId !== undefined) touched.add(event.componentId);

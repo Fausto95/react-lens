@@ -83,7 +83,10 @@ export function createInstrumentation(deps: {
     RenderId,
     { componentId: ComponentId; detail: RenderDetail; timestamp: number }
   >();
-  const RETAIN_MAX = 2000;
+  // Generous: entries are light (a fiber reference + timing), and large apps
+  // mount several thousand components in one commit — too small a ring would
+  // evict early components' only render before they can be inspected.
+  const RETAIN_MAX = 20000;
 
   // Overhead accounting.
   let cpuTimeMs = 0;
