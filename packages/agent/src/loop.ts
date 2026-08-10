@@ -14,6 +14,7 @@ import type {
   AgentStep,
   ToolCall,
   ToolHandlers,
+  ToolName,
 } from "./types.js";
 
 const MAX_STEPS = 6;
@@ -69,39 +70,73 @@ export async function runAgent(opts: {
   return { text, citations: dedupeCitations(citations), steps };
 }
 
-async function executeTool(handlers: ToolHandlers, call: ToolCall): Promise<unknown> {
-  try {
-    switch (call.name) {
-      case "explain_interaction":
-        return await handlers.explain_interaction({
-          interactionId: str(call.arguments.interactionId),
-        });
-      case "query_trace":
-        return await handlers.query_trace({
-          interactionId: str(call.arguments.interactionId),
-          limit: num(call.arguments.limit),
-        });
-      case "why":
-        return await handlers.why({ renderId: num(call.arguments.renderId) ?? 0 });
-      case "root_cause":
-        return await handlers.root_cause({ renderId: num(call.arguments.renderId) ?? 0 });
-      case "diff_snapshots":
-        return await handlers.diff_snapshots({
-          kind: (str(call.arguments.kind) as "props") ?? "props",
-          beforeRenderId: num(call.arguments.beforeRenderId) ?? 0,
-          afterRenderId: num(call.arguments.afterRenderId) ?? 0,
-        });
-      case "diagnose":
-        return await handlers.diagnose({ componentId: num(call.arguments.componentId) ?? 0 });
-      case "resolve_source":
-        return await handlers.resolve_source({
-          file: str(call.arguments.file) ?? "",
-          line: num(call.arguments.line) ?? 0,
-          column: num(call.arguments.column) ?? 0,
-        });
-      default:
-        return { error: "unknown tool" };
+/**
+ * Declarative argument contracts per tool. Validation is strict: a missing or
+ * mistyped required argument becomes a recoverable error naming the field,
+ * never a silent fallback the model would mistake for a real id.
+ */
+type FieldSpec = { type: "string" | "number"; required?: boolean; enum?: readonly string[] };
+const TOOL_ARG_SPECS: Record<ToolName, Record<string, FieldSpec>> = {
+  explain_interaction: { interactionId: { type: "string" } },
+  query_trace: { interactionId: { type: "string" }, limit: { type: "number" } },
+  why: { renderId: { type: "number", required: true } },
+  diff_snapshots: {
+    kind: { type: "string", required: true, enum: ["props", "dom", "state", "hooks", "context"] },
+    beforeRenderId: { type: "number", required: true },
+    afterRenderId: { type: "number", required: true },
+  },
+  diagnose: { componentId: { type: "number", required: true } },
+  resolve_source: {
+    file: { type: "string", required: true },
+    line: { type: "number", required: true },
+    column: { type: "number", required: true },
+  },
+  find_component: { name: { type: "string", required: true } },
+  component_renders: { componentId: { type: "number", required: true }, limit: { type: "number" } },
+  read_component_source: {
+    componentId: { type: "number", required: true },
+    contextLines: { type: "number" },
+  },
+  effects_summary: { componentId: { type: "number", required: true } },
+  graph_neighbors: { componentId: { type: "number", required: true } },
+};
+
+function parseToolArgs(
+  call: ToolCall,
+): { ok: true; args: Record<string, unknown> } | { ok: false; error: string } {
+  const spec = TOOL_ARG_SPECS[call.name];
+  if (!spec) return { ok: false, error: `unknown tool ${call.name}` };
+  const out: Record<string, unknown> = {};
+  for (const [field, rule] of Object.entries(spec)) {
+    const raw = call.arguments[field];
+    // Models often stringify numbers — coerce rather than reject.
+    const value =
+      rule.type === "number" && typeof raw === "string" && raw.trim() !== "" && Number.isFinite(Number(raw))
+        ? Number(raw)
+        : raw;
+    if (value === undefined || value === null) {
+      if (rule.required) {
+        return { ok: false, error: `${call.name}: missing required argument "${field}"` };
+      }
+      continue;
     }
+    if (typeof value !== rule.type) {
+      return { ok: false, error: `${call.name}: argument "${field}" must be a ${rule.type}` };
+    }
+    if (rule.enum && !rule.enum.includes(value as string)) {
+      return { ok: false, error: `${call.name}: "${field}" must be one of ${rule.enum.join(", ")}` };
+    }
+    out[field] = value;
+  }
+  return { ok: true, args: out };
+}
+
+async function executeTool(handlers: ToolHandlers, call: ToolCall): Promise<unknown> {
+  const parsed = parseToolArgs(call);
+  if (!parsed.ok) return { error: parsed.error };
+  try {
+    const handler = handlers[call.name] as (args: Record<string, unknown>) => unknown;
+    return await handler(parsed.args);
   } catch (err) {
     return { error: err instanceof Error ? err.message : String(err) };
   }
@@ -139,14 +174,6 @@ function safeJson(value: unknown): string {
 
 function truncate(s: string, n: number): string {
   return s.length <= n ? s : `${s.slice(0, n)}…`;
-}
-
-function str(v: unknown): string | undefined {
-  return typeof v === "string" ? v : undefined;
-}
-
-function num(v: unknown): number | undefined {
-  return typeof v === "number" && Number.isFinite(v) ? v : undefined;
 }
 
 export { testProviderConnection as testAgentConnection };

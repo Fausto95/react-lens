@@ -1,5 +1,8 @@
-import type { ComponentId, RenderId } from "@react-lens/protocol";
-import type { LensRef } from "@react-lens/explain";
+import type { ComponentId, RenderId, SourceLocation, HookKind } from "@react-lens/protocol";
+import type { LensRef, Narrative } from "@react-lens/explain";
+import type { Diagnostic } from "@react-lens/diagnostics";
+import type { DiffChange, DiffSummary } from "@react-lens/diff-engine";
+import type { InteractionMetrics } from "@react-lens/trace-engine";
 
 /** BYOK chat provider. `zml` is Z.AI GLM (Anthropic-compatible). */
 export type AgentProvider = "openai" | "anthropic" | "zml";
@@ -10,10 +13,6 @@ export interface AgentSettings {
   baseUrl: string;
   apiKey: string;
   model: string;
-}
-
-export interface AgentCitation {
-  ref: LensRef;
 }
 
 export interface AgentStep {
@@ -28,14 +27,27 @@ export interface AgentAnswer {
   steps: AgentStep[];
 }
 
-export type ToolName =
-  | "explain_interaction"
-  | "query_trace"
-  | "why"
-  | "root_cause"
-  | "diff_snapshots"
-  | "diagnose"
-  | "resolve_source";
+// ── Tool arguments ────────────────────────────────────────────────────────────
+
+export interface ToolArgsMap {
+  explain_interaction: { interactionId?: string };
+  query_trace: { interactionId?: string; limit?: number };
+  why: { renderId: number };
+  diff_snapshots: {
+    kind: "props" | "dom" | "state" | "hooks" | "context";
+    beforeRenderId: number;
+    afterRenderId: number;
+  };
+  diagnose: { componentId: number };
+  resolve_source: { file: string; line: number; column: number };
+  find_component: { name: string };
+  component_renders: { componentId: number; limit?: number };
+  read_component_source: { componentId: number; contextLines?: number };
+  effects_summary: { componentId: number };
+  graph_neighbors: { componentId: number };
+}
+
+export type ToolName = keyof ToolArgsMap;
 
 export interface ToolCall {
   id: string;
@@ -43,23 +55,157 @@ export interface ToolCall {
   arguments: Record<string, unknown>;
 }
 
-export interface ToolHandlers {
-  explain_interaction: (args: { interactionId?: string }) => unknown | Promise<unknown>;
-  query_trace: (args: { interactionId?: string; limit?: number }) => unknown | Promise<unknown>;
-  why: (args: { renderId: number }) => unknown | Promise<unknown>;
-  root_cause: (args: { renderId: number }) => unknown | Promise<unknown>;
-  diff_snapshots: (args: {
-    kind: "props" | "dom" | "state" | "hooks" | "context";
-    beforeRenderId: number;
-    afterRenderId: number;
-  }) => unknown | Promise<unknown>;
-  diagnose: (args: { componentId: number }) => unknown | Promise<unknown>;
-  resolve_source: (args: {
-    file: string;
-    line: number;
-    column: number;
-  }) => unknown | Promise<unknown>;
+// ── Tool results ──────────────────────────────────────────────────────────────
+
+/** Every tool can answer with a recoverable error the model can act on. */
+export interface ToolError {
+  error: string;
 }
+
+export interface CauseSummary {
+  level: 1 | 2 | 3;
+  explanation: string;
+  confidence: number;
+  /** Present when the cause is backed by a value diff. */
+  diffSummary?: DiffSummary;
+  /** First few concrete changes: which path, what kind of change. */
+  topChanges?: Array<{ path: string; kind: string }>;
+  /** Where the cause originates (e.g. the re-rendering parent's definition). */
+  source?: SourceLocation;
+}
+
+export interface WhyToolResult {
+  renderId: number;
+  componentId: ComponentId;
+  componentName: string;
+  verdict: "expected" | "no-observable-change" | "unknown";
+  observableOutputChanged: boolean;
+  compiler?: { compiled: boolean; memoized: boolean; bailoutReason?: string };
+  causes: CauseSummary[];
+  citations: LensRef[];
+}
+
+export interface QueryTraceResult {
+  stats: { events: number; renders: number; snapshots: number; components: number };
+  interaction: { id: string; label: string; kind: string; metrics: InteractionMetrics } | null;
+  topRenders: Array<{ renderId: RenderId; componentId: ComponentId; name: string; self: number }>;
+  citations: LensRef[];
+}
+
+export interface HooksDiffRow {
+  index: number;
+  hookKind: HookKind | string;
+  valueChanged: boolean;
+  depsChanged: boolean;
+}
+
+export type DiffSnapshotsResult =
+  | {
+      kind: "hooks";
+      beforeRenderId: number;
+      afterRenderId: number;
+      hooks: HooksDiffRow[];
+      changeCount: number;
+    }
+  | {
+      kind: "props" | "dom" | "state" | "context";
+      beforeRenderId: number;
+      afterRenderId: number;
+      summary: DiffSummary;
+      changeCount: number;
+      changes: DiffChange[];
+    };
+
+export interface DiagnoseResult {
+  componentId: ComponentId;
+  name: string;
+  diagnostics: Diagnostic[];
+  citations: LensRef[];
+}
+
+export interface ResolveSourceResult {
+  compiled: SourceLocation;
+  original: SourceLocation | null;
+  path: string | null;
+  preview: string | null;
+}
+
+export interface FindComponentResult {
+  matches: Array<{
+    componentId: ComponentId;
+    name: string;
+    renders: number;
+    totalSelf: number;
+    source?: SourceLocation;
+  }>;
+  citations: LensRef[];
+}
+
+export interface ComponentRendersResult {
+  componentId: ComponentId;
+  componentName: string;
+  renders: Array<{
+    renderId: RenderId;
+    timestamp: number;
+    self: number;
+    commitId: number;
+    reasons: string[];
+  }>;
+  citations: LensRef[];
+}
+
+export interface ComponentSourceResult {
+  componentId: ComponentId;
+  name: string;
+  file: string | null;
+  span?: { startLine: number; endLine: number };
+  /** Line-numbered original source scoped to the definition, or null. */
+  snippet: string | null;
+  truncated: boolean;
+  /** Why the snippet is missing/partial, when it is. */
+  reason?: string;
+  citations: LensRef[];
+}
+
+export interface EffectsSummaryResult {
+  componentId: ComponentId;
+  componentName: string;
+  runs: number;
+  cleanups: number;
+  totalRunMs: number;
+  /** Effect ran on nearly every recent render. */
+  possibleLoop: boolean;
+  hooks: Array<{ hookIndex: number; runs: number; totalMs: number }>;
+  citations: LensRef[];
+}
+
+export interface GraphNeighborsResult {
+  componentId: ComponentId;
+  componentName: string;
+  parents: Array<{ componentId: ComponentId; name: string }>;
+  children: Array<{ componentId: ComponentId; name: string }>;
+  citations: LensRef[];
+}
+
+export interface ToolResultMap {
+  explain_interaction: Narrative;
+  query_trace: QueryTraceResult;
+  why: WhyToolResult;
+  diff_snapshots: DiffSnapshotsResult;
+  diagnose: DiagnoseResult;
+  resolve_source: ResolveSourceResult;
+  find_component: FindComponentResult;
+  component_renders: ComponentRendersResult;
+  read_component_source: ComponentSourceResult;
+  effects_summary: EffectsSummaryResult;
+  graph_neighbors: GraphNeighborsResult;
+}
+
+export type ToolHandlers = {
+  [K in ToolName]: (
+    args: ToolArgsMap[K],
+  ) => ToolResultMap[K] | ToolError | Promise<ToolResultMap[K] | ToolError>;
+};
 
 /** Normalized turn from any provider. */
 export interface ProviderTurn {

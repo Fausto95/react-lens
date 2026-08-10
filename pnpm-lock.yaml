@@ -202,6 +202,9 @@ importers:
       '@react-lens/explain':
         specifier: workspace:*
         version: link:../explain
+      '@react-lens/graph':
+        specifier: workspace:*
+        version: link:../graph
       '@react-lens/protocol':
         specifier: workspace:*
         version: link:../protocol

@@ -48,7 +48,8 @@ export const TOOL_DEFINITIONS: Array<{
     type: "function",
     function: {
       name: "why",
-      description: "Why a specific render happened (causes + verdict).",
+      description:
+        "Why a specific render happened: verdict, ranked causes with diff evidence (which prop/path changed, and how), the cause's source location, and compiler status.",
       parameters: {
         type: "object",
         required: ["renderId"],
@@ -59,12 +60,67 @@ export const TOOL_DEFINITIONS: Array<{
   {
     type: "function",
     function: {
-      name: "root_cause",
-      description: "Top cause for a render.",
+      name: "find_component",
+      description: "Find components by (partial) name: ids, render counts, total self time, source.",
       parameters: {
         type: "object",
-        required: ["renderId"],
-        properties: { renderId: { type: "number" } },
+        required: ["name"],
+        properties: { name: { type: "string" } },
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "component_renders",
+      description: "A component's renders sorted by self time — use to pick renderIds for why/diff_snapshots.",
+      parameters: {
+        type: "object",
+        required: ["componentId"],
+        properties: {
+          componentId: { type: "number" },
+          limit: { type: "number" },
+        },
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "read_component_source",
+      description:
+        "The component's original source, line-numbered and scoped to its definition. REQUIRED before proposing a code fix.",
+      parameters: {
+        type: "object",
+        required: ["componentId"],
+        properties: {
+          componentId: { type: "number" },
+          contextLines: { type: "number", description: "Extra lines around the definition (default 8)." },
+        },
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "effects_summary",
+      description: "Effect run/cleanup counts and timings per hook, with an every-render/loop heuristic.",
+      parameters: {
+        type: "object",
+        required: ["componentId"],
+        properties: { componentId: { type: "number" } },
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "graph_neighbors",
+      description: "A component's parents and children in the ownership graph.",
+      parameters: {
+        type: "object",
+        required: ["componentId"],
+        properties: { componentId: { type: "number" } },
       },
     },
   },
