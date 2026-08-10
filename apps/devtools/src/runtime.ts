@@ -3,6 +3,7 @@ import { createFiberBridge } from "@react-lens/fiber";
 import { createInstrumentation, type Instrumentation } from "@react-lens/instrumentation";
 import { TraceStore } from "@react-lens/trace-engine";
 import { createCausality, type Causality } from "@react-lens/causality";
+import type { ComponentId } from "@react-lens/protocol";
 
 export interface LensRuntime {
   store: TraceStore;
@@ -10,6 +11,8 @@ export interface LensRuntime {
   instrumentation: Instrumentation;
   /** Exclude a DOM subtree (e.g. the panel overlay) from capture. */
   ignoreContainer(node: Node): void;
+  /** Live DOM nodes for a component — used for page highlighting (embedded). */
+  domNodesOf(id: ComponentId): Node[];
   start(): void;
   stop(): void;
 }
@@ -35,6 +38,7 @@ export function createEmbeddedRuntime(): LensRuntime {
     causality,
     instrumentation,
     ignoreContainer: (node) => fiber.ignoreContainer(node),
+    domNodesOf: (id) => fiber.domNodesOf(id),
     start() {
       instrumentation.start({
         captureDOM: true,

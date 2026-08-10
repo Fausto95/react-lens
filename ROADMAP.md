@@ -50,14 +50,15 @@ fiber's hook list). All packages: **46 tests passing**, full `tsc -b` clean.
 5. ✅ **Why did this render?** — causality with no-observable-change verdict
 6. ⬜ **Doctor** — OXC findings mapped to components with runtime cost
 
-## Next major theme — semantic tree + graph projections (plan v2)
+## Semantic tree + graph projections (plan v2)
 
 The expanded plan reframes the tree as the centerpiece: one unified graph engine
-with multiple **projections** (ownership, causality, dependencies, context,
-queries, effects, DOM) rather than a raw fiber tree.
+with multiple **projections** rather than a raw fiber tree.
 
-- ⬜ **`tree`** — normalize fiber → semantic nodes, wrapper/noise collapsing, repeated-component grouping, virtualization, incremental patches (worker)
-- ⬜ **`graph`** — unified `GraphNode`/`GraphEdge` model + projections; Flame Tree, Rendered/Changed/Potential-Waste modes, Focus Lens, Tree Diff, Freeze Frame
+- ✅ **`tree`** — semantic ownership tree, repeated-component grouping, ancestor-preserving projection filter, flatten to virtual rows (6 tests)
+- ✅ **Tree pane** — Components / Changed / Potential-Waste modes, flame bars + telemetry, expand/collapse, selection→inspector, **bidirectional hover→page highlight**, resizable dock
+- ⬜ **`graph`** — unified `GraphNode`/`GraphEdge` model + more projections (causality, dependencies, context, queries); Focus Lens, Tree Diff, Freeze Frame, Update Wave
+- ⬜ **Row virtualization + tree worker** — needed for 10k+ node apps (current pane renders all visible rows directly)
 - ⬜ **Render overlay** on the page (React-Scan-style heat + counts)
 - ⬜ **⌘K command palette** + structured search language (`renders:>20`, `context:X`, `visual-change:false`)
 - ⬜ **Effect debugger** — effect-execution events, run/cleanup counts, loop detection

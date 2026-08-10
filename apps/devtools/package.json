@@ -12,6 +12,7 @@
   "dependencies": {
     "@react-lens/protocol": "workspace:*",
     "@react-lens/trace-engine": "workspace:*",
+    "@react-lens/tree": "workspace:*",
     "@react-lens/causality": "workspace:*",
     "@react-lens/diff-engine": "workspace:*",
     "@react-lens/instrumentation": "workspace:*",

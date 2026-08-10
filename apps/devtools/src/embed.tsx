@@ -1,16 +1,25 @@
-import { StrictMode, useState } from "react";
+import { StrictMode, useState, useMemo, useEffect } from "react";
 import { createRoot } from "react-dom/client";
+import type { ComponentId } from "@react-lens/protocol";
 import { Panel } from "./Panel.js";
 import type { LensRuntime } from "./runtime.js";
+import { createHighlighter } from "./highlighter.js";
 
 function EmbeddedPanel({ runtime }: { runtime: LensRuntime }) {
   const [recording, setRecording] = useState(true);
+  const highlighter = useMemo(() => createHighlighter(), []);
+  useEffect(() => () => highlighter.dispose(), [highlighter]);
+
   return (
     <Panel
       store={runtime.store}
       causality={runtime.causality}
       recording={recording}
       embedded
+      onHighlight={(id: ComponentId | null) => {
+        if (id === null) highlighter.hide();
+        else highlighter.show(runtime.domNodesOf(id));
+      }}
       onToggleRecording={() => {
         if (recording) runtime.stop();
         else runtime.start();

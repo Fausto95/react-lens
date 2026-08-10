@@ -1,10 +1,10 @@
-import { useState } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import type { TraceStore } from "@react-lens/trace-engine";
 import type { Causality } from "@react-lens/causality";
-import type { ComponentId, ComponentInstance } from "@react-lens/protocol";
+import type { ComponentId } from "@react-lens/protocol";
 import { useTraceVersion } from "./useLens.js";
 import { Inspector } from "./Inspector.js";
-import { ms } from "./format.js";
+import { Tree } from "./Tree.js";
 import "./theme.css";
 
 export interface PanelProps {
@@ -13,26 +13,29 @@ export interface PanelProps {
   recording: boolean;
   onToggleRecording?: () => void;
   embedded?: boolean;
+  /** Highlight a component's DOM on the page (bidirectional selection). */
+  onHighlight?: (id: ComponentId | null) => void;
 }
 
-/** Score used only for ordering the list: total self-time × render count. */
-function attentionScore(store: TraceStore, id: ComponentId): number {
-  return store.selfTimeTotal(id) + store.renderCount(id) * 0.1;
-}
-
-export function Panel({ store, causality, recording, onToggleRecording, embedded }: PanelProps) {
+export function Panel({
+  store,
+  causality,
+  recording,
+  onToggleRecording,
+  embedded,
+  onHighlight,
+}: PanelProps) {
   useTraceVersion(store, { kind: "global" });
   const [selected, setSelected] = useState<ComponentId | null>(null);
-
-  const instances = store
-    .allInstances()
-    .filter((i) => store.renderCount(i.id) > 0)
-    .sort((a, b) => attentionScore(store, b.id) - attentionScore(store, a.id));
-
+  const { width, onResizeStart } = useDockResize(embedded);
   const stats = store.stats();
 
   return (
-    <div className={`rl-root${embedded ? " rl-embedded" : ""}`}>
+    <div
+      className={`rl-root${embedded ? " rl-embedded" : ""}`}
+      style={embedded && width ? { width } : undefined}
+    >
+      {embedded && <div className="rl-resize-handle" onPointerDown={onResizeStart} />}
       <div className="rl-topbar">
         <span className="rl-brand">
           <span className="rl-dot">◈</span> React Lens
@@ -49,23 +52,14 @@ export function Panel({ store, causality, recording, onToggleRecording, embedded
 
       <div className="rl-body">
         <div className="rl-pane">
-          <div className="rl-pane-title">Components · {instances.length}</div>
-          {instances.length === 0 ? (
-            <div className="rl-empty">
-              No renders captured yet. Interact with the page to see components appear.
-            </div>
-          ) : (
-            instances.map((inst) => (
-              <ComponentRow
-                key={inst.id}
-                inst={inst}
-                renders={store.renderCount(inst.id)}
-                selfTime={store.selfTimeTotal(inst.id)}
-                selected={selected === inst.id}
-                onSelect={() => setSelected(inst.id)}
-              />
-            ))
-          )}
+          <div className="rl-pane-title">Tree</div>
+          <Tree
+            store={store}
+            causality={causality}
+            selected={selected}
+            onSelect={setSelected}
+            onHover={onHighlight}
+          />
         </div>
 
         <div className="rl-pane">
@@ -90,25 +84,47 @@ export function Panel({ store, causality, recording, onToggleRecording, embedded
   );
 }
 
-function ComponentRow({
-  inst,
-  renders,
-  selfTime,
-  selected,
-  onSelect,
-}: {
-  inst: ComponentInstance;
-  renders: number;
-  selfTime: number;
-  selected: boolean;
-  onSelect: () => void;
-}) {
-  const suspicious = renders > 5;
-  return (
-    <div className={`rl-row${selected ? " rl-selected" : ""}`} onClick={onSelect}>
-      <span className="rl-name">{inst.name}</span>
-      {selfTime > 0 && <span className="rl-metric">{ms(selfTime)}</span>}
-      <span className={`rl-badge ${suspicious ? "suspicious" : "render"}`}>×{renders}</span>
-    </div>
-  );
+const MIN_WIDTH = 320;
+const MAX_WIDTH_MARGIN = 160; // leave at least this much of the page visible
+
+/**
+ * Drag-to-resize for the right-docked embedded panel. The handle sits on the
+ * left edge; dragging left widens the panel (width = viewport − pointer X).
+ * No-op when not embedded (the extension panel fills its own DevTools pane).
+ */
+function useDockResize(embedded?: boolean): {
+  width: number | null;
+  onResizeStart: (e: React.PointerEvent) => void;
+} {
+  const [width, setWidth] = useState<number | null>(null);
+  const dragging = useRef(false);
+
+  useEffect(() => {
+    if (!embedded) return;
+    const onMove = (e: PointerEvent) => {
+      if (!dragging.current) return;
+      const max = window.innerWidth - MAX_WIDTH_MARGIN;
+      setWidth(Math.max(MIN_WIDTH, Math.min(max, window.innerWidth - e.clientX)));
+    };
+    const onUp = () => {
+      if (!dragging.current) return;
+      dragging.current = false;
+      document.body.style.userSelect = "";
+    };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+    return () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+    };
+  }, [embedded]);
+
+  const onResizeStart = useCallback((e: React.PointerEvent) => {
+    e.preventDefault();
+    dragging.current = true;
+    // Prevent text selection on the page while dragging.
+    document.body.style.userSelect = "none";
+  }, []);
+
+  return { width, onResizeStart };
 }
