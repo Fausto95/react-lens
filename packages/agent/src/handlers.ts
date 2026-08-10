@@ -229,7 +229,7 @@ export function createToolHandlers(deps: {
         return { ...base, file: null, snippet: null, truncated: false, reason: "no source location recorded for this component" };
       }
       const original = await sourceResolver.resolve(loc);
-      const content = await sourceResolver.sourceContent(loc.file, original?.file ?? undefined);
+      let content = await sourceResolver.sourceContent(loc.file, original?.file ?? undefined);
       if (!content) {
         return {
           ...base,
@@ -239,8 +239,18 @@ export function createToolHandlers(deps: {
           reason: "original source unavailable (no source map or sourcesContent)",
         };
       }
+      let span = definitionSpan(content.content, instance.name);
+      if (!span) {
+        // React records the JSX *creation* site, so `loc` usually points at the
+        // parent module. Chase the import that names this component to the
+        // module that actually defines it.
+        const imported = await chaseImport(sourceResolver, loc.file, content.content, instance.name);
+        if (imported) {
+          content = imported.content;
+          span = imported.span;
+        }
+      }
       const lines = content.content.split("\n");
-      const span = definitionSpan(content.content, instance.name);
       let startLine: number;
       let endLine: number;
       let reason: string | undefined;
@@ -344,6 +354,47 @@ export function createToolHandlers(deps: {
       };
     },
   };
+}
+
+/**
+ * Find `import { Name } from "./x"` in the creation-site module and load the
+ * defining module's original source. Specifiers are resolved against the
+ * compiled module URL, trying the usual TS/ESM extension spellings (`.js`
+ * specifiers compile from `.tsx`/`.ts` files under Vite/tsc conventions).
+ */
+async function chaseImport(
+  sourceResolver: SourceResolver,
+  compiledFile: string,
+  creationSource: string,
+  name: string,
+): Promise<{ content: { path: string; content: string }; span: { startLine: number; endLine: number } } | null> {
+  const importRe = new RegExp(
+    `import\\s+(?:[^;'"]*[\\s{,])?${escapeRe(name)}[\\s,}][^;'"]*from\\s+["']([^"']+)["']`,
+  );
+  const match = importRe.exec(creationSource);
+  const specifier = match?.[1];
+  if (!specifier || !specifier.startsWith(".")) return null;
+
+  const bare = specifier.replace(/\.(js|jsx|ts|tsx)$/, "");
+  const candidates = [".tsx", ".ts", ".jsx", ".js", "/index.tsx", "/index.ts"].map((ext) => bare + ext);
+  if (/\.(js|jsx|ts|tsx)$/.test(specifier)) candidates.unshift(specifier);
+  for (const candidate of candidates) {
+    let url: string;
+    try {
+      url = new URL(candidate, compiledFile).href;
+    } catch {
+      continue;
+    }
+    const content = await sourceResolver.sourceContent(url).catch(() => null);
+    if (!content) continue;
+    const span = definitionSpan(content.content, name);
+    if (span) return { content, span };
+  }
+  return null;
+}
+
+function escapeRe(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 /** Project a Cause into what the model needs: evidence, not internals. */
