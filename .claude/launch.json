@@ -6,6 +6,18 @@
       "runtimeExecutable": "pnpm",
       "runtimeArgs": ["--filter", "@react-lens/playground", "dev"],
       "port": 5178
+    },
+    {
+      "name": "playground-alt",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["--filter", "@react-lens/playground", "dev", "--port", "5181", "--strictPort"],
+      "port": 5181
+    },
+    {
+      "name": "site",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["--filter", "@react-lens/site", "dev"],
+      "port": 5179
     }
   ]
 }

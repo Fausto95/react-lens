@@ -72,6 +72,13 @@ h2 { font-size: 30px; letter-spacing: -0.01em; margin: 0 0 12px; }
 .spec-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 6px; }
 .spec-stat { font-family: var(--mono); font-size: 13px; color: var(--dim); }
 .spec-stat b { color: var(--text); font-weight: 600; }
+.spec-input {
+  font-family: var(--mono); font-size: 12px; padding: 7px 10px; min-width: 210px;
+  background: var(--hover); border: 1px solid var(--border); border-radius: 8px;
+  color: var(--text);
+}
+.spec-input::placeholder { color: var(--faint); }
+#time-travel .steps { margin: 30px 0 34px; }
 .tag { font-size: 11px; padding: 2px 7px; border-radius: 5px; background: rgba(167,139,250,0.14); color: var(--accent); border: 1px solid rgba(167,139,250,0.3); }
 .tag.green { background: rgba(74,222,128,0.14); color: var(--green); border-color: rgba(74,222,128,0.3); }
 .tag.orange { background: rgba(251,146,60,0.14); color: var(--orange); border-color: rgba(251,146,60,0.3); }

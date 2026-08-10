@@ -1,6 +1,7 @@
 import { Hero } from "./sections/Hero.js";
 import { FiveQuestions } from "./sections/FiveQuestions.js";
 import { TraceSection } from "./sections/TraceSection.js";
+import { TimeTravelSection } from "./sections/TimeTravelSection.js";
 import { GraphSection } from "./sections/GraphSection.js";
 import { DiffSection } from "./sections/DiffSection.js";
 import { Features } from "./sections/Features.js";
@@ -17,6 +18,7 @@ export function App() {
       <Hero />
       <FiveQuestions />
       <TraceSection />
+      <TimeTravelSection />
       <GraphSection />
       <DiffSection />
       <Features />
