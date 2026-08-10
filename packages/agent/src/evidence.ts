@@ -14,7 +14,13 @@ export interface EvidencePack {
     durationMs: number;
     renderCount: number;
   }>;
-  topComponents: Array<{ componentId: number; name: string; renders: number; totalSelf: number }>;
+  topComponents: Array<{
+    componentId: number;
+    name: string;
+    renders: number;
+    totalSelf: number;
+    compiled: boolean;
+  }>;
   commitAnomalies: {
     median: number;
     p95: number;
@@ -45,6 +51,7 @@ export function buildEvidencePack(store: TraceStore): EvidencePack {
         name: i.name,
         renders: store.renderCount(i.id),
         totalSelf: round(store.selfTimeTotal(i.id)),
+        compiled: i.compiler.compiled,
       }))
       .filter((c) => c.renders > 0)
       .sort((a, b) => b.totalSelf - a.totalSelf)
@@ -89,7 +96,8 @@ export function formatEvidencePack(pack: EvidencePack): string {
       .map((i) => `  [interaction:${i.id}] ${i.label} (${i.kind}) — ${i.durationMs}ms, ${i.renderCount} renders`),
     "top components by self time:",
     ...pack.topComponents.map(
-      (c) => `  [component:${c.componentId}] ${c.name} — ${c.renders} renders, ${c.totalSelf}ms total self`,
+      (c) =>
+        `  [component:${c.componentId}] ${c.name} — ${c.renders} renders, ${c.totalSelf}ms total self${c.compiled ? "" : " · uncompiled"}`,
     ),
   ];
   if (pack.commitAnomalies.anomalies.length > 0) {

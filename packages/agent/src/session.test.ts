@@ -44,6 +44,7 @@ function stubHandlers(overrides: Partial<ToolHandlers> = {}): ToolHandlers {
     resolve_source: () => err,
     find_component: () => err,
     component_renders: () => err,
+    component_runtime: () => err,
     read_component_source: () => err,
     effects_summary: () => err,
     graph_neighbors: () => err,
@@ -54,7 +55,7 @@ function stubHandlers(overrides: Partial<ToolHandlers> = {}): ToolHandlers {
 const emptyEvidence: EvidencePack = {
   stats: { events: 1, renders: 1, snapshots: 0, components: 1 },
   interactions: [{ id: "i1", label: "Click App", kind: "click", durationMs: 12, renderCount: 1 }],
-  topComponents: [{ componentId: 1, name: "App", renders: 1, totalSelf: 3 }],
+  topComponents: [{ componentId: 1, name: "App", renders: 1, totalSelf: 3, compiled: true }],
   commitAnomalies: { median: 1, p95: 1, anomalies: [] },
   reactCompiler: { compiledComponents: 1, totalComponents: 1 },
 };
