@@ -75,17 +75,36 @@ window.addEventListener("message", (event: MessageEvent) => {
 
 /**
  * Update Wave: flash a commit's components on the page, accumulating so the
- * render fanout builds up visibly. Mirrors the embedded runtime's replay.
+ * render fanout builds up visibly. Bounded on every axis so a huge commit (a
+ * few thousand components) can't wash the whole page purple or run for minutes,
+ * and a new replay cancels any wave still in flight (back-to-back replays).
  */
+let waveTimers: ReturnType<typeof setTimeout>[] = [];
+const WAVE_MAX_GROUPS = 300; // components visualized per wave
+const WAVE_MAX_NODES = 400; // boxes drawn at once (sliding window)
+const WAVE_MAX_MS = 1600; // whole wave finishes within this
+
+function cancelWave(): void {
+  for (const t of waveTimers) clearTimeout(t);
+  waveTimers = [];
+  highlighter.hide();
+}
+
 function replayWave(ids: ReadonlyArray<number>): void {
-  const groups = ids.map((id) => fiber.domNodesOf(id as never));
+  cancelWave();
+  const capped = ids.slice(0, WAVE_MAX_GROUPS);
+  const groups = capped.map((id) => fiber.domNodesOf(id as never));
+  const step = Math.min(110, WAVE_MAX_MS / Math.max(1, capped.length));
   const acc: Node[] = [];
-  const step = ids.length > 20 ? 40 : 110;
-  groups.forEach((nodes, i) => {
-    setTimeout(() => {
-      acc.push(...nodes);
-      highlighter.show(acc);
-    }, i * step);
+  capped.forEach((_, i) => {
+    waveTimers.push(
+      setTimeout(() => {
+        const nodes = groups[i];
+        if (nodes) acc.push(...nodes);
+        if (acc.length > WAVE_MAX_NODES) acc.splice(0, acc.length - WAVE_MAX_NODES);
+        highlighter.show(acc);
+      }, i * step),
+    );
   });
-  setTimeout(() => highlighter.hide(), ids.length * step + 700);
+  waveTimers.push(setTimeout(cancelWave, capped.length * step + 500));
 }

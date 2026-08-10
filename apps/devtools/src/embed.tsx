@@ -1,4 +1,4 @@
-import { StrictMode, useState, useMemo, useEffect } from "react";
+import { StrictMode, useState, useMemo, useEffect, useRef } from "react";
 import { createRoot } from "react-dom/client";
 import type { ComponentId } from "@react-lens/protocol";
 import { Panel } from "./Panel.js";
@@ -6,13 +6,45 @@ import type { LensRuntime } from "./runtime.js";
 import { createHighlighter } from "./highlighter.js";
 import { createRenderOverlay } from "./renderOverlay.js";
 
+// Update Wave bounds — a huge commit must not wash the page purple or run for
+// minutes, and back-to-back replays cancel the wave still in flight.
+const WAVE_MAX_GROUPS = 300;
+const WAVE_MAX_NODES = 400;
+const WAVE_MAX_MS = 1600;
+
 function EmbeddedPanel({ runtime }: { runtime: LensRuntime }) {
   const [recording, setRecording] = useState(true);
   const [overlayOn, setOverlayOn] = useState(false);
   const highlighter = useMemo(() => createHighlighter(), []);
   const overlay = useMemo(() => createRenderOverlay(runtime), [runtime]);
+  const waveTimers = useRef<Array<ReturnType<typeof setTimeout>>>([]);
   useEffect(() => () => highlighter.dispose(), [highlighter]);
   useEffect(() => () => overlay.dispose(), [overlay]);
+
+  const cancelWave = () => {
+    for (const t of waveTimers.current) clearTimeout(t);
+    waveTimers.current = [];
+    highlighter.hide();
+  };
+  const replayWave = (ids: ComponentId[]) => {
+    cancelWave();
+    const capped = ids.slice(0, WAVE_MAX_GROUPS);
+    const groups = capped.map((id) => runtime.domNodesOf(id));
+    const step = Math.min(110, WAVE_MAX_MS / Math.max(1, capped.length));
+    const acc: Node[] = [];
+    capped.forEach((_, i) => {
+      waveTimers.current.push(
+        setTimeout(() => {
+          const nodes = groups[i];
+          if (nodes) acc.push(...nodes);
+          if (acc.length > WAVE_MAX_NODES) acc.splice(0, acc.length - WAVE_MAX_NODES);
+          highlighter.show(acc);
+        }, i * step),
+      );
+    });
+    waveTimers.current.push(setTimeout(cancelWave, capped.length * step + 500));
+  };
+  useEffect(() => () => cancelWave(), []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const edit = useMemo(
     () =>
@@ -43,20 +75,7 @@ function EmbeddedPanel({ runtime }: { runtime: LensRuntime }) {
         else overlay.enable();
         setOverlayOn((v) => !v);
       }}
-      onReplayCommit={(ids: ComponentId[]) => {
-        // Update Wave: accumulate highlights so the commit's fanout builds up
-        // visibly (each rendered component stays lit as the wave progresses).
-        const groups = ids.map((id) => runtime.domNodesOf(id));
-        const acc: Node[] = [];
-        const step = ids.length > 20 ? 40 : 110;
-        groups.forEach((nodes, i) => {
-          setTimeout(() => {
-            acc.push(...nodes);
-            highlighter.show(acc);
-          }, i * step);
-        });
-        setTimeout(() => highlighter.hide(), ids.length * step + 700);
-      }}
+      onReplayCommit={replayWave}
       {...(edit ? { edit } : {})}
       onHighlight={(id: ComponentId | null) => {
         if (id === null) highlighter.hide();
