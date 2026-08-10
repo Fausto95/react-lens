@@ -16,7 +16,9 @@ export type ContentToPage =
   // since snapshots aren't streamed inline for large apps).
   | { source: typeof CONTENT_SOURCE; kind: "snapshot-request"; renderId: RenderId }
   // Panel hovered/selected a component: paint (id) or clear (null) its overlay.
-  | { source: typeof CONTENT_SOURCE; kind: "highlight"; componentId: ComponentId | null };
+  | { source: typeof CONTENT_SOURCE; kind: "highlight"; componentId: ComponentId | null }
+  // Panel replayed a commit: flash these components on the page as a wave.
+  | { source: typeof CONTENT_SOURCE; kind: "replay"; componentIds: ComponentId[] };
 
 /** Port protocol for content ↔ background ↔ panel hops. */
 export type PortMessage =
@@ -32,7 +34,9 @@ export type PortMessage =
   // page → panel: the requested snapshot, ingested into the trace store.
   | { kind: "snapshot"; frame: EventsBatchMessage["payload"] }
   // panel → page: paint (id) or clear (null) a component's DOM overlay.
-  | { kind: "highlight"; componentId: ComponentId | null };
+  | { kind: "highlight"; componentId: ComponentId | null }
+  // panel → page: flash a replayed commit's components as a wave.
+  | { kind: "replay"; componentIds: ComponentId[] };
 
 export const PANEL_PORT_PREFIX = "react-lens/panel:";
 export const PAGE_PORT_NAME = "react-lens/page";

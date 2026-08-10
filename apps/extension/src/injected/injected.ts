@@ -68,5 +68,24 @@ window.addEventListener("message", (event: MessageEvent) => {
   } else if (data.kind === "highlight") {
     if (data.componentId === null) highlighter.hide();
     else highlighter.show(fiber.domNodesOf(data.componentId));
+  } else if (data.kind === "replay") {
+    replayWave(data.componentIds);
   }
 });
+
+/**
+ * Update Wave: flash a commit's components on the page, accumulating so the
+ * render fanout builds up visibly. Mirrors the embedded runtime's replay.
+ */
+function replayWave(ids: ReadonlyArray<number>): void {
+  const groups = ids.map((id) => fiber.domNodesOf(id as never));
+  const acc: Node[] = [];
+  const step = ids.length > 20 ? 40 : 110;
+  groups.forEach((nodes, i) => {
+    setTimeout(() => {
+      acc.push(...nodes);
+      highlighter.show(acc);
+    }, i * step);
+  });
+  setTimeout(() => highlighter.hide(), ids.length * step + 700);
+}

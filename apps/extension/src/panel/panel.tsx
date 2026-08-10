@@ -44,6 +44,9 @@ function ExtensionPanel() {
       onHighlight={(componentId) =>
         portRef.current?.postMessage({ kind: "highlight", componentId } satisfies PortMessage)
       }
+      onReplayCommit={(componentIds) =>
+        portRef.current?.postMessage({ kind: "replay", componentIds } satisfies PortMessage)
+      }
     />
   );
 }

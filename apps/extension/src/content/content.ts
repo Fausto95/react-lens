@@ -50,6 +50,9 @@ function connect(): void {
     } else if (msg.kind === "highlight") {
       const toPage: ContentToPage = { source: CONTENT_SOURCE, kind: "highlight", componentId: msg.componentId };
       window.postMessage(toPage, "*");
+    } else if (msg.kind === "replay") {
+      const toPage: ContentToPage = { source: CONTENT_SOURCE, kind: "replay", componentIds: msg.componentIds };
+      window.postMessage(toPage, "*");
     } else if (msg.kind === "panel-ready") {
       // A panel is listening: replay everything captured so far, then stream.
       panelReady = true;
