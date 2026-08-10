@@ -85,17 +85,24 @@ function DomNode({ node, depth }: { node: DOMNodeSnapshot; depth: number }) {
   );
 }
 
+const MAX_ATTR_VALUE = 48;
+
 function Attrs({ attrs }: { attrs: Array<[string, string]> }) {
   return (
     <>
-      {attrs.map(([name, value]) => (
-        <span key={name} className="rl-dom-attr">
-          {" "}
-          <span className="rl-dom-attr-name">{name}</span>
-          <span className="rl-dom-punct">=</span>
-          <span className="rl-dom-attr-val">"{value}"</span>
-        </span>
-      ))}
+      {attrs.map(([name, value]) => {
+        const clipped = value.length > MAX_ATTR_VALUE ? value.slice(0, MAX_ATTR_VALUE) + "…" : value;
+        return (
+          <span key={name} className="rl-dom-attr">
+            {" "}
+            <span className="rl-dom-attr-name">{name}</span>
+            <span className="rl-dom-punct">=</span>
+            <span className="rl-dom-attr-val" title={value}>
+              "{clipped}"
+            </span>
+          </span>
+        );
+      })}
     </>
   );
 }

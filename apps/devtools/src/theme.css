@@ -287,14 +287,20 @@
 .rl-render-reason { flex: 1; color: var(--rl-text-dim); font-size: 12px; }
 .rl-render-cost { font-variant-numeric: tabular-nums; color: var(--rl-text-dim); font-size: 12px; }
 
-/* DOM markup view */
-.rl-dom { font-family: var(--rl-mono); font-size: 12px; line-height: 1.5; }
+/* DOM markup view — wraps within the panel; never overflows horizontally */
+.rl-dom { font-family: var(--rl-mono); font-size: 12px; line-height: 1.5; overflow-x: hidden; }
 .rl-dom-hl { margin-bottom: var(--rl-s3); }
-.rl-dom-line { white-space: nowrap; }
+.rl-dom-line {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  padding-left: 19px;      /* hanging indent so wrapped lines align past the caret */
+  text-indent: -19px;
+}
 .rl-dom-open { cursor: pointer; }
 .rl-dom-open:hover { background: var(--rl-bg-hover); }
-.rl-dom-caret { display: inline-block; width: 11px; color: var(--rl-text-faint); font-size: 9px; }
-.rl-dom-children { margin-left: 11px; padding-left: 8px; border-left: 1px solid var(--rl-border); }
+.rl-dom-caret { display: inline-block; width: 11px; color: var(--rl-text-faint); font-size: 9px; text-indent: 0; }
+.rl-dom-children { margin-left: 6px; padding-left: 8px; border-left: 1px solid var(--rl-border); min-width: 0; }
 .rl-dom-punct { color: var(--rl-text-faint); }
 .rl-dom-tag { color: var(--rl-interaction); }
 .rl-dom-attr-name { color: var(--rl-suspicious); }
