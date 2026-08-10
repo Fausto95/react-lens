@@ -355,6 +355,21 @@
 .rl-dom-text { padding-left: 19px; }
 .rl-dom-ellipsis { color: var(--rl-text-faint); padding-left: 2px; }
 
+/* Doctor */
+.rl-doctor { display: flex; flex-direction: column; gap: var(--rl-s3); }
+.rl-doc { border: 1px solid var(--rl-border); border-left-width: 2px; border-radius: 6px; padding: var(--rl-s3); }
+.rl-doc.rl-sev-severe { border-left-color: var(--rl-severe); }
+.rl-doc.rl-sev-suspicious { border-left-color: var(--rl-suspicious); }
+.rl-doc.rl-sev-warn { border-left-color: var(--rl-warn); }
+.rl-doc.rl-sev-info { border-left-color: var(--rl-text-faint); }
+.rl-doc-head { display: flex; align-items: center; gap: 6px; }
+.rl-doc-mark { color: var(--rl-warn); }
+.rl-doc-title { font-size: 13px; flex: 1; }
+.rl-doc-impact { font-size: 11px; color: var(--rl-text-faint); font-variant-numeric: tabular-nums; }
+.rl-doc-detail { font-size: 12px; color: var(--rl-text-dim); margin-top: 4px; }
+.rl-doc-fix { font-size: 12px; color: var(--rl-healthy); margin-top: 4px; }
+.rl-status-issues { color: var(--rl-warn); }
+
 /* Relations (Focus Lens) */
 .rl-rel { display: flex; flex-direction: column; gap: var(--rl-s3); }
 .rl-rel-group { display: flex; flex-direction: column; gap: 2px; }

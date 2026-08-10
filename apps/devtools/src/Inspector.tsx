@@ -14,6 +14,8 @@ import { RendersTab } from "./tabs/RendersTab.js";
 import { SourceTab } from "./tabs/SourceTab.js";
 import { DomTab } from "./tabs/DomTab.js";
 import { RelationsTab } from "./tabs/RelationsTab.js";
+import { DoctorTab } from "./tabs/DoctorTab.js";
+import { diagnoseOne } from "./doctor.js";
 
 export interface EditApi {
   setProp(componentId: ComponentId, path: Array<string | number>, value: unknown): void;
@@ -87,6 +89,7 @@ export function Inspector({
     ...(onSelectComponent ? { onSelectComponent } : {}),
   };
 
+  const doctorCount = diagnoseOne(store, causality, componentId).length;
   const hooks = snapshot?.hooks ?? [];
   const propCount = snapshot?.props.k === "object" ? (snapshot.props.entries?.length ?? 0) : 0;
   const stateCount = hooks.filter((h) => h.kind === "state" || h.kind === "reducer").length;
@@ -110,6 +113,12 @@ export function Inspector({
       <Section title="Why this render" defaultOpen>
         <WhySection ctx={ctx} />
       </Section>
+
+      {doctorCount > 0 && (
+        <Section title="Doctor" count={doctorCount} defaultOpen>
+          <DoctorTab ctx={ctx} />
+        </Section>
+      )}
 
       {propCount > 0 && (
         <Section title="Props" count={propCount} defaultOpen>

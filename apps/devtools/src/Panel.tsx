@@ -6,6 +6,7 @@ import { useTraceVersion } from "./useLens.js";
 import { Inspector, type EditApi } from "./Inspector.js";
 import { Tree } from "./Tree.js";
 import { Timeline } from "./Timeline.js";
+import { diagnoseAll } from "./doctor.js";
 import { CommandPalette, type Command } from "./CommandPalette.js";
 import "./theme.css";
 
@@ -49,6 +50,9 @@ export function Panel({
   const frozenSet = frozenCommit !== null
     ? new Set(store.commit(frozenCommit)?.componentIds ?? [])
     : null;
+
+  // Doctor: components with at least one diagnostic (for tree badges).
+  const { diagnostics, affected } = diagnoseAll(store, causality);
 
   // ⌘K / Ctrl+K opens the command palette.
   useEffect(() => {
@@ -124,6 +128,7 @@ export function Panel({
             selected={selected}
             onSelect={setSelected}
             onHover={onHighlight}
+            doctor={affected}
             {...(frozenSet ? { frozen: frozenSet } : {})}
           />
         </div>
@@ -156,6 +161,9 @@ export function Panel({
         <span>{stats.events} events</span>
         <span>{stats.renders} renders</span>
         <span>{stats.components} components</span>
+        {diagnostics.length > 0 && (
+          <span className="rl-status-issues">⚕ {diagnostics.length} issues</span>
+        )}
         <span style={{ marginLeft: "auto" }}>
           {embedded ? "embedded" : "devtools"} · protocol v1
         </span>

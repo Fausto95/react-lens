@@ -10,6 +10,7 @@
     { "path": "./packages/instrumentation" },
     { "path": "./packages/tree" },
     { "path": "./packages/graph" },
-    { "path": "./packages/source-maps" }
+    { "path": "./packages/source-maps" },
+    { "path": "./packages/diagnostics" }
   ]
 }

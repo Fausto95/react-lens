@@ -28,6 +28,7 @@ export function Tree({
   onSelect,
   onHover,
   frozen,
+  doctor,
 }: {
   store: TraceStore;
   causality: Causality;
@@ -36,6 +37,8 @@ export function Tree({
   onHover?: (id: ComponentId | null) => void;
   /** Freeze Frame: component ids that rendered in the frozen commit. */
   frozen?: Set<ComponentId>;
+  /** Components with at least one Doctor diagnostic. */
+  doctor?: Set<ComponentId>;
 }) {
   const version = useTraceVersion(store, { kind: "global" });
   const [mode, setMode] = useState<TreeMode>("components");
@@ -143,6 +146,7 @@ export function Tree({
                   onToggle={toggle}
                   onHover={onHover}
                   frozen={frozen}
+                  doctor={doctor}
                 />
               ))}
             </div>
@@ -161,6 +165,7 @@ function TreeRow({
   onToggle,
   onHover,
   frozen,
+  doctor,
 }: {
   row: VisibleRow;
   maxSelf: number;
@@ -169,6 +174,7 @@ function TreeRow({
   onToggle: (key: string) => void;
   onHover?: (id: ComponentId | null) => void;
   frozen?: Set<ComponentId>;
+  doctor?: Set<ComponentId>;
 }) {
   const { node, depth, expandable, expanded } = row;
   const self = rowSelfTime(row);
@@ -203,6 +209,7 @@ function TreeRow({
         <>
           <span className="rl-tree-name">{node.datum.name}</span>
           {inFrozen && <span className="rl-frozen-dot" title="Rendered in the frozen commit" />}
+          {doctor?.has(node.id) && <span className="rl-doc-mark" title="Doctor issue">⚕</span>}
           {node.datum.compiled && <span className="rl-compiler" title="React Compiler optimized">◆</span>}
           {node.datum.observableChange === false && (
             <span className="rl-dot suspicious" title="No observable change" />

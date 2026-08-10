@@ -39,6 +39,9 @@ importers:
       '@react-lens/causality':
         specifier: workspace:*
         version: link:../../packages/causality
+      '@react-lens/diagnostics':
+        specifier: workspace:*
+        version: link:../../packages/diagnostics
       '@react-lens/diff-engine':
         specifier: workspace:*
         version: link:../../packages/diff-engine
@@ -156,6 +159,12 @@ importers:
       '@react-lens/trace-engine':
         specifier: workspace:*
         version: link:../trace-engine
+
+  packages/diagnostics:
+    dependencies:
+      '@react-lens/protocol':
+        specifier: workspace:*
+        version: link:../protocol
 
   packages/diff-engine:
     dependencies:
