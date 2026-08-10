@@ -11,7 +11,18 @@ import { createDoctorClient, type DoctorResult } from "./doctorClient.js";
 import { CommandPalette, type Command } from "./CommandPalette.js";
 import type { TimeCursor, ABMarks } from "./timeCursor.js";
 import { createPanelTimeTravel, type TimeTravelApi } from "./timeTravelController.js";
-import { IconLens, IconBolt, IconSearch, IconDoctor, IconDownload, IconUpload, IconCrosshair } from "@react-lens/icons";
+import { AgentPane } from "./AgentPane.js";
+import { SettingsPopover } from "./SettingsPopover.js";
+import {
+  IconLens,
+  IconBolt,
+  IconSearch,
+  IconSparkle,
+  IconDoctor,
+  IconDownload,
+  IconUpload,
+  IconCrosshair,
+} from "@react-lens/icons";
 import {
   downloadSession,
   importSessionFromFile,
@@ -91,6 +102,10 @@ export function Panel({
   const [cursor, setCursor] = useState<TimeCursor>({ t: 0, mode: "live" });
   const [ab, setAB] = useState<ABMarks>({});
   const [explainToken, setExplainToken] = useState(0);
+  // BYOK AI assistant (drawer) + its provider settings popover.
+  const [agentOpen, setAgentOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [settingsVersion, setSettingsVersion] = useState(0);
   const { width, onResizeStart } = useDockResize(embedded);
   const { splitPct, bodyRef, onSplitStart } = usePaneSplit();
   const stats = store.stats();
@@ -212,6 +227,10 @@ export function Panel({
         e.preventDefault();
         onToggleInspect();
       }
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "i" && !e.shiftKey && !e.altKey) {
+        e.preventDefault();
+        setAgentOpen((v) => !v);
+      }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -235,6 +254,13 @@ export function Panel({
     hint: "L",
     group: "Timeline",
     run: goLive,
+  });
+  commands.push({
+    id: "toggle-agent",
+    label: agentOpen ? "Close AI assistant" : "Ask AI assistant",
+    hint: "⌘I",
+    group: "Navigate",
+    run: () => setAgentOpen((v) => !v),
   });
   commands.push({
     id: "explain-interaction",
@@ -331,6 +357,15 @@ export function Panel({
             <IconCrosshair size={14} />
           </button>
         )}
+        <button
+          className={`rl-icon-btn${agentOpen ? " active" : ""}`}
+          onClick={() => setAgentOpen((v) => !v)}
+          title="AI assistant (⌘I)"
+          aria-label="AI assistant (⌘I)"
+          aria-pressed={agentOpen}
+        >
+          <IconSparkle size={14} />
+        </button>
         <button
           className="rl-icon-btn"
           onClick={() => setPaletteOpen(true)}
@@ -506,6 +541,27 @@ export function Panel({
           onSelectComponent={setSelected}
           onClose={() => setPaletteOpen(false)}
         />
+      )}
+
+      <AgentPane
+        open={agentOpen}
+        store={store}
+        causality={causality}
+        settings={null}
+        settingsVersion={settingsVersion}
+        onClose={() => setAgentOpen(false)}
+        onOpenSettings={() => setSettingsOpen(true)}
+        onSelectComponent={setSelected}
+        onCursor={setCursor}
+      />
+      {settingsOpen && (
+        <div className="rl-settings-anchor">
+          <SettingsPopover
+            open={settingsOpen}
+            onClose={() => setSettingsOpen(false)}
+            onSaved={() => setSettingsVersion((v) => v + 1)}
+          />
+        </div>
       )}
     </div>
   );
