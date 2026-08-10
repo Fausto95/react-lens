@@ -37,8 +37,17 @@ function ExtensionPanel() {
       });
     };
     connect();
+
+    // The inspected page navigated/reloaded: the page re-mints component and
+    // render ids from scratch, so the old trace is not just stale — its ids
+    // would collide with the fresh ones (and the renderId dedup would drop the
+    // new renders). Clear the store so the fresh page starts clean.
+    const onNavigated = () => store.clear();
+    chrome.devtools.network.onNavigated.addListener(onNavigated);
+
     return () => {
       disposed = true;
+      chrome.devtools.network.onNavigated.removeListener(onNavigated);
       portRef.current?.disconnect();
     };
   }, [store]);

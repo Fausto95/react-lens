@@ -345,5 +345,7 @@ export class TraceStore {
     this.eventsByInteractionId.clear();
     this.commitsById.clear();
     this.commitOrder.clear();
+    // Wake subscribers (Tree/Inspector/Timeline) so they re-render to empty.
+    this.notify(new Set(), new Set());
   }
 }
