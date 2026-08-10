@@ -209,4 +209,48 @@ describe("instrumentation + fiber against real React 19", () => {
 
     inst.stop();
   });
+
+  it("attributes a commit to only the subtree that rendered", async () => {
+    const frames: Frame[] = [];
+    const { React, createRoot, act, bridge } = await react();
+    const inst = createInstrumentation({ fiber: bridge, serializer: createSerializer() });
+    inst.start({ captureDOM: false, interactionWindowMs: 200, onFrame: (f) => frames.push(f) });
+
+    let bumpA: () => void = () => {};
+    function WidgetA() {
+      const [n, setN] = React.useState(0);
+      bumpA = () => setN((v) => v + 1);
+      return React.createElement("span", { className: "a" }, String(n));
+    }
+    function WidgetB() {
+      // Sibling that must NOT appear in WidgetA's commit.
+      return React.createElement("span", { className: "b" }, "static");
+    }
+    function Root() {
+      return React.createElement("div", null, React.createElement(WidgetA), React.createElement(WidgetB));
+    }
+
+    const root = createRoot(document.getElementById("root")!);
+    await act(async () => {
+      root.render(React.createElement(Root));
+    });
+    const mountFrames = frames.length;
+    // Isolated update to WidgetA only.
+    await act(async () => bumpA());
+    await flush();
+
+    const newRenders = frames
+      .slice(mountFrames)
+      .flatMap((f) => f.events)
+      .filter((e): e is RenderEvent => e.type === "render");
+    const names = new Set(
+      newRenders.map((r) => nameOf(frames, r.componentId as unknown as number)),
+    );
+    // WidgetA rendered; Root/WidgetB bailed and must be absent.
+    expect(names.has("WidgetA")).toBe(true);
+    expect(names.has("WidgetB")).toBe(false);
+    expect(names.has("Root")).toBe(false);
+
+    inst.stop();
+  });
 });

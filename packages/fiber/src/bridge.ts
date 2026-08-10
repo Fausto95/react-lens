@@ -253,13 +253,8 @@ export function createFiberBridge(target: typeof globalThis = globalThis): Fiber
     const details = new Map<ComponentId, RenderDetail>();
     const rendered: ComponentId[] = [];
 
-    traverse(root.current, (visited) => {
-      if (!isComponentTag(visited.tag)) return;
-      // A bailed-out parent can leave root.current pointing at a stale child;
-      // resolve to the fiber actually on the committed tree before reading it.
-      const fiber = findCurrentFiber(visited);
-      const detail = renderDetail(fiber);
-      if (!detail) return;
+    walkRendered(root.current, (fiber) => {
+      const detail = renderInfo(fiber);
       const id = idOf(fiber);
       buildInstance(fiber, rootId);
       details.set(id, detail);
@@ -365,39 +360,50 @@ export function createFiberBridge(target: typeof globalThis = globalThis): Fiber
   }
 }
 
-function renderDetail(fiber: Fiber): RenderDetail | null {
+/**
+ * Visits exactly the component fibers that performed work in this commit.
+ * React clears the PerformedWork flag when it clones a fiber for a commit and
+ * sets it only on fibers that actually render; it also propagates the bit into
+ * each ancestor's `subtreeFlags`. So we descend only where `subtreeFlags` has
+ * work and count only fibers whose own `flags` have it — which prunes
+ * bailed-out subtrees entirely and never reads their stale fibers. Falls back
+ * to visiting everything when these fields are unavailable (non-dev builds).
+ */
+function walkRendered(root: Fiber, visit: (f: Fiber) => void): void {
+  const hasFlags = typeof root.subtreeFlags === "number";
+  const stack: Fiber[] = [root];
+  while (stack.length) {
+    const node = stack.pop()!;
+    const performed = !hasFlags || (node.flags & PERFORMED_WORK) !== 0;
+    if (performed && isComponentTag(node.tag)) visit(node);
+
+    // Descend only where a descendant actually rendered — keeps us out of
+    // bailed subtrees (whose fibers carry stale flags).
+    const descend = !hasFlags || (node.subtreeFlags & PERFORMED_WORK) !== 0;
+    if (!descend) continue;
+    // Push children in reverse so they pop in natural (pre-order) sequence.
+    const kids: Fiber[] = [];
+    let child = node.child;
+    while (child) {
+      kids.push(child);
+      child = child.sibling;
+    }
+    for (let i = kids.length - 1; i >= 0; i--) stack.push(kids[i]!);
+  }
+}
+
+/** Reason + timing for a fiber already known to have rendered this commit. */
+function renderInfo(fiber: Fiber): RenderDetail {
   const alternate = fiber.alternate;
-  const selfDuration = fiber.actualDuration ?? 0;
+  const selfDuration = typeof fiber.actualDuration === "number" ? fiber.actualDuration : 0;
   const totalDuration = fiber.treeBaseDuration ?? selfDuration;
 
   if (!alternate) {
-    return {
-      reason: "mount",
-      changedPropKeys: [],
-      selfDuration,
-      totalDuration,
-      fiber,
-    };
+    return { reason: "mount", changedPropKeys: [], selfDuration, totalDuration, fiber };
   }
-
   const changedPropKeys = shallowChangedKeys(alternate.memoizedProps, fiber.memoizedProps);
-  const valuePropsChanged = changedPropKeys.length > 0;
-
-  // Whether this fiber did work in this commit. Precise per-commit attribution
-  // is ambiguous post-commit under React's double buffering (actualDuration and
-  // the PerformedWork flag can both be stale on the reused buffer of a
-  // bailed-out fiber), so we use the identity heuristic: a fiber whose props-
-  // or state-head identity differs from its alternate rendered recently. This
-  // is correct for fanout commits (the common case) but can over-report on
-  // commits that update only an isolated subtree — a known limitation.
-  void PERFORMED_WORK;
-  const hasTiming = typeof fiber.actualDuration === "number" && fiber.actualDuration > 0;
-  const propsIdentityChanged = alternate.memoizedProps !== fiber.memoizedProps;
-  const stateChanged = alternate.memoizedState !== fiber.memoizedState;
-  if (!hasTiming && !propsIdentityChanged && !stateChanged) return null;
-
   return {
-    reason: valuePropsChanged ? "props" : "state-or-parent",
+    reason: changedPropKeys.length > 0 ? "props" : "state-or-parent",
     changedPropKeys,
     selfDuration,
     totalDuration,

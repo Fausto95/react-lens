@@ -68,6 +68,15 @@ with multiple **projections** rather than a raw fiber tree.
 - ⬜ **Effect debugger** — effect-execution events, run/cleanup counts, loop detection
 - ⬜ Network, Sessions, Agent layer
 
+## Resolved
+
+- **Per-commit render attribution** — previously over-reported (identity
+  heuristic flagged anything rendered in the last two commits), so replay/
+  freeze/waste showed the whole app. Now uses React's `PerformedWork` flag with
+  `subtreeFlags` pruning: count a fiber only if it performed work, descend only
+  where a descendant did. Accurate per-commit sets (verified: isolated updates
+  no longer leak siblings). Regression test in `instrumentation`.
+
 ## Known follow-ups
 
 - **Doctor static rules.** v1 is runtime-evidence only. Static AST rules

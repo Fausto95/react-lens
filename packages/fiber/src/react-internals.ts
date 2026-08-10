@@ -37,6 +37,7 @@ export interface Fiber {
   updateQueue: unknown;
   dependencies: unknown;
   flags: number;
+  subtreeFlags: number;
   alternate: Fiber | null;
   actualDuration?: number;
   actualStartTime?: number;
