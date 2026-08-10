@@ -1,0 +1,30 @@
+{
+  "name": "@react-lens/devtools",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./runtime": "./src/runtime.ts",
+    "./embed": "./src/embed.tsx",
+    "./panel": "./src/Panel.tsx"
+  },
+  "dependencies": {
+    "@react-lens/protocol": "workspace:*",
+    "@react-lens/trace-engine": "workspace:*",
+    "@react-lens/causality": "workspace:*",
+    "@react-lens/diff-engine": "workspace:*",
+    "@react-lens/instrumentation": "workspace:*",
+    "@react-lens/fiber": "workspace:*",
+    "@react-lens/serializer": "workspace:*",
+    "react": "^19",
+    "react-dom": "^19"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^4.3.4",
+    "vite": "^6.0.7"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  }
+}

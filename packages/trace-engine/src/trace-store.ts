@@ -48,6 +48,9 @@ export class TraceStore {
   private readonly snapshots = new Map<RenderId, RenderSnapshot>();
   private readonly snapshotOrder: RingBuffer<RenderId>;
   private readonly instances = new Map<ComponentId, ComponentInstance>();
+  /** Uncapped lifetime render count per component (rendersOf is capped). */
+  private readonly renderTotals = new Map<ComponentId, number>();
+  private readonly selfTimeTotals = new Map<ComponentId, number>();
   private readonly eventsByInteractionId = new Map<InteractionId, LensEvent[]>();
   private readonly subscriptions = new Set<Subscription>();
 
@@ -81,6 +84,11 @@ export class TraceStore {
         this.createRenderBuffer(event.componentId);
       buf.push(event);
       this.rendersById.set(event.renderId, event);
+      this.renderTotals.set(event.componentId, (this.renderTotals.get(event.componentId) ?? 0) + 1);
+      this.selfTimeTotals.set(
+        event.componentId,
+        (this.selfTimeTotals.get(event.componentId) ?? 0) + event.selfDuration,
+      );
     }
     if (event.interactionId !== undefined) {
       const list = this.eventsByInteractionId.get(event.interactionId) ?? [];
@@ -125,6 +133,19 @@ export class TraceStore {
 
   instance(id: ComponentId): ComponentInstance | undefined {
     return this.instances.get(id);
+  }
+
+  allInstances(): ComponentInstance[] {
+    return [...this.instances.values()];
+  }
+
+  /** Lifetime render count (not capped by the history ring buffer). */
+  renderCount(id: ComponentId): number {
+    return this.renderTotals.get(id) ?? 0;
+  }
+
+  selfTimeTotal(id: ComponentId): number {
+    return this.selfTimeTotals.get(id) ?? 0;
   }
 
   allEvents(): LensEvent[] {
@@ -185,6 +206,8 @@ export class TraceStore {
     this.snapshots.clear();
     this.snapshotOrder.clear();
     this.instances.clear();
+    this.renderTotals.clear();
+    this.selfTimeTotals.clear();
     this.eventsByInteractionId.clear();
   }
 }

@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "playground",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["--filter", "@react-lens/playground", "dev"],
+      "port": 5178
+    }
+  ]
+}
