@@ -248,3 +248,13 @@ export function IconUpload(props: IconProps) {
     </Svg>
   );
 }
+
+/** Time travel — a counter-clockwise history arrow. */
+export function IconRewind(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <path d="M3 8a5 5 0 1 1 1.5 3.6" />
+      <path d="M3 8V5M3 8h3" />
+    </Svg>
+  );
+}

@@ -114,6 +114,7 @@ function EmbeddedPanel({
         setOverlayOn((v) => !v);
       }}
       onReplayCommit={replayWave}
+      timeTravel={runtime.timeTravel}
       {...(edit ? { edit } : {})}
       onHighlight={(id: ComponentId | null) => {
         if (id === null) {

@@ -11,6 +11,7 @@ import {
   IconPause,
   IconPlay,
   IconPlus,
+  IconRewind,
   IconSkipBack,
   IconSkipForward,
 } from "@react-lens/icons";
@@ -42,6 +43,7 @@ export function Timeline({
   onCursor,
   onSetAB,
   onReplay,
+  travel,
   onSelectComponent,
   onHighlight,
   selectedComponent = null,
@@ -54,6 +56,8 @@ export function Timeline({
   onCursor: (c: TimeCursor) => void;
   onSetAB: (ab: ABMarks) => void;
   onReplay?: (ids: ComponentId[]) => void;
+  /** Real time travel: page state follows the playhead while scrubbing. */
+  travel?: { on: boolean; supported: boolean; toggle: () => void };
   onSelectComponent?: (id: ComponentId) => void;
   /** Highlight DOM hosts on the page (same as tree hover). */
   onHighlight?: (id: ComponentId | null) => void;
@@ -288,13 +292,17 @@ export function Timeline({
       stop();
       return;
     }
-    // Scrub forward from the playhead (or session start when live) and flash an update wave
-    // for only the components that commit from that point onward.
+    // Scrub forward from the playhead (or session start when live). With real
+    // time travel on, the page itself replays its state — the cosmetic update
+    // wave would just be noise on top. Without it, flash the wave for the
+    // components that commit from that point onward.
     const from = cursor.mode === "historical" ? cursor.t : bounds.t0;
-    const ids = sessionComponentIds(commits, from);
-    if (ids.length > 0) onReplay?.(ids);
+    if (!travel?.on) {
+      const ids = sessionComponentIds(commits, from);
+      if (ids.length > 0) onReplay?.(ids);
+    }
     play(from, bounds.t1, false);
-  }, [playing, stop, play, cursor, bounds, commits, onReplay]);
+  }, [playing, stop, play, cursor, bounds, commits, onReplay, travel?.on]);
 
   // Keyboard: T, L, [ ], Space, arrows
   useEffect(() => {
@@ -435,6 +443,24 @@ export function Timeline({
           >
             <IconSkipForward size={13} />
           </button>
+          {travel && (
+            <button
+              className={`rl-icon-btn rl-tl-travel${travel.on ? " active" : ""}`}
+              onClick={travel.toggle}
+              disabled={!travel.supported}
+              title={
+                !travel.supported
+                  ? "Time travel requires a development React build"
+                  : travel.on
+                    ? "Time travel on — the page follows the playhead"
+                    : "Time travel off — scrubbing only moves the panel views"
+              }
+              aria-label="Apply state to the page while scrubbing"
+              aria-pressed={travel.on}
+            >
+              <IconRewind size={13} />
+            </button>
+          )}
           <span className="rl-zoom-sep" />
           <button
             className="rl-icon-btn"
@@ -669,7 +695,7 @@ export function Timeline({
 
                 {/* Playhead */}
                 <div
-                  className={`rl-tl-playhead${live ? " live" : ""}`}
+                  className={`rl-tl-playhead${live ? " live" : ""}${!live && travel?.on ? " traveling" : ""}`}
                   style={{ left: cursorX }}
                   onPointerDown={(e) => {
                     e.stopPropagation();

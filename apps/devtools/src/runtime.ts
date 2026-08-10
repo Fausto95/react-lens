@@ -3,7 +3,12 @@ import { createFiberBridge, type CommitObservation, type Dispose } from "@react-
 import { createInstrumentation, type Instrumentation } from "@react-lens/instrumentation";
 import { TraceStore } from "@react-lens/trace-engine";
 import { createCausality, type Causality } from "@react-lens/causality";
-import type { ComponentId, ComponentInstance } from "@react-lens/protocol";
+import type {
+  ComponentId,
+  ComponentInstance,
+  TimeTravelEntry,
+  TimeTravelResult,
+} from "@react-lens/protocol";
 
 export interface LensRuntime {
   store: TraceStore;
@@ -26,6 +31,12 @@ export interface LensRuntime {
     path: Array<string | number>,
     value: unknown,
   ): boolean;
+  /** Real time travel: restore captured raw state on the page (dev builds). */
+  timeTravel: {
+    supported(): boolean;
+    apply(entries: TimeTravelEntry[]): TimeTravelResult;
+    goLive(): TimeTravelResult;
+  };
   start(): void;
   stop(): void;
 }
@@ -57,6 +68,11 @@ export function createEmbeddedRuntime(): LensRuntime {
     canEditValues: () => fiber.canEditValues(),
     setProp: (id, path, value) => fiber.setProp(id, path, value),
     setHookState: (id, hookIndex, path, value) => fiber.setHookState(id, hookIndex, path, value),
+    timeTravel: {
+      supported: () => instrumentation.timeTravel.supported(),
+      apply: (entries) => instrumentation.timeTravel.apply(entries),
+      goLive: () => instrumentation.timeTravel.goLive(),
+    },
     start() {
       instrumentation.start({
         captureDOM: true,

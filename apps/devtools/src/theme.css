@@ -885,6 +885,14 @@
 }
 .rl-tl-playhead:hover .rl-tl-playhead-time,
 .rl-tl-playhead:active .rl-tl-playhead-time { opacity: 1; }
+/* Time travel active: the page is being driven by the playhead. */
+.rl-tl-playhead.traveling .rl-tl-playhead-stem {
+  background: rgba(167, 139, 250, 0.85); width: 2px; opacity: 1;
+  box-shadow: 0 0 6px rgba(167, 139, 250, 0.5);
+}
+.rl-tl-playhead.traveling .rl-tl-playhead-head { background: var(--rl-render); }
+.rl-icon-btn.rl-tl-travel.active { color: var(--rl-render); }
+.rl-icon-btn.rl-tl-travel:disabled { opacity: 0.4; cursor: not-allowed; }
 
 .rl-tl-wf-peek {
   position: absolute; left: 0; right: 0; bottom: 0; height: 18px;

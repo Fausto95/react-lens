@@ -10,6 +10,7 @@ import { diagnoseAll } from "./doctor.js";
 import { createDoctorClient, type DoctorResult } from "./doctorClient.js";
 import { CommandPalette, type Command } from "./CommandPalette.js";
 import type { TimeCursor, ABMarks } from "./timeCursor.js";
+import { createPanelTimeTravel, type TimeTravelApi } from "./timeTravelController.js";
 import { IconLens, IconBolt, IconSearch, IconDoctor, IconDownload, IconUpload, IconCrosshair } from "@react-lens/icons";
 import {
   downloadSession,
@@ -40,6 +41,8 @@ export interface PanelProps {
   onToggleOverlay?: () => void;
   /** Update Wave: flash a commit's components on the page (embedded only). */
   onReplayCommit?: (ids: ComponentId[]) => void;
+  /** Real time travel: restore page state while scrubbing (dev builds only). */
+  timeTravel?: TimeTravelApi;
   /**
    * Fetch one render's heavy snapshot on demand. Present when snapshots aren't
    * streamed inline (the extension, for scale); the inspector calls it for the
@@ -65,6 +68,7 @@ export function Panel({
   overlayEnabled,
   onToggleOverlay,
   onReplayCommit,
+  timeTravel,
   onRequestSnapshot,
   inspecting = false,
   onToggleInspect,
@@ -94,6 +98,29 @@ export function Panel({
     setSelected(selectComponent);
     onSelectConsumed?.();
   }, [selectComponent, onSelectConsumed]);
+
+  // Real time travel: while the cursor is historical (and the toggle is on),
+  // the page's state follows the playhead. On by default when supported.
+  const [travelOn, setTravelOn] = useState(true);
+  const [travelSupported, setTravelSupported] = useState(false);
+  useEffect(() => {
+    if (!timeTravel) return;
+    let alive = true;
+    void Promise.resolve(timeTravel.supported()).then((ok) => {
+      if (alive) setTravelSupported(ok);
+    });
+    return () => {
+      alive = false;
+    };
+  }, [timeTravel]);
+  const travelCtl = useMemo(
+    () => (timeTravel ? createPanelTimeTravel(store, timeTravel) : null),
+    [store, timeTravel],
+  );
+  useEffect(() => () => travelCtl?.dispose(), [travelCtl]);
+  useEffect(() => {
+    travelCtl?.onCursor(cursor, travelOn && travelSupported);
+  }, [travelCtl, cursor, travelOn, travelSupported]);
 
   // Time sync: when scrubbed into the past, dim tree components that weren't in
   // the commit at the cursor (reuses the Freeze-Frame styling).
@@ -422,6 +449,15 @@ export function Panel({
         explainToken={explainToken}
         {...(onHighlight ? { onHighlight } : {})}
         {...(onReplayCommit ? { onReplay: onReplayCommit } : {})}
+        {...(timeTravel
+          ? {
+              travel: {
+                on: travelOn && travelSupported,
+                supported: travelSupported,
+                toggle: () => setTravelOn((v) => !v),
+              },
+            }
+          : {})}
       />
 
       <div className="rl-statusbar">
