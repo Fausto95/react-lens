@@ -45,11 +45,13 @@ export function Panel({
         </span>
         <span className="rl-spacer" />
         <button
-          className={`rl-btn rec${recording ? " active" : ""}`}
+          className={`rl-rec${recording ? " active" : ""}`}
           onClick={onToggleRecording}
-          title="Toggle recording (R)"
+          title={recording ? "Pause recording (R)" : "Start recording (R)"}
+          aria-pressed={recording}
         >
-          ● {recording ? "Recording" : "Paused"}
+          <span className="rl-rec-dot" />
+          {recording ? "Recording" : "Paused"}
         </button>
       </div>
 

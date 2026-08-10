@@ -333,3 +333,39 @@
 }
 .rl-btn:hover { background: var(--rl-bg-active); }
 .rl-btn.rec.active { color: var(--rl-severe); border-color: var(--rl-severe); }
+
+/* Recording toggle — pill with a pulsing dot when live */
+.rl-rec {
+  -webkit-app-region: no-drag;
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 3px 10px 3px 8px; border-radius: 999px;
+  font: inherit; font-size: 12px; cursor: pointer;
+  color: var(--rl-text-dim);
+  background: var(--rl-bg-hover);
+  border: 1px solid var(--rl-border-strong);
+  transition: color 120ms, background 120ms, border-color 120ms;
+}
+.rl-rec:hover { background: var(--rl-bg-active); color: var(--rl-text); }
+.rl-rec-dot {
+  width: 7px; height: 7px; border-radius: 50%;
+  background: var(--rl-text-faint);
+  transition: background 120ms, box-shadow 120ms;
+}
+.rl-rec.active {
+  color: var(--rl-severe);
+  background: rgba(248,113,113,0.10);
+  border-color: rgba(248,113,113,0.5);
+}
+.rl-rec.active .rl-rec-dot {
+  background: var(--rl-severe);
+  box-shadow: 0 0 0 0 rgba(248,113,113,0.6);
+  animation: rl-rec-pulse 1.6s ease-out infinite;
+}
+@keyframes rl-rec-pulse {
+  0% { box-shadow: 0 0 0 0 rgba(248,113,113,0.55); }
+  70% { box-shadow: 0 0 0 5px rgba(248,113,113,0); }
+  100% { box-shadow: 0 0 0 0 rgba(248,113,113,0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .rl-rec.active .rl-rec-dot { animation: none; }
+}
