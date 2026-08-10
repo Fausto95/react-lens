@@ -31,5 +31,5 @@ function statusClass(status: string): string {
 }
 
 export function EmptyTab({ children }: { children: React.ReactNode }) {
-  return <div className="rl-empty">{children}</div>;
+  return <div className="rl-empty rl-empty-compact">{children}</div>;
 }

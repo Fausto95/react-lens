@@ -20,7 +20,12 @@ import { ms } from "@react-lens/ui";
 import type { TimeCursor, ABMarks } from "./timeCursor.js";
 
 type Mode = "collapsed" | "compact" | "expanded";
-const NEXT_MODE: Record<Mode, Mode> = { collapsed: "compact", compact: "expanded", expanded: "collapsed" };
+/** Open sizes always include the Components lane; collapsed hides the tracks. */
+const NEXT_MODE: Record<Mode, Mode> = {
+  collapsed: "compact",
+  compact: "expanded",
+  expanded: "collapsed",
+};
 const SNAP_PX = 6;
 const LANE_LABEL_W = 88;
 const WATERFALL_MAX = 120;
@@ -52,7 +57,7 @@ export function Timeline({
   const version = useTraceVersion(store, { kind: "global" });
   const interactions = useMemo(() => store.interactions(), [store, version]);
   const commits = useMemo(() => store.commits(), [store, version]);
-  const [mode, setMode] = useState<Mode>("compact");
+  const [mode, setMode] = useState<Mode>("expanded");
   const [scale, setScale] = useState(0); // px/ms; 0 = auto-fit to viewport
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [viewportW, setViewportW] = useState(0);
@@ -183,6 +188,13 @@ export function Timeline({
   }, [interactions.length, stop]);
 
   const selected = interactions.find((i) => i.id === selectedId) ?? null;
+
+  // Keep a selection so the Components lane isn't empty after the first event.
+  useEffect(() => {
+    if (selectedId && interactions.some((i) => i.id === selectedId)) return;
+    const latest = interactions.at(-1);
+    if (latest) setSelectedId(latest.id);
+  }, [interactions, selectedId]);
 
   const selectAt = useCallback(
     (t: number) => {
@@ -364,15 +376,22 @@ export function Timeline({
     <div className={`rl-tl rl-tl-${mode}`}>
       <div className="rl-tl-head">
         <button
-          className="rl-icon-btn"
+          className="rl-icon-btn rl-tl-toggle"
           onClick={() => setMode(NEXT_MODE[mode])}
-          title="Cycle timeline size (T)"
+          title={
+            mode === "collapsed"
+              ? "Show timeline (T)"
+              : mode === "compact"
+                ? "Expand components lane (T)"
+                : "Collapse timeline (T)"
+          }
           aria-label="Cycle timeline size (T)"
         >
-          {mode === "collapsed" ? <IconChevronRight size={14} /> : <IconChevronDown size={14} />}
+          {mode === "collapsed" ? <IconChevronRight size={18} /> : <IconChevronDown size={18} />}
         </button>
         <span className="rl-tl-sub">
           {interactions.length} interactions · {commits.length} commits
+          {mode === "compact" && " · compact"}
         </span>
         <span className="rl-spacer" />
         {ab.a !== undefined && ab.b !== undefined && (
@@ -427,6 +446,14 @@ export function Timeline({
           >
             <IconPlus size={13} />
           </button>
+          <button
+            className={`rl-icon-btn${scale === 0 ? " active" : ""}`}
+            onClick={() => setScale(0)}
+            title="Fit session to width"
+            aria-label="Fit session to width"
+          >
+            <span className="rl-tl-fit-glyph">⊡</span>
+          </button>
           {selected && (
             <button
               className="rl-icon-btn"
@@ -459,13 +486,13 @@ export function Timeline({
               <div className="rl-tl-label rl-tl-label-ruler" />
               <div className="rl-tl-label">Interactions</div>
               <div className="rl-tl-label">Commits</div>
-              {mode === "expanded" && <div className="rl-tl-label rl-tl-label-wf">Components</div>}
+              <div className="rl-tl-label rl-tl-label-wf">Components</div>
             </div>
             <div className="rl-tl-scroll" ref={scrollRef} onWheel={onWheel}>
               <div
                 className="rl-tl-inner"
                 ref={innerRef}
-                style={{ width: innerWidth }}
+                style={{ width: Math.max(innerWidth, viewW) }}
                 onPointerDown={onPointerDown}
                 onPointerMove={onPointerMove}
                 onPointerUp={onPointerUp}
@@ -478,7 +505,9 @@ export function Timeline({
                       className={`rl-tl-tick${tick.major ? " major" : ""}`}
                       style={{ left: tick.x }}
                     >
-                      {tick.major && <span className="rl-tl-tick-label">{tick.label}</span>}
+                      {tick.major && tick.label && (
+                        <span className="rl-tl-tick-label">{tick.label}</span>
+                      )}
                     </span>
                   ))}
                 </div>
@@ -526,8 +555,9 @@ export function Timeline({
                 {/* Commits / heat track */}
                 <div className="rl-tl-track rl-tl-track-react">
                   {commits.map((c) => {
-                    const h = 4 + heatScale(c.totalSelfTime, anomaly.max) * (mode === "expanded" ? 28 : 18);
+                    const h = 6 + heatScale(c.totalSelfTime, anomaly.max) * (mode === "expanded" ? 28 : 18);
                     const bad = anomaly.isAnomaly(c);
+                    const barW = Math.max(3, Math.min(10, 2 + heatScale(c.totalSelfTime, anomaly.max) * 8));
                     return (
                       <button
                         key={c.commitId}
@@ -549,33 +579,33 @@ export function Timeline({
                       >
                         <span
                           className={`rl-tl-bar${bad ? " anomaly" : ""}`}
-                          style={{ height: h, background: heatColor(c.totalSelfTime) }}
+                          style={{
+                            height: h,
+                            width: barW,
+                            left: 5 - barW / 2,
+                            background: heatColor(c.totalSelfTime),
+                            boxShadow: `0 0 ${4 + heatScale(c.totalSelfTime, anomaly.max) * 10}px ${heatColor(c.totalSelfTime)}55`,
+                          }}
                         />
                       </button>
                     );
                   })}
                 </div>
 
-                {/* Component waterfall lane (expanded) */}
-                {mode === "expanded" && (
-                  <div className="rl-tl-track rl-tl-track-wf">
-                    {selected ? (
-                      <ComponentWaterfall
-                        store={store}
-                        causality={causality}
-                        interaction={selected}
-                        onSelectComponent={onSelectComponent}
-                      />
-                    ) : (
-                      <div className="rl-tl-wf-empty">Select an interaction to see component costs</div>
-                    )}
-                  </div>
-                )}
-
-                {/* Compact peek */}
-                {mode === "compact" && selected && (
-                  <WaterfallPeek store={store} interaction={selected} />
-                )}
+                {/* Component waterfall — always when timeline is open */}
+                <div className="rl-tl-track rl-tl-track-wf">
+                  {selected ? (
+                    <ComponentWaterfall
+                      store={store}
+                      causality={causality}
+                      interaction={selected}
+                      playheadT={cursorT}
+                      onSelectComponent={onSelectComponent}
+                    />
+                  ) : (
+                    <div className="rl-tl-wf-empty">Select an interaction</div>
+                  )}
+                </div>
 
                 {/* Idle gaps */}
                 {model.segs
@@ -607,14 +637,10 @@ export function Timeline({
 
                 {/* A/B */}
                 {ab.a !== undefined && (
-                  <span className="rl-tl-mark a" style={{ left: xOf(ab.a) }}>
-                    A
-                  </span>
+                  <span className="rl-tl-mark a" style={{ left: xOf(ab.a) }} data-mark="A" />
                 )}
                 {ab.b !== undefined && (
-                  <span className="rl-tl-mark b" style={{ left: xOf(ab.b) }}>
-                    B
-                  </span>
+                  <span className="rl-tl-mark b" style={{ left: xOf(ab.b) }} data-mark="B" />
                 )}
 
                 {/* Playhead */}
@@ -684,96 +710,77 @@ function SelectionStrip({
 
   return (
     <div className="rl-tl-card">
-      {interaction && (
-        <div className="rl-tl-card-main">
-          <span className="rl-tl-card-title">{interaction.label}</span>
-          <span className="rl-tl-card-metric">{ms(interaction.metrics.totalDuration)}</span>
-          <span className="rl-tl-card-dim">React {ms(interaction.metrics.reactDuration)}</span>
-          <span className="rl-tl-card-dim">{interaction.metrics.renderCount} renders</span>
-          {changed !== null && changed.wasted > 0 && (
-            <span className="rl-tl-card-warn">{changed.wasted} wasted</span>
-          )}
-        </div>
-      )}
-      {anomalyCommit && (
-        <span className="rl-tl-card-anomaly" title={`${Math.round(anomalyCommit.totalSelfTime / Math.max(0.01, anomaly.p95))}× p95`}>
-          ⚠ {ms(anomalyCommit.totalSelfTime)} · {anomalyCommit.componentIds.length} comps
-        </span>
-      )}
-      <span className="rl-spacer" />
-      <button
-        className={`rl-icon-btn mark-a${ab.a !== undefined ? " active" : ""}`}
-        onClick={onSetA}
-        title="Set comparison A at cursor"
-        aria-label="Set comparison A at cursor"
-      >
-        <IconMarkA size={14} />
-      </button>
-      <button
-        className={`rl-icon-btn mark-b${ab.b !== undefined ? " active" : ""}`}
-        onClick={onSetB}
-        title="Set comparison B at cursor"
-        aria-label="Set comparison B at cursor"
-      >
-        <IconMarkB size={14} />
-      </button>
-      {onFit && (
-        <button className="rl-icon-btn" onClick={onFit} title="Fit selection" aria-label="Fit selection">
-          <span className="rl-tl-fit-glyph">⛶</span>
-        </button>
-      )}
-      {interaction && (
+      <div className="rl-tl-card-info">
+        {interaction && (
+          <div className="rl-tl-card-main">
+            <span className="rl-tl-card-title" title={interaction.label}>
+              {interaction.label}
+            </span>
+            <span className="rl-tl-card-metric">{ms(interaction.metrics.totalDuration)}</span>
+            <span className="rl-tl-card-dim">React {ms(interaction.metrics.reactDuration)}</span>
+            <span className="rl-tl-card-dim">{interaction.metrics.renderCount} renders</span>
+            {changed !== null && changed.wasted > 0 && (
+              <span className="rl-tl-card-warn">{changed.wasted} wasted</span>
+            )}
+          </div>
+        )}
+        {anomalyCommit && (
+          <span
+            className="rl-tl-card-anomaly"
+            title={`${Math.round(anomalyCommit.totalSelfTime / Math.max(0.01, anomaly.p95))}× p95`}
+          >
+            ⚠ {ms(anomalyCommit.totalSelfTime)} · {anomalyCommit.componentIds.length} comps
+          </span>
+        )}
+      </div>
+      <div className="rl-tl-card-actions" role="toolbar" aria-label="Selection actions">
         <button
-          className="rl-icon-btn primary"
-          onClick={() => onReplay(interaction)}
-          title="Replay interaction"
-          aria-label="Replay interaction"
+          className={`rl-icon-btn mark-a${ab.a !== undefined ? " active" : ""}`}
+          onClick={onSetA}
+          title="Set comparison A at cursor"
+          aria-label="Set comparison A at cursor"
         >
-          <IconPlay size={12} />
+          <IconMarkA size={13} />
         </button>
-      )}
-      {ab.a !== undefined && ab.b !== undefined && (
-        <span className="rl-tl-card-ab">A↔B</span>
-      )}
+        <button
+          className={`rl-icon-btn mark-b${ab.b !== undefined ? " active" : ""}`}
+          onClick={onSetB}
+          title="Set comparison B at cursor"
+          aria-label="Set comparison B at cursor"
+        >
+          <IconMarkB size={13} />
+        </button>
+        {onFit && (
+          <button className="rl-icon-btn" onClick={onFit} title="Fit selection" aria-label="Fit selection">
+            <span className="rl-tl-fit-glyph">⛶</span>
+          </button>
+        )}
+        {interaction && (
+          <button
+            className="rl-icon-btn primary"
+            onClick={() => onReplay(interaction)}
+            title="Replay interaction"
+            aria-label="Replay interaction"
+          >
+            <IconPlay size={12} />
+          </button>
+        )}
+      </div>
     </div>
   );
 }
 
-function WaterfallPeek({ store, interaction }: { store: TraceStore; interaction: Interaction }) {
-  const top = useMemo(() => {
-    const renders = interaction.renderIds
-      .map((id) => store.getRender(id))
-      .filter((r): r is RenderEvent => r != null)
-      .sort((a, b) => b.selfDuration - a.selfDuration);
-    const first = renders[0];
-    if (!first) return null;
-    return {
-      name: store.instance(first.componentId)?.name ?? `#${first.componentId}`,
-      self: first.selfDuration,
-      n: renders.length,
-    };
-  }, [store, interaction]);
-  if (!top) return null;
-  return (
-    <div className="rl-tl-wf-peek">
-      {top.n} components · top {top.name} · {ms(top.self)}
-    </div>
-  );
-}
-
-/**
- * Cost-sorted render waterfall for the selected interaction. Slow work rises
- * to the top; click selects the component in the tree/inspector.
- */
 function ComponentWaterfall({
   store,
   causality,
   interaction,
+  playheadT,
   onSelectComponent,
 }: {
   store: TraceStore;
   causality: Causality;
   interaction: Interaction;
+  playheadT: number;
   onSelectComponent?: (id: ComponentId) => void;
 }) {
   const rows = useMemo(() => {
@@ -796,6 +803,7 @@ function ComponentWaterfall({
         }
       }
       const reason = r.reasons[0]?.type ?? "render";
+      const tEnd = r.timestamp + Math.max(r.selfDuration, 0.05);
       return {
         id: r.componentId,
         name: store.instance(r.componentId)?.name ?? `#${r.componentId}`,
@@ -805,6 +813,8 @@ function ComponentWaterfall({
         heat: r.selfDuration / maxSelf,
         wasted,
         reason,
+        t0: r.timestamp,
+        t1: tEnd,
       };
     });
   }, [store, causality, interaction]);
@@ -815,30 +825,38 @@ function ComponentWaterfall({
 
   return (
     <div className="rl-wf rl-wf-lane">
+      <div className="rl-wf-cols" aria-hidden>
+        <span className="rl-wf-col-name">Component</span>
+        <span className="rl-wf-col-track" />
+        <span className="rl-wf-col-ms">self</span>
+      </div>
       <div className="rl-wf-rows">
-        {rows.map((row, i) => (
-          <button
-            type="button"
-            className={`rl-wf-row${row.wasted ? " wasted" : ""}`}
-            key={`${row.id}-${i}`}
-            title={`${row.name} · ${ms(row.self)} · ${row.reason}${row.wasted ? " · no visible change" : ""}`}
-            onClick={() => onSelectComponent?.(row.id)}
-          >
-            <span className="rl-wf-name">{row.name}</span>
-            <span className="rl-wf-track">
-              <span
-                className="rl-wf-bar"
-                style={{
-                  left: `${row.leftPct}%`,
-                  width: `${row.widthPct}%`,
-                  background: heatColor(row.self),
-                  opacity: 0.55 + row.heat * 0.45,
-                }}
-              />
-            </span>
-            <span className="rl-wf-ms">{ms(row.self)}</span>
-          </button>
-        ))}
+        {rows.map((row, i) => {
+          const underPlayhead = playheadT >= row.t0 - 0.25 && playheadT <= row.t1;
+          return (
+            <button
+              type="button"
+              className={`rl-wf-row${row.wasted ? " wasted" : ""}${underPlayhead ? " under-playhead" : ""}`}
+              key={`${row.id}-${i}`}
+              title={`${row.name} · ${ms(row.self)} · ${row.reason}${row.wasted ? " · no visible change" : ""}`}
+              onClick={() => onSelectComponent?.(row.id)}
+            >
+              <span className="rl-wf-name">{row.name}</span>
+              <span className="rl-wf-track">
+                <span
+                  className="rl-wf-bar"
+                  style={{
+                    left: `${row.leftPct}%`,
+                    width: `${row.widthPct}%`,
+                    background: heatColor(row.self),
+                    opacity: 0.55 + row.heat * 0.45,
+                  }}
+                />
+              </span>
+              <span className="rl-wf-ms">{ms(row.self)}</span>
+            </button>
+          );
+        })}
       </div>
     </div>
   );
@@ -1014,12 +1032,19 @@ function buildTicks(segs: Seg[], t0: number): Array<{ x: number; major: boolean;
   const active = segs.filter((s) => !s.idle);
   for (const s of active) {
     const span = s.t1 - s.t0;
-    const step = niceStep(span / 4);
+    const pxSpan = Math.max(1, s.x1 - s.x0);
+    // Aim for ~1 label per 56px so labels never collide.
+    const targetSteps = Math.max(2, Math.floor(pxSpan / 56));
+    const step = niceStep(span / targetSteps);
     let t = Math.ceil(s.t0 / step) * step;
+    let lastLabelX = -Infinity;
     while (t <= s.t1 + 0.01) {
       const x = projectX(segs, t);
-      const major = Math.abs((t - t0) % (step * 2)) < step * 0.01 || Math.abs(t - s.t0) < 0.01;
-      ticks.push({ x, major, label: ms(t - t0) });
+      const atEdge = Math.abs(t - s.t0) < 0.01 || Math.abs(t - s.t1) < 0.01;
+      const major = atEdge || Math.abs((t - t0) % (step * 2)) < step * 0.01;
+      const showLabel = major && (atEdge || x - lastLabelX >= 48);
+      ticks.push({ x, major, label: showLabel ? ms(t - t0) : "" });
+      if (showLabel) lastLabelX = x;
       t += step;
     }
   }

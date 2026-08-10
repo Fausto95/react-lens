@@ -61,6 +61,7 @@ export function Panel({
   const [selected, setSelected] = useState<ComponentId | null>(null);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [treeModeHint, setTreeModeHint] = useState<"waste" | null>(null);
+  const [sessionLabel, setSessionLabel] = useState<string | null>(null);
   const [recentSessions, setRecentSessions] = useState<
     Array<{ id: string; title: string; eventCount: number }>
   >([]);
@@ -107,6 +108,7 @@ export function Panel({
       setCursor({ t: 0, mode: "live" });
       setAB({});
       setSelected(null);
+      setSessionLabel(null);
     }
   }, [empty]);
 
@@ -132,12 +134,26 @@ export function Panel({
     void listRecentSessions().then(setRecentSessions);
   }, [paletteOpen]);
 
+  const goLive = useCallback(() => {
+    const commits = store.commits();
+    const t = commits.at(-1)?.timestamp ?? 0;
+    setCursor({ t, mode: "live" });
+  }, [store]);
+
   const commands: Command[] = [];
+  commands.push({
+    id: "go-live",
+    label: "Go live",
+    hint: "L",
+    group: "Timeline",
+    run: goLive,
+  });
   if (onToggleOverlay) {
     commands.push({
       id: "toggle-overlay",
       label: overlayEnabled ? "Disable render overlay" : "Enable render overlay",
       hint: "⚡",
+      group: "Navigate",
       run: onToggleOverlay,
     });
   }
@@ -146,6 +162,7 @@ export function Panel({
       id: "toggle-recording",
       label: recording ? "Pause recording" : "Start recording",
       hint: "R",
+      group: "Navigate",
       run: onToggleRecording,
     });
   }
@@ -153,12 +170,14 @@ export function Panel({
     id: "export-session",
     label: "Export session",
     hint: "↓",
+    group: "Session",
     run: () => downloadSession(store),
   });
   commands.push({
     id: "import-session",
     label: "Import session",
     hint: "↑",
+    group: "Session",
     run: () => importRef.current?.click(),
   });
   for (const entry of recentSessions) {
@@ -166,6 +185,7 @@ export function Panel({
       id: `session:${entry.id}`,
       label: `Open · ${entry.title}`,
       hint: `${entry.eventCount} ev`,
+      group: "Session",
       run: () => {
         void loadSessionFromIdb(entry.id).then((file) => {
           if (!file) return;
@@ -173,6 +193,7 @@ export function Panel({
           setSelected(null);
           setCursor({ t: 0, mode: "live" });
           setAB({});
+          setSessionLabel(file.meta?.title ?? entry.title);
         });
       },
     });
@@ -188,6 +209,11 @@ export function Panel({
         <span className="rl-brand">
           <IconLens className="rl-brand-icon" /> React Lens
         </span>
+        {sessionLabel && (
+          <span className="rl-session-label" title={sessionLabel}>
+            {sessionLabel}
+          </span>
+        )}
         <span className="rl-spacer" />
         <button
           className="rl-icon-btn"
@@ -223,10 +249,11 @@ export function Panel({
             e.target.value = "";
             if (!file) return;
             void importSessionFromFile(store, file)
-              .then(() => {
+              .then((session) => {
                 setSelected(null);
                 setCursor({ t: 0, mode: "live" });
                 setAB({});
+                setSessionLabel(session.meta?.title ?? file.name);
               })
               .catch(() => {
                 /* invalid file — ignore for MVP */
@@ -286,7 +313,10 @@ export function Panel({
         <div className="rl-pane">
           <div className="rl-pane-title">Inspector</div>
           {selected === null ? (
-            <div className="rl-empty">Select a component to inspect its renders and causes.</div>
+            <div className="rl-empty rl-empty-action">
+              <span>No component selected.</span>
+              <span className="rl-empty-hint">Pick one in the tree, waterfall, or ⌘K.</span>
+            </div>
           ) : (
             <Inspector
               store={store}
@@ -315,20 +345,30 @@ export function Panel({
       />
 
       <div className="rl-statusbar">
-        <span>{stats.events} events</span>
-        <span>{stats.renders} renders</span>
-        <span>{stats.components} components</span>
+        <span className="rl-status-metric" title="Events">
+          <span className="rl-status-k">ev</span> {stats.events}
+        </span>
+        <span className="rl-status-metric" title="Renders">
+          <span className="rl-status-k">rnd</span> {stats.renders}
+        </span>
+        <span className="rl-status-metric" title="Components">
+          <span className="rl-status-k">cmp</span> {stats.components}
+        </span>
         {suspended.size > 0 && (
-          <span className="rl-status-suspended">◇ {suspended.size} suspended</span>
-        )}
-        {issueCount > 0 && (
-          <span className="rl-status-issues">
-            <IconDoctor size={12} /> {issueCount} issues
+          <span className="rl-status-metric warn" title="Suspended">
+            <span className="rl-status-k">sus</span> {suspended.size}
           </span>
         )}
-        <span style={{ marginLeft: "auto" }}>
-          {embedded ? "embedded" : "devtools"} · protocol v1
-        </span>
+        {issueCount > 0 && (
+          <span className="rl-status-metric warn" title="Doctor issues">
+            <IconDoctor size={11} /> {issueCount}
+          </span>
+        )}
+        <span className="rl-spacer" />
+        <details className="rl-status-about">
+          <summary>{embedded ? "embedded" : "devtools"}</summary>
+          <div className="rl-status-about-pop">protocol v1</div>
+        </details>
       </div>
 
       {paletteOpen && (

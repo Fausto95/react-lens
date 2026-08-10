@@ -75,13 +75,14 @@ export function importSession(store: TraceStore, session: LensSessionFile): void
   store.ingest(session.payload);
 }
 
-export async function importSessionFromFile(store: TraceStore, file: File): Promise<void> {
+export async function importSessionFromFile(store: TraceStore, file: File): Promise<LensSessionFile> {
   const text = await file.text();
   const session = parseSessionFile(text);
   importSession(store, session);
   await saveSessionToIdb(session).catch(() => {
     /* ignore */
   });
+  return session;
 }
 
 function openDb(): Promise<IDBDatabase> {

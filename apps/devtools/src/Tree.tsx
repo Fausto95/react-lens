@@ -144,19 +144,24 @@ export function Tree({
       </div>
       <input
         className="rl-tree-search"
-        placeholder="Search  renders:>20  context:X  compiled:false"
+        placeholder="Filter by name…"
         value={query}
         spellCheck={false}
         onChange={(e) => setQuery(e.target.value)}
       />
 
       {rows.length === 0 ? (
-        <div className="rl-empty">
-          {mode === "waste"
-            ? "No potentially-wasted renders detected."
-            : mode === "changed"
-              ? "No components changed observable output yet."
-              : "No components captured. Interact with the page."}
+        <div className="rl-empty rl-empty-action">
+          <span>
+            {mode === "waste"
+              ? "No potentially wasted renders."
+              : mode === "changed"
+                ? "No observable output changes yet."
+                : "No components yet."}
+          </span>
+          <span className="rl-empty-hint">
+            {mode === "components" ? "Interact with the page to capture a tree." : "Try another mode or clear the filter."}
+          </span>
         </div>
       ) : (
         <div
@@ -249,24 +254,22 @@ function TreeRow({
         {node.kind === "component" ? (
           <>
             <span className="rl-tree-name">{node.datum.name}</span>
-            {inFrozen && <span className="rl-frozen-dot" title="Rendered in the frozen commit" />}
-            {node.datum.kind === "server-boundary" && (
-              <span className="rl-server-mark" title="RSC / Flight client reference">◈</span>
-            )}
-            {suspended?.has(node.id) && <span className="rl-suspense-mark" title="Suspended">◇</span>}
-            {doctor?.has(node.id) && <span className="rl-doc-mark" title="Doctor issue">⚕</span>}
-            {node.datum.compiled && <span className="rl-compiler" title="React Compiler optimized">◆</span>}
-            {node.datum.observableChange === false && (
-              <span className="rl-dot suspicious" title="No observable change" />
-            )}
+            <TreePips
+              frozen={!!inFrozen}
+              server={node.datum.kind === "server-boundary"}
+              suspended={!!suspended?.has(node.id)}
+              doctor={!!doctor?.has(node.id)}
+              compiled={!!node.datum.compiled}
+              waste={node.datum.observableChange === false}
+            />
           </>
         ) : (
           <>
             <span className="rl-tree-name">{node.name}</span>
             <span className="rl-badge render">×{node.count}</span>
             {node.suspicious > 0 && (
-              <span className="rl-badge suspicious" title="Suspicious instances">
-                ⚠ {node.suspicious}
+              <span className="rl-pip warn" title={`${node.suspicious} suspicious`}>
+                {node.suspicious}
               </span>
             )}
           </>
@@ -279,6 +282,41 @@ function TreeRow({
       <span className="rl-tree-metric rl-tree-renders">{rowRenders(row)}×</span>
       <span className="rl-tree-metric rl-tree-ms dim">{self > 0 ? ms(self) : ""}</span>
     </div>
+  );
+}
+
+function TreePips({
+  frozen,
+  server,
+  suspended,
+  doctor,
+  compiled,
+  waste,
+}: {
+  frozen: boolean;
+  server: boolean;
+  suspended: boolean;
+  doctor: boolean;
+  compiled: boolean;
+  waste: boolean;
+}) {
+  // One severity pip max (doctor > waste > suspended), plus quiet meta marks.
+  const severity = doctor ? "doctor" : waste ? "waste" : suspended ? "suspended" : null;
+  const title =
+    severity === "doctor"
+      ? "Doctor issue"
+      : severity === "waste"
+        ? "No observable change"
+        : severity === "suspended"
+          ? "Suspended"
+          : undefined;
+  return (
+    <span className="rl-tree-pips">
+      {frozen && <span className="rl-pip frozen" title="In frozen commit" />}
+      {severity && <span className={`rl-pip ${severity}`} title={title} />}
+      {server && <span className="rl-pip server" title="RSC / Flight" />}
+      {compiled && !severity && <span className="rl-pip compiled" title="Compiler optimized" />}
+    </span>
   );
 }
 

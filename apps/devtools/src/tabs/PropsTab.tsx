@@ -26,8 +26,14 @@ export function PropsTab({ ctx }: { ctx: InspectorContext }) {
     <div className="rl-val-list">
       {props.entries.map(([key, value]) => {
         const status = statuses.get(key);
+        const tint =
+          status === "changed" || status === "added" || status === "removed"
+            ? " changed"
+            : status === "fn" || status === "ref"
+              ? " identity"
+              : "";
         return (
-          <div className="rl-val-row" key={key}>
+          <div className={`rl-val-row${tint}`} key={key}>
             <span className="rl-val-key">{key}</span>
             <ValueView value={value} path={[key]} edit={editFn} />
             {status && <span className={`rl-badge ${statusClass(status)}`}>{status}</span>}

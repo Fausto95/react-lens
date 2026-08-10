@@ -10,7 +10,7 @@ const QUIET_MS = 450;
 
 /**
  * After an interaction settles, if enough renders produced no observable DOM
- * change, surface a dismissible chip — proactive waste without opening the tree.
+ * change, surface a dismissible severe chip — not a card.
  */
 export function WasteBanner({
   store,
@@ -60,19 +60,21 @@ export function WasteBanner({
   if (!banner) return null;
 
   return (
-    <div className="rl-waste-banner" role="status">
+    <div className="rl-waste-chip" role="status">
       <button
-        className="rl-waste-banner-body"
+        type="button"
+        className="rl-waste-chip-body"
         onClick={() => {
           onInspect({ interactionId: banner.interactionId, worstId: banner.worstId });
           dismissed.current.add(banner.interactionId);
           setBanner(null);
         }}
       >
-        <span className="rl-waste-banner-label">
-          {banner.label} — {banner.wasted}/{banner.total} renders with no visible change
+        <span className="rl-waste-chip-pip" />
+        <span className="rl-waste-chip-label">
+          {banner.label} · {banner.wasted}/{banner.total} wasted
         </span>
-        <span className="rl-waste-banner-cta">Inspect</span>
+        <span className="rl-waste-chip-cta">Inspect</span>
       </button>
       <button
         className="rl-icon-btn"

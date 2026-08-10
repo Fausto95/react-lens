@@ -18,7 +18,7 @@ export function ContextTab({ ctx }: { ctx: InspectorContext }) {
   return (
     <div className="rl-kv-list">
       {contexts.map((c, i) => (
-        <div className="rl-val-row" key={i}>
+        <div className={`rl-val-row${changed ? " changed" : ""}`} key={i}>
           <span className="rl-val-key">{c.displayName ?? `Context #${i}`}</span>
           <ValueView value={c.value} />
           {changed && <span className="rl-badge warn">changed</span>}

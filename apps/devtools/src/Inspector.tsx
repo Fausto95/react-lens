@@ -46,9 +46,8 @@ export interface InspectorContext {
 }
 
 /**
- * Single dense scroll of collapsible sections — no tabs. Sections with no data
- * for the current component are hidden entirely, so what you see is only what
- * exists. Order is by debugging priority: why first, then props/state/hooks.
+ * Detail inspector under the playhead: sticky header with cost chips, then
+ * sparse disclosure sections. Why is a one-line verdict by default.
  */
 export function Inspector({
   store,
@@ -81,15 +80,12 @@ export function Inspector({
     if (latest) setSelectedRender(latest.renderId);
   }, [latest?.renderId]);
 
-  // Time travel: when the global cursor is historical, show this component's
-  // render at that moment (redesign §30); otherwise the manually-selected/latest.
   const historical = cursor?.mode === "historical";
   const historicalRenderId = historical
     ? store.renderAtOrBefore(componentId, cursor.t)?.renderId ?? null
     : null;
   const activeRenderId = historical ? historicalRenderId : selectedRender ?? latest?.renderId ?? null;
 
-  // When snapshots aren't streamed inline (large apps), fetch on demand.
   const hasSnapshot = activeRenderId !== null && store.snapshot(activeRenderId) !== undefined;
   useEffect(() => {
     if (onRequestSnapshot && activeRenderId !== null && !hasSnapshot) {
@@ -123,44 +119,49 @@ export function Inspector({
   const stateCount = hooks.filter((h) => h.kind === "state" || h.kind === "reducer").length;
   const effectCount = hooks.filter((h) => h.kind === "effect" || h.kind === "layout-effect").length;
   const contextCount = snapshot?.contexts?.length ?? 0;
+  const renderCount = store.renderCount(componentId);
+  const selfTotal = store.selfTimeTotal(componentId);
+  const activeSelf = activeRenderId != null ? store.getRender(activeRenderId)?.selfDuration : undefined;
 
   return (
     <div className="rl-inspector">
-      <div className="rl-insp-head">
-        <h2>{inst.name}</h2>
-        <span className={`rl-badge ${inst.compiler.compiled ? "healthy" : "dim"}`}>
-          {inst.compiler.compiled ? "◆ compiled" : "not compiled"}
-        </span>
-        {inst.kind === "server-boundary" && (
-          <span className="rl-badge render" title={rscTitle(inst)}>
-            {inst.rsc?.role === "server-reference"
-              ? "server action"
-              : inst.rsc?.role === "lazy-payload"
-                ? "RSC lazy"
-                : "RSC boundary"}
-            {inst.rsc?.exportName ? ` · ${inst.rsc.exportName}` : ""}
+      <div className="rl-insp-sticky">
+        <div className="rl-insp-head">
+          <h2>{inst.name}</h2>
+          {historical && <span className="rl-chip warn">historical</span>}
+          {inst.compiler.compiled && (
+            <span className="rl-chip healthy" title="React Compiler optimized">
+              compiled
+            </span>
+          )}
+          {inst.kind === "server-boundary" && (
+            <span className="rl-chip render" title={rscTitle(inst)}>
+              {inst.rsc?.role === "server-reference"
+                ? "server action"
+                : inst.rsc?.role === "lazy-payload"
+                  ? "RSC lazy"
+                  : "RSC"}
+            </span>
+          )}
+          {(inst.kind === "suspense" || inst.underSuspense) && (
+            <span className={`rl-chip ${inst.suspended ? "warn" : "dim"}`}>
+              {inst.suspended ? "suspended" : "Suspense"}
+            </span>
+          )}
+        </div>
+        <div className="rl-insp-meta">
+          <span className="rl-insp-chip">{renderCount} renders</span>
+          <span className="rl-insp-chip">{ms(selfTotal)} total</span>
+          {activeSelf != null && <span className="rl-insp-chip accent">{ms(activeSelf)} this</span>}
+          {doctor.total > 0 && <span className="rl-insp-chip warn">{doctor.total} issues</span>}
+          <span className="rl-insp-source">
+            {inst.source ? `${shortSource(inst.source.file)}:${inst.source.line}` : "no source"}
           </span>
-        )}
-        {inst.kind === "suspense" && (
-          <span className={`rl-badge ${inst.suspended ? "warn" : "dim"}`}>
-            Suspense{inst.suspended ? " · fallback" : ""}
-          </span>
-        )}
-        {inst.underSuspense && inst.kind !== "suspense" && (
-          <span className={`rl-badge ${inst.suspended ? "warn" : "dim"}`}>
-            ◇ {inst.suspended ? "suspended" : "under Suspense"}
-          </span>
-        )}
-        {historical && <span className="rl-badge warn">◷ historical</span>}
-      </div>
-      <div className="rl-source">
-        {inst.source ? `${shortSource(inst.source.file)}:${inst.source.line}` : "source unavailable"}
-        {" · "}
-        {store.renderCount(componentId)} renders · {ms(store.selfTimeTotal(componentId))}
+        </div>
       </div>
 
       {historical && activeRenderId === null && (
-        <div className="rl-empty">Not yet rendered at this point in time.</div>
+        <div className="rl-empty rl-empty-compact">Not rendered yet at this cursor.</div>
       )}
 
       {abDiff && (
@@ -169,7 +170,7 @@ export function Inspector({
         </Section>
       )}
 
-      <Section title="Why this render" defaultOpen>
+      <Section title="Why" defaultOpen>
         <WhySection ctx={ctx} />
       </Section>
 
@@ -236,7 +237,6 @@ interface ABDiff {
   state?: DiffResult;
 }
 
-/** Diff a component's props/state between the A and B timestamps (§28, §164). */
 function compareAB(store: TraceStore, id: ComponentId, a: number, b: number): ABDiff {
   const sa = store.snapshotAtOrBefore(id, a);
   const sb = store.snapshotAtOrBefore(id, b);
@@ -255,8 +255,8 @@ function ABCompare({ diff: d }: { diff: ABDiff }) {
   if (d.missing) {
     const where = d.missing === "both" ? "A and B" : d.missing;
     return (
-      <div className="rl-empty">
-        Snapshot not retained at {where}. Scrub there to fetch it, then set the marker again.
+      <div className="rl-empty rl-empty-compact">
+        Snapshot missing at {where}. Scrub there, then set the marker again.
       </div>
     );
   }
@@ -278,4 +278,3 @@ function rscTitle(inst: { rsc?: { role: string; moduleId?: string; exportName?: 
   if (r.moduleId) parts.push(r.moduleId);
   return parts.join(" · ");
 }
-
