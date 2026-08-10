@@ -610,7 +610,7 @@ export function Timeline({
                   })}
                 </div>
 
-                {/* Phase-packed component bars (no persistent lanes) */}
+                {/* Wall-clock component bars (aligned to the ruler) */}
                 <div className="rl-tl-track rl-tl-track-wf">
                   <PhaseWaterfall
                     store={store}
@@ -641,7 +641,7 @@ export function Timeline({
                       style={{ left: s.x0, width: s.x1 - s.x0 }}
                       title={`${ms(s.t1 - s.t0)} idle`}
                     >
-                      ⋯
+                      {compactGap(s.t1 - s.t0)}
                     </span>
                   ))}
 
@@ -835,9 +835,9 @@ function SelectionStrip({
 }
 
 /**
- * Phase-scoped packed waterfall: one column per interaction. Each bar is one
- * render (re-renders of the same component show as separate bars). Width is
- * cost-scaled inside the phase column; order follows render time.
+ * Wall-clock component waterfall: one bar per render, placed at xOf(timestamp)
+ * with width from self-duration on the same scale as the ruler. Overlapping
+ * renders stack onto tracks. Interaction phase columns remain as background.
  */
 function PhaseWaterfall({
   store,
@@ -940,8 +940,8 @@ const PHASE_PAD_Y = 8;
 const TRACK_H = 28;
 const BAR_H = 22;
 const PHASE_BAR_CAP = 64;
-/** Minimum readable bar width inside a phase column. */
-const MIN_BAR_PX = 56;
+/** Minimum clickable width when a render is sub-pixel on the scale. */
+const MIN_BAR_PX = 3;
 
 interface PackedBar {
   id: ComponentId;
@@ -980,21 +980,24 @@ function packPhaseBars(
   let trackCount = 1;
   let whyChecked = 0;
 
+  type Agg = {
+    id: ComponentId;
+    renderId: RenderId;
+    name: string;
+    t0: number;
+    t1: number;
+    self: number;
+    wasted: boolean;
+    reason: string;
+    left: number;
+    width: number;
+  };
+
   for (const it of interactions) {
     const phaseLeft = xOf(it.start);
     const phaseRight = xOf(Math.max(it.end, it.start + 0.05));
     const phaseWidth = Math.max(8, phaseRight - phaseLeft);
 
-    type Agg = {
-      id: ComponentId;
-      renderId: RenderId;
-      name: string;
-      t0: number;
-      t1: number;
-      self: number;
-      wasted: boolean;
-      reason: string;
-    };
     const items: Agg[] = [];
 
     for (const rid of it.renderIds) {
@@ -1012,6 +1015,8 @@ function packPhaseBars(
           /* ignore */
         }
       }
+      const left = xOf(t0);
+      const width = Math.max(MIN_BAR_PX, xOf(t1) - left);
       items.push({
         id: r.componentId,
         renderId: r.renderId,
@@ -1021,10 +1026,12 @@ function packPhaseBars(
         self: r.selfDuration,
         wasted,
         reason: r.reasons[0]?.type ?? "render",
+        left,
+        width,
       });
     }
 
-    // One bar per render (re-renders stay visible), ranked by self-time.
+    // Prefer costliest renders when capped; layout still follows wall-clock.
     const ranked = [...items].sort((a, b) => b.self - a.self).slice(0, PHASE_BAR_CAP);
 
     phases.push({
@@ -1039,55 +1046,30 @@ function packPhaseBars(
     if (ranked.length === 0) continue;
 
     const maxSelf = Math.max(0, ...ranked.map((a) => a.self));
-    const act0 = Math.min(...ranked.map((a) => a.t0));
-    const act1 = Math.max(...ranked.map((a) => a.t1));
-    const actSpan = Math.max(act1 - act0, 1e-6);
-
-    const pad = Math.min(6, phaseWidth * 0.04);
-    const innerW = Math.max(4, phaseWidth - pad * 2);
-    const n = ranked.length;
-    // Lone / sparse phases should use the column — don't leave a truncated chip
-    // in a sea of empty track (zero-cost renders used to collapse to MIN_BAR_PX).
-    const shareFloor =
-      n === 1
-        ? innerW * 0.92
-        : Math.min(innerW, Math.max(MIN_BAR_PX, innerW / (n + 0.75)));
-
-    const laid = ranked.map((item) => {
-      const heat = maxSelf <= 0 ? 1 : item.self / maxSelf;
-      const width = Math.min(innerW, Math.max(shareFloor, heat * innerW * 0.92));
-      const rel = (item.t0 - act0) / actSpan;
-      const maxLeft = innerW - width;
-      const left = phaseLeft + pad + Math.max(0, Math.min(Math.max(0, maxLeft), rel * maxLeft));
-      return {
-        ...item,
-        heat,
-        left,
-        width,
-        pack0: left,
-        pack1: left + width,
-      };
-    });
-
+    // Pack tracks by visible pixel span so min-width bars don't overlap.
     const packedItems = greedyPack(
-      laid.map((item) => ({ ...item, t0: item.pack0, t1: item.pack1 })),
+      ranked.map((item) => ({
+        item,
+        t0: item.left,
+        t1: item.left + item.width,
+      })),
     );
-    for (const item of packedItems) {
-      trackCount = Math.max(trackCount, item.track + 1);
-      const real = ranked.find((r) => r.renderId === item.renderId)!;
+    for (const packed of packedItems) {
+      const item = packed.item;
+      trackCount = Math.max(trackCount, packed.track + 1);
       bars.push({
         id: item.id,
         renderId: item.renderId,
         name: item.name,
         phaseId: it.id,
         phaseLabel: it.label,
-        t0: real.t0,
-        t1: real.t1,
+        t0: item.t0,
+        t1: item.t1,
         self: item.self,
-        heat: item.heat,
+        heat: maxSelf <= 0 ? 1 : item.self / maxSelf,
         wasted: item.wasted,
         reason: item.reason,
-        track: item.track,
+        track: packed.track,
         left: item.left,
         width: item.width,
       });
@@ -1294,27 +1276,48 @@ function sessionBounds(
 }
 
 function buildTicks(segs: Seg[], t0: number): Array<{ x: number; major: boolean; label: string }> {
-  const ticks: Array<{ x: number; major: boolean; label: string }> = [];
-  const active = segs.filter((s) => !s.idle);
-  for (const s of active) {
+  const ticks: Array<{ x: number; t: number; major: boolean; label: string }> = [];
+  const seenX = new Set<number>();
+  const pushTick = (t: number, major: boolean) => {
+    const x = Math.round(projectX(segs, t) * 10) / 10;
+    if (seenX.has(x)) return;
+    seenX.add(x);
+    ticks.push({ x, t, major, label: "" });
+  };
+
+  // Boundary ticks for every scale segment (active + idle) so gutters aren't blank.
+  for (const s of segs) {
+    pushTick(s.t0, true);
+    pushTick(s.t1, true);
+  }
+
+  // Interior ticks only on active time — idle is already a single compressed cell.
+  for (const s of segs) {
+    if (s.idle) continue;
     const span = s.t1 - s.t0;
     const pxSpan = Math.max(1, s.x1 - s.x0);
-    // Aim for ~1 label per 56px so labels never collide.
-    const targetSteps = Math.max(2, Math.floor(pxSpan / 56));
+    // ~1 tick per 48px → a label can sit between adjacent tick lines.
+    const targetSteps = Math.max(1, Math.floor(pxSpan / 48));
     const step = niceStep(span / targetSteps);
-    let t = Math.ceil(s.t0 / step) * step;
-    let lastLabelX = -Infinity;
-    while (t <= s.t1 + 0.01) {
-      const x = projectX(segs, t);
-      const atEdge = Math.abs(t - s.t0) < 0.01 || Math.abs(t - s.t1) < 0.01;
-      const major = atEdge || Math.abs((t - t0) % (step * 2)) < step * 0.01;
-      const showLabel = major && (atEdge || x - lastLabelX >= 48);
-      ticks.push({ x, major, label: showLabel ? ms(t - t0) : "" });
-      if (showLabel) lastLabelX = x;
+    // Walk from the first step strictly inside the segment (edges already added).
+    let t = Math.ceil((s.t0 + step * 0.25) / step) * step;
+    while (t < s.t1 - step * 0.25) {
+      pushTick(t, false);
       t += step;
     }
   }
-  return ticks;
+
+  ticks.sort((a, b) => a.x - b.x);
+
+  // Label every tick that has room — not only "major" — so each cell gets a time.
+  let lastLabelX = -Infinity;
+  for (const tick of ticks) {
+    if (tick.x - lastLabelX < 40) continue;
+    tick.label = ms(tick.t - t0);
+    tick.major = true;
+    lastLabelX = tick.x;
+  }
+  return ticks.map(({ x, major, label }) => ({ x, major, label }));
 }
 
 function niceStep(raw: number): number {
@@ -1325,6 +1328,16 @@ function niceStep(raw: number): number {
   if (n < 3.5) return 2 * pow;
   if (n < 7.5) return 5 * pow;
   return 10 * pow;
+}
+
+/** Short gap label for the 34px idle gutter. */
+function compactGap(msVal: number): string {
+  if (msVal >= 60_000) return `${Math.round(msVal / 60_000)}m`;
+  if (msVal >= 1000) {
+    const s = msVal / 1000;
+    return s >= 10 ? `${Math.round(s)}s` : `${s.toFixed(1)}s`;
+  }
+  return `${Math.round(msVal)}ms`;
 }
 
 function heatScale(value: number, max: number): number {
