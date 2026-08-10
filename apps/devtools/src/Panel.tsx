@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import type { TraceStore } from "@react-lens/trace-engine";
 import type { Causality } from "@react-lens/causality";
-import type { ComponentId, CommitId, RenderId } from "@react-lens/protocol";
+import type { ComponentId, RenderId } from "@react-lens/protocol";
 import { useTraceVersion } from "./useLens.js";
 import { Inspector, type EditApi } from "./Inspector.js";
 import { Tree } from "./Tree.js";
@@ -9,6 +9,7 @@ import { Timeline } from "./Timeline.js";
 import { diagnoseAll } from "./doctor.js";
 import { createDoctorClient, type DoctorResult } from "./doctorClient.js";
 import { CommandPalette, type Command } from "./CommandPalette.js";
+import type { TimeCursor, ABMarks } from "./timeCursor.js";
 import { IconLens, IconBolt } from "@react-lens/icons";
 import "./theme.css";
 
@@ -51,14 +52,18 @@ export function Panel({
   useTraceVersion(store, { kind: "global" });
   const [selected, setSelected] = useState<ComponentId | null>(null);
   const [paletteOpen, setPaletteOpen] = useState(false);
-  const [frozenCommit, setFrozenCommit] = useState<CommitId | null>(null);
+  // Global time cursor + A/B marks (redesign §6, §28) — the temporal spine
+  // shared by the Timeline, Tree, and Inspector.
+  const [cursor, setCursor] = useState<TimeCursor>({ t: 0, mode: "live" });
+  const [ab, setAB] = useState<ABMarks>({});
   const { width, onResizeStart } = useDockResize(embedded);
   const { splitPct, bodyRef, onSplitStart } = usePaneSplit();
   const stats = store.stats();
 
-  // Freeze Frame: the component set that rendered in the frozen commit.
-  const frozenSet = frozenCommit !== null
-    ? new Set(store.commit(frozenCommit)?.componentIds ?? [])
+  // Time sync: when scrubbed into the past, dim tree components that weren't in
+  // the commit at the cursor (reuses the Freeze-Frame styling).
+  const frozenSet = cursor.mode === "historical"
+    ? new Set(store.commitAt(cursor.t)?.componentIds ?? [])
     : null;
 
   // Doctor: components with at least one diagnostic (for tree badges + count).
@@ -177,6 +182,8 @@ export function Panel({
               store={store}
               causality={causality}
               componentId={selected}
+              cursor={cursor}
+              ab={ab}
               onSelectComponent={setSelected}
               {...(edit ? { edit } : {})}
               {...(onHighlight ? { highlight: onHighlight } : {})}
@@ -188,7 +195,11 @@ export function Panel({
 
       <Timeline
         store={store}
-        onFreeze={setFrozenCommit}
+        causality={causality}
+        cursor={cursor}
+        ab={ab}
+        onCursor={setCursor}
+        onSetAB={setAB}
         {...(onReplayCommit ? { onReplay: onReplayCommit } : {})}
       />
 

@@ -1,300 +1,625 @@
 import { useMemo, useRef, useState, useEffect } from "react";
-import type { TraceStore, CommitSummary } from "@react-lens/trace-engine";
-import type { ComponentId, CommitId } from "@react-lens/protocol";
+import type { TraceStore, Interaction, CommitSummary } from "@react-lens/trace-engine";
+import type { Causality } from "@react-lens/causality";
+import type { ComponentId } from "@react-lens/protocol";
 import { useTraceVersion } from "./useLens.js";
 import { ms } from "@react-lens/ui";
+import type { TimeCursor, ABMarks } from "./timeCursor.js";
 
-const MIN_BAR = 5;
-const MAX_BAR = 30;
-const GAP = 2;
-const TRACK_H = 60;
-
-function heatColor(msVal: number): string {
-  if (msVal < 1) return "74,222,128";
-  if (msVal < 5) return "251,191,36";
-  if (msVal < 16) return "251,146,60";
-  return "248,113,113";
-}
-
-interface MenuState {
-  x: number;
-  y: number;
-  commitId: CommitId;
-}
+type Mode = "collapsed" | "compact" | "expanded";
+const NEXT_MODE: Record<Mode, Mode> = { collapsed: "compact", compact: "expanded", expanded: "collapsed" };
 
 /**
- * Commit timeline. A zoomable, pannable bar track. Pointer hit-testing (not
- * per-bar handlers) drives selection: click to select, drag for a range,
- * shift-click to extend, ⌘/ctrl-click to toggle. Right-click for actions.
+ * Interaction-first time machine (redesign §1-6, §160-165). The primary unit is
+ * the interaction, not the commit; a shared time cursor scrubs the whole
+ * product's history, A/B marks turn any two moments into a diff, and anomaly
+ * markers surface the extreme commits automatically. DOM-rendered on a
+ * time-proportional scale (Canvas/worker-LOD is a later phase).
  */
 export function Timeline({
   store,
-  onFreeze,
+  causality,
+  cursor,
+  ab,
+  onCursor,
+  onSetAB,
   onReplay,
 }: {
   store: TraceStore;
-  onFreeze: (id: CommitId | null) => void;
+  causality: Causality;
+  cursor: TimeCursor;
+  ab: ABMarks;
+  onCursor: (c: TimeCursor) => void;
+  onSetAB: (ab: ABMarks) => void;
   onReplay?: (ids: ComponentId[]) => void;
 }) {
   const version = useTraceVersion(store, { kind: "global" });
-  const allCommits = useMemo(() => store.commits(), [store, version]);
-  const [barWidth, setBarWidth] = useState(9);
-  const [selected, setSelected] = useState<Set<CommitId>>(new Set());
-  const [ignored, setIgnored] = useState<Set<CommitId>>(new Set());
-  const [deleted, setDeleted] = useState<Set<CommitId>>(new Set());
-  const [hovered, setHovered] = useState<number | null>(null);
-  const [menu, setMenu] = useState<MenuState | null>(null);
+  const interactions = useMemo(() => store.interactions(), [store, version]);
+  const commits = useMemo(() => store.commits(), [store, version]);
+  const [mode, setMode] = useState<Mode>("compact");
+  const [scale, setScale] = useState(0); // px/ms; 0 = auto-fit
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const innerRef = useRef<HTMLDivElement>(null);
-  const drag = useRef<{ start: number } | null>(null);
-  const anchor = useRef<number>(0);
+  const scrubbing = useRef(false);
+  const rafRef = useRef(0);
+  const [playing, setPlaying] = useState(false);
 
-  const commits = useMemo(
-    () => allCommits.filter((c) => !deleted.has(c.commitId)),
-    [allCommits, deleted],
-  );
-  const maxSelf = useMemo(() => Math.max(1, ...commits.map((c) => c.totalSelfTime)), [commits]);
+  const bounds = useMemo(() => sessionBounds(interactions, commits), [interactions, commits]);
+  const anomaly = useMemo(() => anomalyStats(commits), [commits]);
 
-  useEffect(() => {
-    if (selected.size === 1) onFreeze([...selected][0]!);
-    else onFreeze(null);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selected]);
-
-  useEffect(() => {
-    const up = () => (drag.current = null);
-    const close = () => setMenu(null);
-    window.addEventListener("pointerup", up);
-    window.addEventListener("mousedown", close);
-    return () => {
-      window.removeEventListener("pointerup", up);
-      window.removeEventListener("mousedown", close);
-    };
-  }, []);
-
-  const step = barWidth + GAP;
-
-  /** Which bar index is under a client X coordinate. */
-  const indexAt = (clientX: number): number => {
+  // Idle time between interactions is compressed (redesign §149) so a long
+  // pause doesn't push activity to opposite ends of an empty track. Time stays
+  // linear WITHIN active regions; only the dead space collapses, marked with ⋯.
+  const active = useMemo(() => mergeActive(interactions), [interactions]);
+  const activeSpan = useMemo(() => active.reduce((s, [a, b]) => s + (b - a), 0) || 1, [active]);
+  const fit = clamp(760 / activeSpan, 0.02, 4);
+  const px = scale || fit;
+  const model = useMemo(() => buildScale(active, bounds.t0, bounds.t1, px), [active, bounds, px]);
+  const innerWidth = model.width;
+  const xOf = (t: number) => projectX(model.segs, clamp(t, bounds.t0, bounds.t1));
+  const tOf = (clientX: number) => {
     const inner = innerRef.current;
-    if (!inner) return 0;
-    const x = clientX - inner.getBoundingClientRect().left;
-    return Math.max(0, Math.min(commits.length - 1, Math.floor(x / step)));
+    if (!inner) return bounds.t0;
+    const x = clamp(clientX - inner.getBoundingClientRect().left, 0, innerWidth);
+    return projectT(model.segs, x);
   };
 
-  const selectRange = (a: number, b: number) =>
-    setSelected(new Set(commits.slice(Math.min(a, b), Math.max(a, b) + 1).map((c) => c.commitId)));
+  // Play mode (redesign §106): advance the global cursor across the timeline
+  // like a video playhead, so the Tree and Inspector replay history in motion.
+  // Moves in screen-space (px) so compressed idle gaps whoosh by quickly.
+  const stop = () => {
+    cancelAnimationFrame(rafRef.current);
+    setPlaying(false);
+  };
+  const play = (fromT: number, toT: number) => {
+    const segs = model.segs;
+    const startX = projectX(segs, clamp(fromT, bounds.t0, bounds.t1));
+    const endX = projectX(segs, clamp(toT, bounds.t0, bounds.t1));
+    cancelAnimationFrame(rafRef.current);
+    if (endX <= startX) {
+      onCursor({ t: bounds.t1, mode: "live" });
+      return;
+    }
+    const durMs = clamp((endX - startX) * 6, 700, 4000);
+    const startWall = performance.now();
+    setPlaying(true);
+    const tick = () => {
+      const frac = clamp((performance.now() - startWall) / durMs, 0, 1);
+      const t = projectT(segs, startX + (endX - startX) * frac);
+      onCursor({ t, mode: frac >= 1 ? "live" : "historical" });
+      if (frac < 1) rafRef.current = requestAnimationFrame(tick);
+      else setPlaying(false);
+    };
+    rafRef.current = requestAnimationFrame(tick);
+  };
+  useEffect(() => () => cancelAnimationFrame(rafRef.current), []);
 
-  const onPointerDown = (e: React.PointerEvent) => {
-    if (e.button !== 0 || commits.length === 0) return;
-    const i = indexAt(e.clientX);
-    const id = commits[i]!.commitId;
-    if (e.shiftKey) {
-      selectRange(anchor.current, i);
-    } else if (e.metaKey || e.ctrlKey) {
-      setSelected((prev) => {
-        const next = new Set(prev);
-        next.has(id) ? next.delete(id) : next.add(id);
-        return next;
-      });
-      anchor.current = i;
-    } else {
-      drag.current = { start: i };
-      anchor.current = i;
-      selectRange(i, i);
+  const replayInteraction = (it: Interaction) => {
+    onReplay?.(it.metrics.componentIds);
+    play(it.start, it.end);
+  };
+
+  // Keyboard: T cycles mode, L returns live, [ ] jump interactions.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const el = document.activeElement;
+      if (el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA")) return;
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      if (e.key === "t" || e.key === "T") setMode((m) => NEXT_MODE[m]);
+      else if (e.key === "l" || e.key === "L") onCursor({ t: bounds.t1, mode: "live" });
+      else if (e.key === "[") stepInteraction(-1);
+      else if (e.key === "]") stepInteraction(1);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [interactions, bounds.t1, cursor]);
+
+  const stepInteraction = (dir: 1 | -1) => {
+    if (interactions.length === 0) return;
+    const here = cursor.mode === "historical" ? cursor.t : bounds.t1;
+    const starts = interactions.map((i) => i.start);
+    const next = dir > 0 ? starts.find((s) => s > here + 0.01) : [...starts].reverse().find((s) => s < here - 0.01);
+    if (next !== undefined) {
+      onCursor({ t: next, mode: "historical" });
+      selectAt(next);
     }
   };
 
-  const onPointerMove = (e: React.PointerEvent) => {
-    if (commits.length === 0) return;
-    const i = indexAt(e.clientX);
-    setHovered(i);
-    if (drag.current) selectRange(drag.current.start, i);
+  const selectAt = (t: number) => {
+    const hit = interactions.find((i) => t >= i.start && t <= i.end) ?? nearest(interactions, t);
+    setSelectedId(hit?.id ?? null);
   };
 
-  const zoom = (d: number) => setBarWidth((w) => Math.max(MIN_BAR, Math.min(MAX_BAR, w + d)));
-  const pan = (dir: 1 | -1) => scrollRef.current?.scrollBy({ left: dir * 240, behavior: "smooth" });
+  const scrubTo = (clientX: number) => {
+    const t = tOf(clientX);
+    onCursor({ t, mode: t >= bounds.t1 - 0.5 ? "live" : "historical" });
+    selectAt(t);
+  };
+
+  const onPointerDown = (e: React.PointerEvent) => {
+    if (e.button !== 0) return;
+    if (e.altKey) return onSetAB({ ...ab, a: tOf(e.clientX) });
+    if (e.shiftKey) return onSetAB({ ...ab, b: tOf(e.clientX) });
+    scrubbing.current = true;
+    innerRef.current?.setPointerCapture(e.pointerId);
+    scrubTo(e.clientX);
+  };
+  const onPointerMove = (e: React.PointerEvent) => {
+    if (scrubbing.current) scrubTo(e.clientX);
+  };
+  const onPointerUp = () => {
+    scrubbing.current = false;
+  };
 
   const onWheel = (e: React.WheelEvent) => {
     const el = scrollRef.current;
     if (!el) return;
-    if (e.ctrlKey || e.metaKey) zoom(e.deltaY < 0 ? 2 : -2);
-    else el.scrollLeft += e.deltaX || e.deltaY; // horizontal or vertical → pan
-  };
-
-  const replayIds = (): ComponentId[] => {
-    const ids: ComponentId[] = [];
-    for (const c of commits) {
-      if (selected.has(c.commitId) && !ignored.has(c.commitId)) ids.push(...c.componentIds);
+    if (e.ctrlKey || e.metaKey) {
+      setScale((s) => clamp((s || fit) * (e.deltaY < 0 ? 1.2 : 0.8), 0.01, 8));
+    } else {
+      el.scrollLeft += e.deltaX || e.deltaY;
     }
-    return ids;
   };
 
-  const selectedCommits = commits.filter((c) => selected.has(c.commitId));
-  const single = selectedCommits.length === 1 ? selectedCommits[0]! : null;
-  const prevOfSingle = single ? commits[commits.indexOf(single) - 1] ?? null : null;
-  const diff = single ? commitDiff(prevOfSingle, single) : null;
-  const hoveredCommit = hovered !== null ? commits[hovered] : undefined;
+  const selected = interactions.find((i) => i.id === selectedId) ?? null;
+  const live = cursor.mode === "live";
+  const cursorT = live ? bounds.t1 : cursor.t;
+  const cursorCommit = store.commitAt(cursorT);
+  const cursorAnomaly = cursorCommit && anomaly.isAnomaly(cursorCommit) ? cursorCommit : null;
 
   return (
-    <div className="rl-timeline-wrap">
-      <div className="rl-timeline-head">
-        <span className="rl-timeline-title">Timeline</span>
-        <span className="rl-timeline-sub">
-          {commits.length} commits{selected.size > 1 ? ` · ${selected.size} selected` : ""}
+    <div className={`rl-tl rl-tl-${mode}`}>
+      <div className="rl-tl-head">
+        <button className="rl-tl-mode" onClick={() => setMode(NEXT_MODE[mode])} title="Cycle size (T)">
+          {mode === "collapsed" ? "▸" : mode === "compact" ? "▾" : "▿"} Timeline
+        </button>
+        <span className="rl-tl-sub">
+          {interactions.length} interactions · {commits.length} commits
         </span>
         <span className="rl-spacer" />
-        <div className="rl-zoom">
-          <button className="rl-zoom-btn" onClick={() => pan(-1)} aria-label="Pan left">‹</button>
-          <button className="rl-zoom-btn" onClick={() => pan(1)} aria-label="Pan right">›</button>
+        {ab.a !== undefined && ab.b !== undefined && (
+          <button className="rl-tl-ab-clear" onClick={() => onSetAB({})} title="Clear A/B">
+            A↔B ✕
+          </button>
+        )}
+        <div className="rl-tl-nav">
+          <button className="rl-zoom-btn" onClick={() => stepInteraction(-1)} title="Previous interaction ([)">|◀</button>
+          <button
+            className={`rl-zoom-btn${playing ? " active" : ""}`}
+            onClick={() => (playing ? stop() : play(bounds.t0, bounds.t1))}
+            title={playing ? "Pause" : "Replay whole timeline"}
+          >
+            {playing ? "⏸" : "▶"}
+          </button>
+          <button className="rl-zoom-btn" onClick={() => stepInteraction(1)} title="Next interaction (])">▶|</button>
           <span className="rl-zoom-sep" />
-          <button className="rl-zoom-btn" onClick={() => zoom(-4)} aria-label="Zoom out">−</button>
-          <button className="rl-zoom-btn" onClick={() => zoom(4)} aria-label="Zoom in">+</button>
+          <button className="rl-zoom-btn" onClick={() => setScale((s) => clamp((s || fit) * 0.8, 0.01, 8))} title="Zoom out">−</button>
+          <button className="rl-zoom-btn" onClick={() => setScale((s) => clamp((s || fit) * 1.25, 0.01, 8))} title="Zoom in">+</button>
         </div>
+        <button
+          className={`rl-tl-live ${live ? "live" : "past"}`}
+          onClick={() => onCursor({ t: bounds.t1, mode: "live" })}
+          title={live ? "Following live" : "Return to live (L)"}
+        >
+          <span className="rl-tl-live-dot" />
+          {live ? "LIVE" : `PAST · ${ms(cursorT - bounds.t0)}`}
+        </button>
       </div>
 
-      {commits.length === 0 ? (
-        <div className="rl-timeline-empty">No commits yet — interact with the page.</div>
-      ) : (
-        <div className="rl-track" ref={scrollRef} onWheel={onWheel} style={{ height: TRACK_H }}>
-          <div
-            className="rl-track-inner"
-            ref={innerRef}
-            style={{ gap: GAP }}
-            onPointerDown={onPointerDown}
-            onPointerMove={onPointerMove}
-            onPointerLeave={() => setHovered(null)}
-            onContextMenu={(e) => {
-              e.preventDefault();
-              const i = indexAt(e.clientX);
-              const id = commits[i]!.commitId;
-              if (!selected.has(id)) selectRange(i, i);
-              setMenu({ x: e.clientX, y: e.clientY, commitId: id });
-            }}
-          >
-            {commits.map((c, i) => {
-              const h = 4 + (c.totalSelfTime / maxSelf) * (TRACK_H - 16);
-              const cls =
-                "rl-bar" +
-                (selected.has(c.commitId) ? " active" : "") +
-                (ignored.has(c.commitId) ? " ignored" : "") +
-                (hovered === i ? " hover" : "");
-              return (
+      {mode !== "collapsed" && (
+        interactions.length === 0 ? (
+          <div className="rl-tl-empty">No activity yet — interact with the page.</div>
+        ) : (
+          <div className="rl-tl-scroll" ref={scrollRef} onWheel={onWheel}>
+            <div
+              className="rl-tl-inner"
+              ref={innerRef}
+              style={{ width: innerWidth }}
+              onPointerDown={onPointerDown}
+              onPointerMove={onPointerMove}
+              onPointerUp={onPointerUp}
+            >
+              {/* Interactions track */}
+              <div className="rl-tl-track rl-tl-track-int">
+                {interactions.map((it, i) => {
+                  const c = intColor(it, i);
+                  return (
+                    <button
+                      key={it.id}
+                      className={`rl-tl-int${selectedId === it.id ? " sel" : ""}`}
+                      style={{
+                        left: xOf(it.start),
+                        width: Math.max(3, (it.end - it.start) * px),
+                        background: `rgba(${c},0.16)`,
+                        borderColor: `rgba(${c},0.55)`,
+                        color: `rgb(${c})`,
+                      }}
+                      title={`${it.label} · ${ms(it.metrics.totalDuration)} · ${it.metrics.renderCount} renders`}
+                      onPointerDown={(e) => {
+                        e.stopPropagation();
+                        setSelectedId(it.id);
+                        onCursor({ t: it.start, mode: "historical" });
+                      }}
+                    >
+                      <span className="rl-tl-int-label">{it.label}</span>
+                    </button>
+                  );
+                })}
+              </div>
+
+              {mode === "expanded" && (
+                <div className="rl-tl-track rl-tl-track-state">
+                  {stateMarkers(store, version).map((m, i) => (
+                    <span key={i} className="rl-tl-state" style={{ left: xOf(m.t) }} title="state update" />
+                  ))}
+                </div>
+              )}
+
+              {/* React / heat track */}
+              <div className="rl-tl-track rl-tl-track-react">
+                {commits.map((c) => {
+                  const h = 3 + heatScale(c.totalSelfTime, anomaly.max) * (mode === "expanded" ? 44 : 22);
+                  const bad = anomaly.isAnomaly(c);
+                  return (
+                    <span
+                      key={c.commitId}
+                      className={`rl-tl-bar${bad ? " anomaly" : ""}`}
+                      style={{ left: xOf(c.timestamp), height: h, background: heatColor(c.totalSelfTime) }}
+                    />
+                  );
+                })}
+              </div>
+
+              {/* Collapsed idle gaps */}
+              {model.segs.filter((s) => s.idle).map((s, i) => (
                 <span
-                  key={c.commitId}
-                  className={cls}
-                  style={{ width: barWidth, height: h, background: `rgb(${heatColor(c.totalSelfTime)})` }}
-                />
-              );
-            })}
-          </div>
-          {hoveredCommit && (
-            <div className="rl-tip" style={{ left: hovered! * step - (scrollRef.current?.scrollLeft ?? 0) }}>
-              #{hoveredCommit.commitId} · {hoveredCommit.componentIds.length} · {ms(hoveredCommit.totalSelfTime)}
+                  key={`idle${i}`}
+                  className="rl-tl-idle"
+                  style={{ left: s.x0, width: s.x1 - s.x0 }}
+                  title={`${ms(s.t1 - s.t0)} idle`}
+                >
+                  ⋯
+                </span>
+              ))}
+
+              {/* Anomaly markers */}
+              {commits.filter((c) => anomaly.isAnomaly(c)).map((c) => (
+                <span
+                  key={`a${c.commitId}`}
+                  className="rl-tl-anomaly"
+                  style={{ left: xOf(c.timestamp) }}
+                  title={`Extreme commit · ${ms(c.totalSelfTime)}`}
+                >
+                  ⚠
+                </span>
+              ))}
+
+              {/* A/B markers */}
+              {ab.a !== undefined && <span className="rl-tl-mark a" style={{ left: xOf(ab.a) }}>A</span>}
+              {ab.b !== undefined && <span className="rl-tl-mark b" style={{ left: xOf(ab.b) }}>B</span>}
+
+              {/* Cursor */}
+              <span className={`rl-tl-cursor${live ? " live" : ""}`} style={{ left: xOf(cursorT) }} />
             </div>
-          )}
-        </div>
+          </div>
+        )
       )}
 
-      {selected.size > 0 && (
-        <div className="rl-freeze">
-          {single && diff ? (
-            <>
-              <span className="rl-freeze-label">commit #{single.commitId}</span>
-              <span className="rl-freeze-stat">{single.componentIds.length} rendered</span>
-              {diff.added > 0 && <span className="rl-freeze-stat added">+{diff.added}</span>}
-              {diff.gone > 0 && <span className="rl-freeze-stat gone">−{diff.gone}</span>}
-              <span className="rl-freeze-stat">{ms(single.totalSelfTime)}</span>
-            </>
-          ) : (
-            <span className="rl-freeze-label">{selected.size} commits selected</span>
-          )}
-          <span className="rl-spacer" />
-          {onReplay && (
-            <button className="rl-ctl rl-ctl-primary" onClick={() => onReplay(replayIds())}>
-              ▶ Replay{selected.size > 1 ? ` ${selected.size}` : ""}
-            </button>
-          )}
-          <button className="rl-ctl" onClick={() => setSelected(new Set())} aria-label="Clear selection">
-            ✕
-          </button>
-        </div>
+      {mode === "expanded" && selected && (
+        <RenderWaterfall store={store} interaction={selected} />
       )}
 
-      {menu && (
-        <CommitMenu
-          menu={menu}
-          count={selected.size}
-          ignored={ignored.has(menu.commitId)}
-          onReplay={onReplay ? () => onReplay(replayIds()) : undefined}
-          onIgnore={() => setIgnored((prev) => toggle(prev, [...selected]))}
-          onDelete={() => {
-            setDeleted((prev) => add(prev, [...selected]));
-            setSelected(new Set());
-          }}
-          onClose={() => setMenu(null)}
+      {mode !== "collapsed" && (selected || cursorAnomaly) && (
+        <SelectionCard
+          interaction={selected}
+          anomalyCommit={cursorAnomaly}
+          anomaly={anomaly}
+          causality={causality}
+          ab={ab}
+          onSetA={() => onSetAB({ ...ab, a: cursorT })}
+          onSetB={() => onSetAB({ ...ab, b: cursorT })}
+          onReplay={replayInteraction}
         />
       )}
     </div>
   );
 }
 
-function CommitMenu({
-  menu,
-  count,
-  ignored,
+function SelectionCard({
+  interaction,
+  anomalyCommit,
+  anomaly,
+  causality,
+  ab,
+  onSetA,
+  onSetB,
   onReplay,
-  onIgnore,
-  onDelete,
-  onClose,
 }: {
-  menu: MenuState;
-  count: number;
-  ignored: boolean;
-  onReplay?: () => void;
-  onIgnore: () => void;
-  onDelete: () => void;
-  onClose: () => void;
+  interaction: Interaction | null;
+  anomalyCommit: CommitSummary | null;
+  anomaly: AnomalyStats;
+  causality: Causality;
+  ab: ABMarks;
+  onSetA: () => void;
+  onSetB: () => void;
+  onReplay: (it: Interaction) => void;
 }) {
-  const noun = count > 1 ? `${count} commits` : `commit #${menu.commitId}`;
-  const run = (fn: () => void) => () => {
-    fn();
-    onClose();
-  };
-  const flipUp = typeof window !== "undefined" && menu.y > window.innerHeight - 160;
-  const style = flipUp
-    ? { left: menu.x, bottom: window.innerHeight - menu.y }
-    : { left: menu.x, top: menu.y };
+  // Rendered-vs-Changed for the selected interaction (lazy, bounded).
+  const changed = useMemo(
+    () => (interaction ? changedCount(interaction, causality) : null),
+    [interaction, causality],
+  );
+
   return (
-    <div className="rl-menu" style={style} onMouseDown={(e) => e.stopPropagation()}>
-      <div className="rl-menu-head">{noun}</div>
-      {onReplay && (
-        <button className="rl-menu-item" onClick={run(onReplay)}>▶ Replay</button>
+    <div className="rl-tl-card">
+      {interaction && (
+        <div className="rl-tl-card-main">
+          <span className="rl-tl-card-title">{interaction.label}</span>
+          <span className="rl-tl-card-metric">{ms(interaction.metrics.totalDuration)}</span>
+          <span className="rl-tl-card-dim">React {ms(interaction.metrics.reactDuration)}</span>
+          <span className="rl-tl-card-dim">{interaction.metrics.renderCount} renders</span>
+          {changed !== null && changed.wasted > 0 && (
+            <span className="rl-tl-card-warn">{changed.wasted} no visible change</span>
+          )}
+          {interaction.metrics.stateUpdates > 0 && (
+            <span className="rl-tl-card-dim">{interaction.metrics.stateUpdates} state</span>
+          )}
+        </div>
       )}
-      <button className="rl-menu-item" onClick={run(onIgnore)}>{ignored ? "Un-ignore" : "Ignore"}</button>
-      <button className="rl-menu-item danger" onClick={run(onDelete)}>Delete</button>
+      {anomalyCommit && (
+        <div className="rl-tl-card-anomaly">
+          ⚠ Extreme commit · {ms(anomalyCommit.totalSelfTime)} ·{" "}
+          {Math.round(anomalyCommit.totalSelfTime / Math.max(0.01, anomaly.p95))}× p95 ·{" "}
+          {anomalyCommit.componentIds.length} rendered
+        </div>
+      )}
+      <span className="rl-spacer" />
+      <button className="rl-ctl" onClick={onSetA} title="Set comparison A at cursor">Set A</button>
+      <button className="rl-ctl" onClick={onSetB} title="Set comparison B at cursor">Set B</button>
+      {interaction && (
+        <button className="rl-ctl rl-ctl-primary" onClick={() => onReplay(interaction)}>
+          ▶ Replay
+        </button>
+      )}
+      {ab.a !== undefined && ab.b !== undefined && (
+        <span className="rl-tl-card-ab">Comparing A↔B in Inspector</span>
+      )}
     </div>
   );
 }
 
-function toggle(set: Set<CommitId>, ids: CommitId[]): Set<CommitId> {
-  const next = new Set(set);
-  const allIgnored = ids.length > 0 && ids.every((id) => next.has(id));
-  for (const id of ids) allIgnored ? next.delete(id) : next.add(id);
-  return next;
-}
-function add(set: Set<CommitId>, ids: CommitId[]): Set<CommitId> {
-  const next = new Set(set);
-  for (const id of ids) next.add(id);
-  return next;
+const WATERFALL_MAX = 120;
+
+/**
+ * Per-component render waterfall for the selected interaction (redesign §36):
+ * each render is a bar positioned by when it happened within the interaction
+ * and sized by its self-duration, revealing the propagation the single
+ * interaction block hides. Ordered by time; capped so a huge mount stays cheap.
+ */
+function RenderWaterfall({ store, interaction }: { store: TraceStore; interaction: Interaction }) {
+  const rows = useMemo(() => {
+    const renders = interaction.renderIds
+      .map((id) => store.getRender(id))
+      .filter((r): r is NonNullable<typeof r> => r != null)
+      .sort((a, b) => a.timestamp - b.timestamp);
+    const span = Math.max(1, interaction.end - interaction.start);
+    return renders.slice(0, WATERFALL_MAX).map((r) => ({
+      name: store.instance(r.componentId)?.name ?? `#${r.componentId}`,
+      leftPct: ((r.timestamp - interaction.start) / span) * 100,
+      widthPct: Math.max(0.6, (r.selfDuration / span) * 100),
+      self: r.selfDuration,
+      total: renders.length,
+    }));
+  }, [store, interaction]);
+
+  if (rows.length === 0) return null;
+  const total = rows[0]!.total;
+
+  return (
+    <div className="rl-wf">
+      <div className="rl-wf-head">
+        {interaction.label} · {total} renders{total > WATERFALL_MAX ? ` · showing ${WATERFALL_MAX} by time` : ""}
+      </div>
+      <div className="rl-wf-rows">
+        {rows.map((row, i) => (
+          <div className="rl-wf-row" key={i} title={`${row.name} · ${ms(row.self)}`}>
+            <span className="rl-wf-name">{row.name}</span>
+            <span className="rl-wf-track">
+              <span
+                className="rl-wf-bar"
+                style={{ left: `${row.leftPct}%`, width: `${row.widthPct}%`, background: heatColor(row.self) }}
+              />
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
 }
 
-function commitDiff(prev: CommitSummary | null, cur: CommitSummary): { added: number; gone: number } {
-  const prevSet = new Set(prev?.componentIds ?? []);
-  const curSet = new Set(cur.componentIds);
-  let added = 0;
-  let gone = 0;
-  for (const id of curSet) if (!prevSet.has(id)) added++;
-  for (const id of prevSet) if (!curSet.has(id)) gone++;
-  return { added, gone };
+// ── helpers ──────────────────────────────────────────────────────────────────
+
+interface AnomalyStats {
+  median: number;
+  p95: number;
+  max: number;
+  isAnomaly: (c: CommitSummary) => boolean;
+}
+
+function anomalyStats(commits: CommitSummary[]): AnomalyStats {
+  const times = commits.map((c) => c.totalSelfTime).sort((a, b) => a - b);
+  const median = percentile(times, 0.5);
+  const p95 = percentile(times, 0.95);
+  const max = times[times.length - 1] ?? 1;
+  // Extreme = well above the session's typical cost and not trivially small.
+  const floor = Math.max(8, median * 5);
+  return { median, p95, max, isAnomaly: (c) => c.totalSelfTime >= floor && c.totalSelfTime >= p95 };
+}
+
+function percentile(sorted: number[], p: number): number {
+  if (sorted.length === 0) return 0;
+  const i = Math.min(sorted.length - 1, Math.floor(p * sorted.length));
+  return sorted[i] ?? 0;
+}
+
+/** Distinct-but-restrained accents so adjacent interactions are easy to tell apart. */
+const PALETTE = [
+  "167,139,250", "96,165,250", "52,211,153", "251,191,36",
+  "244,114,182", "45,212,191", "251,146,60", "129,140,248",
+];
+function intColor(it: Interaction, i: number): string {
+  if (it.kind === "load") return "148,163,184";
+  if (it.kind === "system") return "100,116,139";
+  return PALETTE[i % PALETTE.length]!;
+}
+
+/** Gaps between interactions longer than this collapse to a fixed width. */
+const IDLE_GAP_MS = 400;
+const IDLE_WIDTH = 34;
+
+interface Seg {
+  t0: number;
+  t1: number;
+  x0: number;
+  x1: number;
+  idle: boolean;
+}
+interface TimeScale {
+  segs: Seg[];
+  width: number;
+}
+
+/** Merge interaction spans, joining ones separated by less than a small gap. */
+function mergeActive(interactions: Interaction[]): Array<[number, number]> {
+  const ivals = interactions
+    .map((i) => [i.start, Math.max(i.end, i.start + 1)] as [number, number])
+    .sort((a, b) => a[0] - b[0]);
+  const merged: Array<[number, number]> = [];
+  for (const [s, e] of ivals) {
+    const last = merged[merged.length - 1];
+    if (last && s - last[1] <= IDLE_GAP_MS) last[1] = Math.max(last[1], e);
+    else merged.push([s, e]);
+  }
+  return merged;
+}
+
+/**
+ * Piecewise time→x map: active spans scale linearly by `px`; the idle gaps
+ * between them collapse to a fixed `IDLE_WIDTH` so the track stays dense.
+ */
+function buildScale(active: Array<[number, number]>, t0: number, t1: number, px: number): TimeScale {
+  const segs: Seg[] = [];
+  let x = 0;
+  let cursor = t0;
+  const push = (a: number, b: number, w: number, idle: boolean) => {
+    segs.push({ t0: a, t1: b, x0: x, x1: x + w, idle });
+    x += w;
+  };
+  for (const [s, e] of active) {
+    if (s > cursor) push(cursor, s, IDLE_WIDTH, true);
+    push(s, e, Math.max(4, (e - s) * px), false);
+    cursor = e;
+  }
+  if (t1 > cursor) push(cursor, t1, IDLE_WIDTH, true);
+  if (segs.length === 0) push(t0, t1, Math.max(320, (t1 - t0) * px), false);
+  return { segs, width: Math.max(320, x) };
+}
+
+function projectX(segs: Seg[], t: number): number {
+  for (const s of segs) {
+    if (t <= s.t1) {
+      const frac = s.t1 === s.t0 ? 0 : (t - s.t0) / (s.t1 - s.t0);
+      return s.x0 + clamp(frac, 0, 1) * (s.x1 - s.x0);
+    }
+  }
+  const last = segs[segs.length - 1];
+  return last ? last.x1 : 0;
+}
+
+function projectT(segs: Seg[], x: number): number {
+  for (const s of segs) {
+    if (x <= s.x1) {
+      const frac = s.x1 === s.x0 ? 0 : (x - s.x0) / (s.x1 - s.x0);
+      return s.t0 + clamp(frac, 0, 1) * (s.t1 - s.t0);
+    }
+  }
+  const last = segs[segs.length - 1];
+  return last ? last.t1 : 0;
+}
+
+function sessionBounds(interactions: Interaction[], commits: CommitSummary[]): { t0: number; t1: number; span: number } {
+  let t0 = Infinity;
+  let t1 = -Infinity;
+  for (const it of interactions) {
+    t0 = Math.min(t0, it.start);
+    t1 = Math.max(t1, it.end);
+  }
+  for (const c of commits) {
+    t0 = Math.min(t0, c.timestamp);
+    t1 = Math.max(t1, c.timestamp);
+  }
+  if (!isFinite(t0)) {
+    t0 = 0;
+    t1 = 1;
+  }
+  return { t0, t1, span: Math.max(1, t1 - t0) };
+}
+
+/** Log-scaled height fraction so one 4.4s commit doesn't flatten the 1ms ones. */
+function heatScale(value: number, max: number): number {
+  if (max <= 0) return 0;
+  return Math.log1p(value) / Math.log1p(max);
+}
+
+function heatColor(msVal: number): string {
+  if (msVal < 1) return "rgb(74,222,128)";
+  if (msVal < 5) return "rgb(251,191,36)";
+  if (msVal < 16) return "rgb(251,146,60)";
+  return "rgb(248,113,113)";
+}
+
+function nearest(interactions: Interaction[], t: number): Interaction | null {
+  let best: Interaction | null = null;
+  let dist = Infinity;
+  for (const it of interactions) {
+    const d = t < it.start ? it.start - t : t > it.end ? t - it.end : 0;
+    if (d < dist) {
+      dist = d;
+      best = it;
+    }
+  }
+  return best;
+}
+
+function clamp(v: number, lo: number, hi: number): number {
+  return Math.max(lo, Math.min(hi, v));
+}
+
+/** State-update markers for the expanded track. */
+function stateMarkers(store: TraceStore, _version: number): Array<{ t: number }> {
+  const marks: Array<{ t: number }> = [];
+  for (const e of store.allEvents()) {
+    if (e.type === "render" && e.reasons.some((r) => r.type === "state")) marks.push({ t: e.timestamp });
+  }
+  return marks;
+}
+
+const CHANGED_CAP = 800;
+
+/** How many of an interaction's renders produced no observable change. */
+function changedCount(interaction: Interaction, causality: Causality): { wasted: number } | null {
+  let wasted = 0;
+  let checked = 0;
+  for (const renderId of interaction.renderIds) {
+    if (checked >= CHANGED_CAP) break;
+    checked++;
+    try {
+      if (causality.why(renderId).verdict === "no-observable-change") wasted++;
+    } catch {
+      /* ignore */
+    }
+  }
+  return { wasted };
 }

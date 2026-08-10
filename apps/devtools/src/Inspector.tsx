@@ -1,10 +1,12 @@
 import { useState, useEffect } from "react";
-import { Section } from "@react-lens/ui";
+import { Section, DiffLines } from "@react-lens/ui";
 import type { TraceStore } from "@react-lens/trace-engine";
 import type { Causality } from "@react-lens/causality";
 import type { ComponentId, RenderId, RenderSnapshot } from "@react-lens/protocol";
+import { diff, type DiffResult } from "@react-lens/diff-engine";
 import { useTraceVersion } from "./useLens.js";
 import { ms, shortSource } from "@react-lens/ui";
+import type { TimeCursor, ABMarks } from "./timeCursor.js";
 import { WhySection } from "./tabs/OverviewTab.js";
 import { PropsTab } from "./tabs/PropsTab.js";
 import { StateTab } from "./tabs/StateTab.js";
@@ -52,6 +54,8 @@ export function Inspector({
   store,
   causality,
   componentId,
+  cursor,
+  ab,
   edit,
   highlight,
   onSelectComponent,
@@ -60,6 +64,8 @@ export function Inspector({
   store: TraceStore;
   causality: Causality;
   componentId: ComponentId;
+  cursor?: TimeCursor;
+  ab?: ABMarks;
   edit?: EditApi;
   highlight?: (id: ComponentId | null) => void;
   onSelectComponent?: (id: ComponentId) => void;
@@ -75,21 +81,26 @@ export function Inspector({
     if (latest) setSelectedRender(latest.renderId);
   }, [latest?.renderId]);
 
-  // When snapshots aren't streamed inline (large apps), fetch the selected
-  // render's snapshot on demand the first time it's needed.
-  const activeRender = selectedRender ?? latest?.renderId ?? null;
-  const hasSnapshot = activeRender !== null && store.snapshot(activeRender) !== undefined;
+  // Time travel: when the global cursor is historical, show this component's
+  // render at that moment (redesign §30); otherwise the manually-selected/latest.
+  const historical = cursor?.mode === "historical";
+  const historicalRenderId = historical
+    ? store.renderAtOrBefore(componentId, cursor.t)?.renderId ?? null
+    : null;
+  const activeRenderId = historical ? historicalRenderId : selectedRender ?? latest?.renderId ?? null;
+
+  // When snapshots aren't streamed inline (large apps), fetch on demand.
+  const hasSnapshot = activeRenderId !== null && store.snapshot(activeRenderId) !== undefined;
   useEffect(() => {
-    if (onRequestSnapshot && activeRender !== null && !hasSnapshot) {
-      onRequestSnapshot(activeRender);
+    if (onRequestSnapshot && activeRenderId !== null && !hasSnapshot) {
+      onRequestSnapshot(activeRenderId);
     }
-  }, [onRequestSnapshot, activeRender, hasSnapshot]);
+  }, [onRequestSnapshot, activeRenderId, hasSnapshot]);
 
   const doctor = useDoctor(store, causality, componentId);
 
   if (!inst) return <div className="rl-empty">Component no longer mounted.</div>;
 
-  const activeRenderId = selectedRender ?? latest?.renderId ?? null;
   const snapshot = activeRenderId !== null ? store.snapshot(activeRenderId) : undefined;
 
   const ctx: InspectorContext = {
@@ -103,6 +114,9 @@ export function Inspector({
     ...(highlight ? { highlight } : {}),
     ...(onSelectComponent ? { onSelectComponent } : {}),
   };
+
+  const abDiff =
+    ab?.a != null && ab?.b != null ? compareAB(store, componentId, ab.a, ab.b) : null;
 
   const hooks = snapshot?.hooks ?? [];
   const propCount = snapshot?.props.k === "object" ? (snapshot.props.entries?.length ?? 0) : 0;
@@ -122,12 +136,23 @@ export function Inspector({
             ◇ {inst.suspended ? "suspended" : "suspense"}
           </span>
         )}
+        {historical && <span className="rl-badge warn">◷ historical</span>}
       </div>
       <div className="rl-source">
         {inst.source ? `${shortSource(inst.source.file)}:${inst.source.line}` : "source unavailable"}
         {" · "}
         {store.renderCount(componentId)} renders · {ms(store.selfTimeTotal(componentId))}
       </div>
+
+      {historical && activeRenderId === null && (
+        <div className="rl-empty">Not yet rendered at this point in time.</div>
+      )}
+
+      {abDiff && (
+        <Section title="Compare A ↔ B" defaultOpen>
+          <ABCompare diff={abDiff} />
+        </Section>
+      )}
 
       <Section title="Why this render" defaultOpen>
         <WhySection ctx={ctx} />
@@ -186,6 +211,46 @@ export function Inspector({
           <DomTab ctx={ctx} />
         </Section>
       )}
+    </div>
+  );
+}
+
+interface ABDiff {
+  missing: "A" | "B" | "both" | null;
+  props?: DiffResult;
+  state?: DiffResult;
+}
+
+/** Diff a component's props/state between the A and B timestamps (§28, §164). */
+function compareAB(store: TraceStore, id: ComponentId, a: number, b: number): ABDiff {
+  const sa = store.snapshotAtOrBefore(id, a);
+  const sb = store.snapshotAtOrBefore(id, b);
+  if (!sa && !sb) return { missing: "both" };
+  if (!sa) return { missing: "A" };
+  if (!sb) return { missing: "B" };
+  const undef = { k: "undefined" } as const;
+  return {
+    missing: null,
+    props: diff({ kind: "props", before: sa.props ?? undef, after: sb.props ?? undef }),
+    state: diff({ kind: "state", before: sa.state ?? undef, after: sb.state ?? undef }),
+  };
+}
+
+function ABCompare({ diff: d }: { diff: ABDiff }) {
+  if (d.missing) {
+    const where = d.missing === "both" ? "A and B" : d.missing;
+    return (
+      <div className="rl-empty">
+        Snapshot not retained at {where}. Scrub there to fetch it, then set the marker again.
+      </div>
+    );
+  }
+  return (
+    <div className="rl-ab">
+      <div className="rl-ab-label">Props</div>
+      <DiffLines result={d.props!} />
+      <div className="rl-ab-label">State</div>
+      <DiffLines result={d.state!} />
     </div>
   );
 }
