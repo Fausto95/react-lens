@@ -36,6 +36,9 @@ importers:
 
   apps/devtools:
     dependencies:
+      '@react-lens/agent':
+        specifier: workspace:*
+        version: link:../../packages/agent
       '@react-lens/causality':
         specifier: workspace:*
         version: link:../../packages/causality
