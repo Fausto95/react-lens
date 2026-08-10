@@ -399,6 +399,149 @@ describe("graph_neighbors", () => {
   });
 });
 
+describe("component_runtime", () => {
+  /**
+   * BigList: 3 renders — mount, then two prop-driven renders. The last render
+   * only changed a function identity and produced identical DOM (a wasted
+   * render). Latest snapshot carries a big array prop, hooks, and a context.
+   */
+  function bigListStore(): TraceStore {
+    const store = new TraceStore();
+    const items: SerializedValue = { k: "array", identity: "a1", length: 5000 };
+    const propsOf = (identity: string, fnId: string): SerializedValue => ({
+      k: "object",
+      identity,
+      entries: [
+        ["items", items],
+        ["onSelect", fn(fnId)],
+      ],
+    });
+    const dom = { root: { nodeName: "UL", text: "same" } };
+    store.ingest(
+      batch({
+        instances: [
+          instance(1, "BigList", {
+            compiler: { compiled: false, memoized: false, bailoutReason: "mutation of props" },
+            source: { file: "src/BigList.tsx", line: 12, column: 0 },
+          }),
+        ],
+        events: [
+          renderEvent({ renderId: rid(1), componentId: cid(1), selfDuration: 2 }),
+          renderEvent({
+            renderId: rid(2),
+            componentId: cid(1),
+            selfDuration: 9,
+            reasons: [{ type: "props", changed: ["onSelect"] }],
+          }),
+          renderEvent({
+            renderId: rid(3),
+            componentId: cid(1),
+            selfDuration: 4,
+            reasons: [{ type: "props", changed: ["onSelect"] }],
+          }),
+        ],
+        snapshots: [
+          { renderId: rid(2), componentId: cid(1), timestamp: 2, props: propsOf("o2", "f1"), dom },
+          {
+            renderId: rid(3),
+            componentId: cid(1),
+            timestamp: 3,
+            props: propsOf("o3", "f2"),
+            dom,
+            hooks: [
+              { index: 0, kind: "state", value: num(1) },
+              { index: 1, kind: "effect", deps: [num(1)] },
+            ],
+            contexts: [{ displayName: "Theme", value: str("dark") }],
+          },
+        ],
+      }),
+    );
+    return store;
+  }
+
+  it("rejects an unknown componentId with a find_component hint", async () => {
+    const handlers = makeHandlers(new TraceStore());
+    const out = (await handlers.component_runtime({ componentId: 99 })) as { error?: string };
+    expect(out.error).toMatch(/find_component/);
+  });
+
+  it("aggregates timings, reason histogram, wasted renders, and compiler status", async () => {
+    const handlers = makeHandlers(bigListStore());
+    const out = (await handlers.component_runtime({ componentId: 1 })) as {
+      componentName: string;
+      compiler: { compiled: boolean; bailoutReason?: string };
+      source?: { file: string };
+      stats: {
+        renders: number;
+        totalSelfMs: number;
+        avgSelfMs: number;
+        maxSelfMs: number;
+        lastRenderId: number | null;
+        wastedRenders: number;
+        functionPropChurn: boolean;
+      };
+      reasons: Record<string, number>;
+      citations: Array<{ kind: string }>;
+    };
+    expect(out.componentName).toBe("BigList");
+    expect(out.compiler).toMatchObject({ compiled: false, bailoutReason: "mutation of props" });
+    expect(out.source).toMatchObject({ file: "src/BigList.tsx" });
+    expect(out.stats).toMatchObject({
+      renders: 3,
+      totalSelfMs: 15,
+      avgSelfMs: 5,
+      maxSelfMs: 9,
+      lastRenderId: 3,
+      // Render 3: identical DOM, only a function identity changed.
+      wastedRenders: 1,
+      functionPropChurn: true,
+    });
+    expect(out.reasons).toEqual({ mount: 1, props: 2 });
+    expect(out.citations.some((c) => c.kind === "component")).toBe(true);
+  });
+
+  it("summarizes the latest snapshot's props, hooks, and contexts", async () => {
+    const handlers = makeHandlers(bigListStore());
+    const out = (await handlers.component_runtime({ componentId: 1 })) as {
+      latest: {
+        renderId: number;
+        props: { type: string; entries?: Record<string, { type: string; size?: number }> };
+        hooks: Array<{ index: number; kind: string; hasDeps: boolean }>;
+        contexts: Array<{ name?: string }>;
+      } | null;
+      citations: Array<{ kind: string }>;
+    };
+    expect(out.latest).not.toBeNull();
+    expect(out.latest!.renderId).toBe(3);
+    // The agent sees the real runtime shape: a 5000-item array prop.
+    expect(out.latest!.props.entries!.items).toMatchObject({ type: "array", size: 5000 });
+    expect(out.latest!.hooks).toEqual([
+      expect.objectContaining({ index: 0, kind: "state", hasDeps: false }),
+      expect.objectContaining({ index: 1, kind: "effect", hasDeps: true }),
+    ]);
+    expect(out.latest!.contexts[0]).toMatchObject({ name: "Theme" });
+    expect(out.citations.some((c) => c.kind === "render")).toBe(true);
+  });
+
+  it("returns latest:null with an honest reason when no snapshot is retained", async () => {
+    const store = new TraceStore();
+    store.ingest(
+      batch({
+        instances: [instance(1, "Remote")],
+        events: [renderEvent({ renderId: rid(1), componentId: cid(1) })],
+      }),
+    );
+    const handlers = makeHandlers(store);
+    const out = (await handlers.component_runtime({ componentId: 1 })) as {
+      latest: unknown;
+      snapshotReason?: string;
+    };
+    expect(out.latest).toBeNull();
+    expect(out.snapshotReason).toMatch(/snapshot/i);
+  });
+});
+
 describe("read_component_source — definition in another module", () => {
   const APP_FILE = [
     'import { Expensive } from "./scenarios/Expensive.js";',
