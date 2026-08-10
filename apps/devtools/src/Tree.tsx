@@ -204,7 +204,9 @@ function TreeRow({
   return (
     <div
       className={`rl-tree-row${isSelected ? " rl-selected" : ""}${frozenClass}`}
-      style={{ paddingLeft: 6 + depth * 12 }}
+      // Cap the indent: deep real-world trees (50+ levels) would otherwise push
+      // the row off-screen and collapse the name to zero width.
+      style={{ paddingLeft: 6 + Math.min(depth, 14) * 8 }}
       onClick={() => {
         if (isComponent) onSelect(node.id);
         else onToggle(node.key);

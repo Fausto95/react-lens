@@ -194,12 +194,13 @@
 .rl-tree-row.rl-selected { background: var(--rl-bg-active); }
 .rl-caret { width: 12px; color: var(--rl-text-faint); font-size: 9px; cursor: pointer; user-select: none; text-align: center; }
 .rl-caret.hidden { visibility: hidden; }
-.rl-tree-name { color: var(--rl-text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rl-tree-name { flex: 1 1 auto; min-width: 0; color: var(--rl-text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .rl-compiler { color: var(--rl-render); font-size: 10px; }
 .rl-suspense-mark { color: var(--rl-warn); font-size: 11px; }
 .rl-dot { width: 6px; height: 6px; border-radius: 50%; display: inline-block; }
 .rl-dot.suspicious { background: var(--rl-suspicious); }
-.rl-flame { flex: 1; height: 4px; margin: 0 var(--rl-s2); background: rgba(255,255,255,0.04); border-radius: 2px; overflow: hidden; min-width: 24px; }
+/* Decorative: yields space to the name (shrinks ~3x faster) when rows are tight. */
+.rl-flame { flex: 0 3 56px; min-width: 0; height: 4px; margin: 0 var(--rl-s2); background: rgba(255,255,255,0.04); border-radius: 2px; overflow: hidden; }
 .rl-flame-bar { display: block; height: 100%; background: linear-gradient(90deg, var(--rl-render), var(--rl-suspicious)); border-radius: 2px; }
 .rl-tree-metric { font-variant-numeric: tabular-nums; color: var(--rl-text-dim); font-size: 11px; min-width: 26px; text-align: right; }
 .rl-tree-metric.dim { color: var(--rl-text-faint); }
