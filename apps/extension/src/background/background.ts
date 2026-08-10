@@ -28,6 +28,10 @@ chrome.runtime.onConnect.addListener((port) => {
     const pair = pairFor(tabId);
     pair.page = port;
 
+    // If a panel is already listening (e.g. the page reloaded), tell the fresh
+    // page to start/flush immediately.
+    if (pair.panel) port.postMessage({ kind: "record", recording: true } satisfies PortMessage);
+
     port.onMessage.addListener((msg: PortMessage) => {
       pair.panel?.postMessage(msg);
     });

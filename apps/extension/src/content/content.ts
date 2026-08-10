@@ -33,6 +33,11 @@ function ensurePort(): chrome.runtime.Port {
   return port ?? connect();
 }
 
+// Connect eagerly so the background can deliver record-control to the page
+// immediately when a panel opens — without this the page↔panel handshake
+// deadlocks (the page only sent frames after recording, which never started).
+connect();
+
 window.addEventListener("message", (event: MessageEvent) => {
   if (event.source !== window) return;
   const data = event.data as PageToContent | undefined;
