@@ -131,7 +131,7 @@ function parseToolArgs(
   return { ok: true, args: out };
 }
 
-async function executeTool(handlers: ToolHandlers, call: ToolCall): Promise<unknown> {
+export async function executeTool(handlers: ToolHandlers, call: ToolCall): Promise<unknown> {
   const parsed = parseToolArgs(call);
   if (!parsed.ok) return { error: parsed.error };
   try {
@@ -142,7 +142,7 @@ async function executeTool(handlers: ToolHandlers, call: ToolCall): Promise<unkn
   }
 }
 
-function collectCitations(result: unknown, into: LensRef[]): void {
+export function collectCitations(result: unknown, into: LensRef[]): void {
   if (!result || typeof result !== "object") return;
   const obj = result as Record<string, unknown>;
   if (Array.isArray(obj.citations)) {
@@ -152,7 +152,7 @@ function collectCitations(result: unknown, into: LensRef[]): void {
   }
 }
 
-function dedupeCitations(refs: LensRef[]): LensRef[] {
+export function dedupeCitations(refs: LensRef[]): LensRef[] {
   const seen = new Set<string>();
   const out: LensRef[] = [];
   for (const r of refs) {

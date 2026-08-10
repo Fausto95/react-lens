@@ -45,6 +45,11 @@ export function startTranscript(system: string, question: string, settings: Agen
   };
 }
 
+/** Add a follow-up user message to an ongoing conversation. */
+export function appendUser(transcript: ProviderTranscript, content: string): void {
+  transcript.messages.push({ role: "user", content });
+}
+
 export function appendAssistant(transcript: ProviderTranscript, turn: ProviderTurn): void {
   if (transcript.kind === "openai") {
     const raw = turn.rawAssistant as OpenAiMessage;

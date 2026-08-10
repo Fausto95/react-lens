@@ -207,6 +207,26 @@ export type ToolHandlers = {
   ) => ToolResultMap[K] | ToolError | Promise<ToolResultMap[K] | ToolError>;
 };
 
+// ── Conversation ─────────────────────────────────────────────────────────────
+
+export type ChatMessage =
+  | { role: "user"; content: string }
+  | { role: "assistant"; content: string; citations: LensRef[]; steps: AgentStep[] };
+
+/** Progress events emitted while a send() is in flight. */
+export type AgentEvent =
+  | { type: "model_start" }
+  | { type: "text_delta"; text: string }
+  | { type: "tool_start"; name: ToolName; args: Record<string, unknown> }
+  | { type: "tool_result"; name: ToolName; summary: string; citations: LensRef[] }
+  | { type: "done"; answer: AgentAnswer }
+  | { type: "error"; message: string };
+
+export interface AgentSession {
+  send(question: string, opts?: { signal?: AbortSignal; onEvent?: (e: AgentEvent) => void }): Promise<AgentAnswer>;
+  readonly messages: ChatMessage[];
+}
+
 /** Normalized turn from any provider. */
 export interface ProviderTurn {
   text: string | null;

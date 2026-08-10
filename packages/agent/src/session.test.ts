@@ -86,7 +86,9 @@ describe("agent session", () => {
 
     // The second request carries the whole prior conversation.
     const secondBody = JSON.parse((fetchMock.mock.calls[1] as [string, RequestInit])[1].body as string);
-    const contents = secondBody.messages.map((m: { content: unknown }) => String(m.content));
+    const contents = secondBody.messages
+      .filter((m: { role: string }) => m.role !== "system") // the prompt itself names the block
+      .map((m: { content: unknown }) => String(m.content));
     expect(contents.some((c: string) => c.includes("SESSION EVIDENCE"))).toBe(true);
     expect(contents.some((c: string) => c.includes("Why slow?"))).toBe(true);
     expect(contents.some((c: string) => c.includes("Answer one."))).toBe(true);
@@ -131,7 +133,8 @@ describe("agent session", () => {
         if (e.type === "tool_result") seen.push(e.summary);
       },
     });
-    expect(seen[0]).toMatch(/missing required argument "renderId"/);
+    expect(seen[0]).toMatch(/missing required argument/);
+    expect(seen[0]).toMatch(/renderId/);
   });
 
   it("stops at the step ceiling with an explicit message", async () => {

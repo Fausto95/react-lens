@@ -1,4 +1,5 @@
 export { runAgent, testAgentConnection } from "./loop.js";
+export { createAgentSession } from "./session.js";
 export { createToolHandlers } from "./handlers.js";
 export { SYSTEM_PROMPT, TOOL_DEFINITIONS } from "./tools.js";
 export { buildEvidencePack, formatEvidencePack, type EvidencePack } from "./evidence.js";
@@ -14,6 +15,9 @@ export type {
   ToolError,
   ToolArgsMap,
   ToolResultMap,
+  AgentEvent,
+  AgentSession,
+  ChatMessage,
   CauseSummary,
   WhyToolResult,
   ComponentSourceResult,
