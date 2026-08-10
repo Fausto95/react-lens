@@ -10,10 +10,18 @@ import { PAGE_PORT_NAME, PANEL_PORT_PREFIX, type PortMessage } from "../transpor
  */
 const HOOK_SCRIPT_ID = "react-lens-hook";
 
+// The registration persists across sessions, so re-registering throws
+// "Duplicate script ID". Unregister-then-register makes it idempotent, and a
+// single top-level call (once per service-worker cold start) avoids the
+// concurrent double-registration that onInstalled + onStartup + this would
+// otherwise cause.
 async function registerHookStub(): Promise<void> {
   try {
-    const existing = await chrome.scripting.getRegisteredContentScripts({ ids: [HOOK_SCRIPT_ID] });
-    if (existing.length > 0) return;
+    await chrome.scripting.unregisterContentScripts({ ids: [HOOK_SCRIPT_ID] });
+  } catch {
+    // Nothing registered yet — expected on first run.
+  }
+  try {
     await chrome.scripting.registerContentScripts([
       {
         id: HOOK_SCRIPT_ID,
@@ -29,9 +37,6 @@ async function registerHookStub(): Promise<void> {
   }
 }
 
-chrome.runtime.onInstalled.addListener(() => void registerHookStub());
-chrome.runtime.onStartup.addListener(() => void registerHookStub());
-// Also on first service-worker spin-up (covers unpacked reloads).
 void registerHookStub();
 
 /**

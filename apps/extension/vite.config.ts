@@ -10,6 +10,11 @@ export default defineConfig({
   plugins: [react(), crx({ manifest: manifest as never })],
   build: {
     target: "chrome116",
+    // Chrome 116 supports native ESM + <link rel=modulepreload>, so the polyfill
+    // is dead weight. Disabling it also stops Vite injecting cross-world
+    // modulepreload hints into the devtools/panel HTML — those resources load in
+    // a different extension world and Chrome warns they're preloaded-but-unused.
+    modulePreload: false,
     rollupOptions: {
       input: {
         devtools: "src/devtools/devtools.html",
