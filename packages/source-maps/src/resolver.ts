@@ -1,5 +1,12 @@
-import { TraceMap, originalPositionFor } from "@jridgewell/trace-mapping";
+import { TraceMap, originalPositionFor, sourceContentFor } from "@jridgewell/trace-mapping";
 import type { SourceLocation } from "@react-lens/protocol";
+
+export interface OriginalSource {
+  /** Normalized original path, e.g. src/App.tsx. */
+  path: string;
+  /** Original (pre-compile) source text, from the map's sourcesContent. */
+  content: string;
+}
 
 export interface SourceResolver {
   /**
@@ -8,6 +15,8 @@ export interface SourceResolver {
    * no map is available or the position can't be mapped.
    */
   resolve(compiled: SourceLocation): Promise<SourceLocation | null>;
+  /** Original source text for a compiled module, from its source map. */
+  sourceContent(compiledFile: string): Promise<OriginalSource | null>;
   clear(): void;
 }
 
@@ -53,8 +62,19 @@ export function createSourceResolver(fetcher: Fetcher = defaultFetch): SourceRes
     };
   }
 
+  async function sourceContent(compiledFile: string): Promise<OriginalSource | null> {
+    const map = await mapFor(compiledFile);
+    if (!map) return null;
+    const source = map.sources.find((s): s is string => typeof s === "string");
+    if (!source) return null;
+    const content = sourceContentFor(map, source);
+    if (content == null) return null;
+    return { path: normalizeSource(source), content };
+  }
+
   return {
     resolve,
+    sourceContent,
     clear: () => maps.clear(),
   };
 }

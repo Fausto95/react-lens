@@ -16,7 +16,7 @@ import { SourceTab } from "./tabs/SourceTab.js";
 import { DomTab } from "./tabs/DomTab.js";
 import { RelationsTab } from "./tabs/RelationsTab.js";
 import { DoctorTab } from "./tabs/DoctorTab.js";
-import { diagnoseOne } from "./doctor.js";
+import { useDoctor } from "./useDoctor.js";
 
 export interface EditApi {
   setProp(componentId: ComponentId, path: Array<string | number>, value: unknown): void;
@@ -73,6 +73,8 @@ export function Inspector({
     if (latest) setSelectedRender(latest.renderId);
   }, [latest?.renderId]);
 
+  const doctor = useDoctor(store, causality, componentId);
+
   if (!inst) return <div className="rl-empty">Component no longer mounted.</div>;
 
   const activeRenderId = selectedRender ?? latest?.renderId ?? null;
@@ -90,7 +92,6 @@ export function Inspector({
     ...(onSelectComponent ? { onSelectComponent } : {}),
   };
 
-  const doctorCount = diagnoseOne(store, causality, componentId).length;
   const hooks = snapshot?.hooks ?? [];
   const propCount = snapshot?.props.k === "object" ? (snapshot.props.entries?.length ?? 0) : 0;
   const stateCount = hooks.filter((h) => h.kind === "state" || h.kind === "reducer").length;
@@ -120,9 +121,9 @@ export function Inspector({
         <WhySection ctx={ctx} />
       </Section>
 
-      {doctorCount > 0 && (
-        <Section title="Doctor" count={doctorCount} defaultOpen>
-          <DoctorTab ctx={ctx} />
+      {doctor.total > 0 && (
+        <Section title="Doctor" count={doctor.total} defaultOpen>
+          <DoctorTab runtime={doctor.runtime} staticFindings={doctor.staticFindings} />
         </Section>
       )}
 

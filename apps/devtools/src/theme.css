@@ -376,6 +376,7 @@
 .rl-doc-mark { color: var(--rl-warn); }
 .rl-doc-title { font-size: 13px; flex: 1; }
 .rl-doc-impact { font-size: 11px; color: var(--rl-text-faint); font-variant-numeric: tabular-nums; }
+.rl-doc-impact.rl-doc-static { color: var(--rl-interaction); }
 .rl-doc-detail { font-size: 12px; color: var(--rl-text-dim); margin-top: 4px; }
 .rl-doc-fix { font-size: 12px; color: var(--rl-healthy); margin-top: 4px; }
 .rl-status-issues { color: var(--rl-warn); }
