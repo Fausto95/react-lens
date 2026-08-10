@@ -19,8 +19,12 @@
     "build:extension": "pnpm --filter @react-lens/extension build"
   },
   "devDependencies": {
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "happy-dom": "^15.11.7",
+    "react": "^19",
+    "react-dom": "^19",
     "typescript": "^5.6.3",
-    "vitest": "^2.1.8",
-    "happy-dom": "^15.11.7"
+    "vitest": "^2.1.8"
   }
 }

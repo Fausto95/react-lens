@@ -1,0 +1,17 @@
+{
+  "name": "@react-lens/instrumentation",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@react-lens/protocol": "workspace:*",
+    "@react-lens/fiber": "workspace:*",
+    "@react-lens/serializer": "workspace:*"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  }
+}

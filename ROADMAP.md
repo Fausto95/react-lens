@@ -24,12 +24,14 @@ Legend: ✅ done · 🚧 in progress · ⬜ not started
 - ⬜ **`diagnostics`** — Doctor rules over `(ast, runtimeEvidence)` via OXC (interface first, rules later)
 - ⬜ **`source-maps`** — runtime component ↔ source location
 
-Core pure packages total: **43 tests passing**, full `tsc -b` clean.
-
 ## Page-side (runs in the inspected page)
 
-- 🚧 **`fiber`** — owned React hook, DOM↔Fiber↔Component, commit capture, compiler status
-- ⬜ **`instrumentation`** — commit + browser events → `LensEvent`, batching, overhead budget
+- ✅ **`fiber`** — owned React hook (chains existing), DOM↔Fiber↔Component, commit capture, compiler-status best-effort
+- ✅ **`instrumentation`** — commit + interaction events → `LensEvent`, DOM snapshots, batching, overhead self-report
+
+Verified against **real React 19** (integration tests): mount + state + prop
+re-render counting, prop-change reasons, DOM→component resolution.
+All packages: **45 tests passing**, full `tsc -b` clean.
 
 ## Apps
 

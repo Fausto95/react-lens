@@ -5,6 +5,8 @@
     { "path": "./packages/serializer" },
     { "path": "./packages/diff-engine" },
     { "path": "./packages/trace-engine" },
-    { "path": "./packages/causality" }
+    { "path": "./packages/causality" },
+    { "path": "./packages/fiber" },
+    { "path": "./packages/instrumentation" }
   ]
 }
