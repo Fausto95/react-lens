@@ -26,5 +26,8 @@
     "react-dom": "^19",
     "typescript": "^5.6.3",
     "vitest": "^2.1.8"
+  },
+  "dependencies": {
+    "@jridgewell/trace-mapping": "^0.3.31"
   }
 }

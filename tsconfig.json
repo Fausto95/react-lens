@@ -9,6 +9,7 @@
     { "path": "./packages/fiber" },
     { "path": "./packages/instrumentation" },
     { "path": "./packages/tree" },
-    { "path": "./packages/graph" }
+    { "path": "./packages/graph" },
+    { "path": "./packages/source-maps" }
   ]
 }

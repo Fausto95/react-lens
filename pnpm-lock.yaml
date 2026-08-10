@@ -7,6 +7,10 @@ settings:
 importers:
 
   .:
+    dependencies:
+      '@jridgewell/trace-mapping':
+        specifier: ^0.3.31
+        version: 0.3.31
     devDependencies:
       '@types/react':
         specifier: ^19
@@ -53,6 +57,9 @@ importers:
       '@react-lens/serializer':
         specifier: workspace:*
         version: link:../../packages/serializer
+      '@react-lens/source-maps':
+        specifier: workspace:*
+        version: link:../../packages/source-maps
       '@react-lens/trace-engine':
         specifier: workspace:*
         version: link:../../packages/trace-engine
@@ -184,6 +191,15 @@ importers:
 
   packages/serializer:
     dependencies:
+      '@react-lens/protocol':
+        specifier: workspace:*
+        version: link:../protocol
+
+  packages/source-maps:
+    dependencies:
+      '@jridgewell/trace-mapping':
+        specifier: ^0.3.31
+        version: 0.3.31
       '@react-lens/protocol':
         specifier: workspace:*
         version: link:../protocol

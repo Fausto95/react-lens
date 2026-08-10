@@ -1,0 +1,12 @@
+{
+  "name": "@react-lens/source-maps",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": { ".": "./src/index.ts" },
+  "dependencies": {
+    "@react-lens/protocol": "workspace:*",
+    "@jridgewell/trace-mapping": "^0.3.31"
+  },
+  "scripts": { "typecheck": "tsc --noEmit" }
+}

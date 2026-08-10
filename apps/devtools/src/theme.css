@@ -372,7 +372,8 @@
 .rl-rel-dot.context { background: var(--rl-healthy); }
 
 .rl-muted { color: var(--rl-text-faint); }
-.rl-source-loc { font-family: var(--rl-mono); font-size: 12px; margin-bottom: var(--rl-s4); overflow-wrap: anywhere; }
+.rl-source-loc { font-family: var(--rl-mono); font-size: 12px; margin-bottom: var(--rl-s2); overflow-wrap: anywhere; display: flex; align-items: center; flex-wrap: wrap; }
+.rl-source-sub { font-family: var(--rl-mono); font-size: 11px; color: var(--rl-text-faint); margin-bottom: var(--rl-s4); overflow-wrap: anywhere; }
 .rl-actions { display: flex; gap: var(--rl-s3); }
 
 .rl-statusbar {
