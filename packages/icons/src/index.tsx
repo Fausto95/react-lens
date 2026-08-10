@@ -258,3 +258,13 @@ export function IconRewind(props: IconProps) {
     </Svg>
   );
 }
+
+/** AI assistant — a four-point sparkle. */
+export function IconSparkle(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <path d="M8 2.5c.5 2.6 1.4 3.5 4 4-2.6.5-3.5 1.4-4 4-.5-2.6-1.4-3.5-4-4 2.6-.5 3.5-1.4 4-4z" fill="currentColor" stroke="none" />
+      <path d="M12.6 10.4c.25 1.3.7 1.75 2 2-1.3.25-1.75.7-2 2-.25-1.3-.7-1.75-2-2 1.3-.25 1.75-.7 2-2z" fill="currentColor" stroke="none" />
+    </Svg>
+  );
+}
