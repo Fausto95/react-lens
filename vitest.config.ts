@@ -4,7 +4,7 @@ export default defineConfig({
   test: {
     // happy-dom for the DOM-snapshot diff tests; pure packages ignore it.
     environment: "happy-dom",
-    include: ["packages/**/*.test.ts"],
+    include: ["packages/**/*.test.ts", "apps/**/src/**/*.test.ts"],
     passWithNoTests: true,
   },
 });
