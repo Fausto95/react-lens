@@ -398,3 +398,60 @@ describe("graph_neighbors", () => {
     expect(out.children[0]).toMatchObject({ name: "Row" });
   });
 });
+
+describe("read_component_source — definition in another module", () => {
+  const APP_FILE = [
+    'import { Expensive } from "./scenarios/Expensive.js";',
+    "",
+    "export function App() {",
+    "  return <Expensive />;",
+    "}",
+  ].join("\n");
+  const EXPENSIVE_FILE = [
+    'import { useState } from "react";',
+    "",
+    "export function Expensive() {",
+    "  const [tick, setTick] = useState(0);",
+    "  return <Heavy iterations={4_000_000} />;",
+    "}",
+  ].join("\n");
+
+  it("chases the import from the creation site to the defining module", async () => {
+    const store = new TraceStore();
+    store.ingest(
+      batch({
+        instances: [
+          instance(1, "Expensive", {
+            // React records the JSX creation site — App.tsx, not Expensive.tsx.
+            source: { file: "http://app/src/App.tsx", line: 4, column: 10 },
+          }),
+        ],
+        events: [renderEvent({ renderId: rid(1), componentId: cid(1) })],
+      }),
+    );
+    const resolver = {
+      resolve: async () => ({ file: "src/App.tsx", line: 4, column: 10 }),
+      sourceContent: async (file: string) => {
+        if (file === "http://app/src/App.tsx") return { path: "src/App.tsx", content: APP_FILE };
+        if (file === "http://app/src/scenarios/Expensive.tsx") {
+          return { path: "src/scenarios/Expensive.tsx", content: EXPENSIVE_FILE };
+        }
+        return null;
+      },
+    };
+    const handlers = createToolHandlers({
+      store,
+      causality: createCausality(store),
+      diagnose: () => [],
+      sourceResolver: resolver as never,
+    });
+    const out = (await handlers.read_component_source({ componentId: 1 })) as {
+      file: string | null;
+      span?: { startLine: number };
+      snippet: string | null;
+    };
+    expect(out.file).toBe("src/scenarios/Expensive.tsx");
+    expect(out.span?.startLine).toBe(3);
+    expect(out.snippet).toContain("export function Expensive()");
+  });
+});
