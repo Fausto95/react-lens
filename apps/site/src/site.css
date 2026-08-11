@@ -307,12 +307,14 @@ pre.code .k {
 .steps {
   counter-reset: step;
   display: grid;
-  gap: 14px;
-  max-width: 640px;
+  gap: 26px;
+  max-width: 660px;
+  margin: 26px 0 34px;
 }
 .step {
   display: flex;
-  gap: 12px;
+  gap: 14px;
+  line-height: 1.75;
 }
 .step::before {
   counter-increment: step;
@@ -327,6 +329,21 @@ pre.code .k {
   color: var(--accent);
   font-size: 12px;
   font-family: var(--mono);
+}
+/* Keys and gestures — a physical-looking cap so shortcuts read as input,
+   not as code. */
+kbd {
+  font-family: var(--mono);
+  /* Relative so a key cap stays proportional in 16px steps and 13px hints. */
+  font-size: 0.85em;
+  line-height: 1;
+  padding: 3px 7px 4px;
+  border-radius: 6px;
+  background: var(--hover);
+  border: 1px solid var(--border-strong);
+  border-bottom-width: 2px;
+  color: var(--text);
+  white-space: nowrap;
 }
 .copybtn {
   -webkit-app-region: no-drag;

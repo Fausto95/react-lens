@@ -36,9 +36,9 @@ export function CompareSection() {
       <p className="sec-lead">
         The inspector’s diff answers “what changed in this render”. A/B answers the bigger question:
         between <em>these two points in time</em>, which components ended up somewhere different?
-        React Lens resolves the render each component was showing at A and at B, then lists every one
-        where those differ — the same resolution time travel uses, so the index is exactly what you’d
-        see if you scrubbed there.
+        React Lens resolves the render each component was showing at A and at B, then lists every
+        one where those differ — the same resolution time travel uses, so the index is exactly what
+        you’d see if you scrubbed there.
       </p>
 
       <div className="card">
@@ -47,8 +47,9 @@ export function CompareSection() {
             <code> doesn't become a sibling column. */}
         <div className="card-hint">
           <span>
-            ▶ Double-click a commit tick in the timeline’s <code>CMT</code> lane — A lands just
-            before it, B just after, and the index opens showing what that one commit changed.
+            ▶ <kbd>Double-click</kbd> a commit tick in the timeline’s <code>CMT</code> lane — A
+            lands just before it, B just after, and the index opens showing what that one commit
+            changed.
           </span>
         </div>
       </div>
@@ -57,8 +58,8 @@ export function CompareSection() {
       <div className="steps">
         <div className="step">
           <span>
-            Set the marks. <code>Alt</code>+click the timeline sets <b>A</b>, <code>Shift</code>
-            +click sets <b>B</b> — on empty track or straight on a commit bar. Keep the shift-click
+            Set the marks. <kbd>Alt</kbd> + click the timeline sets <b>A</b>, <kbd>Shift</kbd> +
+            click sets <b>B</b> — on empty track or straight on a commit bar. Keep the shift-click
             still: dragging it becomes a zoom rubber band instead.
           </span>
         </div>
@@ -71,9 +72,9 @@ export function CompareSection() {
         </div>
         <div className="step">
           <span>
-            Click a row. The component is selected and the inspector grows a{" "}
-            <b>Compare A ↔ B</b> section with the value-level props and state diff — before → after,
-            across the whole span rather than one render.
+            Click a row. The component is selected and the inspector grows a <b>Compare A ↔ B</b>{" "}
+            section with the value-level props and state diff — before → after, across the whole
+            span rather than one render.
           </span>
         </div>
       </div>
@@ -83,9 +84,9 @@ export function CompareSection() {
           <span className="tag">changed</span>
           <h3>Different render at A than at B</h3>
           <p>
-            Rows are sorted by how much the component churned inside the range, with its render count
-            and self-time. Everything else is folded into the <code>unchanged</code> tally in the
-            header — a 900-component tree where you touched one panel reads as{" "}
+            Rows are sorted by how much the component churned inside the range, with its render
+            count and self-time. Everything else is folded into the <code>unchanged</code> tally in
+            the header — an 882-component tree where you bumped one panel reads as{" "}
             <code>1 changed · 881 unchanged</code>, which is the whole point.
           </p>
         </article>
