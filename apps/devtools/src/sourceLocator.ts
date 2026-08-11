@@ -1,6 +1,7 @@
 import type { ComponentId, SourceLocation } from "@reactlens/protocol";
 import type { ResolvedLocation } from "@reactlens/source-maps";
 import { getSourceResolver } from "./sourceResolver.js";
+import { declaredNameNear } from "./declaredName.js";
 
 /**
  * Where a component is defined on a PRODUCTION build, where React exposes no
@@ -69,6 +70,34 @@ async function run(locate: ComponentLocator, id: ComponentId): Promise<LocatedSo
   return {
     compiled,
     ...(original ? { original } : {}),
-    ...(original?.name ? { originalName: original.name } : {}),
+    ...(original ? await originalNameOf(compiled, original) : {}),
   };
+}
+
+/** Component names are capitalised; `useState` or `props` are not one. */
+const COMPONENT_NAME = /^[A-Z][A-Za-z0-9_$]*$/;
+
+/**
+ * The pre-minification name.
+ *
+ * The map's `name` at this position is unreliable — a located frame often lands
+ * on the component's first statement, so the recorded identifier can be the
+ * hook being called. Read the enclosing declaration out of the original source
+ * (text the map already ships for the Source tab) and keep the map's name only
+ * as a component-shaped fallback.
+ */
+async function originalNameOf(
+  compiled: SourceLocation,
+  original: ResolvedLocation,
+): Promise<{ originalName?: string }> {
+  try {
+    const src = await getSourceResolver().sourceContent(compiled.file, original.file);
+    const declared = src ? declaredNameNear(src.content, original.line) : null;
+    if (declared) return { originalName: declared };
+  } catch {
+    // No sourcesContent (maps can omit it) — fall through to the map name.
+  }
+  return original.name && COMPONENT_NAME.test(original.name)
+    ? { originalName: original.name }
+    : {};
 }
