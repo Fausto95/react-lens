@@ -22,14 +22,16 @@ import { AgentPane } from "./AgentPane.js";
 import { SettingsPopover } from "./SettingsPopover.js";
 import {
   IconLens,
-  IconBolt,
   IconSearch,
   IconSparkle,
   IconDoctor,
   IconDownload,
   IconUpload,
   IconCrosshair,
+  IconSliders,
 } from "@react-lens/icons";
+import { PanelMenu } from "./PanelMenu.js";
+import { applyThemePref, type ThemePref } from "./theme.js";
 import {
   downloadSession,
   importSessionFromFile,
@@ -113,6 +115,14 @@ export function Panel({
   const [agentOpen, setAgentOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsVersion, setSettingsVersion] = useState(0);
+  // Panel color scheme: dark by default, light/system via the header menu.
+  const [themePref, setThemePrefState] = useState<ThemePref>(() => loadPanelPrefs().theme);
+  const [menuOpen, setMenuOpen] = useState(false);
+  useEffect(() => applyThemePref(themePref), [themePref]);
+  const setThemePref = useCallback((pref: ThemePref) => {
+    setThemePrefState(pref);
+    savePanelPrefs({ theme: pref });
+  }, []);
   // Loaded once (and on save) so AgentPane doesn't re-read storage per ask.
   const [agentSettings, setAgentSettings] = useState<AgentSettings | null>(null);
   useEffect(() => {
@@ -349,6 +359,15 @@ export function Panel({
       run: onToggleOverlay,
     });
   }
+  for (const pref of ["system", "light", "dark"] as const) {
+    if (pref === themePref) continue;
+    commands.push({
+      id: `theme-${pref}`,
+      label: `Theme: ${pref[0]!.toUpperCase()}${pref.slice(1)}`,
+      group: "Navigate",
+      run: () => setThemePref(pref),
+    });
+  }
   if (onToggleRecording) {
     commands.push({
       id: "toggle-recording",
@@ -467,17 +486,30 @@ export function Panel({
               });
           }}
         />
-        {onToggleOverlay && (
+        <span className="rl-menu-anchor">
           <button
-            className={`rl-icon-btn${overlayEnabled ? " active" : ""}`}
-            onClick={onToggleOverlay}
-            title="Toggle render overlay"
-            aria-label="Toggle render overlay"
-            aria-pressed={overlayEnabled}
+            className={`rl-icon-btn${menuOpen ? " active" : ""}`}
+            onClick={() => setMenuOpen((v) => !v)}
+            title="Panel settings"
+            aria-label="Panel settings"
+            aria-haspopup="dialog"
+            aria-expanded={menuOpen}
           >
-            <IconBolt size={13} />
+            <IconSliders size={14} />
           </button>
-        )}
+          <PanelMenu
+            open={menuOpen}
+            onClose={() => setMenuOpen(false)}
+            theme={themePref}
+            onThemeChange={setThemePref}
+            overlay={
+              onToggleOverlay
+                ? { enabled: overlayEnabled ?? false, toggle: onToggleOverlay }
+                : undefined
+            }
+            reading={embedded ? "embedded" : "devtools"}
+          />
+        </span>
         <button
           className={`rl-icon-btn recording severe${recording ? " active" : ""}`}
           onClick={onToggleRecording}

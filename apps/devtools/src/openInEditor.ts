@@ -32,6 +32,16 @@ export function preferredEditor(): EditorId {
   }
 }
 
+export const EDITOR_IDS = Object.keys(EDITOR_SCHEMES) as EditorId[];
+
+export function setPreferredEditor(editor: EditorId): void {
+  try {
+    localStorage.setItem(EDITOR_PREF_KEY, editor);
+  } catch {
+    /* storage unavailable — the preference simply doesn't persist */
+  }
+}
+
 export function openInEditor(file: string, line = 1, column = 1): boolean {
   const path = normalizeEditorPath(file);
   if (!path) return false;

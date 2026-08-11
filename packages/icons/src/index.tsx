@@ -287,3 +287,14 @@ export function IconSparkle(props: IconProps) {
     </Svg>
   );
 }
+
+/** Panel settings — two tune sliders. */
+export function IconSliders(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <path d="M2.5 5.5h11M2.5 10.5h11" />
+      <circle cx="6" cy="5.5" r="1.7" fill="var(--rl-bg, #0b0d10)" />
+      <circle cx="10" cy="10.5" r="1.7" fill="var(--rl-bg, #0b0d10)" />
+    </Svg>
+  );
+}
