@@ -32,6 +32,38 @@ export function diffApplySet(
   return delta;
 }
 
+export interface ApplySetChange {
+  componentId: ComponentId;
+  /** Render shown at A, or null when the component had none retained there. */
+  renderA: RenderId | null;
+  renderB: RenderId | null;
+}
+
+export interface ApplySetComparison {
+  changed: ApplySetChange[];
+  unchangedCount: number;
+}
+
+/**
+ * Whole-app A/B: which components would show a different render at `a` vs
+ * `b`. Null on one side means the component had no retained render there
+ * (born later, or history evicted).
+ */
+export function compareApplySets(store: TraceStore, a: number, b: number): ApplySetComparison {
+  const setA = applySetAt(store, Math.min(a, b));
+  const setB = applySetAt(store, Math.max(a, b));
+  const changed: ApplySetChange[] = [];
+  let unchangedCount = 0;
+  const ids = new Set<ComponentId>([...setA.keys(), ...setB.keys()]);
+  for (const componentId of ids) {
+    const renderA = setA.get(componentId) ?? null;
+    const renderB = setB.get(componentId) ?? null;
+    if (renderA === renderB) unchangedCount++;
+    else changed.push({ componentId, renderA, renderB });
+  }
+  return { changed, unchangedCount };
+}
+
 export interface ApplySetCursor {
   /** The apply set at `t`, recomputing only components that rendered between moves. */
   moveTo(t: number): Map<ComponentId, RenderId>;

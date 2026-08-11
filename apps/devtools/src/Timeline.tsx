@@ -38,27 +38,26 @@ import {
   SCALE_MIN,
   buildScale,
   clamp,
+  clampPaneHeight,
   countIdleGutters,
+  fitPlan,
   IDLE_WIDTH,
   mergeActive,
   nearest,
   projectT,
   projectX,
-  scaleForProjectedWidth,
   sessionBounds,
 } from "./timeline/geometry.js";
 import { buildTicks, compactGap } from "./timeline/ticks.js";
 import { packPhaseBars, type PackedBar } from "./timeline/pack.js";
 import { aggregateBars, visibleChunkRange, type ChunkRange } from "./timeline/lod.js";
+import { ABDiffPanel } from "./timeline/ABDiffPanel.js";
+import { loadPanelPrefs, savePanelPrefs } from "./panelPrefs.js";
+import { compareApplySets } from "@react-lens/trace-engine";
 
-type Mode = "collapsed" | "compact" | "expanded";
-/** Open sizes always include the phase waterfall; collapsed hides the tracks. */
-const NEXT_MODE: Record<Mode, Mode> = {
-  collapsed: "compact",
-  compact: "expanded",
-  expanded: "collapsed",
-};
 const SNAP_PX = 6;
+/** Shift-drag must travel this many px before it becomes a zoom band (else it's a B mark). */
+const BAND_THRESHOLD_PX = 4;
 /** Wasted-render verdicts computed per repack, detail bars first. */
 const WHY_CAP = 80;
 
@@ -109,7 +108,21 @@ export function Timeline({
   const version = useTraceVersion(store, { kind: "global" });
   const interactions = useMemo(() => store.interactions(), [store, version]);
   const commits = useMemo(() => store.commits(), [store, version]);
-  const [mode, setMode] = useState<Mode>("expanded");
+  // Resizable pane: collapsed toggle (T) + persisted waterfall-lane height.
+  const [collapsed, setCollapsedState] = useState(() => loadPanelPrefs().tlCollapsed);
+  const [paneH, setPaneHState] = useState(() => clampPaneHeight(loadPanelPrefs().tlPaneH));
+  const rootRef = useRef<HTMLDivElement>(null);
+  const setCollapsed = (update: (v: boolean) => boolean) =>
+    setCollapsedState((v) => {
+      const next = update(v);
+      savePanelPrefs({ tlCollapsed: next });
+      return next;
+    });
+  const setPaneH = (h: number) => {
+    const next = clampPaneHeight(h);
+    setPaneHState(next);
+    savePanelPrefs({ tlPaneH: next });
+  };
   const [scale, setScale] = useState(0); // px/ms; 0 = auto-fit to viewport
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [viewportW, setViewportW] = useState(0);
@@ -121,6 +134,11 @@ export function Timeline({
   /** Applied after the scale model commits so scrollLeft isn't clamped to the old width. */
   const pendingScrollRef = useRef<number | null>(null);
   const [playing, setPlaying] = useState(false);
+  // Shift-drag zoom band (inner-canvas px); anchor survives until pointer-up.
+  const bandAnchor = useRef<{ clientX: number; pointerId: number } | null>(null);
+  const [band, setBand] = useState<{ x0: number; x1: number } | null>(null);
+  // A→B apply-set diff panel.
+  const [abPanelOpen, setAbPanelOpen] = useState(false);
   // Scroll drives DOM directly (--rl-scroll-x + minimap window); the only
   // scroll-driven React state is the coarse culling window below.
   const [chunks, setChunks] = useState<ChunkRange>(() => visibleChunkRange(0, 760));
@@ -197,7 +215,7 @@ export function Timeline({
     syncScrollUi();
     el.addEventListener("scroll", syncScrollUi, { passive: true });
     return () => el.removeEventListener("scroll", syncScrollUi);
-  }, [mode, interactions.length, syncScrollUi]);
+  }, [collapsed, interactions.length, syncScrollUi]);
 
   const snapTargets = useMemo(() => {
     const ts: number[] = [];
@@ -274,7 +292,7 @@ export function Timeline({
     const ro = new ResizeObserver(measure);
     ro.observe(el);
     return () => ro.disconnect();
-  }, [mode, interactions.length]);
+  }, [collapsed, interactions.length]);
 
   useEffect(() => {
     if (interactions.length === 0) {
@@ -366,33 +384,14 @@ export function Timeline({
     }
   }, [scale]);
 
-  const fitSelection = useCallback(
-    (it: Interaction) => {
+  /** Zoom to an arbitrary time range (drag-zoom, fit-selection, minimap edges). */
+  const fitRange = useCallback(
+    (start: number, end: number) => {
       const el = scrollRef.current;
       const port = el?.clientWidth || viewW;
-      // Fit the clip; expand sub-frame clicks to a small context window so zoom is usable.
-      const span = Math.max(0, it.end - it.start);
-      const window = Math.max(span, 16);
-      const pad = (window - span) / 2;
-      const rangeStart = clamp(it.start - pad, bounds.t0, bounds.t1);
-      const rangeEnd = clamp(Math.max(it.end, it.start) + pad, bounds.t0, bounds.t1);
-      const targetW = Math.max(80, port * 0.85);
-      const next = scaleForProjectedWidth(
-        active,
-        bounds.t0,
-        bounds.t1,
-        rangeStart,
-        rangeEnd,
-        targetW,
-      );
-      const built = buildScale(active, bounds.t0, bounds.t1, next);
-      const x0 = projectX(built.segs, rangeStart);
-      const x1 = projectX(built.segs, rangeEnd);
-      const scrollTo = Math.max(0, (x0 + x1) / 2 - port / 2);
-      pendingScrollRef.current = scrollTo;
-      setSelectedId(it.id);
-      onCursor({ t: it.start, mode: "historical" });
-      if (next === scale) {
+      const plan = fitPlan(active, bounds, { start, end }, port);
+      pendingScrollRef.current = plan.scrollLeft;
+      if (plan.scale === scale) {
         // No scale change → layout effect won't re-fire; scroll now.
         requestAnimationFrame(() => {
           if (pendingScrollRef.current == null) return;
@@ -401,10 +400,19 @@ export function Timeline({
           pendingScrollRef.current = null;
         });
       } else {
-        setScale(next);
+        setScale(plan.scale);
       }
     },
-    [active, bounds.t0, bounds.t1, onCursor, scale, viewW],
+    [active, bounds, scale, viewW],
+  );
+
+  const fitSelection = useCallback(
+    (it: Interaction) => {
+      setSelectedId(it.id);
+      onCursor({ t: it.start, mode: "historical" });
+      fitRange(it.start, it.end);
+    },
+    [fitRange, onCursor],
   );
 
   const togglePlay = useCallback(() => {
@@ -463,7 +471,11 @@ export function Timeline({
       const el = document.activeElement;
       if (el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA")) return;
       if (e.metaKey || e.ctrlKey || e.altKey) return;
-      if (e.key === "t" || e.key === "T") setMode((m) => NEXT_MODE[m]);
+      if (e.key === "t" || e.key === "T") setCollapsed((v) => !v);
+      else if (e.key === "Escape" && bandAnchor.current) {
+        bandAnchor.current = null;
+        setBand(null);
+      }
       else if (e.key === "l" || e.key === "L") onCursor({ t: bounds.t1, mode: "live" });
       else if (e.key === "f" || e.key === "F") {
         if (selected) fitSelection(selected);
@@ -487,6 +499,11 @@ export function Timeline({
     return () => window.removeEventListener("keydown", onKey);
   }, [bounds.t1, onCursor, stepInteraction, stepCommit, togglePlay, selected, fitSelection, fitSession, zoomButtons]);
 
+  const xOfClient = (clientX: number): number => {
+    const inner = innerRef.current;
+    return inner ? clientX - inner.getBoundingClientRect().left : 0;
+  };
+
   const onPointerDown = (e: React.PointerEvent) => {
     if (e.button !== 0) return;
     if ((e.target as HTMLElement).closest(".rl-tl-playhead")) return;
@@ -496,15 +513,42 @@ export function Timeline({
     // here stole the gesture and fought the click handlers.
     if ((e.target as HTMLElement).closest(".rl-wf-packed")) return;
     if (e.altKey) return onSetAB({ ...ab, a: snapT(tOfClient(e.clientX)) });
-    if (e.shiftKey) return onSetAB({ ...ab, b: snapT(tOfClient(e.clientX)) });
+    if (e.shiftKey) {
+      // Ambiguous until movement: a still shift-click sets B (existing
+      // behavior); dragging past the threshold becomes a zoom rubber band.
+      bandAnchor.current = { clientX: e.clientX, pointerId: e.pointerId };
+      innerRef.current?.setPointerCapture(e.pointerId);
+      return;
+    }
     scrubbing.current = true;
     innerRef.current?.setPointerCapture(e.pointerId);
     scrubToClient(e.clientX);
   };
   const onPointerMove = (e: React.PointerEvent) => {
+    if (bandAnchor.current) {
+      if (band || Math.abs(e.clientX - bandAnchor.current.clientX) > BAND_THRESHOLD_PX) {
+        const x0 = xOfClient(bandAnchor.current.clientX);
+        const x1 = xOfClient(e.clientX);
+        setBand({ x0: Math.min(x0, x1), x1: Math.max(x0, x1) });
+      }
+      return;
+    }
     if (scrubbing.current || draggingPlayhead.current) scrubToClient(e.clientX);
   };
-  const onPointerUp = () => {
+  const onPointerUp = (e: React.PointerEvent) => {
+    if (bandAnchor.current) {
+      const anchor = bandAnchor.current;
+      bandAnchor.current = null;
+      if (band && band.x1 - band.x0 > BAND_THRESHOLD_PX) {
+        setBand(null);
+        fitRange(tOfX(band.x0), tOfX(band.x1));
+      } else {
+        setBand(null);
+        onSetAB({ ...ab, b: snapT(tOfClient(anchor.clientX)) });
+      }
+      return;
+    }
+    void e;
     scrubbing.current = false;
     draggingPlayhead.current = false;
   };
@@ -542,7 +586,7 @@ export function Timeline({
     };
     el.addEventListener("wheel", handler, { passive: false });
     return () => el.removeEventListener("wheel", handler);
-  }, [mode, interactions.length]);
+  }, [collapsed, interactions.length]);
 
   const live = cursor.mode === "live";
   const cursorT = live ? bounds.t1 : cursor.t;
@@ -558,38 +602,79 @@ export function Timeline({
   const cursorAnomaly = cursorCommit && anomaly.isAnomaly(cursorCommit) ? cursorCommit : null;
   const cursorX = xOf(cursorT);
   const ticks = useMemo(() => buildTicks(model.segs, bounds.t0), [model.segs, bounds.t0]);
+  const abComparison = useMemo(
+    () =>
+      ab.a !== undefined && ab.b !== undefined ? compareApplySets(store, ab.a, ab.b) : null,
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [store, ab.a, ab.b, version],
+  );
 
   return (
-    <div className={`rl-tl rl-tl-${mode}`}>
+    <div
+      ref={rootRef}
+      className={`rl-tl ${collapsed ? "rl-tl-collapsed" : "rl-tl-open"}`}
+      style={{ ["--rl-tl-wf-h" as string]: `${paneH}px` }}
+    >
+      {!collapsed && (
+        <div
+          className="rl-tl-resize"
+          title="Drag to resize the timeline"
+          onPointerDown={(e) => {
+            e.preventDefault();
+            const startY = e.clientY;
+            const startH = paneH;
+            const el = e.currentTarget;
+            el.setPointerCapture(e.pointerId);
+            const move = (ev: PointerEvent) => {
+              // Dragging up grows the pane (the timeline docks at the bottom).
+              const next = clampPaneHeight(startH + (startY - ev.clientY));
+              rootRef.current?.style.setProperty("--rl-tl-wf-h", `${next}px`);
+            };
+            const up = (ev: PointerEvent) => {
+              el.removeEventListener("pointermove", move);
+              el.removeEventListener("pointerup", up);
+              setPaneH(startH + (startY - ev.clientY));
+            };
+            el.addEventListener("pointermove", move);
+            el.addEventListener("pointerup", up);
+          }}
+        />
+      )}
       <div className="rl-tl-head">
         <button
           className="rl-icon-btn rl-tl-toggle"
-          onClick={() => setMode(NEXT_MODE[mode])}
-          title={
-            mode === "collapsed"
-              ? "Show timeline (T)"
-              : mode === "compact"
-                ? "Expand phase waterfall (T)"
-                : "Collapse timeline (T)"
-          }
-          aria-label="Cycle timeline size (T)"
+          onClick={() => setCollapsed((v) => !v)}
+          title={collapsed ? "Show timeline (T)" : "Collapse timeline (T)"}
+          aria-label="Toggle timeline (T)"
         >
-          {mode === "collapsed" ? <IconChevronRight size={18} /> : <IconChevronDown size={18} />}
+          {collapsed ? <IconChevronRight size={18} /> : <IconChevronDown size={18} />}
         </button>
         <span className="rl-tl-sub">
           {interactions.length} interactions · {commits.length} commits
-          {mode === "compact" && " · compact"}
         </span>
         <span className="rl-spacer" />
-        {ab.a !== undefined && ab.b !== undefined && (
-          <button
-            className="rl-icon-btn"
-            onClick={() => onSetAB({})}
-            title="Clear A/B comparison"
-            aria-label="Clear A/B comparison"
-          >
-            <IconClose size={12} />
-          </button>
+        {abComparison && (
+          <>
+            <button
+              className={`rl-btn rl-tl-ab-btn${abPanelOpen ? " primary" : ""}`}
+              onClick={() => setAbPanelOpen((v) => !v)}
+              title="What changed between the A and B marks"
+              aria-pressed={abPanelOpen}
+            >
+              A→B · {abComparison.changed.length} changed
+            </button>
+            <button
+              className="rl-icon-btn"
+              onClick={() => {
+                onSetAB({});
+                setAbPanelOpen(false);
+              }}
+              title="Clear A/B comparison"
+              aria-label="Clear A/B comparison"
+            >
+              <IconClose size={12} />
+            </button>
+          </>
         )}
         <div className="rl-tl-nav">
           <button
@@ -688,7 +773,7 @@ export function Timeline({
         </button>
       </div>
 
-      {mode !== "collapsed" && interactions.length > 0 && innerWidth + INNER_RIGHT_PAD > viewW * 1.2 && (
+      {!collapsed && interactions.length > 0 && innerWidth + INNER_RIGHT_PAD > viewW * 1.2 && (
         <Minimap
           interactions={interactions}
           commits={commits}
@@ -699,13 +784,14 @@ export function Timeline({
             // Position the window as soon as the minimap mounts.
             if (ctl) syncScrollUi();
           }}
+          onFitRange={fitRange}
           onSeekView={(t) => {
             const el = scrollRef.current;
             if (el) el.scrollLeft = Math.max(0, xOf(clamp(t, bounds.t0, bounds.t1)) - viewW / 2);
           }}
         />
       )}
-      {mode !== "collapsed" &&
+      {!collapsed &&
         (interactions.length === 0 ? (
           <div className="rl-tl-empty">No activity yet — interact with the page.</div>
         ) : (
@@ -803,7 +889,7 @@ export function Timeline({
                 {/* Commits / heat track */}
                 <div className="rl-tl-track rl-tl-track-react">
                   {commits.map((c) => {
-                    const h = 6 + heatScale(c.totalSelfTime, anomaly.max) * (mode === "expanded" ? 28 : 18);
+                    const h = 6 + heatScale(c.totalSelfTime, anomaly.max) * (paneH >= 200 ? 28 : 18);
                     const bad = anomaly.isAnomaly(c);
                     const barW = Math.max(3, Math.min(10, 2 + heatScale(c.totalSelfTime, anomaly.max) * 8));
                     return (
@@ -848,7 +934,7 @@ export function Timeline({
                     interactions={interactions}
                     selectedId={selectedId}
                     playheadT={cursorT}
-                    maxRows={mode === "expanded" ? 8 : 4}
+                    maxRows={Math.max(3, Math.floor((paneH - PHASE_PAD_Y - 18) / TRACK_H))}
                     xOf={xOf}
                     px={px}
                     cull={chunks}
@@ -895,11 +981,30 @@ export function Timeline({
                   ))}
 
                 {/* A/B */}
+                {ab.a !== undefined && ab.b !== undefined && (
+                  <span
+                    className="rl-tl-abband"
+                    style={{
+                      left: xOf(Math.min(ab.a, ab.b)),
+                      width: Math.max(2, Math.abs(xOf(ab.b) - xOf(ab.a))),
+                    }}
+                    aria-hidden
+                  />
+                )}
                 {ab.a !== undefined && (
                   <span className="rl-tl-mark a" style={{ left: xOf(ab.a) }} data-mark="A" />
                 )}
                 {ab.b !== undefined && (
                   <span className="rl-tl-mark b" style={{ left: xOf(ab.b) }} data-mark="B" />
+                )}
+
+                {/* Shift-drag zoom band */}
+                {band && (
+                  <span
+                    className="rl-tl-rubber"
+                    style={{ left: band.x0, width: band.x1 - band.x0 }}
+                    aria-hidden
+                  />
                 )}
 
                 {/* Playhead */}
@@ -924,7 +1029,18 @@ export function Timeline({
           </div>
         ))}
 
-      {mode !== "collapsed" && (selected || cursorAnomaly) && (
+      {!collapsed && abPanelOpen && abComparison && ab.a !== undefined && ab.b !== undefined && (
+        <ABDiffPanel
+          store={store}
+          comparison={abComparison}
+          a={ab.a}
+          b={ab.b}
+          {...(onSelectComponent ? { onSelectComponent } : {})}
+          onClose={() => setAbPanelOpen(false)}
+        />
+      )}
+
+      {!collapsed && (selected || cursorAnomaly) && (
         <SelectionStrip
           store={store}
           interaction={selected}
@@ -952,6 +1068,7 @@ function Minimap({
   anomaly,
   bounds,
   onRegister,
+  onFitRange,
   onSeekView,
 }: {
   interactions: Interaction[];
@@ -964,6 +1081,8 @@ function Minimap({
    * through a React render.
    */
   onRegister: (ctl: { update(viewStart: number, viewEnd: number): void } | null) => void;
+  /** Edge-dragging the viewport window zooms to the adjusted range. */
+  onFitRange: (start: number, end: number) => void;
   onSeekView: (t: number) => void;
 }) {
   const span = Math.max(1, bounds.t1 - bounds.t0);
@@ -1025,7 +1144,47 @@ function Minimap({
           style={{ left: pct(c.timestamp) }}
         />
       ))}
-      <span ref={windowRef} className="rl-tl-mini-window" />
+      <span
+        ref={windowRef}
+        className="rl-tl-mini-window"
+        onPointerDown={(e) => {
+          const el = windowRef.current;
+          if (!el) return;
+          const rect = el.getBoundingClientRect();
+          const edge =
+            e.clientX - rect.left <= 6 ? "left" : rect.right - e.clientX <= 6 ? "right" : null;
+          // Body clicks/drags fall through to the container's pan gesture.
+          if (!edge) return;
+          e.stopPropagation();
+          e.preventDefault();
+          const host = el.parentElement!.getBoundingClientRect();
+          const t0 = bounds.t0;
+          const tAt = (clientX: number) =>
+            t0 + clamp((clientX - host.left) / Math.max(1, host.width), 0, 1) * span;
+          const fixedT = edge === "left" ? tAt(rect.right) : tAt(rect.left);
+          let lastT = tAt(e.clientX);
+          const preview = () => {
+            const a = Math.min(fixedT, lastT);
+            const b = Math.max(fixedT, lastT);
+            el.style.left = `${clamp(((a - t0) / span) * 100, 0, 100)}%`;
+            el.style.width = `${clamp(((b - a) / span) * 100, 0.5, 100)}%`;
+          };
+          const move = (ev: PointerEvent) => {
+            lastT = tAt(ev.clientX);
+            preview();
+          };
+          const up = () => {
+            el.removeEventListener("pointermove", move);
+            el.removeEventListener("pointerup", up);
+            const a = Math.min(fixedT, lastT);
+            const b = Math.max(fixedT, lastT);
+            if (b - a > 0.5) onFitRange(a, b);
+          };
+          el.setPointerCapture(e.pointerId);
+          el.addEventListener("pointermove", move);
+          el.addEventListener("pointerup", up);
+        }}
+      />
     </div>
   );
 }

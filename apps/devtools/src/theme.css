@@ -719,6 +719,97 @@
 
 .rl-tl-empty { padding: 10px var(--rl-s4) 14px; font-size: 11px; color: var(--rl-text-faint); }
 
+/* Resizable pane: 6px grab strip on the timeline's top edge. */
+.rl-tl { position: relative; }
+.rl-tl-resize {
+  position: absolute;
+  top: -3px;
+  left: 0;
+  right: 0;
+  height: 6px;
+  cursor: ns-resize;
+  z-index: 5;
+}
+.rl-tl-resize:hover { background: rgba(122, 134, 156, 0.25); }
+
+/* Shift-drag zoom band */
+.rl-tl-rubber {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  z-index: 6;
+  background: rgba(122, 134, 156, 0.14);
+  border-left: 1px solid rgba(122, 134, 156, 0.5);
+  border-right: 1px solid rgba(122, 134, 156, 0.5);
+  pointer-events: none;
+}
+
+/* Shaded span between the A and B marks. */
+.rl-tl-abband {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  z-index: 1;
+  background: rgba(251, 191, 36, 0.06);
+  border-left: 1px dashed rgba(251, 191, 36, 0.35);
+  border-right: 1px dashed rgba(251, 191, 36, 0.35);
+  pointer-events: none;
+}
+
+.rl-tl-ab-btn { font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+/* A→B apply-set diff panel (sits in the selection-strip slot). */
+.rl-tl-abpanel {
+  border-top: 1px solid var(--rl-border);
+  background: var(--rl-bg);
+  max-height: 180px;
+  display: flex;
+  flex-direction: column;
+}
+.rl-tl-abpanel-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px var(--rl-s4);
+  font-size: 10px;
+  color: var(--rl-text-dim);
+}
+.rl-tl-abpanel-title { font-variant-numeric: tabular-nums; }
+.rl-tl-abpanel-rows { overflow-y: auto; padding: 0 var(--rl-s2) 6px; }
+.rl-tl-abpanel-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 3px 8px;
+  margin: 0;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--rl-text);
+  font-size: 11px;
+  text-align: left;
+  cursor: pointer;
+}
+.rl-tl-abpanel-row:hover { background: var(--rl-bg-hover); }
+.rl-tl-abpanel-name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.rl-tl-abpanel-meta { flex: 0 0 auto; color: var(--rl-text-faint); font-variant-numeric: tabular-nums; }
+.rl-tl-abpanel-more { padding: 3px 8px; font-size: 10px; color: var(--rl-text-faint); }
+
+/* Minimap window edges are resize handles. */
+.rl-tl-mini-window { cursor: grab; }
+.rl-tl-mini-window::before,
+.rl-tl-mini-window::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 6px;
+  cursor: ew-resize;
+}
+.rl-tl-mini-window::before { left: -2px; }
+.rl-tl-mini-window::after { right: -2px; }
+
 .rl-tl-body { display: flex; min-height: 0; min-width: 0; flex: 0 0 auto; position: relative; z-index: 1; }
 .rl-tl-labels {
   flex: 0 0 64px;
@@ -756,23 +847,21 @@
 }
 .rl-tl-label-short { display: none; }
 .rl-tl-label-ruler { height: 18px; border-bottom: 1px solid var(--rl-border); }
-.rl-tl-compact .rl-tl-label:nth-child(3),
-.rl-tl-expanded .rl-tl-label:nth-child(3) { height: 36px; }
+.rl-tl-open .rl-tl-label:nth-child(3) { height: 36px; }
 .rl-tl-label-wf {
   align-items: flex-start !important; padding-top: 10px !important;
   border-bottom: none;
 }
 /* Lane label heights must match .rl-tl-track-wf — otherwise the gutter drifts. */
-.rl-tl-compact .rl-tl-label-wf { height: 140px !important; }
-.rl-tl-expanded .rl-tl-label-wf { height: 250px !important; }
+.rl-tl-open .rl-tl-label-wf { height: var(--rl-tl-wf-h, 250px) !important; }
 
 /* Scroll viewport = ruler(18) + int(30) + commits(36) + comps lane.
    The comps track used to be taller than this box, so overflow-y:hidden
    clipped the +N-more chip and made vertical lane scroll feel broken. */
 .rl-tl-scroll { position: relative; flex: 1 1 auto; min-width: 0; overflow-x: auto; overflow-y: hidden; }
 .rl-tl-collapsed .rl-tl-scroll { display: none; }
-.rl-tl-compact .rl-tl-scroll { height: 224px; }
-.rl-tl-expanded .rl-tl-scroll { height: 334px; }
+/* Scroll viewport = waterfall lane + fixed chrome (ruler 20 + tracks 64). */
+.rl-tl-open .rl-tl-scroll { height: calc(var(--rl-tl-wf-h, 250px) + 84px); }
 .rl-tl-scroll::-webkit-scrollbar { height: 8px; }
 .rl-tl-scroll::-webkit-scrollbar-thumb { background: var(--rl-border-strong); border-radius: 4px; }
 
@@ -800,8 +889,10 @@
   display: flex; flex-direction: column; border-bottom: none;
 }
 /* Collapsed canvas = padY(8) + rows*28 + scrollbar pad(18); keep lane ≥ that. */
-.rl-tl-compact .rl-tl-track-wf { height: 140px; flex: 0 0 140px; }
-.rl-tl-expanded .rl-tl-track-wf { height: 250px; flex: 0 0 250px; }
+.rl-tl-open .rl-tl-track-wf {
+  height: var(--rl-tl-wf-h, 250px);
+  flex: 0 0 var(--rl-tl-wf-h, 250px);
+}
 
 .rl-tl-int {
   position: absolute; top: 4px; height: 22px; min-width: 3px;

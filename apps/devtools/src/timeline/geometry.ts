@@ -160,6 +160,50 @@ export function scaleForProjectedWidth(
   return clamp((lo + hi) / 2, SCALE_MIN, SCALE_MAX);
 }
 
+/** Resizable waterfall-lane bounds (px). */
+export const PANE_MIN_H = 100;
+export const PANE_MAX_H = 520;
+
+export function clampPaneHeight(h: number): number {
+  return clamp(Math.round(h), PANE_MIN_H, PANE_MAX_H);
+}
+
+export interface FitPlan {
+  scale: number;
+  scrollLeft: number;
+}
+
+/**
+ * Zoom-to-range: solve the scale that projects [start, end] to ~85% of the
+ * viewport and the scrollLeft that centers it. Sub-frame ranges expand to a
+ * 16ms context window so the zoom stays usable.
+ */
+export function fitPlan(
+  active: Array<[number, number]>,
+  bounds: { t0: number; t1: number },
+  range: TimeSpan,
+  portW: number,
+): FitPlan {
+  const span = Math.max(0, range.end - range.start);
+  const window = Math.max(span, 16);
+  const pad = (window - span) / 2;
+  const rangeStart = clamp(range.start - pad, bounds.t0, bounds.t1);
+  const rangeEnd = clamp(Math.max(range.end, range.start) + pad, bounds.t0, bounds.t1);
+  const targetW = Math.max(80, portW * 0.85);
+  const scale = scaleForProjectedWidth(
+    active,
+    bounds.t0,
+    bounds.t1,
+    rangeStart,
+    rangeEnd,
+    targetW,
+  );
+  const built = buildScale(active, bounds.t0, bounds.t1, scale);
+  const x0 = projectX(built.segs, rangeStart);
+  const x1 = projectX(built.segs, rangeEnd);
+  return { scale, scrollLeft: Math.max(0, (x0 + x1) / 2 - portW / 2) };
+}
+
 export function sessionBounds(
   spans: readonly TimeSpan[],
   points: ReadonlyArray<{ timestamp: number }>,

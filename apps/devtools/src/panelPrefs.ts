@@ -5,11 +5,14 @@
 export interface PanelPrefs {
   /** Real time travel follows the playhead while scrubbing. */
   travelOn: boolean;
+  /** Timeline pane: waterfall-lane height (px) and collapsed state. */
+  tlPaneH: number;
+  tlCollapsed: boolean;
 }
 
 const KEY = "react-lens/panel-prefs";
 
-const DEFAULTS: PanelPrefs = { travelOn: true };
+const DEFAULTS: PanelPrefs = { travelOn: true, tlPaneH: 250, tlCollapsed: false };
 
 export function loadPanelPrefs(): PanelPrefs {
   try {
@@ -18,6 +21,9 @@ export function loadPanelPrefs(): PanelPrefs {
     const parsed = JSON.parse(raw) as Partial<PanelPrefs>;
     return {
       travelOn: typeof parsed.travelOn === "boolean" ? parsed.travelOn : DEFAULTS.travelOn,
+      tlPaneH: typeof parsed.tlPaneH === "number" ? parsed.tlPaneH : DEFAULTS.tlPaneH,
+      tlCollapsed:
+        typeof parsed.tlCollapsed === "boolean" ? parsed.tlCollapsed : DEFAULTS.tlCollapsed,
     };
   } catch {
     return { ...DEFAULTS };
