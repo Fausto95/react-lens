@@ -1,6 +1,11 @@
 import { TraceMap, originalPositionFor, sourceContentFor } from "@jridgewell/trace-mapping";
 import type { SourceLocation } from "@reactlens/protocol";
 
+/** A resolved original position; `name` is the pre-minification identifier. */
+export interface ResolvedLocation extends SourceLocation {
+  name?: string;
+}
+
 export interface OriginalSource {
   /** Normalized original path, e.g. src/App.tsx. */
   path: string;
@@ -16,7 +21,7 @@ export interface SourceResolver {
    * original source coordinates using the module's source map. Returns null if
    * no map is available or the position can't be mapped.
    */
-  resolve(compiled: SourceLocation): Promise<SourceLocation | null>;
+  resolve(compiled: SourceLocation): Promise<ResolvedLocation | null>;
   /**
    * Original source text for a compiled module. When `prefer` is set, pick the
    * map source that best matches that path; otherwise use the last resolved
@@ -61,7 +66,7 @@ export function createSourceResolver(fetcher: Fetcher = defaultFetch): SourceRes
     return map;
   }
 
-  async function resolve(compiled: SourceLocation): Promise<SourceLocation | null> {
+  async function resolve(compiled: SourceLocation): Promise<ResolvedLocation | null> {
     const map = await mapFor(compiled.file);
     if (!map) return null;
     const pos = originalPositionFor(map, { line: compiled.line, column: compiled.column });
@@ -72,6 +77,9 @@ export function createSourceResolver(fetcher: Fetcher = defaultFetch): SourceRes
       file,
       line: pos.line,
       column: pos.column ?? 0,
+      // The pre-minification identifier, when the map recorded one — the only
+      // route back from `Qj` to `ProductCard`.
+      ...(pos.name ? { name: pos.name } : {}),
     };
   }
 
