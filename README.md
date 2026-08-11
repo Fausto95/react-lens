@@ -1,56 +1,85 @@
-# React Lens
+<p align="center">
+  <img src="apps/site/public/og.png" alt="React Lens — know why every render happened. Time travel, AI agent, render causes, AST Doctor, waste detection, Suspense & RSC." width="800" />
+</p>
 
-**Know why every render happened.**
+<h1 align="center">React Lens</h1>
 
-Dev-time React observability — from interaction to cause to fix, in one panel.
-Trace clicks, explain waste, and diff what changed over a single event log.
+<p align="center">
+  <strong>Know why every render happened.</strong><br />
+  Dev-time React observability — from interaction to cause to fix, in one panel.
+</p>
 
-## Five questions, fast
+<p align="center">
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-a78bfa" alt="MIT license" /></a>
+  <img src="https://img.shields.io/badge/React-19%20%2B%20Compiler-a78bfa" alt="React 19 + Compiler" />
+  <img src="https://img.shields.io/badge/TypeScript-strict-a78bfa" alt="TypeScript strict" />
+</p>
 
-1. **What is this element?**
-2. **Why did it render?**
-3. **Why is it slow?**
-4. **What changed?**
-5. **How do I fix it?**
+---
+
+React devtools tell you **what** rendered. React Lens tells you **why** — and
+what it cost, whether it was wasted, and how to fix it. Every click, commit,
+and render lands in one event log, so answers are backed by evidence instead
+of guesses.
+
+## The five questions
+
+Debugging a React app is always the same five questions. Lens answers each in
+one or two clicks:
+
+1. **What is this element?** — pick it on the page (⌘\\), get the component,
+   its props, state, hooks, DOM, and source.
+2. **Why did it render?** — a cause chain (props / state / hooks / parent),
+   with confidence levels, not a shrug.
+3. **Why is it slow?** — an interaction-first timeline with commit heat and a
+   component waterfall.
+4. **What changed?** — value + DOM diffs per render, A/B compare any two
+   commits.
+5. **How do I fix it?** — Doctor findings stamped `file:line`, Explain
+   narratives, and an AI agent grounded in the trace.
 
 ## Features
 
-### Timeline & time travel
-
-Interaction-first timeline with commit heat, a component waterfall, compressed idle gaps, and a scrubbable playhead. Optional **real time travel** restores page state as you scrub (dev builds).
-
-### Semantic tree + inspector
-
-Ownership tree with Components / Changed / Potential Waste modes, flame bars, page highlight on hover, and a single-scroll inspector for why, props, state, hooks, DOM, source, and more.
-
-### Explain this interaction
-
-One click (or ⌘K) produces a ranked narrative — cost, cause chain, Doctor findings, and a suggested next step.
-
-### Also included
-
-- **Doctor** — runtime findings fused with static/source-aware rules
-- **Waste banner** — when an interaction produces mostly no-visible-change renders
-- **Sessions** — export / import / IndexedDB recent traces
-- **Element picker** — inspect a component from the page (⌘\\)
-- **Chrome extension** — same panel over MV3 messaging
-- **React 19 + Compiler aware** — never recommends hand-rolled `useMemo` / `useCallback`
+- **Time travel** — scrub the commit timeline and (in dev builds) restore real
+  page state as you go; double-click two commits to A/B them.
+- **AI agent, BYOK** — ⌘I opens an in-panel assistant (OpenAI / Anthropic /
+  Z.AI; your key never leaves the browser) that answers through typed tools
+  over the live trace. Every claim cites a Lens ID — clickable chips that jump
+  to the exact render, component, or interaction.
+- **Render causes** — why-did-this-render at three levels of depth, including
+  a "no observable change" verdict when a render was avoidable.
+- **AST Doctor** — static analysis (OXC parser, regex fallback) fused with
+  runtime evidence; findings are scoped to a component's definition and
+  stamped `file:line`.
+- **Waste detection** — after an interaction settles, a banner flags renders
+  that produced no visible change and jumps you to the worst offender.
+- **Effect debugger** — timed effect run/cleanup events, durations, and a
+  "possible loop" badge when an effect fires on nearly every render.
+- **Suspense & RSC aware** — suspense boundaries, server-component roles, and
+  server actions are detected and badged in the tree and inspector.
+- **Sessions** — export/import the whole trace as a `.json` file; recent
+  sessions persist in IndexedDB and reload from ⌘K.
+- **Explain this interaction** — one click produces a ranked narrative: cost,
+  cause chain, Doctor findings, suggested next step.
+- **React 19 + Compiler aware** — compiled components are badged ◆, and Lens
+  never recommends hand-rolled `useMemo` / `useCallback`.
 
 ## Quick start
 
+Requires Node ≥ 20 and [pnpm](https://pnpm.io).
+
 ```bash
 pnpm install
-pnpm test
-pnpm typecheck
 ```
 
-### Playground (embedded panel, no extension)
+### Try it in the playground (no extension needed)
 
 ```bash
 pnpm dev:playground
 ```
 
-Open the page and click a product in the Shop. The in-page panel records the interaction, flags avoidable re-renders, and can **Explain** the cost.
+Open the page and click a product in the Shop. The in-page panel records the
+interaction, flags avoidable re-renders, and can **Explain** the cost.
 
 ### Chrome extension
 
@@ -58,57 +87,78 @@ Open the page and click a product in the Shop. The in-page panel records the int
 pnpm build:extension
 ```
 
-Load `apps/extension/dist` as an unpacked extension (`chrome://extensions` → Developer mode → Load unpacked), then open DevTools → **React Lens**.
+Load `apps/extension/dist` as an unpacked extension (`chrome://extensions` →
+Developer mode → Load unpacked), then open DevTools → **React Lens**.
 
-### Marketing site (live self-inspection)
+### The site (inspects itself)
 
 ```bash
 pnpm dev:site
 ```
 
-## Monorepo
+The product site runs Lens on its own component tree — everything in the
+panel is the page you're looking at.
+
+## How it works
+
+A pure analysis core — plain data in, plain data out, zero framework
+dependencies — sits behind a small page-side capture half, bridged by a shared
+protocol. Dependencies flow one way; the panel is just a consumer of the
+event log.
 
 ```
 packages/
   protocol/         shared event + message contract
-  serializer/       safe value serialization
+  serializer/       safe value serialization (never throws)
   diff-engine/      value + DOM diff
   trace-engine/     event log, queries, subscriptions
   causality/        why-did-this-render + verdicts
-  fiber/            owned React hook, DOM ↔ fiber
+  fiber/            owned React hook, DOM ↔ fiber resolution
   instrumentation/  commits + interactions → events
-  diagnostics/      Doctor rules
-  explain/          interaction narratives
-  …                 source-maps, tree, graph, agent, ui, icons
+  diagnostics/      Doctor rules (runtime + static AST)
+  explain/          deterministic interaction narratives
+  agent/            trace-grounded tool loop, BYOK providers
+  source-maps/      runtime component ↔ original source
+  tree/ graph/      semantic tree + graph projections
+  ui/ icons/        shared panel primitives
 apps/
-  devtools/         React 19 panel
-  playground/       misbehaving demo app
-  extension/        MV3 Chrome extension
+  devtools/         the React 19 panel
+  playground/       demo app engineered to misbehave
+  extension/        MV3 Chrome extension shell
   site/             product site (inspects itself)
 ```
 
-Design principle: a pure analysis core (`trace-engine` / `diff-engine` / `causality`) and a small page-side capture half (`fiber` / `instrumentation`), bridged by `protocol`. Dependencies flow one way.
+See [DESIGN.md](DESIGN.md) for architecture decisions and
+[INTERFACES.md](INTERFACES.md) for package contracts.
 
 ## Status
 
-The observability core is **demoable end-to-end**: fiber capture, tree, inspector, timeline, time travel, Explain, Doctor, sessions, and the extension shell.
+The core is demoable end-to-end: fiber capture, semantic tree, inspector,
+timeline with time travel, Explain, Doctor, the AI agent, sessions, and the
+extension shell. [ROADMAP.md](ROADMAP.md) is the living checklist of what's
+built and what's next.
 
-Deferred for later: Agent UI on top of `@react-lens/agent`, Canvas/LOD timeline, network adapters.
-
-See [ROADMAP.md](ROADMAP.md) for the living checklist, [DESIGN.md](DESIGN.md) for architecture, and [INTERFACES.md](INTERFACES.md) for package contracts.
+Not yet: npm-published packages, Firefox/Safari extensions, network adapters.
 
 ## Contributing
 
-Issues and PRs welcome. For local work:
+Issues and PRs are welcome.
 
 ```bash
 pnpm install
-pnpm test
-pnpm typecheck
+pnpm test             # vitest across all packages
+pnpm typecheck        # strict tsc -b
 pnpm dev:playground   # fastest feedback loop
 ```
 
-Keep changes scoped; match existing TypeScript and UI patterns in `apps/devtools`.
+A few ground rules:
+
+- Keep the core pure — `trace-engine` / `diff-engine` / `causality` take
+  plain data and return plain data; framework coupling stays in the adapter
+  layers.
+- Match the existing TypeScript and UI patterns in `apps/devtools`.
+- Tests first: pure logic gets plain unit tests, integration behavior gets a
+  contract test against real React 19.
 
 ## License
 

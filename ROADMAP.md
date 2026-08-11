@@ -52,7 +52,7 @@ fiber's hook list). All packages: **46 tests passing**, full `tsc -b` clean.
 5. ✅ **Why did this render?** — causality with no-observable-change verdict
 6. ✅ **Doctor** — runtime findings + static fusion; OXC attempted in worker (regex fallback)
 7. ✅ **Explain this interaction** — one-click deterministic narrative on Timeline / ⌘K
-8. ⬜ **Agent (BYOK)** — deferred; package scaffold remains (`@react-lens/agent`) but UI is unwired until the narrative quality is worth surfacing
+8. ✅ **Agent (BYOK)** — in-panel drawer (✨ topbar button, ⌘I) over the typed tool loop; see the Agent layer entry below for the full scope
 
 ## Semantic tree + graph projections (plan v2)
 
@@ -84,12 +84,13 @@ with multiple **projections** rather than a raw fiber tree.
   no unmount of later-born components (DESIGN §10.5).
 - ✅ **`source-maps`** — resolve compiled `_debugStack` coords to original source
 - ✅ **`diagnostics` (Doctor v1)** — impact-ranked rules over runtime evidence; inspector section + tree ⚕ badges + issue count
-- ⬜ **Effect debugger** — effect-execution events, run/cleanup counts, loop detection
+- ✅ **Effect debugger** — timed `EffectEvent`s (run + cleanup + hookIndex) via `onPostCommitFiberRoot`; Effects tab with counts, durations, and a "possible loop" badge
 - ✅ **Editing in the extension** — panel `edit-setProp` / `edit-setHookState` / `edit-setText` hop to injected `overrideProps` / hook state (parity with embed)
 - ✅ **Page Inspect mode** — crosshair pick (⌘\\), hover highlight + source tooltip, sticky select, inline leaf-text edit (React override then ephemeral DOM badge)
 - ✅ **Open in editor** — Source tab + inspect tooltip → `cursor://` / `vscode://`
 - ✅ **Explain verdicts** — expected vs avoidable, waste share, one actionable next step (still deterministic / no LLM)
-- ⬜ Network, Sessions
+- ✅ **Sessions** — export/import the TraceStore as `.json` (topbar + ⌘K), IndexedDB recents (capped at 20) with "Open · …" reload
+- ⬜ Network adapters
 - ✅ **Agent layer (BYOK)** — multi-turn streamed conversation (`createAgentSession`)
   over 11 typed tools; `why` carries diff evidence + cause source, and
   `read_component_source` (definition-scoped, line-numbered) enables concrete fenced
