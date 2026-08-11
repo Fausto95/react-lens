@@ -1082,11 +1082,16 @@
    The concept's toolbar sits in a 1420px card where nothing competes for
    space. In a resizable dock its children shrank below their content width
    and wrapped onto two lines, and the action buttons overlapped. Nothing in
-   the bar wraps; the hint is the only thing allowed to give up space. */
+   the bar wraps; the hint is the only thing allowed to give up space.
+
+   `overflow` stays visible here: the settings and ⋯ menus are anchored to
+   buttons *inside* the bar, so clipping it cut them off at the toolbar's
+   bottom edge — which reads as the popover hiding behind the inspector. The
+   hint below does the clipping instead. */
 .rl-redesign .toolbar {
   flex: none;
   min-width: 0;
-  overflow: hidden;
+  overflow: visible;
 }
 .rl-redesign .toolbar > * {
   flex: 0 0 auto;
