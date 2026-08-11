@@ -32,6 +32,45 @@ export function rulerMarkers(
   return out;
 }
 
+/** Rough px a marker label occupies, for collision tests. */
+const LABEL_CHAR_PX = 5.6;
+const PIN_PX = 16;
+/** Gap a label needs before the next pin to stay readable. */
+const LABEL_GAP_PX = 10;
+
+export interface PlacedMarker {
+  marker: RulerMarker;
+  x: number;
+  labelled: boolean;
+}
+
+/**
+ * Decide which markers get to show their text.
+ *
+ * Pins are always drawn — losing one would hide a real event — but a label is
+ * only rendered when it fits before the next pin. Without this, a burst of
+ * interactions stacks four labels on top of each other and over the tick
+ * numbers, which is worse than showing none of them.
+ */
+export function placeMarkers(
+  markers: readonly RulerMarker[],
+  xOf: (t: number) => number,
+  showLabels: boolean,
+): PlacedMarker[] {
+  const placed = markers
+    .map((marker) => ({ marker, x: xOf(marker.t), labelled: false }))
+    .sort((a, b) => a.x - b.x);
+
+  for (const [i, entry] of placed.entries()) {
+    if (!showLabels) continue;
+    const next = placed[i + 1];
+    const room = next ? next.x - entry.x : Number.POSITIVE_INFINITY;
+    const needed = PIN_PX + entry.marker.label.length * LABEL_CHAR_PX + LABEL_GAP_PX;
+    entry.labelled = room >= needed;
+  }
+  return placed;
+}
+
 /**
  * The time ruler. It lives inside the same horizontal scroller as the lanes
  * (sticky to the top) so the two can never drift out of alignment — there is
@@ -75,15 +114,17 @@ export function Ruler({
             {tick.major && tick.label && <span>{tick.label}</span>}
           </div>
         ))}
-        {markers.map((marker) => (
+        {placeMarkers(markers, xOf, showMarkerLabels).map(({ marker, x, labelled }) => (
           <div
             key={marker.key}
             className={`marker${marker.long ? " long" : ""}`}
-            style={{ left: xOf(marker.t) }}
+            style={{ left: x }}
+            // The pin always carries the full text, so a dropped label is
+            // still reachable on hover rather than lost.
             title={marker.label}
           >
             <i>{marker.long ? "!" : "◆"}</i>
-            {showMarkerLabels ? marker.label : ""}
+            {labelled ? marker.label : ""}
           </div>
         ))}
       </div>

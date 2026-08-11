@@ -1387,3 +1387,29 @@
 .rl-redesign .lanes-body::-webkit-scrollbar-track {
   background: transparent;
 }
+
+/* ── Ruler legibility ───────────────────────────────────────────────────────
+   The concept's 30px ruler assumes a handful of well-spaced pins. A real
+   session puts interactions and long-task warnings close together, and at 30px
+   the marker text landed on top of the tick numbers. Give each its own band:
+   markers on top, tick labels below. */
+.rl-redesign .ruler {
+  height: 44px;
+}
+.rl-redesign .marker {
+  top: 2px;
+  max-width: 220px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  /* Pins sit above tick labels; a labelled pin must not be overdrawn. */
+  z-index: 2;
+  background: linear-gradient(90deg, var(--panel) 85%, transparent);
+  padding-right: 6px;
+}
+.rl-redesign .tick {
+  height: 9px;
+}
+.rl-redesign .tick span {
+  bottom: 11px;
+}
