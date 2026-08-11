@@ -1,6 +1,5 @@
 import { describe, it, expect } from "vitest";
 import { TraceStore } from "@react-lens/trace-engine";
-import { createCausality } from "@react-lens/causality";
 import type {
   ComponentId,
   RenderId,
@@ -85,7 +84,6 @@ describe("packPhaseBars", () => {
       snapshots: [],
       events: [render(1, 10, 100, 4), render(2, 11, 102, 1)],
     });
-    const causality = createCausality(store);
     const interaction = {
       id: "i1",
       label: "click",
@@ -102,13 +100,13 @@ describe("packPhaseBars", () => {
         componentIds: [1 as ComponentId, 2 as ComponentId],
       },
     };
-    return { store, causality, interaction };
+    return { store, interaction };
   }
 
   it("places one bar per render at xOf(t) with a minimum width", () => {
-    const { store, causality, interaction } = fixture();
+    const { store, interaction } = fixture();
     const xOf = (t: number) => (t - 100) * 2;
-    const packed = packPhaseBars(store, causality, [interaction], xOf);
+    const packed = packPhaseBars(store, [interaction], xOf, 2);
     expect(packed.phases).toHaveLength(1);
     expect(packed.bars).toHaveLength(2);
     const barA = packed.bars.find((b) => b.name === "A")!;
@@ -119,9 +117,75 @@ describe("packPhaseBars", () => {
   });
 
   it("phase summary counts every render even when bars are capped", () => {
-    const { store, causality, interaction } = fixture();
-    const packed = packPhaseBars(store, causality, [interaction], (t) => t - 100);
+    const { store, interaction } = fixture();
+    const packed = packPhaseBars(store, [interaction], (t) => t - 100, 1);
     expect(packed.phases[0]!.renderCount).toBe(2);
     expect(packed.phases[0]!.barCount).toBeLessThanOrEqual(packed.phases[0]!.renderCount);
+  });
+
+  it("track assignment is independent of idle-gutter compression", () => {
+    const store = new TraceStore();
+    store.ingest({
+      instances: [inst(1, "A"), inst(2, "B"), inst(3, "C")],
+      snapshots: [],
+      events: [render(1, 20, 100, 20), render(2, 21, 110, 20), render(3, 22, 200, 5)],
+    });
+    const interaction = {
+      id: "i1",
+      label: "click",
+      kind: "click" as const,
+      start: 100,
+      end: 210,
+      renderIds: [20, 21, 22] as RenderId[],
+      commitIds: [1] as CommitId[],
+      metrics: {
+        totalDuration: 110,
+        reactDuration: 45,
+        renderCount: 3,
+        stateUpdates: 1,
+        componentIds: [1, 2, 3] as ComponentId[],
+      },
+    };
+    const px = 2;
+    const plain = (t: number) => (t - 100) * px;
+    const shifted = (t: number) => (t - 100) * px + (t > 150 ? 34 : 0); // fake gutter
+    const tracksOf = (xOf: (t: number) => number) =>
+      new Map(packPhaseBars(store, [interaction], xOf, px).bars.map((b) => [b.renderId, b.track]));
+    expect(tracksOf(shifted)).toEqual(tracksOf(plain));
+  });
+
+  it("track assignment is stable across zoom for overlapping renders", () => {
+    const store = new TraceStore();
+    store.ingest({
+      instances: [inst(1, "A"), inst(2, "B"), inst(3, "C")],
+      snapshots: [],
+      events: [render(1, 30, 100, 20), render(2, 31, 110, 20), render(3, 32, 200, 5)],
+    });
+    const interaction = {
+      id: "i1",
+      label: "click",
+      kind: "click" as const,
+      start: 100,
+      end: 210,
+      renderIds: [30, 31, 32] as RenderId[],
+      commitIds: [1] as CommitId[],
+      metrics: {
+        totalDuration: 110,
+        reactDuration: 45,
+        renderCount: 3,
+        stateUpdates: 1,
+        componentIds: [1, 2, 3] as ComponentId[],
+      },
+    };
+    const tracksAt = (px: number) =>
+      new Map(
+        packPhaseBars(store, [interaction], (t) => (t - 100) * px, px).bars.map((b) => [
+          b.renderId,
+          b.track,
+        ]),
+      );
+    const zoomedOut = tracksAt(2);
+    expect(zoomedOut.get(30 as RenderId)).not.toBe(zoomedOut.get(31 as RenderId)); // overlap stacks
+    expect(tracksAt(50)).toEqual(zoomedOut);
   });
 });
