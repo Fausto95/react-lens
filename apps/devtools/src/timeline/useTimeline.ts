@@ -8,8 +8,8 @@ import type { TimeCursor } from "../timeCursor.js";
 import { buildLanes, statsInRegion } from "./model/lanes.js";
 import { chainFor, edgesForCommit } from "./model/edges.js";
 import { laneRows, lanesContaining, rowsHeight } from "./model/rows.js";
-import { mergeActive, type TimeSpan } from "./model/scale.js";
-import { replaySchedule } from "./model/schedule.js";
+import { mergeActive, projectT, projectX, type TimeSpan } from "./model/scale.js";
+import { replaySchedule, replaySpan, type Sweep } from "./model/schedule.js";
 import {
   initialTimelineState,
   timelineReducer,
@@ -167,6 +167,17 @@ export function useTimeline({
     () => replaySchedule(commits, state.region, bounds),
     [commits, state.region, bounds],
   );
+  /**
+   * The playhead advances at a constant speed *on screen*, not on the clock:
+   * compressed idle gutters are 34 px wide however long they lasted, and a
+   * wall-clock sweep would stall inside them for most of the replay.
+   */
+  const sweep = useMemo<Sweep>(() => {
+    const { lo, hi } = replaySpan(state.region, bounds);
+    const x0 = projectX(scale.segs, lo);
+    const x1 = projectX(scale.segs, hi);
+    return (p) => projectT(scale.segs, x0 + (x1 - x0) * Math.max(0, Math.min(1, p)));
+  }, [scale, state.region, bounds]);
 
   const playhead = cursor.mode === "live" ? bounds.t1 : cursor.t;
 
@@ -189,6 +200,7 @@ export function useTimeline({
     statsRaw,
     fixSavedRenders: Math.max(0, statsRaw.renders - stats.renders),
     schedule,
+    sweep,
     playhead,
   };
 }

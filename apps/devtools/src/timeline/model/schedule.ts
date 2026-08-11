@@ -4,18 +4,19 @@ import type { TimeSpan } from "./scale.js";
 import type { Bounds } from "./viewport.js";
 
 /**
- * Replay as an ordered list of stops, not a continuous sweep.
+ * Replay, as a sweep that is not allowed to skip anything.
  *
  * Time travel rebuilds the page's state for a cursor timestamp, and that state
- * only changes at a commit. Sweeping smoothly emitted a fresh timestamp every
- * frame — hundreds of synchronous React flushes that made replay crawl — while
- * naively snapping the cursor to commit boundaries suppressed every
- * intermediate value and froze the playhead instead.
+ * only changes at a commit — so the commits are the stops the replay owes the
+ * viewer. Emitting *only* those made playback a series of jumps; emitting a
+ * free timestamp every frame stepped over short commits, and the page never
+ * showed those states at all.
  *
- * Both failures come from mixing two jobs. A schedule separates them: the
- * stops are *what the page must show*, and the ticker independently decides
- * *when*. That makes "replay walks every state and returns live" a property of
- * a pure function.
+ * Separating the two jobs fixes both. The stops are *what must be shown*; the
+ * sweep decides *where the playhead would otherwise be*; `advanceReplay`
+ * reconciles them. All of it is pure, so "replay visits every state, moves
+ * smoothly, and returns live" is a property under test rather than something
+ * to observe by eye.
  */
 export interface ReplayStop {
   /** Cursor timestamp to emit. */
@@ -24,6 +25,29 @@ export interface ReplayStop {
   commitId: CommitId | null;
   /** The final stop returns the panel (and page) to the present. */
   live: boolean;
+}
+
+/**
+ * Where the playhead would be at a given 0→1 of the way through a replay,
+ * before any stop is taken into account.
+ *
+ * This is a seam, not decoration. Replaying uniformly in *wall-clock* time
+ * looks broken on a compressed scale: a session with one long idle gap draws
+ * that gap as a 34 px gutter, so the playhead would spend most of the replay
+ * apparently frozen inside it. The timeline supplies a sweep that is uniform
+ * in *screen* space instead, and the schedule stays independent of geometry.
+ */
+export type Sweep = (progress: number) => number;
+
+/** Uniform in time — the plain reading, and the default when there is no scale. */
+export function linearSweep(span: { lo: number; hi: number }): Sweep {
+  return (p) => span.lo + (span.hi - span.lo) * Math.max(0, Math.min(1, p));
+}
+
+/** The time range a replay covers: the region if set, else the whole session. */
+export function replaySpan(region: TimeSpan | null, bounds: Bounds): { lo: number; hi: number } {
+  if (!region) return { lo: bounds.t0, hi: bounds.t1 };
+  return { lo: Math.min(region.start, region.end), hi: Math.max(region.start, region.end) };
 }
 
 /**
@@ -36,8 +60,7 @@ export function replaySchedule(
   region: TimeSpan | null,
   bounds: Bounds,
 ): ReplayStop[] {
-  const lo = region ? Math.min(region.start, region.end) : bounds.t0;
-  const hi = region ? Math.max(region.start, region.end) : bounds.t1;
+  const { lo, hi } = replaySpan(region, bounds);
 
   const stops: ReplayStop[] = [];
   const seen = new Set<CommitId>();
@@ -58,9 +81,31 @@ export function replaySchedule(
   return stops;
 }
 
-/** Which stop a 0→1 progress value lands on. Monotonic and clamped. */
-export function stopIndexAt(stops: readonly ReplayStop[], progress: number): number {
-  if (stops.length === 0) return 0;
-  const clamped = Math.max(0, Math.min(1, progress));
-  return Math.min(stops.length - 1, Math.floor(clamped * stops.length));
+/**
+ * One frame of replay: where the cursor goes, given progress and how many
+ * stops have already been shown.
+ *
+ * Playback has two obligations that pull against each other. It must *look*
+ * like playback — the playhead sweeping through time, not hopping — and it
+ * must not step over a commit, or the page silently skips a state. Sweeping
+ * freely does the first and fails the second (a 5 ms commit falls between two
+ * frames); walking stop to stop does the second and fails the first, which is
+ * the jump-from-start-to-end this replaces.
+ *
+ * So: sweep freely, but never past the next stop. Between commits the cursor
+ * moves with the clock; when it reaches one it lands there for a frame and
+ * releases. Dense stretches degrade to stepping, which is the honest reading.
+ */
+export function advanceReplay(
+  stops: readonly ReplayStop[],
+  sweep: Sweep,
+  progress: number,
+  visited: number,
+): { t: number; live: boolean; visited: number } {
+  const p = Math.max(0, Math.min(1, progress));
+  const swept = sweep(p);
+  const next = stops[visited];
+  if (next && swept >= next.t) return { t: next.t, live: next.live, visited: visited + 1 };
+  // Hold behind the stop we have not shown yet, so it is never overshot.
+  return { t: next ? Math.min(swept, next.t) : swept, live: false, visited };
 }

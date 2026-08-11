@@ -5,7 +5,7 @@ import type { TimeCursor } from "../../timeCursor.js";
 import { projectT, projectX, type TimeSpan } from "../model/scale.js";
 import { visibleChunkRange, sameChunkRange, type ChunkRange } from "../model/culling.js";
 import { resolveZoom } from "../model/viewport.js";
-import { stopIndexAt } from "../model/schedule.js";
+import { advanceReplay } from "../model/schedule.js";
 import { clipAtTime } from "../model/lanes.js";
 import { startReplayTicker } from "../replayTicker.js";
 import type { Timeline as TimelineModel } from "../useTimeline.js";
@@ -128,19 +128,21 @@ export function Timeline({
   onCursorRef.current = onCursor;
   const scheduleRef = useRef(model.schedule);
   scheduleRef.current = model.schedule;
+  const sweepRef = useRef(model.sweep);
+  sweepRef.current = model.sweep;
   useEffect(() => {
     if (!state.playing) return;
-    let lastIndex = -1;
+    // How many stops the page has already been shown — the one piece of state
+    // the ticker carries, so a stop can never be replayed or skipped.
+    let visited = 0;
     const ticker = startReplayTicker(REPLAY_MS, false, (frac, done) => {
       const stops = scheduleRef.current;
-      const index = stopIndexAt(stops, frac);
-      // Emit each stop once: the page's state only changes at a commit, so
-      // re-sending the same one would be a wasted synchronous React flush.
-      if (index !== lastIndex) {
-        lastIndex = index;
-        const stop = stops[index];
-        if (stop) onCursorRef.current({ t: stop.t, mode: stop.live ? "live" : "historical" });
-      }
+      const step = advanceReplay(stops, sweepRef.current, frac, visited);
+      visited = step.visited;
+      // Emitted every frame so the playhead moves. Re-applying the same page
+      // state is not wasted work: the travel controller diffs against what it
+      // last applied and sends nothing when the commit has not changed.
+      onCursorRef.current({ t: step.t, mode: step.live ? "live" : "historical" });
       if (done) {
         const last = stops.at(-1);
         if (last) onCursorRef.current({ t: last.t, mode: "live" });
