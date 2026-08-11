@@ -318,3 +318,96 @@ describe("time travel controller — failure reasons", () => {
     expect(result.failures).toEqual([]);
   });
 });
+
+describe("time travel controller — external-store adapters", () => {
+  function makeStoreFixture(initial: number) {
+    let value = initial;
+    return {
+      applied: [] as number[],
+      adapter: {
+        id: "demo",
+        getSnapshot: () => value,
+        applySnapshot(s: unknown) {
+          value = s as number;
+        },
+      },
+      set(n: number) {
+        value = n;
+      },
+      get: () => value,
+    };
+  }
+
+  it("restores a registered store to its snapshot at or before t and back on goLive", () => {
+    const tt = createTimeTravel({ fiber: makeFakeFiber() as never });
+    const fx = makeStoreFixture(0);
+    tt.registerStore(fx.adapter);
+    tt.captureStores(100); // value 0
+    fx.set(1);
+    tt.captureStores(200); // value 1
+    fx.set(2); // live value, never captured
+
+    const mid = tt.apply([], 150);
+    expect(fx.get()).toBe(0);
+    expect(mid).toMatchObject({ applied: 1, failed: 0 });
+
+    tt.apply([], 250);
+    expect(fx.get()).toBe(1);
+
+    tt.goLive();
+    expect(fx.get()).toBe(2);
+  });
+
+  it("a store with no snapshot at or before t counts as failed", () => {
+    const tt = createTimeTravel({ fiber: makeFakeFiber() as never });
+    const fx = makeStoreFixture(7);
+    tt.registerStore(fx.adapter);
+    tt.captureStores(500);
+    const result = tt.apply([], 100);
+    expect(result).toMatchObject({ applied: 0, failed: 1 });
+    expect(fx.get()).toBe(7); // untouched
+  });
+
+  it("unregistering stops capture and restoration", () => {
+    const tt = createTimeTravel({ fiber: makeFakeFiber() as never });
+    const fx = makeStoreFixture(0);
+    const off = tt.registerStore(fx.adapter);
+    tt.captureStores(100);
+    off();
+    fx.set(5);
+    tt.apply([], 150);
+    expect(fx.get()).toBe(5);
+  });
+
+  it("bounds per-store snapshot history", () => {
+    const tt = createTimeTravel({ fiber: makeFakeFiber() as never, snapshotsPerStore: 2 });
+    const fx = makeStoreFixture(0);
+    tt.registerStore(fx.adapter);
+    for (const t of [100, 200, 300]) {
+      fx.set(t);
+      tt.captureStores(t);
+    }
+    fx.set(999);
+    expect(tt.apply([], 150)).toMatchObject({ applied: 0, failed: 1 }); // t=100 evicted
+    tt.apply([], 250);
+    expect(fx.get()).toBe(200);
+  });
+
+  it("an adapter that throws on apply counts as failed, others still apply", () => {
+    const tt = createTimeTravel({ fiber: makeFakeFiber() as never });
+    const good = makeStoreFixture(0);
+    tt.registerStore(good.adapter);
+    tt.registerStore({
+      id: "broken",
+      getSnapshot: () => 0,
+      applySnapshot() {
+        throw new Error("nope");
+      },
+    });
+    tt.captureStores(100);
+    good.set(9);
+    const result = tt.apply([], 150);
+    expect(result).toMatchObject({ applied: 1, failed: 1 });
+    expect(good.get()).toBe(0);
+  });
+});
