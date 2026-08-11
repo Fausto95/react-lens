@@ -38,8 +38,12 @@ export interface FrameLocation {
   column: number;
 }
 
-/** `Error.prepareStackTrace` is a V8 extension, absent from the DOM lib types. */
-const ErrorWithPrepare = Error as ErrorConstructor & {
+/**
+ * `Error.prepareStackTrace` is a V8 extension: absent from the DOM lib types,
+ * and typed as a required function by @types/node. Both must accept undefined
+ * here, so go through an independent view of the constructor.
+ */
+const ErrorWithPrepare = Error as unknown as {
   prepareStackTrace?: ((err: Error, frames: unknown[]) => unknown) | undefined;
 };
 
