@@ -389,3 +389,50 @@ describe("historical queries — binary-search equivalence", () => {
     expect(second).toHaveLength(2);
   });
 });
+
+describe("commit DOM snapshots (offline replay)", () => {
+  const dom = (label: string) => ({ root: { nodeName: "DIV", text: label } });
+
+  it("commitDomAt returns the nearest snapshot at or before t", () => {
+    const store = new TraceStore();
+    store.ingest(
+      batch({
+        commitSnapshots: [
+          { commitId: 1 as CommitId, timestamp: 100, dom: dom("a") },
+          { commitId: 2 as CommitId, timestamp: 300, dom: dom("b") },
+        ],
+      }),
+    );
+    expect(store.commitDomAt(50)).toBeUndefined();
+    expect(store.commitDomAt(100)?.dom.root.text).toBe("a");
+    expect(store.commitDomAt(250)?.dom.root.text).toBe("a");
+    expect(store.commitDomAt(999)?.dom.root.text).toBe("b");
+  });
+
+  it("caps retained commit snapshots", () => {
+    const store = new TraceStore({ maxCommitSnapshots: 2 });
+    store.ingest(
+      batch({
+        commitSnapshots: [1, 2, 3].map((n) => ({
+          commitId: n as CommitId,
+          timestamp: n * 100,
+          dom: dom(`c${n}`),
+        })),
+      }),
+    );
+    expect(store.commitDomAt(150)).toBeUndefined(); // oldest evicted
+    expect(store.commitDomAt(250)?.dom.root.text).toBe("c2");
+  });
+
+  it("export round-trips commit snapshots into a fresh store", () => {
+    const source = new TraceStore();
+    source.ingest(
+      batch({
+        commitSnapshots: [{ commitId: 1 as CommitId, timestamp: 100, dom: dom("x") }],
+      }),
+    );
+    const mirror = new TraceStore();
+    mirror.ingest(source.export());
+    expect(mirror.commitDomAt(100)?.dom.root.text).toBe("x");
+  });
+});
