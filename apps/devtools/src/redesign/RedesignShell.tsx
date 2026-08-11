@@ -23,6 +23,8 @@ const TREE_MIN = 180;
 const TREE_MAX = 520;
 const INSP_MIN = 260;
 const INSP_MAX = 620;
+/** The timeline must stay wide enough for its footer controls to be reachable. */
+const TIMELINE_MIN = 340;
 
 function clampPx(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
@@ -128,8 +130,16 @@ export function RedesignShell({
       // Window-level, so a drag that outruns the 7px strip keeps tracking.
       const move = (ev: PointerEvent) => {
         const rect = host.getBoundingClientRect();
-        if (which === "tree") setTreeW(clampPx(ev.clientX - rect.left, TREE_MIN, TREE_MAX));
-        else setInspW(clampPx(rect.right - ev.clientX, INSP_MIN, INSP_MAX));
+        // Neither outer column may squeeze the timeline below the width its
+        // transport controls need — dragging used to crush it to ~40px, which
+        // clipped the zoom buttons out of reach.
+        if (which === "tree") {
+          const max = Math.min(TREE_MAX, rect.width - inspW - TIMELINE_MIN);
+          setTreeW(clampPx(ev.clientX - rect.left, TREE_MIN, Math.max(TREE_MIN, max)));
+        } else {
+          const max = Math.min(INSP_MAX, rect.width - treeW - TIMELINE_MIN);
+          setInspW(clampPx(rect.right - ev.clientX, INSP_MIN, Math.max(INSP_MIN, max)));
+        }
       };
       const up = () => {
         window.removeEventListener("pointermove", move);

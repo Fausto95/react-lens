@@ -1128,7 +1128,7 @@
   background: var(--bad);
   display: block;
 }
-@container timeline (max-width: 1040px) {
+@container panel (max-width: 1040px) {
   .rl-redesign .hint {
     display: none;
   }
@@ -1439,4 +1439,47 @@
 }
 .rl-redesign .lname .x {
   margin-left: 4px;
+}
+
+/* ── Footer: controls survive, prose gives way ──────────────────────────────
+   Everything in the bar was `nowrap` inside an `overflow: hidden` row, so the
+   LAST item lost — which happened to be the zoom controls. A control you
+   cannot reach is worse than a truncated sentence, so the stats text is the
+   only thing allowed to shrink. */
+.rl-redesign .tlfoot > .btn,
+.rl-redesign .tlfoot .zoom,
+.rl-redesign .tlfoot .zoom > * {
+  flex: 0 0 auto;
+}
+.rl-redesign .tlfoot > span {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.rl-redesign .tlfoot .zoom {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+/* Narrow columns: drop the slider before any button — −, + and fit still do
+   the whole job. */
+@container timeline (max-width: 400px) {
+  .rl-redesign .tlfoot .zoom input[type="range"] {
+    display: none;
+  }
+}
+
+/* Container contexts. `timeline` used to be declared on `.rl-tl`, which the
+   rewrite removed — so every `@container timeline` query silently stopped
+   matching. Re-establish both: the panel for toolbar-level decisions, the
+   timeline column for its own chrome. */
+.rl-redesign {
+  container-type: inline-size;
+  container-name: panel;
+}
+.rl-redesign .tl {
+  container-type: inline-size;
+  container-name: timeline;
 }
