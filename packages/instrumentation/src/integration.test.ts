@@ -254,3 +254,37 @@ describe("instrumentation + fiber against real React 19", () => {
     inst.stop();
   });
 });
+
+describe("interaction attribution — ignored containers", () => {
+  beforeEach(() => {
+    document.body.innerHTML = "<div id='root'></div>";
+  });
+
+  it("clicks inside an ignored container (the panel) record no interaction", async () => {
+    const frames: Frame[] = [];
+    const { bridge } = await react();
+    const inst = createInstrumentation({ fiber: bridge, serializer: createSerializer() });
+    inst.start({ captureDOM: false, interactionWindowMs: 200, onFrame: (f) => frames.push(f) });
+
+    const panel = document.createElement("div");
+    panel.id = "fake-panel";
+    const panelButton = document.createElement("button");
+    panel.appendChild(panelButton);
+    document.body.appendChild(panel);
+    bridge.ignoreContainer(panel);
+
+    panelButton.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    await flush();
+    const interactions = frames.flatMap((f) => f.events).filter((e) => e.type === "interaction");
+    expect(interactions).toHaveLength(0);
+
+    // A click on page content is still recorded.
+    document.getElementById("root")!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    await flush();
+    const after = frames.flatMap((f) => f.events).filter((e) => e.type === "interaction");
+    expect(after).toHaveLength(1);
+
+    inst.stop();
+    panel.remove();
+  });
+});
