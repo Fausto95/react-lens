@@ -49,6 +49,7 @@ import {
   sessionBounds,
 } from "./timeline/geometry.js";
 import { buildTicks, compactGap } from "./timeline/ticks.js";
+import { startReplayTicker, type ReplayTicker } from "./timeline/replayTicker.js";
 import { packPhaseBars, type PackedBar } from "./timeline/pack.js";
 import { aggregateBars, visibleChunkRange, type ChunkRange } from "./timeline/lod.js";
 import { ABDiffPanel } from "./timeline/ABDiffPanel.js";
@@ -134,7 +135,7 @@ export function Timeline({
   const innerRef = useRef<HTMLDivElement>(null);
   const scrubbing = useRef(false);
   const draggingPlayhead = useRef(false);
-  const rafRef = useRef(0);
+  const tickerRef = useRef<ReplayTicker | null>(null);
   /** Applied after the scale model commits so scrollLeft isn't clamped to the old width. */
   const pendingScrollRef = useRef<number | null>(null);
   const [playing, setPlaying] = useState(false);
@@ -248,7 +249,7 @@ export function Timeline({
   );
 
   const stop = useCallback(() => {
-    cancelAnimationFrame(rafRef.current);
+    tickerRef.current?.stop();
     setPlaying(false);
   }, []);
 
@@ -257,30 +258,19 @@ export function Timeline({
       const segs = model.segs;
       const startX = projectX(segs, clamp(fromT, bounds.t0, bounds.t1));
       const endX = projectX(segs, clamp(toT, bounds.t0, bounds.t1));
-      cancelAnimationFrame(rafRef.current);
+      tickerRef.current?.stop();
       if (endX <= startX) {
         onCursor({ t: bounds.t1, mode: "live" });
         return;
       }
       const durMs = clamp((endX - startX) * 6, 700, 4000);
-      // Frame-delta pacing, not wall-clock: rAF pauses in hidden tabs and the
-      // travel applies themselves can stretch frames — absolute time would
-      // skip that stretch of the replay (or collapse all of it into one
-      // jump-to-live). A capped per-frame step makes stalls pause playback.
-      let elapsed = 0;
-      let lastWall = performance.now();
       let lastSentT: number | null = null;
       const traveling = travel?.on ?? false;
       setPlaying(true);
-      const tick = () => {
-        const nowWall = performance.now();
-        elapsed += Math.min(nowWall - lastWall, 100);
-        lastWall = nowWall;
-        let frac = clamp(elapsed / durMs, 0, 1);
-        if (frac >= 1 && loop) {
-          elapsed = 0;
-          frac = 0;
-        }
+      // Frame-delta pacing with a timer fallback (see replayTicker): stalls
+      // pause playback instead of skipping it, and replay keeps advancing
+      // even while the document gets no animation frames.
+      tickerRef.current = startReplayTicker(durMs, loop, (frac, done) => {
         const rawT = projectT(segs, startX + (endX - startX) * frac);
         // With real travel on, commits ARE the replay's frames: the apply set
         // only changes at commits, so quantize to commit boundaries and apply
@@ -289,20 +279,17 @@ export function Timeline({
         // deltas — each a synchronous React flush — which crawled or, under
         // wall-clock pacing, skipped the replay entirely.
         const t = traveling ? (store.commitAt(rawT)?.endTimestamp ?? rawT) : rawT;
-        const done = frac >= 1 && !loop;
         if (done || t !== lastSentT) {
           lastSentT = t;
           onCursor({ t, mode: done ? "live" : "historical" });
         }
-        if (!done) rafRef.current = requestAnimationFrame(tick);
-        else setPlaying(false);
-      };
-      rafRef.current = requestAnimationFrame(tick);
+        if (done) setPlaying(false);
+      });
     },
     [model.segs, bounds.t0, bounds.t1, onCursor, store, travel?.on],
   );
 
-  useEffect(() => () => cancelAnimationFrame(rafRef.current), []);
+  useEffect(() => () => tickerRef.current?.stop(), []);
 
   // Fit auto-scale to the scroll viewport so clips fill the available width.
   useEffect(() => {
