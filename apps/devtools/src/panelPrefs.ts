@@ -24,6 +24,9 @@ export interface PanelPrefs {
    *  takes whatever is left. */
   treeWidth: number;
   inspectorWidth: number;
+  /** Side panes collapsed to a rail; each keeps its width for when it returns. */
+  treeCollapsed: boolean;
+  inspectorCollapsed: boolean;
   /** Selecting a component scrolls the inspected page to it when off-screen. */
   revealOnSelect: boolean;
   /**
@@ -43,6 +46,8 @@ const DEFAULTS: PanelPrefs = {
   dockWidth: null,
   treeWidth: 272,
   inspectorWidth: 320,
+  treeCollapsed: false,
+  inspectorCollapsed: false,
   revealOnSelect: true,
   laneFilter: serializeLaneFilter(EMPTY_LANE_FILTER),
 };
@@ -72,6 +77,12 @@ export function loadPanelPrefs(): PanelPrefs {
           : DEFAULTS.dockWidth,
       treeWidth: num(parsed.treeWidth, DEFAULTS.treeWidth, 180, 460),
       inspectorWidth: num(parsed.inspectorWidth, DEFAULTS.inspectorWidth, 240, 560),
+      treeCollapsed:
+        typeof parsed.treeCollapsed === "boolean" ? parsed.treeCollapsed : DEFAULTS.treeCollapsed,
+      inspectorCollapsed:
+        typeof parsed.inspectorCollapsed === "boolean"
+          ? parsed.inspectorCollapsed
+          : DEFAULTS.inspectorCollapsed,
       revealOnSelect:
         typeof parsed.revealOnSelect === "boolean"
           ? parsed.revealOnSelect

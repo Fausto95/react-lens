@@ -1,3 +1,4 @@
+import { IconPause, IconPlay, IconSkipBack, IconSkipForward } from "@reactlens/icons";
 import type { RegionStats } from "../model/lanes.js";
 
 /**
@@ -49,6 +50,7 @@ export function Footer({
   isFit,
   extra,
   onPlayToggle,
+  onStep,
   onZoomTo,
   onFit,
 }: {
@@ -58,9 +60,11 @@ export function Footer({
   /** The scale "fit" resolves to — the 1× reference for every control here. */
   fitPxPerMs: number;
   isFit: boolean;
-  /** Transport controls contributed by the panel (travel toggle, A/B…). */
+  /** Panel-owned transport controls (travel toggle, A/B…), after a separator. */
   extra?: React.ReactNode;
   onPlayToggle: () => void;
+  /** Jump the playhead to the adjacent commit — where state actually changes. */
+  onStep: (dir: 1 | -1) => void;
   /** Absolute target scale, so every control is the same one-way action. */
   onZoomTo: (pxPerMs: number) => void;
   onFit: () => void;
@@ -70,16 +74,44 @@ export function Footer({
 
   return (
     <div className="tlfoot">
-      <button
-        type="button"
-        className={`btn${playing ? " active" : ""}`}
-        title={playing ? "Pause (space)" : "Play from playhead (space)"}
-        aria-label={playing ? "Pause" : "Play from playhead"}
-        aria-pressed={playing}
-        onClick={onPlayToggle}
-      >
-        {playing ? "⏸" : "▶"}
-      </button>
+      {/* v1's transport: bare icon buttons, with the panel's own controls
+          (time travel, A/B) following a separator. */}
+      <div className="rl-tl-nav">
+        <button
+          type="button"
+          className="rl-icon-btn"
+          title="Previous commit (←)"
+          aria-label="Step back one commit"
+          onClick={() => onStep(-1)}
+        >
+          <IconSkipBack size={13} />
+        </button>
+        <button
+          type="button"
+          className={`rl-icon-btn${playing ? " active" : ""}`}
+          title={playing ? "Pause (space)" : "Play from playhead (space)"}
+          aria-label={playing ? "Pause" : "Play from playhead"}
+          aria-pressed={playing}
+          onClick={onPlayToggle}
+        >
+          {playing ? <IconPause size={12} /> : <IconPlay size={12} />}
+        </button>
+        <button
+          type="button"
+          className="rl-icon-btn"
+          title="Next commit (→)"
+          aria-label="Step forward one commit"
+          onClick={() => onStep(1)}
+        >
+          <IconSkipForward size={13} />
+        </button>
+        {extra && (
+          <>
+            <span className="rl-zoom-sep" />
+            {extra}
+          </>
+        )}
+      </div>
 
       <span>
         In selection: <b>{stats.renders} renders</b>
@@ -90,8 +122,6 @@ export function Footer({
         </span>
       )}
       <span className="mono">total {stats.selfMs.toFixed(0)} ms</span>
-
-      {extra}
 
       <div className="zoom">
         <button

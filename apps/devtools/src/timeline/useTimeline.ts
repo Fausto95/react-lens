@@ -164,20 +164,34 @@ export function useTimeline({
     [lanes, statsRange.start, statsRange.end],
   );
   const schedule = useMemo(
-    () => replaySchedule(commits, state.region, bounds),
-    [commits, state.region, bounds],
+    () => replaySchedule(commits, state.region, bounds, state.playFrom),
+    [commits, state.region, bounds, state.playFrom],
   );
+  /** Full span of what ▶ would replay, ignoring where it was started from. */
+  const replayRange = useMemo(() => replaySpan(state.region, bounds), [state.region, bounds]);
+  /**
+   * How much of that range is left to play, measured *on screen*. Starting
+   * from the playhead would otherwise take a full replay's worth of time
+   * however little remained, so a late start crawled.
+   */
+  const replayFraction = useMemo(() => {
+    const from = replaySpan(state.region, bounds, state.playFrom).lo;
+    const x0 = projectX(scale.segs, replayRange.lo);
+    const x1 = projectX(scale.segs, replayRange.hi);
+    if (x1 - x0 <= 0) return 1;
+    return Math.max(0, Math.min(1, (x1 - projectX(scale.segs, from)) / (x1 - x0)));
+  }, [scale, state.region, state.playFrom, bounds, replayRange]);
   /**
    * The playhead advances at a constant speed *on screen*, not on the clock:
    * compressed idle gutters are 34 px wide however long they lasted, and a
    * wall-clock sweep would stall inside them for most of the replay.
    */
   const sweep = useMemo<Sweep>(() => {
-    const { lo, hi } = replaySpan(state.region, bounds);
+    const { lo, hi } = replaySpan(state.region, bounds, state.playFrom);
     const x0 = projectX(scale.segs, lo);
     const x1 = projectX(scale.segs, hi);
     return (p) => projectT(scale.segs, x0 + (x1 - x0) * Math.max(0, Math.min(1, p)));
-  }, [scale, state.region, bounds]);
+  }, [scale, state.region, bounds, state.playFrom]);
 
   const playhead = cursor.mode === "live" ? bounds.t1 : cursor.t;
 
@@ -200,6 +214,8 @@ export function useTimeline({
     statsRaw,
     fixSavedRenders: Math.max(0, statsRaw.renders - stats.renders),
     schedule,
+    replayRange,
+    replayFraction,
     sweep,
     playhead,
   };

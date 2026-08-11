@@ -18,17 +18,7 @@ import { Timeline } from "../timeline/view/Timeline.js";
 import { buildRenderStory } from "../inspector/renderStory.js";
 import { TreeView, treeViewRows } from "./TreeView.js";
 import { InspectorView } from "./InspectorView.js";
-
-const TREE_MIN = 180;
-const TREE_MAX = 520;
-const INSP_MIN = 260;
-const INSP_MAX = 620;
-/** The timeline must stay wide enough for its footer controls to be reachable. */
-const TIMELINE_MIN = 340;
-
-function clampPx(value: number, min: number, max: number): number {
-  return Math.max(min, Math.min(max, value));
-}
+import { columnTemplate, nextColumnWidth, type CollapsedPanes } from "./columns.js";
 
 /**
  * Panel layout: toolbar over three columns — Components · Timeline · Inspector.
@@ -118,9 +108,24 @@ export function RedesignShell({
   const gridRef = useRef<HTMLDivElement>(null);
   const [treeW, setTreeW] = useState(() => loadPanelPrefs().treeWidth);
   const [inspW, setInspW] = useState(() => loadPanelPrefs().inspectorWidth);
+  /**
+   * Collapsed panes keep their stored width, so expanding restores the layout
+   * the user had rather than a default.
+   */
+  const [collapsed, setCollapsed] = useState<CollapsedPanes>(() => {
+    const prefs = loadPanelPrefs();
+    return { tree: prefs.treeCollapsed, inspector: prefs.inspectorCollapsed };
+  });
   useEffect(() => {
-    savePanelPrefs({ treeWidth: treeW, inspectorWidth: inspW });
-  }, [treeW, inspW]);
+    savePanelPrefs({
+      treeWidth: treeW,
+      inspectorWidth: inspW,
+      treeCollapsed: collapsed.tree,
+      inspectorCollapsed: collapsed.inspector,
+    });
+  }, [treeW, inspW, collapsed]);
+  const togglePane = (which: keyof CollapsedPanes) =>
+    setCollapsed((prev) => ({ ...prev, [which]: !prev[which] }));
 
   const startColumnDrag =
     (which: "tree" | "inspector") => (e: React.PointerEvent<HTMLDivElement>) => {
@@ -130,16 +135,14 @@ export function RedesignShell({
       // Window-level, so a drag that outruns the 7px strip keeps tracking.
       const move = (ev: PointerEvent) => {
         const rect = host.getBoundingClientRect();
-        // Neither outer column may squeeze the timeline below the width its
-        // transport controls need — dragging used to crush it to ~40px, which
-        // clipped the zoom buttons out of reach.
-        if (which === "tree") {
-          const max = Math.min(TREE_MAX, rect.width - inspW - TIMELINE_MIN);
-          setTreeW(clampPx(ev.clientX - rect.left, TREE_MIN, Math.max(TREE_MIN, max)));
-        } else {
-          const max = Math.min(INSP_MAX, rect.width - treeW - TIMELINE_MIN);
-          setInspW(clampPx(rect.right - ev.clientX, INSP_MIN, Math.max(INSP_MIN, max)));
-        }
+        const wanted = which === "tree" ? ev.clientX - rect.left : rect.right - ev.clientX;
+        const next = nextColumnWidth(which, wanted, {
+          total: rect.width,
+          treeW,
+          inspW,
+          collapsed,
+        });
+        (which === "tree" ? setTreeW : setInspW)(next);
       };
       const up = () => {
         window.removeEventListener("pointermove", move);
@@ -152,7 +155,7 @@ export function RedesignShell({
     };
 
   // ── Tree ─────────────────────────────────────────────────────────────────
-  const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(new Set());
+  const [collapsedNodes, setCollapsedNodes] = useState<ReadonlySet<string>>(new Set());
   const [openGroups, setOpenGroups] = useState<ReadonlySet<string>>(new Set());
   const data = useMemo(() => buildData(store, causality), [store, causality, version]);
   const parsed = useMemo(() => parseQuery(query), [query]);
@@ -165,14 +168,14 @@ export function RedesignShell({
           if (openGroups.has(node.key)) set.add(node.key);
           walk(node.instances);
         } else {
-          if (!collapsed.has(node.key)) set.add(node.key);
+          if (!collapsedNodes.has(node.key)) set.add(node.key);
           walk(node.children);
         }
       }
     };
     walk(roots);
     return set;
-  }, [roots, collapsed, openGroups]);
+  }, [roots, collapsedNodes, openGroups]);
   const treeRows = useMemo(() => treeViewRows(flatten(roots, expanded)), [roots, expanded]);
   const matchCount = useMemo(
     () => (query.trim() ? data.filter(parsed.predicate).length : null),
@@ -189,7 +192,7 @@ export function RedesignShell({
     [treeRows],
   );
   const toggleTree = (key: string) => {
-    const setter = key.startsWith("g:") ? setOpenGroups : setCollapsed;
+    const setter = key.startsWith("g:") ? setOpenGroups : setCollapsedNodes;
     setter((prev) => {
       const next = new Set(prev);
       if (!next.delete(key)) next.add(key);
@@ -271,83 +274,95 @@ export function RedesignShell({
       <div
         className="grid"
         ref={gridRef}
-        style={{ gridTemplateColumns: `${treeW}px minmax(0, 1fr) ${inspW}px` }}
+        style={{ gridTemplateColumns: columnTemplate(treeW, inspW, collapsed) }}
       >
-        <div
-          className="colresize"
-          style={{ left: treeW }}
-          title="Drag to resize"
-          onPointerDown={startColumnDrag("tree")}
-        />
-        <div
-          className="colresize"
-          style={{ right: inspW }}
-          title="Drag to resize"
-          onPointerDown={startColumnDrag("inspector")}
-        />
-
-        <div className="col">
-          <div className="colhead">Components</div>
-          <div className="filter">
-            <svg
-              width="11"
-              height="11"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="#5C5C66"
-              strokeWidth="2.4"
-            >
-              <circle cx="11" cy="11" r="7" />
-              <path d="m20 20-3.5-3.5" />
-            </svg>
-            {filterChips.map((token) => (
-              <span
-                key={token}
-                className="chip"
-                title="Click to remove"
-                role="button"
-                tabIndex={0}
-                onClick={() => setFilterChips((prev) => prev.filter((t) => t !== token))}
-                onKeyDown={(e) =>
-                  e.key === "Enter" && setFilterChips((prev) => prev.filter((t) => t !== token))
-                }
-              >
-                {token}
-              </span>
-            ))}
-            <input
-              ref={filterRef}
-              className="rl-tree-search"
-              placeholder={filterChips.length > 0 ? "Filter…" : "Filter components…"}
-              value={filterFree}
-              spellCheck={false}
-              aria-invalid={parsed.errors.length > 0}
-              {...(parsed.errors.length > 0 ? { title: parsed.errors.join(" · ") } : {})}
-              onChange={(e) => setFilterFree(e.target.value)}
-              onKeyDown={onFilterKeyDown}
-              onBlur={() => commitFilterTokens(filterFree)}
-            />
-            {parsed.errors.length > 0 ? (
-              <span className="rl-tree-search-count invalid">!</span>
-            ) : (
-              matchCount !== null && <span className="rl-tree-search-count">{matchCount}</span>
-            )}
-          </div>
-          <TreeView
-            rows={treeRows}
-            maxSelf={maxSelf}
-            selected={selected}
-            onSelect={selectTreeComponent}
-            onToggle={toggleTree}
-            watchlist={watchlist}
-            lanes={lanes}
-            regionHeat={timeline.statsRaw.byLane}
-            fixApplied={fixApplied}
-            flashId={flashId}
-            {...(doctor ? { doctor } : {})}
-            {...(onHighlight ? { onHover: onHighlight } : {})}
+        {/* A collapsed pane is a rail — there is nothing left to resize. */}
+        {!collapsed.tree && (
+          <div
+            className="colresize"
+            style={{ left: treeW }}
+            title="Drag to resize"
+            onPointerDown={startColumnDrag("tree")}
           />
-        </div>
+        )}
+        {!collapsed.inspector && (
+          <div
+            className="colresize"
+            style={{ right: inspW }}
+            title="Drag to resize"
+            onPointerDown={startColumnDrag("inspector")}
+          />
+        )}
+
+        {collapsed.tree ? (
+          <PaneRail label="Components" side="left" onExpand={() => togglePane("tree")} />
+        ) : (
+          <div className="col">
+            <div className="colhead">
+              Components
+              <PaneToggle label="Components" side="left" onClick={() => togglePane("tree")} />
+            </div>
+            <div className="filter">
+              <svg
+                width="11"
+                height="11"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="#5C5C66"
+                strokeWidth="2.4"
+              >
+                <circle cx="11" cy="11" r="7" />
+                <path d="m20 20-3.5-3.5" />
+              </svg>
+              {filterChips.map((token) => (
+                <span
+                  key={token}
+                  className="chip"
+                  title="Click to remove"
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => setFilterChips((prev) => prev.filter((t) => t !== token))}
+                  onKeyDown={(e) =>
+                    e.key === "Enter" && setFilterChips((prev) => prev.filter((t) => t !== token))
+                  }
+                >
+                  {token}
+                </span>
+              ))}
+              <input
+                ref={filterRef}
+                className="rl-tree-search"
+                placeholder={filterChips.length > 0 ? "Filter…" : "Filter components…"}
+                value={filterFree}
+                spellCheck={false}
+                aria-invalid={parsed.errors.length > 0}
+                {...(parsed.errors.length > 0 ? { title: parsed.errors.join(" · ") } : {})}
+                onChange={(e) => setFilterFree(e.target.value)}
+                onKeyDown={onFilterKeyDown}
+                onBlur={() => commitFilterTokens(filterFree)}
+              />
+              {parsed.errors.length > 0 ? (
+                <span className="rl-tree-search-count invalid">!</span>
+              ) : (
+                matchCount !== null && <span className="rl-tree-search-count">{matchCount}</span>
+              )}
+            </div>
+            <TreeView
+              rows={treeRows}
+              maxSelf={maxSelf}
+              selected={selected}
+              onSelect={selectTreeComponent}
+              onToggle={toggleTree}
+              watchlist={watchlist}
+              lanes={lanes}
+              regionHeat={timeline.statsRaw.byLane}
+              fixApplied={fixApplied}
+              flashId={flashId}
+              {...(doctor ? { doctor } : {})}
+              {...(onHighlight ? { onHover: onHighlight } : {})}
+            />
+          </div>
+        )}
 
         <div className="col">
           <div className="colhead">
@@ -377,32 +392,99 @@ export function RedesignShell({
           />
         </div>
 
-        <div className="col insp">
-          <InspectorView
-            store={store}
-            componentId={selectedRenderEvent?.componentId ?? selected}
-            story={story}
-            t0={selectedRenderEvent ? selectedRenderEvent.timestamp - timeline.bounds.t0 : null}
-            t1={
-              selectedRenderEvent
-                ? selectedRenderEvent.timestamp -
-                  timeline.bounds.t0 +
-                  selectedRenderEvent.selfDuration
-                : null
-            }
-            fixApplied={fixApplied}
-            onToggleFix={() => setFixApplied((v) => !v)}
-            onSelectComponent={selectTreeComponent}
-            onHoverComponent={(id) => {
-              onHighlight?.(id);
-              if (id === null) return;
-              const name = store.instance(id)?.name;
-              if (name) timeline.dispatch({ type: "selectLane", laneKey: typeLaneKey(name) });
-            }}
-          />
-        </div>
+        {collapsed.inspector ? (
+          <PaneRail label="Inspector" side="right" onExpand={() => togglePane("inspector")} />
+        ) : (
+          <div className="col insp">
+            <InspectorView
+              headAction={
+                <PaneToggle
+                  label="Inspector"
+                  side="right"
+                  onClick={() => togglePane("inspector")}
+                />
+              }
+              store={store}
+              componentId={selectedRenderEvent?.componentId ?? selected}
+              story={story}
+              t0={selectedRenderEvent ? selectedRenderEvent.timestamp - timeline.bounds.t0 : null}
+              t1={
+                selectedRenderEvent
+                  ? selectedRenderEvent.timestamp -
+                    timeline.bounds.t0 +
+                    selectedRenderEvent.selfDuration
+                  : null
+              }
+              fixApplied={fixApplied}
+              onToggleFix={() => setFixApplied((v) => !v)}
+              onSelectComponent={selectTreeComponent}
+              onHoverComponent={(id) => {
+                onHighlight?.(id);
+                if (id === null) return;
+                const name = store.instance(id)?.name;
+                if (name) timeline.dispatch({ type: "selectLane", laneKey: typeLaneKey(name) });
+              }}
+            />
+          </div>
+        )}
       </div>
     </>
+  );
+}
+
+/**
+ * The chevron that collapses a side pane, sitting at the end of its heading.
+ * It points the way the pane will go, so the control reads as its own effect.
+ */
+function PaneToggle({
+  label,
+  side,
+  onClick,
+}: {
+  label: string;
+  side: "left" | "right";
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      className="panetoggle"
+      title={`Collapse ${label}`}
+      aria-label={`Collapse ${label}`}
+      aria-expanded={true}
+      onClick={onClick}
+    >
+      {side === "left" ? "\u2039" : "\u203A"}
+    </button>
+  );
+}
+
+/**
+ * What a collapsed pane leaves behind: a rail carrying its name and the way
+ * back. Vertical text rather than an icon, so the pane is still identifiable
+ * at 28px wide.
+ */
+function PaneRail({
+  label,
+  side,
+  onExpand,
+}: {
+  label: string;
+  side: "left" | "right";
+  onExpand: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      className="panerail"
+      title={`Expand ${label}`}
+      aria-label={`Expand ${label}`}
+      aria-expanded={false}
+      onClick={onExpand}
+    >
+      <span className="chev">{side === "left" ? "\u203A" : "\u2039"}</span>
+      <span className="rl-rail-label">{label}</span>
+    </button>
   );
 }
 

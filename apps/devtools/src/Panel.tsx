@@ -36,6 +36,7 @@ import {
   IconUpload,
   IconCrosshair,
   IconSliders,
+  IconRewind,
 } from "@reactlens/icons";
 import { PanelMenu } from "./PanelMenu.js";
 import { applyThemePref, type ThemePref } from "./theme.js";
@@ -212,7 +213,7 @@ export function Panel({
   // Real time travel: while the cursor is historical (and the toggle is on),
   // the page's state follows the playhead. On by default when supported;
   // the toggle persists across sessions.
-  const travelOn = loadPanelPrefs().travelOn;
+  const [travelOn, setTravelOn] = useState(() => loadPanelPrefs().travelOn);
   const [travelSupported, setTravelSupported] = useState(false);
   // Set-wide restore feedback while traveling (partial-restore pill + markers).
   const [, setRestoreStatus] = useState<RestoreStatus | null>(null);
@@ -473,6 +474,34 @@ export function Panel({
         onSelect={select}
         sessionSpanMs={sessionSpanMs}
         {...(onHighlight ? { onHighlight } : {})}
+        transport={
+          timeTravel ? (
+            <button
+              type="button"
+              className={`rl-icon-btn rl-tl-travel${travelOn ? " active" : ""}`}
+              disabled={!travelSupported || offlineSession}
+              title={
+                offlineSession
+                  ? "Imported session — time travel needs the original live page. Resume recording to go back live."
+                  : !travelSupported
+                    ? "Time travel requires a development React build"
+                    : travelOn
+                      ? "Time travel on — the page follows the playhead"
+                      : "Time travel off — scrubbing only moves the panel views"
+              }
+              aria-label="Apply state to the page while scrubbing"
+              aria-pressed={travelOn}
+              onClick={() => {
+                setTravelOn((on) => {
+                  savePanelPrefs({ travelOn: !on });
+                  return !on;
+                });
+              }}
+            >
+              <IconRewind size={13} />
+            </button>
+          ) : undefined
+        }
         toolbarActions={
           <span className="rl-toolbar-actions">
             {onToggleInspect && (

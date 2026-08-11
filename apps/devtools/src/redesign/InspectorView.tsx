@@ -17,6 +17,7 @@ export function InspectorView({
   onToggleFix,
   onSelectComponent,
   onHoverComponent,
+  headAction,
 }: {
   store: TraceStore;
   componentId: ComponentId | null;
@@ -27,6 +28,8 @@ export function InspectorView({
   onToggleFix: () => void;
   onSelectComponent?: (id: ComponentId) => void;
   onHoverComponent?: (id: ComponentId | null) => void;
+  /** Trailing control in the column heading — the shell's collapse toggle. */
+  headAction?: ReactNode;
 }) {
   const [copied, setCopied] = useState(false);
 
@@ -35,7 +38,10 @@ export function InspectorView({
   if (componentId === null) {
     return (
       <>
-        <div className="colhead">Inspector</div>
+        <div className="colhead">
+          Inspector
+          {headAction}
+        </div>
         <div className="isect why">Select a component, or a render clip on the timeline.</div>
       </>
     );
@@ -52,7 +58,10 @@ export function InspectorView({
   if (!story) {
     return (
       <>
-        <div className="colhead">Inspector</div>
+        <div className="colhead">
+          Inspector
+          {headAction}
+        </div>
         {header}
         <div className="crumb">
           {ownerChain(store, componentId).map((step, i, all) => (
@@ -85,6 +94,7 @@ export function InspectorView({
             t = {Math.round(t0).toLocaleString("en-US")}–{Math.round(t1).toLocaleString("en-US")} ms
           </span>
         )}
+        {headAction}
       </div>
 
       {header}

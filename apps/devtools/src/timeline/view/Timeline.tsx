@@ -5,7 +5,8 @@ import type { TimeCursor } from "../../timeCursor.js";
 import { projectT, projectX, type TimeSpan } from "../model/scale.js";
 import { visibleChunkRange, sameChunkRange, type ChunkRange } from "../model/culling.js";
 import { resolveZoom } from "../model/viewport.js";
-import { advanceReplay } from "../model/schedule.js";
+import { advanceReplay, stepStop } from "../model/schedule.js";
+import { timelineKeyAction } from "../keymap.js";
 import { clipAtTime } from "../model/lanes.js";
 import { startReplayTicker } from "../replayTicker.js";
 import type { Timeline as TimelineModel } from "../useTimeline.js";
@@ -17,8 +18,10 @@ import { Chrome } from "./Chrome.js";
 import { Footer } from "./Footer.js";
 import { NAME_W } from "./metrics.js";
 
-/** One replay pass over the region, in ms of wall clock. */
+/** One replay pass over the whole region, in ms of wall clock. */
 const REPLAY_MS = 2600;
+/** A replay started near the end still needs long enough to be watchable. */
+const MIN_REPLAY_MS = 700;
 /** Show marker labels only when the axis is roomy enough to read them. */
 const MARKER_LABEL_MIN_PX_PER_MS = 0.35;
 
@@ -123,6 +126,62 @@ export function Timeline({
     return () => el.removeEventListener("wheel", onWheel);
   }, [dispatch]);
 
+  // ── Transport ─────────────────────────────────────────────────────────────
+  /**
+   * ⏮ / ⏭ move to the adjacent commit rather than by a slice of time: between
+   * commits the page's state is unchanged, so a fixed step would land on the
+   * same thing twice.
+   */
+  const stepPlayhead = (dir: 1 | -1) => {
+    const t = stepStop(model.schedule, model.replayRange, model.playhead, dir);
+    onCursor({ t, mode: t >= bounds.t1 - 0.5 ? "live" : "historical" });
+  };
+
+  // ── Keyboard ──────────────────────────────────────────────────────────────
+  /**
+   * The bindings live in `keymap.ts` as data; this only routes them. Held in a
+   * ref so the listener is installed once rather than re-bound on every store
+   * ingest — the same dependency that used to tear down the replay ticker.
+   */
+  const keyHandlerRef = useRef<(e: KeyboardEvent) => void>(() => {});
+  keyHandlerRef.current = (e: KeyboardEvent) => {
+    const action = timelineKeyAction(e);
+    if (!action) return;
+    // Never steal a key from a field the user is typing into.
+    const el = e.target as HTMLElement | null;
+    if (el && (el.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName))) return;
+    switch (action.kind) {
+      case "toggle-play":
+        e.preventDefault();
+        dispatch(state.playing ? { type: "pause" } : { type: "play", from: model.playhead });
+        break;
+      case "step-commit":
+        e.preventDefault();
+        stepPlayhead(action.dir);
+        break;
+      case "fit":
+        dispatch({ type: "fit" });
+        break;
+      case "go-live":
+        onCursor({ t: bounds.t1, mode: "live" });
+        break;
+      case "zoom":
+        dispatch({ type: "zoomBy", factor: action.factor });
+        break;
+      case "escape-band":
+        dispatch({ type: "setRegion", span: null });
+        break;
+      default:
+        // `step-interaction` belongs to the interaction track, not yet re-homed.
+        break;
+    }
+  };
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => keyHandlerRef.current(e);
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
   // ── Replay ────────────────────────────────────────────────────────────────
   const onCursorRef = useRef(onCursor);
   onCursorRef.current = onCursor;
@@ -130,25 +189,32 @@ export function Timeline({
   scheduleRef.current = model.schedule;
   const sweepRef = useRef(model.sweep);
   sweepRef.current = model.sweep;
+  /** Read once when ▶ is pressed, so the ticker keeps a constant speed. */
+  const fractionRef = useRef(model.replayFraction);
+  fractionRef.current = model.replayFraction;
   useEffect(() => {
     if (!state.playing) return;
     // How many stops the page has already been shown — the one piece of state
     // the ticker carries, so a stop can never be replayed or skipped.
     let visited = 0;
-    const ticker = startReplayTicker(REPLAY_MS, false, (frac, done) => {
-      const stops = scheduleRef.current;
-      const step = advanceReplay(stops, sweepRef.current, frac, visited);
-      visited = step.visited;
-      // Emitted every frame so the playhead moves. Re-applying the same page
-      // state is not wasted work: the travel controller diffs against what it
-      // last applied and sends nothing when the commit has not changed.
-      onCursorRef.current({ t: step.t, mode: step.live ? "live" : "historical" });
-      if (done) {
-        const last = stops.at(-1);
-        if (last) onCursorRef.current({ t: last.t, mode: "live" });
-        dispatch({ type: "pause" });
-      }
-    });
+    const ticker = startReplayTicker(
+      Math.max(MIN_REPLAY_MS, REPLAY_MS * fractionRef.current),
+      false,
+      (frac, done) => {
+        const stops = scheduleRef.current;
+        const step = advanceReplay(stops, sweepRef.current, frac, visited);
+        visited = step.visited;
+        // Emitted every frame so the playhead moves. Re-applying the same page
+        // state is not wasted work: the travel controller diffs against what
+        // it last applied and sends nothing when the commit has not changed.
+        onCursorRef.current({ t: step.t, mode: step.live ? "live" : "historical" });
+        if (done) {
+          const last = stops.at(-1);
+          if (last) onCursorRef.current({ t: last.t, mode: "live" });
+          dispatch({ type: "pause" });
+        }
+      },
+    );
     return () => ticker.stop();
     // Deliberately NOT keyed on the schedule or bounds: those change on every
     // store ingest, which would tear the ticker down and restart it each frame.
@@ -310,7 +376,10 @@ export function Timeline({
         fitPxPerMs={fitPxPerMs}
         isFit={state.viewport.zoom === "fit"}
         {...(transport ? { extra: transport } : {})}
-        onPlayToggle={() => dispatch({ type: state.playing ? "pause" : "play" })}
+        onPlayToggle={() =>
+          dispatch(state.playing ? { type: "pause" } : { type: "play", from: model.playhead })
+        }
+        onStep={stepPlayhead}
         onZoomTo={(px) => dispatch({ type: "zoomTo", pxPerMs: px })}
         onFit={() => dispatch({ type: "fit" })}
       />

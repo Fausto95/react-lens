@@ -1545,3 +1545,77 @@
   padding: 5px 9px;
   line-height: 1.35;
 }
+
+/* ── Collapsible side panes ─────────────────────────────────────────────────
+   Either outer column can fold down to a rail. The rail keeps the pane's name
+   legible at 28px by running it vertically, so a folded pane is still
+   identifiable rather than an anonymous strip. */
+.rl-redesign .panetoggle {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: none;
+  color: var(--text-3);
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+}
+/* The inspector heading already has a `.right` timestamp claiming the margin. */
+.rl-redesign .colhead .right + .panetoggle {
+  margin-left: 6px;
+}
+.rl-redesign .panetoggle:hover {
+  background: var(--panel-2);
+  color: var(--text);
+}
+.rl-redesign .panerail {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  padding: 9px 0;
+  border: 0;
+  background: var(--panel);
+  color: var(--text-3);
+  cursor: pointer;
+  overflow: hidden;
+}
+/* The column divider belongs *between* panes — a left rail is flush with the
+   panel's own edge and must not draw one. */
+.rl-redesign .panerail:not(:first-child) {
+  border-left: 1px solid var(--line);
+}
+.rl-redesign .panerail:hover {
+  color: var(--text);
+}
+.rl-redesign .panerail .chev {
+  font-size: 13px;
+  line-height: 1;
+}
+.rl-redesign .rl-rail-label {
+  writing-mode: vertical-rl;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Transport: v1's bare icon buttons, grouped so the footer's 14px gap does
+   not scatter them. `.rl-icon-btn` and `.rl-zoom-sep` come from theme.css —
+   the marks are the same controls, so they keep the same styling. */
+.rl-redesign .tlfoot .rl-tl-nav {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin-right: -6px;
+}

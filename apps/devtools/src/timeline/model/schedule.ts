@@ -44,10 +44,28 @@ export function linearSweep(span: { lo: number; hi: number }): Sweep {
   return (p) => span.lo + (span.hi - span.lo) * Math.max(0, Math.min(1, p));
 }
 
-/** The time range a replay covers: the region if set, else the whole session. */
-export function replaySpan(region: TimeSpan | null, bounds: Bounds): { lo: number; hi: number } {
-  if (!region) return { lo: bounds.t0, hi: bounds.t1 };
-  return { lo: Math.min(region.start, region.end), hi: Math.max(region.start, region.end) };
+/**
+ * Close enough to the end that starting there would be a zero-length replay.
+ * At that point ▶ means "play it again", not "play the last millisecond".
+ */
+const RESTART_EPSILON_MS = 1;
+
+/**
+ * The time range a replay covers: the region if set, else the whole session —
+ * picked up from `from` when the playhead is parked inside it.
+ *
+ * ▶ is labelled *play from playhead* and never was: every replay restarted at
+ * the beginning, so positioning the ruler before pressing it did nothing.
+ */
+export function replaySpan(
+  region: TimeSpan | null,
+  bounds: Bounds,
+  from?: number | null,
+): { lo: number; hi: number } {
+  const lo = region ? Math.min(region.start, region.end) : bounds.t0;
+  const hi = region ? Math.max(region.start, region.end) : bounds.t1;
+  if (from == null || from <= lo || from >= hi - RESTART_EPSILON_MS) return { lo, hi };
+  return { lo: from, hi };
 }
 
 /**
@@ -59,8 +77,9 @@ export function replaySchedule(
   commits: readonly CommitSummary[],
   region: TimeSpan | null,
   bounds: Bounds,
+  from?: number | null,
 ): ReplayStop[] {
-  const { lo, hi } = replaySpan(region, bounds);
+  const { lo, hi } = replaySpan(region, bounds, from);
 
   const stops: ReplayStop[] = [];
   const seen = new Set<CommitId>();
@@ -79,6 +98,31 @@ export function replaySchedule(
 
   stops.push({ t: hi, commitId: null, live: true });
   return stops;
+}
+
+/**
+ * Where ⏮ / ⏭ put the playhead: the adjacent commit, since that is where the
+ * page's state actually changes — stepping by a fixed slice of time would land
+ * between commits and show the same thing twice.
+ *
+ * Going back past the first commit rewinds to the top rather than sticking,
+ * which is what a rewind control is for.
+ */
+export function stepStop(
+  stops: readonly ReplayStop[],
+  span: { lo: number; hi: number },
+  t: number,
+  dir: 1 | -1,
+): number {
+  const times = stops.map((s) => s.t);
+  if (dir === 1) {
+    const next = times.filter((v) => v > t + RESTART_EPSILON_MS).sort((a, b) => a - b)[0];
+    return next ?? span.hi;
+  }
+  const prev = times.filter((v) => v < t - RESTART_EPSILON_MS).sort((a, b) => b - a)[0];
+  // Nothing behind the first commit but the span's own start — which is where
+  // ⏮ should land, rather than sticking on that commit.
+  return prev ?? span.lo;
 }
 
 /**

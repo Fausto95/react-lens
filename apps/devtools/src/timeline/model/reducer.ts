@@ -35,6 +35,11 @@ export interface TimelineState {
   /** In/out points that scope the footer stats and bound replay. */
   region: TimeSpan | null;
   playing: boolean;
+  /**
+   * Where the current replay began — the playhead at the moment ▶ was pressed.
+   * Null between replays, when the span's own start is the beginning.
+   */
+  playFrom: number | null;
 }
 
 /**
@@ -61,7 +66,7 @@ export type TimelineAction =
   | { type: "expandLanes"; keys: readonly LaneKey[] }
   | { type: "setRegion"; span: TimeSpan | null }
   | { type: "dragRegionEdge"; side: "start" | "end"; t: number }
-  | { type: "play" }
+  | { type: "play"; from: number | null }
   | { type: "pause" };
 
 export function initialTimelineState(over: Partial<TimelineState> = {}): TimelineState {
@@ -72,6 +77,7 @@ export function initialTimelineState(over: Partial<TimelineState> = {}): Timelin
     expandedLanes: new Set(),
     region: null,
     playing: false,
+    playFrom: null,
     ...over,
   };
 }
@@ -191,9 +197,9 @@ export function timelineReducer(
     }
 
     case "play":
-      return state.playing ? state : { ...state, playing: true };
+      return state.playing ? state : { ...state, playing: true, playFrom: action.from };
 
     case "pause":
-      return state.playing ? { ...state, playing: false } : state;
+      return state.playing ? { ...state, playing: false, playFrom: null } : state;
   }
 }
