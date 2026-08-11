@@ -2,8 +2,18 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { TraceStore } from "@reactlens/trace-engine";
 import { createCausality } from "@reactlens/causality";
-import type { ComponentId, TimeTravelEntry, TimeTravelResult } from "@reactlens/protocol";
-import { Panel, configureSourceFetcher } from "@reactlens/devtools/panel";
+import type {
+  ComponentId,
+  SourceLocation,
+  TimeTravelEntry,
+  TimeTravelResult,
+} from "@reactlens/protocol";
+import {
+  Panel,
+  configureSourceFetcher,
+  configureComponentLocator,
+  configureSourceRevealer,
+} from "@reactlens/devtools/panel";
 import type { EditApi, TimeTravelApi } from "@reactlens/devtools/panel";
 import { PANEL_PORT_PREFIX, type EditPrimitive, type PortMessage } from "../transport.js";
 
@@ -25,6 +35,7 @@ function ExtensionPanel() {
     new Map<string, { resolve: (ok: boolean) => void; reject: (err: Error) => void }>(),
   );
   const pendingTravel = useRef(new Map<string, (result: TimeTravelResult) => void>());
+  const pendingLocate = useRef(new Map<string, (loc: SourceLocation | null) => void>());
 
   useEffect(() => {
     let disposed = false;
@@ -61,6 +72,17 @@ function ExtensionPanel() {
               supported: msg.supported,
               failures: msg.failures ?? [],
             });
+          }
+        }
+        if (msg.kind === "locate-source-result") {
+          const pending = pendingLocate.current.get(msg.requestId);
+          if (pending) {
+            pendingLocate.current.delete(msg.requestId);
+            pending(
+              msg.file !== undefined && msg.line !== undefined
+                ? { file: msg.file, line: msg.line, column: msg.column ?? 0 }
+                : null,
+            );
           }
         }
         if (msg.kind === "inspect-picked") {
@@ -231,6 +253,58 @@ function ExtensionPanel() {
     }),
     [travelRequest],
   );
+
+  /**
+   * Ask the page where a component is defined in the shipped bundle. Only
+   * needed on production builds; dev builds answer from _debugStack already.
+   */
+  const locateRequest = useCallback((componentId: ComponentId): Promise<SourceLocation | null> => {
+    return new Promise((resolve) => {
+      const port = portRef.current;
+      if (!port) {
+        resolve(null);
+        return;
+      }
+      const requestId = crypto.randomUUID();
+      pendingLocate.current.set(requestId, resolve);
+      try {
+        port.postMessage({ kind: "locate-source", requestId, componentId } satisfies PortMessage);
+      } catch {
+        pendingLocate.current.delete(requestId);
+        resolve(null);
+        return;
+      }
+      setTimeout(() => {
+        if (!pendingLocate.current.has(requestId)) return;
+        pendingLocate.current.delete(requestId);
+        resolve(null);
+      }, 5_000);
+    });
+  }, []);
+
+  useEffect(() => {
+    configureComponentLocator(locateRequest);
+    return () => configureComponentLocator(undefined);
+  }, [locateRequest]);
+
+  // Production sources live in the inspected page, not on this machine: reveal
+  // them in the browser's own Sources panel, which applies sourcemaps itself.
+  useEffect(() => {
+    configureSourceRevealer(async (file, line, column) => {
+      const panels = chrome.devtools?.panels as
+        | { openResource?: (url: string, line: number, column: number) => void }
+        | undefined;
+      if (!panels?.openResource || !/^https?:\/\//.test(file)) return false;
+      try {
+        // DevTools counts from zero; our locations are 1-based lines.
+        panels.openResource(file, Math.max(0, line - 1), Math.max(0, column));
+        return true;
+      } catch {
+        return false;
+      }
+    });
+    return () => configureSourceRevealer(undefined);
+  }, []);
 
   const onToggleInspect = useCallback(() => {
     setInspecting((on) => {

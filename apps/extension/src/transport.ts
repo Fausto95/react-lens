@@ -43,6 +43,16 @@ export type PageToContent =
       mode?: "react" | "dom";
       error?: string;
     }
+  /** Where a component is defined inside the shipped bundle (production builds). */
+  | {
+      source: typeof PAGE_SOURCE;
+      kind: "locate-source-result";
+      requestId: string;
+      componentId: ComponentId;
+      file?: string;
+      line?: number;
+      column?: number;
+    }
   /** Ack for a time-travel apply/go-live (entry ids are JSON-safe numbers). */
   | {
       source: typeof PAGE_SOURCE;
@@ -95,7 +105,13 @@ export type ContentToPage =
       /** Cursor time — lets the page rewind registered store adapters too. */
       atT?: number;
     }
-  | { source: typeof CONTENT_SOURCE; kind: "time-travel-live"; requestId: string };
+  | { source: typeof CONTENT_SOURCE; kind: "time-travel-live"; requestId: string }
+  | {
+      source: typeof CONTENT_SOURCE;
+      kind: "locate-source";
+      requestId: string;
+      componentId: ComponentId;
+    };
 
 /** Port protocol for content ↔ background ↔ panel hops. */
 export type PortMessage =
@@ -145,6 +161,15 @@ export type PortMessage =
       ok: boolean;
       mode?: "react" | "dom";
       error?: string;
+    }
+  | { kind: "locate-source"; requestId: string; componentId: ComponentId }
+  | {
+      kind: "locate-source-result";
+      requestId: string;
+      componentId: ComponentId;
+      file?: string;
+      line?: number;
+      column?: number;
     }
   | { kind: "time-travel-apply"; requestId: string; entries: TimeTravelEntry[]; atT?: number }
   | { kind: "time-travel-live"; requestId: string }

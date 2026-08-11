@@ -46,6 +46,9 @@ import { createTooltipLayer } from "./tooltip.js";
 import "./theme.css";
 
 export { configureSourceFetcher, getSourceResolver } from "./sourceResolver.js";
+export { configureComponentLocator } from "./sourceLocator.js";
+export { configureSourceRevealer } from "./revealSource.js";
+export type { ComponentLocator, LocatedSource } from "./sourceLocator.js";
 export type { EditApi } from "./Inspector.js";
 export type { TimeTravelApi } from "./timeTravelController.js";
 

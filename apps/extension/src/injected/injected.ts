@@ -143,6 +143,20 @@ window.addEventListener("message", (event: MessageEvent) => {
     inspect.start();
   } else if (data.kind === "inspect-stop") {
     inspect.stop();
+  } else if (data.kind === "locate-source") {
+    // Production builds expose no _debugStack: find where the component
+    // function lives in the shipped bundle instead.
+    const loc = fiber.locateComponent(data.componentId);
+    window.postMessage(
+      {
+        source: PAGE_SOURCE,
+        kind: "locate-source-result",
+        requestId: data.requestId,
+        componentId: data.componentId,
+        ...(loc ? { file: loc.file, line: loc.line, column: loc.column } : {}),
+      },
+      "*",
+    );
   } else if (data.kind === "time-travel-apply") {
     const result = instrumentation.timeTravel.apply(data.entries, data.atT);
     window.postMessage(

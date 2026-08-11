@@ -113,6 +113,16 @@ function connect(): void {
         } satisfies ContentToPage,
         "*",
       );
+    } else if (msg.kind === "locate-source") {
+      window.postMessage(
+        {
+          source: CONTENT_SOURCE,
+          kind: "locate-source",
+          requestId: msg.requestId,
+          componentId: msg.componentId,
+        } satisfies ContentToPage,
+        "*",
+      );
     } else if (msg.kind === "time-travel-apply") {
       window.postMessage(
         {
@@ -184,6 +194,17 @@ window.addEventListener("message", (event: MessageEvent) => {
 
   if (data.kind === "snapshot") {
     relayLive({ kind: "snapshot", frame: data.frame });
+    return;
+  }
+  if (data.kind === "locate-source-result") {
+    relayLive({
+      kind: "locate-source-result",
+      requestId: data.requestId,
+      componentId: data.componentId,
+      ...(data.file !== undefined ? { file: data.file } : {}),
+      ...(data.line !== undefined ? { line: data.line } : {}),
+      ...(data.column !== undefined ? { column: data.column } : {}),
+    });
     return;
   }
   if (data.kind === "source") {

@@ -19,6 +19,7 @@ import { DomTab } from "./tabs/DomTab.js";
 import { RelationsTab } from "./tabs/RelationsTab.js";
 import { DoctorTab } from "./tabs/DoctorTab.js";
 import { openResolvedInEditor } from "./openInEditor.js";
+import { revealSource } from "./revealSource.js";
 import { getSourceResolver } from "./sourceResolver.js";
 import { useLocatedSource } from "./useLocatedSource.js";
 import { diagnosticFixPrompt } from "./perfBudget.js";
@@ -200,7 +201,7 @@ export function Inspector({
                   ? `Open in editor · ${located.original.file}:${located.original.line}`
                   : `Bundled at ${located.compiled.file}:${located.compiled.line} — deploy source maps for original paths`
               }
-              onClick={() => openResolvedInEditor(located.compiled, located.original ?? null)}
+              onClick={() => void revealSource(located.compiled, located.original ?? null)}
             >
               {shortSource((located.original ?? located.compiled).file)}:
               {(located.original ?? located.compiled).line}
