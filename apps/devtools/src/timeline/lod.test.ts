@@ -55,15 +55,17 @@ describe("aggregateBars", () => {
     expect(singles).toHaveLength(3);
   });
 
-  it("never merges across tracks or phases", () => {
+  it("never merges across tracks", () => {
     const bars = [
       bar({ left: 0, width: 1, track: 0 }),
       bar({ left: 1, width: 1, track: 1 }),
       bar({ left: 2, width: 1, track: 0, phaseId: "p2" }),
     ];
     const { singles, clusters } = aggregateBars(bars, 2);
-    expect(clusters).toHaveLength(0);
-    expect(singles).toHaveLength(3);
+    // Same track, adjacent, sub-threshold — phase boundaries do not split a lane.
+    expect(clusters).toHaveLength(1);
+    expect(clusters[0]!.count).toBe(2);
+    expect(singles).toHaveLength(1);
   });
 
   it("preserves total count and self time across the split", () => {

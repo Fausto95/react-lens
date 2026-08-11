@@ -130,8 +130,11 @@ function classify(node: HookNode, index: number): RawHook {
   }
 
   // useState / useReducer: has a dispatch queue; memoizedState is the value.
+  // React doesn't tag which — distinguish by probing lastRenderedReducer:
+  // useState's basicStateReducer returns the action when it isn't a function.
   if (node.queue != null) {
-    return { index, kind: "state", value: state };
+    const kind: HookKind = isBasicStateReducer(node.queue) ? "state" : "reducer";
+    return { index, kind, value: state };
   }
 
   // useContext leaves no hook state node in most React builds; a bare value
@@ -206,6 +209,22 @@ function isRefLike(state: unknown): boolean {
 
 function isMemoCache(state: unknown): boolean {
   return Array.isArray(state) && state.some((x) => x === REACT_MEMO_CACHE_SENTINEL);
+}
+
+/**
+ * useState installs React's basicStateReducer, which returns a non-function
+ * action as-is. User reducers almost never do — probe with a sentinel.
+ */
+function isBasicStateReducer(queue: unknown): boolean {
+  if (!queue || typeof queue !== "object") return true;
+  const reducer = (queue as { lastRenderedReducer?: unknown }).lastRenderedReducer;
+  if (typeof reducer !== "function") return true;
+  const sentinel = {};
+  try {
+    return (reducer as (s: unknown, a: unknown) => unknown)(null, sentinel) === sentinel;
+  } catch {
+    return false;
+  }
 }
 
 function isMemoTuple(state: unknown): boolean {

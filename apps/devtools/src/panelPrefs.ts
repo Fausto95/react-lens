@@ -12,11 +12,22 @@ export interface PanelPrefs {
   tlCollapsed: boolean;
   /** Panel color scheme; dark is the historical default. */
   theme: ThemePref;
+  /** Embedded dock width (px); null keeps the CSS default. */
+  dockWidth: number | null;
+  /** Tree/inspector split as a percent of the body width. */
+  splitPct: number;
 }
 
 const KEY = "react-lens/panel-prefs";
 
-const DEFAULTS: PanelPrefs = { travelOn: true, tlPaneH: 250, tlCollapsed: false, theme: "dark" };
+const DEFAULTS: PanelPrefs = {
+  travelOn: true,
+  tlPaneH: 250,
+  tlCollapsed: false,
+  theme: "dark",
+  dockWidth: null,
+  splitPct: 50,
+};
 
 export function loadPanelPrefs(): PanelPrefs {
   try {
@@ -31,6 +42,14 @@ export function loadPanelPrefs(): PanelPrefs {
       theme: THEME_PREFS.includes(parsed.theme as ThemePref)
         ? (parsed.theme as ThemePref)
         : DEFAULTS.theme,
+      dockWidth:
+        typeof parsed.dockWidth === "number" && Number.isFinite(parsed.dockWidth)
+          ? parsed.dockWidth
+          : DEFAULTS.dockWidth,
+      splitPct:
+        typeof parsed.splitPct === "number" && Number.isFinite(parsed.splitPct)
+          ? Math.max(22, Math.min(78, parsed.splitPct))
+          : DEFAULTS.splitPct,
     };
   } catch {
     return { ...DEFAULTS };

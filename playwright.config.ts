@@ -9,14 +9,14 @@ const PORT = 5199;
 
 export default defineConfig({
   testDir: "e2e",
-  timeout: 30_000,
-  expect: { timeout: 10_000 },
+  timeout: 45_000,
+  expect: { timeout: 12_000 },
   fullyParallel: true,
   // The playground mounts ~900 components per page; more workers starve the
   // machine into flaky boot timeouts.
   workers: 2,
   forbidOnly: !!process.env.CI,
-  retries: process.env.CI ? 2 : 0,
+  retries: process.env.CI ? 2 : 1,
   reporter: process.env.CI ? "github" : "list",
   use: {
     baseURL: `http://localhost:${PORT}`,

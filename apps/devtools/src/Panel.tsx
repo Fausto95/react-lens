@@ -699,7 +699,9 @@ function usePaneSplit(): {
   bodyRef: React.RefObject<HTMLDivElement | null>;
   onSplitStart: (e: React.PointerEvent) => void;
 } {
-  const [splitPct, setSplitPct] = useState(50);
+  const [splitPct, setSplitPct] = useState(() => loadPanelPrefs().splitPct);
+  const splitRef = useRef(splitPct);
+  splitRef.current = splitPct;
   const bodyRef = useRef<HTMLDivElement>(null);
   const dragging = useRef(false);
 
@@ -714,6 +716,7 @@ function usePaneSplit(): {
       if (!dragging.current) return;
       dragging.current = false;
       document.body.style.userSelect = "";
+      savePanelPrefs({ splitPct: splitRef.current });
     };
     window.addEventListener("pointermove", move);
     window.addEventListener("pointerup", up);
@@ -744,7 +747,9 @@ function useDockResize(embedded?: boolean): {
   width: number | null;
   onResizeStart: (e: React.PointerEvent) => void;
 } {
-  const [width, setWidth] = useState<number | null>(null);
+  const [width, setWidth] = useState<number | null>(() => loadPanelPrefs().dockWidth);
+  const widthRef = useRef(width);
+  widthRef.current = width;
   const dragging = useRef(false);
 
   useEffect(() => {
@@ -758,6 +763,7 @@ function useDockResize(embedded?: boolean): {
       if (!dragging.current) return;
       dragging.current = false;
       document.body.style.userSelect = "";
+      if (widthRef.current != null) savePanelPrefs({ dockWidth: widthRef.current });
     };
     window.addEventListener("pointermove", onMove);
     window.addEventListener("pointerup", onUp);

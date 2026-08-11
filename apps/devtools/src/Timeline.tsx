@@ -940,6 +940,16 @@ export function Timeline({
                         title={`Commit · ${ms(c.totalSelfTime)} · ${c.componentIds.length} components — double-click to A/B this commit`}
                         onPointerDown={(e) => {
                           e.stopPropagation();
+                          // Alt/Shift A/B marks — same contract as empty-track
+                          // clicks; without this the bar swallows the modifiers.
+                          if (e.altKey) {
+                            onSetAB({ ...ab, a: c.timestamp });
+                            return;
+                          }
+                          if (e.shiftKey) {
+                            onSetAB({ ...ab, b: c.timestamp });
+                            return;
+                          }
                           onCursor({ t: c.timestamp, mode: "historical" });
                           const byId = c.interactionId
                             ? interactions.find((i) => String(i.id) === String(c.interactionId))

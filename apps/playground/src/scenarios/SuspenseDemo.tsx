@@ -37,7 +37,7 @@ function getResource(nonce: number): Resource {
         setTimeout(() => {
           res.status = "done";
           resolve();
-        }, 800),
+        }, 1_200),
       ),
     };
     cache.set(nonce, res);
