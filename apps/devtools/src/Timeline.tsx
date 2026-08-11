@@ -263,23 +263,43 @@ export function Timeline({
         return;
       }
       const durMs = clamp((endX - startX) * 6, 700, 4000);
-      let startWall = performance.now();
+      // Frame-delta pacing, not wall-clock: rAF pauses in hidden tabs and the
+      // travel applies themselves can stretch frames — absolute time would
+      // skip that stretch of the replay (or collapse all of it into one
+      // jump-to-live). A capped per-frame step makes stalls pause playback.
+      let elapsed = 0;
+      let lastWall = performance.now();
+      let lastSentT: number | null = null;
+      const traveling = travel?.on ?? false;
       setPlaying(true);
       const tick = () => {
-        let frac = clamp((performance.now() - startWall) / durMs, 0, 1);
+        const nowWall = performance.now();
+        elapsed += Math.min(nowWall - lastWall, 100);
+        lastWall = nowWall;
+        let frac = clamp(elapsed / durMs, 0, 1);
         if (frac >= 1 && loop) {
-          startWall = performance.now();
+          elapsed = 0;
           frac = 0;
         }
-        const t = projectT(segs, startX + (endX - startX) * frac);
+        const rawT = projectT(segs, startX + (endX - startX) * frac);
+        // With real travel on, commits ARE the replay's frames: the apply set
+        // only changes at commits, so quantize to commit boundaries and apply
+        // each commit as ONE atomic delta. Sweeping smoothly through a
+        // commit's span instead streamed its renders as hundreds of partial
+        // deltas — each a synchronous React flush — which crawled or, under
+        // wall-clock pacing, skipped the replay entirely.
+        const t = traveling ? (store.commitAt(rawT)?.endTimestamp ?? rawT) : rawT;
         const done = frac >= 1 && !loop;
-        onCursor({ t, mode: done ? "live" : "historical" });
+        if (done || t !== lastSentT) {
+          lastSentT = t;
+          onCursor({ t, mode: done ? "live" : "historical" });
+        }
         if (!done) rafRef.current = requestAnimationFrame(tick);
         else setPlaying(false);
       };
       rafRef.current = requestAnimationFrame(tick);
     },
-    [model.segs, bounds.t0, bounds.t1, onCursor],
+    [model.segs, bounds.t0, bounds.t1, onCursor, store, travel?.on],
   );
 
   useEffect(() => () => cancelAnimationFrame(rafRef.current), []);
@@ -715,11 +735,13 @@ export function Timeline({
               onClick={travel.toggle}
               disabled={!travel.supported}
               title={
-                !travel.supported
-                  ? "Time travel requires a development React build"
-                  : travel.on
-                    ? "Time travel on — the page follows the playhead"
-                    : "Time travel off — scrubbing only moves the panel views"
+                offline
+                  ? "Imported session — time travel needs the original live page; showing captured page snapshots instead. Resume recording to go back live."
+                  : !travel.supported
+                    ? "Time travel requires a development React build"
+                    : travel.on
+                      ? "Time travel on — the page follows the playhead"
+                      : "Time travel off — scrubbing only moves the panel views"
               }
               aria-label="Apply state to the page while scrubbing"
               aria-pressed={travel.on}

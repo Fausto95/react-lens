@@ -167,6 +167,26 @@ export function Panel({
   // different app run, so real restoration is disabled and the timeline shows
   // captured page DOM instead.
   const offlineSession = sessionLabel != null;
+  // Importing pauses recording (see the import handlers). If the user resumes,
+  // the first live frame means the store has moved past the imported session —
+  // drop the session view and return to live semantics so travel re-enables.
+  useEffect(() => {
+    if (sessionLabel == null) return;
+    return store.onIngest((batch) => {
+      if (batch.events.length > 0) setSessionLabel(null);
+    });
+  }, [store, sessionLabel]);
+  /** Common post-import state: fresh cursor, no marks, recording paused. */
+  const enterSessionView = useCallback(
+    (label: string) => {
+      setSelected(null);
+      setCursor({ t: 0, mode: "live" });
+      setAB({});
+      setSessionLabel(label);
+      if (recording) onToggleRecording?.();
+    },
+    [recording, onToggleRecording],
+  );
   useEffect(() => {
     travelCtl?.onCursor(cursor, travelOn && travelSupported && !offlineSession);
   }, [travelCtl, cursor, travelOn, travelSupported, offlineSession]);
@@ -343,10 +363,7 @@ export function Panel({
         void loadSessionFromIdb(entry.id).then((file) => {
           if (!file) return;
           importSession(store, file);
-          setSelected(null);
-          setCursor({ t: 0, mode: "live" });
-          setAB({});
-          setSessionLabel(file.meta?.title ?? entry.title);
+          enterSessionView(file.meta?.title ?? entry.title);
         });
       },
     });
@@ -424,10 +441,7 @@ export function Panel({
             if (!file) return;
             void importSessionFromFile(store, file)
               .then((session) => {
-                setSelected(null);
-                setCursor({ t: 0, mode: "live" });
-                setAB({});
-                setSessionLabel(session.meta?.title ?? file.name);
+                enterSessionView(session.meta?.title ?? file.name);
               })
               .catch(() => {
                 /* invalid file — ignore for MVP */
