@@ -55,7 +55,12 @@ export interface RenderStory {
   chain: ChainStep[];
   changes: ChangeRow[];
   refWarning: string | null;
-  cost: { render: number; commit: number; effects: number };
+  /**
+   * What this render cost, in the only terms React actually reports:
+   * its own work, its subtree's, and its effects. There is no per-component
+   * commit time in the profiler, so we don't invent one.
+   */
+  cost: { render: number; subtree: number; effects: number };
   wasted: boolean;
   fix: Fix;
 }
@@ -376,8 +381,7 @@ export function buildRenderStory(
       ? `${identityOnly.join(", ")} ${identityOnly.length === 1 ? "is" : "are"} referentially new but structurally identical — same shape, new reference. Memoized consumers are broken by this.`
       : null;
 
-  // ── Cost: render / commit / effects ───────────────────────────────────────
-  const commit = store.commit(render.commitId);
+  // ── Cost: render / subtree / effects ──────────────────────────────────────
   const effects = store
     .allEvents()
     .filter(
@@ -393,12 +397,11 @@ export function buildRenderStory(
   const residual = Math.max(0, render.totalDuration - render.selfDuration);
   const cost = {
     render: renderMs,
-    // Commit isn't attributed per component; take this fiber's residual tree
-    // time, scaled by its share of the commit when we have totals.
-    commit:
-      commit && commit.totalSelfTime > 0 && renderMs > 0
-        ? residual * (renderMs / commit.totalSelfTime)
-        : residual,
+    // `totalDuration - selfDuration` is the SUBTREE's time, not commit time.
+    // Labelling it "commit" (and scaling it by an arbitrary share of the
+    // commit's total) made a parent component's bar almost entirely one
+    // colour — it read as a progress bar rather than a cost breakdown.
+    subtree: residual,
     effects,
   };
 

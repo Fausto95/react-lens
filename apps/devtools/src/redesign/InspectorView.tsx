@@ -71,9 +71,9 @@ export function InspectorView({
 
   // Sub-ms renders often measure as 0 — still paint a concept-shaped meter
   // (full render slice) so Cost doesn't look broken next to the HTML mock.
-  const measured = story.cost.render + story.cost.commit + story.cost.effects;
-  const phases = measured > 0 ? story.cost : { render: 0.1, commit: 0, effects: 0 };
-  const total = phases.render + phases.commit + phases.effects || 1;
+  const measured = story.cost.render + story.cost.subtree + story.cost.effects;
+  const phases = measured > 0 ? story.cost : { render: 0.1, subtree: 0, effects: 0 };
+  const total = phases.render + phases.subtree + phases.effects || 1;
   const pct = (v: number) => Math.round((v / total) * 100);
 
   return (
@@ -172,7 +172,7 @@ export function InspectorView({
         </div>
         <div className="phases">
           <i style={{ width: `${pct(phases.render)}%`, background: "rgba(76,141,255,.6)" }} />
-          <i style={{ width: `${pct(phases.commit)}%`, background: "rgba(62,207,142,.55)" }} />
+          <i style={{ width: `${pct(phases.subtree)}%`, background: "rgba(62,207,142,.55)" }} />
           <i style={{ width: `${pct(phases.effects)}%`, background: "rgba(167,139,250,.55)" }} />
         </div>
         <div className="plegend">
@@ -180,7 +180,7 @@ export function InspectorView({
             render <em>{formatPhaseMs(story.cost.render, measured === 0)} ms</em>
           </span>
           <span>
-            commit <em>{formatPhaseMs(story.cost.commit)} ms</em>
+            subtree <em>{formatPhaseMs(story.cost.subtree)} ms</em>
           </span>
           <span>
             effects <em>{formatPhaseMs(story.cost.effects)} ms</em>
