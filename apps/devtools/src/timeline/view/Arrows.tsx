@@ -12,6 +12,12 @@ import type { CausalEdge } from "../model/edges.js";
  * Measuring also means an edge whose endpoint isn't drawn (a collapsed group)
  * is simply skipped rather than pointing into empty space.
  */
+/**
+ * Clear horizontal room needed before an edge is routed side-to-side. Below
+ * this the curve would double back, so it drops through the lanes instead.
+ */
+const SIDE_ROUTE_MIN_PX = 24;
+
 export function Arrows({
   edges,
   hostRef,
@@ -36,6 +42,9 @@ export function Arrows({
       return {
         left: r.left - base.left + host.scrollLeft,
         right: r.right - base.left + host.scrollLeft,
+        cx: r.left - base.left + host.scrollLeft + r.width / 2,
+        top: r.top - base.top + host.scrollTop,
+        bottom: r.top - base.top + host.scrollTop + r.height,
         y: r.top - base.top + host.scrollTop + r.height / 2,
       };
     };
@@ -44,9 +53,28 @@ export function Arrows({
       const a = rectOf(edge.from);
       const b = rectOf(edge.to);
       if (!a || !b) continue;
-      const x1 = a.right - 4;
-      const x2 = b.left + 4;
-      next.push(`M ${x1} ${a.y} C ${x1 + 40} ${a.y}, ${x2 - 40} ${b.y}, ${x2} ${b.y}`);
+      const gap = b.left - a.right;
+      if (gap > SIDE_ROUTE_MIN_PX) {
+        // Room to the right: leave the cause's trailing edge and enter the
+        // effect's leading edge, the way the concept draws it.
+        const x1 = a.right - 4;
+        const x2 = b.left + 4;
+        const bend = Math.max(16, Math.min(48, gap / 2));
+        next.push(`M ${x1} ${a.y} C ${x1 + bend} ${a.y}, ${x2 - bend} ${b.y}, ${x2} ${b.y}`);
+      } else {
+        // A synchronous cascade lands in the same millisecond, so the effect
+        // is not to the right of its cause — often slightly left. Routing
+        // edge-to-edge there makes the curve double back on itself and cross
+        // its neighbours. Drop down the lanes instead, which is how a cascade
+        // reads anyway.
+        const down = b.top >= a.bottom;
+        const y1 = down ? a.bottom : a.top;
+        const y2 = down ? b.top : b.bottom;
+        const bend = Math.max(10, Math.min(30, Math.abs(y2 - y1) / 2));
+        const c1 = down ? y1 + bend : y1 - bend;
+        const c2 = down ? y2 - bend : y2 + bend;
+        next.push(`M ${a.cx} ${y1} C ${a.cx} ${c1}, ${b.cx} ${c2}, ${b.cx} ${y2}`);
+      }
     }
     // Identity-stable when unchanged, so measuring cannot loop.
     setPaths((prev) =>
