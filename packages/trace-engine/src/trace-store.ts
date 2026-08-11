@@ -6,6 +6,7 @@ import type {
   InteractionId,
   RenderId,
   CommitId,
+  CommitSnapshot,
   RenderSnapshot,
   EventsBatchMessage,
 } from "@react-lens/protocol";
@@ -28,6 +29,8 @@ export interface TraceStoreConfig {
   maxRendersPerComponent: number;
   maxSnapshots: number;
   maxCommits: number;
+  /** Whole-page DOM snapshots retained for offline replay. */
+  maxCommitSnapshots: number;
 }
 
 const DEFAULTS: TraceStoreConfig = {
@@ -35,6 +38,7 @@ const DEFAULTS: TraceStoreConfig = {
   maxRendersPerComponent: 100,
   maxSnapshots: 5_000,
   maxCommits: 1_000,
+  maxCommitSnapshots: 300,
 };
 
 interface MutableCommit {
@@ -78,6 +82,8 @@ export class TraceStore {
   private readonly eventsByInteractionId = new Map<InteractionId, LensEvent[]>();
   private readonly commitsById = new Map<CommitId, MutableCommit>();
   private readonly commitOrder: RingBuffer<CommitId>;
+  /** Throttled whole-page DOM per commit (offline replay), oldest→newest. */
+  private readonly commitSnapshots: RingBuffer<CommitSnapshot>;
   /** Set when the event ring overwrites a render — commits rebuild on next read/ingest end. */
   private commitsDirty = false;
   /** Materialized commits(), invalidated whenever any commit mutates. */
@@ -90,6 +96,7 @@ export class TraceStore {
     this.events = new RingBuffer<LensEvent>(this.config.maxEvents);
     this.snapshotOrder = new RingBuffer<RenderId>(this.config.maxSnapshots);
     this.commitOrder = new RingBuffer<CommitId>(this.config.maxCommits);
+    this.commitSnapshots = new RingBuffer<CommitSnapshot>(this.config.maxCommitSnapshots);
   }
 
   ingest(batch: EventsBatchMessage["payload"]): void {
@@ -103,6 +110,9 @@ export class TraceStore {
       // On-demand snapshots arrive in their own batch with no events; mark the
       // component touched so subscribers (the Inspector) re-render and read it.
       touched.add(snapshot.componentId);
+    }
+    for (const cs of batch.commitSnapshots ?? []) {
+      this.commitSnapshots.push(cs);
     }
     for (const event of batch.events) {
       this.addEvent(event);
@@ -136,6 +146,7 @@ export class TraceStore {
       events: this.events.toArray(),
       snapshots: [...this.snapshots.values()],
       instances: [...this.instances.values()],
+      commitSnapshots: this.commitSnapshots.toArray(),
     };
   }
 
@@ -360,6 +371,24 @@ export class TraceStore {
     return best;
   }
 
+  /** Whole-page DOM at or before `t` — offline playback for imported sessions. */
+  commitDomAt(t: number): CommitSnapshot | undefined {
+    let lo = 0;
+    let hi = this.commitSnapshots.size - 1;
+    let best: CommitSnapshot | undefined;
+    while (lo <= hi) {
+      const mid = (lo + hi) >> 1;
+      const cs = this.commitSnapshots.at(mid)!;
+      if (cs.timestamp <= t) {
+        best = cs;
+        lo = mid + 1;
+      } else {
+        hi = mid - 1;
+      }
+    }
+    return best;
+  }
+
   stats(): { events: number; renders: number; snapshots: number; components: number } {
     let renders = 0;
     for (const buf of this.rendersByComponent.values()) renders += buf.size;
@@ -419,6 +448,7 @@ export class TraceStore {
     this.eventsByInteractionId.clear();
     this.commitsById.clear();
     this.commitOrder.clear();
+    this.commitSnapshots.clear();
     this.commitsDirty = false;
     this.commitsCache = null;
     // Wake subscribers (Tree/Inspector/Timeline) so they re-render to empty.

@@ -52,6 +52,7 @@ import { buildTicks, compactGap } from "./timeline/ticks.js";
 import { packPhaseBars, type PackedBar } from "./timeline/pack.js";
 import { aggregateBars, visibleChunkRange, type ChunkRange } from "./timeline/lod.js";
 import { ABDiffPanel } from "./timeline/ABDiffPanel.js";
+import { DomSnapshotView } from "./timeline/DomSnapshotView.js";
 import { loadPanelPrefs, savePanelPrefs } from "./panelPrefs.js";
 import { compareApplySets } from "@react-lens/trace-engine";
 
@@ -74,6 +75,7 @@ export function Timeline({
   onSetAB,
   onReplay,
   travel,
+  offline = false,
   onSelectComponent,
   onHighlight,
   onAskAI,
@@ -95,6 +97,8 @@ export function Timeline({
     /** Set-wide restore state (null while live / not traveling). */
     status?: RestoreStatus | null;
   };
+  /** An imported session is loaded — the live page no longer matches it. */
+  offline?: boolean;
   onSelectComponent?: (id: ComponentId) => void;
   /** Highlight DOM hosts on the page (same as tree hover). */
   onHighlight?: (id: ComponentId | null) => void;
@@ -591,6 +595,10 @@ export function Timeline({
   const live = cursor.mode === "live";
   const cursorT = live ? bounds.t1 : cursor.t;
   const restoreStatus = travel?.on && !live ? (travel.status ?? null) : null;
+  // Offline playback: without a live page to restore (imported session, or no
+  // dev-build override API), show the captured page DOM at the cursor instead.
+  const offlineDom =
+    !live && (offline || !travel || !travel.supported) ? store.commitDomAt(cursorT) : undefined;
   const restoreFailures: RestoreFailureItem[] = restoreStatus
     ? [...restoreStatus.failedIds].map(([id, reason]) => ({
         id,
@@ -1028,6 +1036,10 @@ export function Timeline({
             </div>
           </div>
         ))}
+
+      {!collapsed && offlineDom && (
+        <DomSnapshotView dom={offlineDom.dom} atOffsetMs={offlineDom.timestamp - bounds.t0} />
+      )}
 
       {!collapsed && abPanelOpen && abComparison && ab.a !== undefined && ab.b !== undefined && (
         <ABDiffPanel

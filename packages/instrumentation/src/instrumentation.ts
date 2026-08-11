@@ -6,6 +6,7 @@ import type {
   InteractionEvent,
   ComponentId,
   ComponentInstance,
+  CommitSnapshot,
   RenderSnapshot,
   RenderId,
   EventId,
@@ -87,6 +88,8 @@ export function createInstrumentation(deps: {
   let pendingEvents: LensEvent[] = [];
   let pendingSnapshots: RenderSnapshot[] = [];
   let pendingInstances = new Map<ComponentId, ComponentInstance>();
+  let pendingCommitSnapshots: CommitSnapshot[] = [];
+  let lastCommitDomAt = -Infinity;
   let flushScheduled = false;
 
   let currentInteraction: { id: InteractionId; until: number } | null = null;
@@ -103,6 +106,10 @@ export function createInstrumentation(deps: {
   // mount several thousand components in one commit — too small a ring would
   // evict early components' only render before they can be inspected.
   const RETAIN_MAX = 20000;
+  /** At most one whole-page DOM capture per this window (trailing). */
+  const COMMIT_DOM_THROTTLE_MS = 250;
+  /** Page-wide budget: deeper/wider than the per-render default. */
+  const COMMIT_DOM_LIMITS = { maxDepth: 12, maxChildren: 64 };
 
   // Overhead accounting.
   let cpuTimeMs = 0;
@@ -152,6 +159,7 @@ export function createInstrumentation(deps: {
     const renderedSet = new Set(commit.rendered);
     const interactionId = activeInteractionId();
 
+    captureCommitDom(commit);
     for (const id of commit.rendered) {
       const detail = commit.details.get(id);
       const instance = fiber.getInstance(id);
@@ -187,6 +195,20 @@ export function createInstrumentation(deps: {
 
     cpuTimeMs += now() - t0;
     scheduleFlush();
+  }
+
+  /**
+   * Throttled whole-page DOM per commit — the offline replay substrate for
+   * exported sessions. Trailing capture: at most one snapshot per
+   * COMMIT_DOM_THROTTLE_MS, taken at the newest commit inside the window.
+   */
+  function captureCommitDom(commit: CommitObservation): void {
+    if (!config?.captureDOM || !commit.container) return;
+    if (commit.timestamp - lastCommitDomAt < COMMIT_DOM_THROTTLE_MS) return;
+    const dom = snapshotDom(commit.container, COMMIT_DOM_LIMITS);
+    if (!dom) return;
+    lastCommitDomAt = commit.timestamp;
+    pendingCommitSnapshots.push({ commitId: commit.commitId, timestamp: commit.timestamp, dom });
   }
 
   function retain(
@@ -373,12 +395,18 @@ export function createInstrumentation(deps: {
   function flush(): void {
     flushScheduled = false;
     if (!config) return;
-    if (pendingEvents.length === 0 && pendingSnapshots.length === 0) return;
+    if (
+      pendingEvents.length === 0 &&
+      pendingSnapshots.length === 0 &&
+      pendingCommitSnapshots.length === 0
+    )
+      return;
 
     const frame: EventsBatchMessage["payload"] = {
       events: pendingEvents,
       snapshots: pendingSnapshots,
       instances: [...pendingInstances.values()],
+      ...(pendingCommitSnapshots.length > 0 ? { commitSnapshots: pendingCommitSnapshots } : {}),
     };
     eventsInWindow += pendingEvents.length;
     bytesInWindow += approxBytes(frame);
@@ -386,6 +414,7 @@ export function createInstrumentation(deps: {
     pendingEvents = [];
     pendingSnapshots = [];
     pendingInstances = new Map();
+    pendingCommitSnapshots = [];
 
     config.onFrame(frame);
     maybeReportOverhead();

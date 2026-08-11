@@ -34,6 +34,8 @@ export type Dispose = () => void;
 export interface CommitObservation extends CommitInfo {
   /** Per-rendered-component reasons + timing, derived from the fiber pair. */
   details: Map<ComponentId, RenderDetail>;
+  /** The root's DOM container, when the renderer exposes it (commit DOM capture). */
+  container?: Node;
 }
 
 export interface RenderDetail {
@@ -421,6 +423,8 @@ export function createFiberBridge(target: typeof globalThis = globalThis): Fiber
       rendered,
       details,
     };
+    const container = (root.current.stateNode as { containerInfo?: Node } | null)?.containerInfo;
+    if (container) observation.container = container;
     for (const cb of commitListeners) cb(observation);
   }
 

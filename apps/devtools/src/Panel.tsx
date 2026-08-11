@@ -163,9 +163,13 @@ export function Panel({
     [store, timeTravel],
   );
   useEffect(() => () => travelCtl?.dispose(), [travelCtl]);
+  // Imported sessions never drive the live page: their renderIds belong to a
+  // different app run, so real restoration is disabled and the timeline shows
+  // captured page DOM instead.
+  const offlineSession = sessionLabel != null;
   useEffect(() => {
-    travelCtl?.onCursor(cursor, travelOn && travelSupported);
-  }, [travelCtl, cursor, travelOn, travelSupported]);
+    travelCtl?.onCursor(cursor, travelOn && travelSupported && !offlineSession);
+  }, [travelCtl, cursor, travelOn, travelSupported, offlineSession]);
 
   // Time sync: when scrubbed into the past, dim tree components that weren't in
   // the commit at the cursor (reuses the Freeze-Frame styling).
@@ -518,13 +522,14 @@ export function Panel({
         selectedComponent={selected}
         explainToken={explainToken}
         onAskAI={askAI}
+        offline={offlineSession}
         {...(onHighlight ? { onHighlight } : {})}
         {...(onReplayCommit ? { onReplay: onReplayCommit } : {})}
         {...(timeTravel
           ? {
               travel: {
-                on: travelOn && travelSupported,
-                supported: travelSupported,
+                on: travelOn && travelSupported && !offlineSession,
+                supported: travelSupported && !offlineSession,
                 toggle: () => setTravelOn((v) => !v),
                 status: restoreStatus,
               },

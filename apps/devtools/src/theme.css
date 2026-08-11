@@ -758,6 +758,41 @@
 
 .rl-tl-ab-btn { font-variant-numeric: tabular-nums; white-space: nowrap; }
 
+/* Offline playback: structural page DOM at the cursor (imported sessions). */
+.rl-tl-domsnap {
+  border-top: 1px solid var(--rl-border);
+  background: var(--rl-bg);
+  max-height: 160px;
+  display: flex;
+  flex-direction: column;
+}
+.rl-tl-domsnap-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px var(--rl-s4);
+  margin: 0;
+  border: none;
+  background: transparent;
+  color: var(--rl-text-dim);
+  font-size: 10px;
+  text-align: left;
+  cursor: pointer;
+}
+.rl-tl-domsnap-caret { width: 10px; }
+.rl-tl-domsnap-hint { color: var(--rl-text-faint); margin-left: 6px; }
+.rl-tl-domsnap-tree {
+  overflow: auto;
+  padding: 0 var(--rl-s4) 6px;
+  font-family: var(--rl-mono, ui-monospace, monospace);
+  font-size: 10px;
+  line-height: 1.5;
+}
+.rl-tl-domsnap-tag { color: var(--rl-network, #7aa2f7); }
+.rl-tl-domsnap-attr { color: var(--rl-text-faint); margin-left: 4px; }
+.rl-tl-domsnap-inline, .rl-tl-domsnap-text { color: var(--rl-text-dim); margin-left: 6px; }
+.rl-tl-domsnap-more { color: var(--rl-text-faint); padding: 2px 0; }
+
 /* A→B apply-set diff panel (sits in the selection-strip slot). */
 .rl-tl-abpanel {
   border-top: 1px solid var(--rl-border);

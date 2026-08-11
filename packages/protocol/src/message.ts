@@ -1,6 +1,6 @@
 import type { LensEvent } from "./events.js";
 import type { ComponentInstance } from "./component.js";
-import type { RenderSnapshot } from "./snapshot.js";
+import type { CommitSnapshot, RenderSnapshot } from "./snapshot.js";
 import type { ComponentId, RenderId } from "./ids.js";
 
 /** Current protocol version. Runtime and panel will drift; this gates it. */
@@ -21,7 +21,13 @@ export type HelloMessage = LensMessage<
 /** The primary high-frequency channel: batched events + their snapshots. */
 export type EventsBatchMessage = LensMessage<
   "events/batch",
-  { events: LensEvent[]; snapshots: RenderSnapshot[]; instances: ComponentInstance[] }
+  {
+    events: LensEvent[];
+    snapshots: RenderSnapshot[];
+    instances: ComponentInstance[];
+    /** Throttled whole-page DOM per commit (offline replay). Optional — no version bump. */
+    commitSnapshots?: CommitSnapshot[];
+  }
 >;
 
 /** Panel asks the runtime for a specific snapshot on demand. */

@@ -1,4 +1,4 @@
-import type { ComponentId, ComponentType, RenderId } from "./ids.js";
+import type { CommitId, ComponentId, ComponentType, RenderId } from "./ids.js";
 import type { SerializedValue } from "./value.js";
 
 export interface DOMNodeSnapshot {
@@ -10,6 +10,17 @@ export interface DOMNodeSnapshot {
 
 export interface DOMSnapshot {
   root: DOMNodeSnapshot;
+}
+
+/**
+ * Whole-page DOM at a commit, throttled — the offline playback substrate.
+ * Imported sessions cannot restore live state, but they can show what the
+ * page looked like at the cursor.
+ */
+export interface CommitSnapshot {
+  commitId: CommitId;
+  timestamp: number;
+  dom: DOMSnapshot;
 }
 
 export type HookKind =

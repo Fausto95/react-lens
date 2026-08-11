@@ -3,7 +3,7 @@ import { snapshotDom } from "./dom-snapshot.js";
 
 function deepTree(depth: number): HTMLElement {
   const root = document.createElement("div");
-  let cur = root;
+  let cur: HTMLElement = root;
   for (let i = 0; i < depth; i++) {
     const child = document.createElement("section");
     child.setAttribute("data-level", String(i));
@@ -34,7 +34,8 @@ describe("snapshotDom limits", () => {
       node = node.children[0];
       depth++;
     }
-    expect(depth).toBe(10);
+    // 10 nested sections + the leaf text node.
+    expect(depth).toBe(11);
     expect(node.text).toBe("leaf");
   });
 
