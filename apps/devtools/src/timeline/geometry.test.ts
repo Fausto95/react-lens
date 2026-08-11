@@ -18,10 +18,14 @@ const span = (start: number, end: number) => ({ start, end });
 
 describe("mergeActive", () => {
   it("merges spans separated by at most the idle gap", () => {
-    const merged = mergeActive([span(0, 100), span(100 + IDLE_GAP_MS, 600), span(650, 700)]);
+    const merged = mergeActive([
+      span(0, 100),
+      span(100 + IDLE_GAP_MS, 600), // exactly at the gap → merges
+      span(600 + IDLE_GAP_MS + 1, 1200), // past the gap → separate
+    ]);
     expect(merged).toEqual([
       [0, 600],
-      [650, 700],
+      [600 + IDLE_GAP_MS + 1, 1200],
     ]);
   });
 

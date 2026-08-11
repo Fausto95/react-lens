@@ -67,7 +67,7 @@ describe("packPhaseBars", () => {
     componentId: comp as ComponentId,
     selfDuration: self,
     totalDuration: self,
-    reasons: [{ type: "state", componentId: comp as ComponentId }],
+    reasons: [{ type: "state", hookIndex: 0 }],
     compiler: { compiled: false, memoized: false },
   });
   const inst = (id: number, name: string): ComponentInstance => ({
@@ -94,7 +94,13 @@ describe("packPhaseBars", () => {
       end: 110,
       renderIds: [10, 11] as RenderId[],
       commitIds: [1] as CommitId[],
-      metrics: { totalDuration: 10, reactDuration: 5, renderCount: 2, commitCount: 1 },
+      metrics: {
+        totalDuration: 10,
+        reactDuration: 5,
+        renderCount: 2,
+        stateUpdates: 1,
+        componentIds: [1 as ComponentId, 2 as ComponentId],
+      },
     };
     return { store, causality, interaction };
   }

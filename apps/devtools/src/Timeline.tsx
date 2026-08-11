@@ -32,6 +32,24 @@ import type { RestoreStatus } from "./timeTravelController.js";
 import { NarrativeCard } from "./NarrativeCard.js";
 import { diagnoseOne } from "./doctor.js";
 import { RestoreStatusPill, type RestoreFailureItem } from "./timeline/RestoreStatusPill.js";
+import {
+  INNER_RIGHT_PAD,
+  SCALE_MAX,
+  SCALE_MIN,
+  buildScale,
+  clamp,
+  countIdleGutters,
+  IDLE_WIDTH,
+  mergeActive,
+  nearest,
+  projectT,
+  projectX,
+  scaleForProjectedWidth,
+  sessionBounds,
+  stickyLabelShift,
+} from "./timeline/geometry.js";
+import { buildTicks, compactGap } from "./timeline/ticks.js";
+import { packPhaseBars, type PackedBar } from "./timeline/pack.js";
 
 type Mode = "collapsed" | "compact" | "expanded";
 /** Open sizes always include the phase waterfall; collapsed hides the tracks. */
@@ -41,11 +59,6 @@ const NEXT_MODE: Record<Mode, Mode> = {
   expanded: "collapsed",
 };
 const SNAP_PX = 6;
-const WHY_CAP = 80;
-/** Manual / fit zoom ceiling (px per ms). Short interactions need headroom past 200. */
-const SCALE_MAX = 5000;
-/** Floor (px per ms) for zoom controls. */
-const SCALE_MIN = 0.01;
 
 /**
  * Video-editor-style time machine: interaction / commit tracks plus a
@@ -761,7 +774,6 @@ export function Timeline({
                               xOf(it.start),
                               Math.max(3, xOf(it.end) - xOf(it.start)),
                               scrollLeft,
-                              8,
                             )}px)`,
                           }}
                         >
@@ -1329,7 +1341,7 @@ function PhaseWaterfall({
                   <span
                     className="rl-wf-bar-label"
                     style={{
-                      transform: `translateX(${stickyLabelShift(bar.left, bar.width, scrollLeft, 12)}px)`,
+                      transform: `translateX(${stickyLabelShift(bar.left, bar.width, scrollLeft)}px)`,
                     }}
                   >
                     {bar.name}
@@ -1377,202 +1389,10 @@ function PhaseWaterfall({
 const PHASE_PAD_Y = 8;
 const TRACK_H = 28;
 const BAR_H = 22;
-const PHASE_BAR_CAP = 64;
-/** Minimum clickable width when a render is sub-pixel on the scale. */
-const MIN_BAR_PX = 3;
 /** Below this box width the label moves outside the bar (flame-chart style). */
 const LABEL_MIN_PX = 56;
 /** Minimum free run on the track before an outside label is worth drawing. */
 const OUT_LABEL_MIN_ROOM = 40;
-/** Right-edge breathing room so end-of-session boxes and labels never crop. */
-const INNER_RIGHT_PAD = 90;
-
-/** Keep a bar label in the visible scrollport while the bar itself is on-screen. */
-function stickyLabelShift(
-  barLeft: number,
-  barWidth: number,
-  scrollLeft: number,
-  _pad = 0,
-): number {
-  const hidden = scrollLeft - barLeft;
-  if (hidden <= 0) return 0;
-  // Leave room so the label doesn't shove the trailing ms off the bar.
-  const maxShift = Math.max(0, barWidth - 56);
-  return Math.min(hidden, maxShift);
-}
-
-interface PackedBar {
-  id: ComponentId;
-  renderId: RenderId;
-  name: string;
-  phaseId: string;
-  phaseLabel: string;
-  t0: number;
-  t1: number;
-  self: number;
-  heat: number;
-  wasted: boolean;
-  reason: string;
-  track: number;
-  left: number;
-  width: number;
-  /** Free px after this box before the next bar on the same track. */
-  labelRoom: number;
-}
-
-interface PackedPhase {
-  id: string;
-  label: string;
-  left: number;
-  width: number;
-  barCount: number;
-  renderCount: number;
-}
-
-function packPhaseBars(
-  store: TraceStore,
-  causality: Causality,
-  interactions: Interaction[],
-  xOf: (t: number) => number,
-): { phases: PackedPhase[]; bars: PackedBar[]; trackCount: number } {
-  const phases: PackedPhase[] = [];
-  const bars: PackedBar[] = [];
-  let trackCount = 1;
-  let whyChecked = 0;
-
-  type Agg = {
-    id: ComponentId;
-    renderId: RenderId;
-    name: string;
-    t0: number;
-    t1: number;
-    self: number;
-    wasted: boolean;
-    reason: string;
-    left: number;
-    width: number;
-  };
-
-  for (const it of interactions) {
-    const phaseLeft = xOf(it.start);
-    const phaseRight = xOf(Math.max(it.end, it.start + 0.05));
-    const phaseWidth = Math.max(8, phaseRight - phaseLeft);
-
-    const items: Agg[] = [];
-
-    for (const rid of it.renderIds) {
-      const r = store.getRender(rid);
-      if (!r) continue;
-      const name = store.instance(r.componentId)?.name ?? `#${r.componentId}`;
-      const t0 = r.timestamp;
-      const t1 = r.timestamp + Math.max(r.selfDuration, 0.05);
-      let wasted = false;
-      if (whyChecked < WHY_CAP) {
-        whyChecked++;
-        try {
-          wasted = causality.why(r.renderId).verdict === "no-observable-change";
-        } catch {
-          /* ignore */
-        }
-      }
-      const left = xOf(t0);
-      const width = Math.max(MIN_BAR_PX, xOf(t1) - left);
-      items.push({
-        id: r.componentId,
-        renderId: r.renderId,
-        name,
-        t0,
-        t1,
-        self: r.selfDuration,
-        wasted,
-        reason: r.reasons[0]?.type ?? "render",
-        left,
-        width,
-      });
-    }
-
-    // Prefer costliest renders when capped; layout still follows wall-clock.
-    const ranked = [...items].sort((a, b) => b.self - a.self).slice(0, PHASE_BAR_CAP);
-
-    phases.push({
-      id: it.id,
-      label: it.label,
-      left: phaseLeft,
-      width: phaseWidth,
-      barCount: ranked.length,
-      renderCount: items.length,
-    });
-
-    if (ranked.length === 0) continue;
-
-    const maxSelf = Math.max(0, ...ranked.map((a) => a.self));
-    // Pack tracks by visible pixel span so min-width bars don't overlap.
-    const packedItems = greedyPack(
-      ranked.map((item) => ({
-        item,
-        t0: item.left,
-        t1: item.left + item.width,
-      })),
-    );
-    for (const packed of packedItems) {
-      const item = packed.item;
-      trackCount = Math.max(trackCount, packed.track + 1);
-      bars.push({
-        id: item.id,
-        renderId: item.renderId,
-        name: item.name,
-        phaseId: it.id,
-        phaseLabel: it.label,
-        t0: item.t0,
-        t1: item.t1,
-        self: item.self,
-        heat: maxSelf <= 0 ? 1 : item.self / maxSelf,
-        wasted: item.wasted,
-        reason: item.reason,
-        track: packed.track,
-        left: item.left,
-        width: item.width,
-        labelRoom: Number.POSITIVE_INFINITY,
-      });
-    }
-  }
-
-  // Free run after each box on its track — decides where outside labels fit.
-  const byTrack = new Map<number, PackedBar[]>();
-  for (const bar of bars) {
-    const list = byTrack.get(bar.track) ?? [];
-    list.push(bar);
-    byTrack.set(bar.track, list);
-  }
-  for (const list of byTrack.values()) {
-    list.sort((a, b) => a.left - b.left);
-    for (let i = 0; i < list.length - 1; i++) {
-      list[i]!.labelRoom = Math.max(0, list[i + 1]!.left - (list[i]!.left + list[i]!.width) - 6);
-    }
-  }
-
-  return { phases, bars, trackCount };
-}
-
-/** Assign non-overlapping tracks (greedy). Intervals are display px here. */
-function greedyPack<T extends { t0: number; t1: number }>(
-  items: T[],
-): Array<T & { track: number }> {
-  const sorted = [...items].sort(
-    (a, b) => a.t0 - b.t0 || b.t1 - b.t0 - (a.t1 - a.t0),
-  );
-  const trackEnds: number[] = [];
-  return sorted.map((item) => {
-    let track = trackEnds.findIndex((end) => end <= item.t0 + 0.5);
-    if (track < 0) {
-      track = trackEnds.length;
-      trackEnds.push(item.t1);
-    } else {
-      trackEnds[track] = item.t1;
-    }
-    return { ...item, track };
-  });
-}
 
 function componentRgb(id: ComponentId): string {
   return PALETTE[Math.abs(Number(id)) % PALETTE.length]!;
@@ -1597,236 +1417,6 @@ function intColor(it: Interaction, i: number): string {
   return PALETTE[i % PALETTE.length]!;
 }
 
-const IDLE_GAP_MS = 400;
-const IDLE_WIDTH = 34;
-
-interface Seg {
-  t0: number;
-  t1: number;
-  x0: number;
-  x1: number;
-  idle: boolean;
-}
-interface TimeScale {
-  segs: Seg[];
-  width: number;
-}
-
-function mergeActive(interactions: Interaction[]): Array<[number, number]> {
-  const ivals = interactions
-    .map((i) => [i.start, Math.max(i.end, i.start + 1)] as [number, number])
-    .sort((a, b) => a[0] - b[0]);
-  const merged: Array<[number, number]> = [];
-  for (const [s, e] of ivals) {
-    const last = merged[merged.length - 1];
-    if (last && s - last[1] <= IDLE_GAP_MS) last[1] = Math.max(last[1], e);
-    else merged.push([s, e]);
-  }
-  return merged;
-}
-
-function countIdleGutters(active: Array<[number, number]>, t0: number, t1: number): number {
-  let n = 0;
-  let cursor = t0;
-  for (const [s, e] of active) {
-    if (s > cursor) n++;
-    cursor = e;
-  }
-  if (t1 > cursor) n++;
-  return n;
-}
-
-function buildScale(
-  active: Array<[number, number]>,
-  t0: number,
-  t1: number,
-  px: number,
-  /** When set (auto-fit), stretch so total width matches the viewport. */
-  fillWidth?: number,
-): TimeScale {
-  const segs: Seg[] = [];
-  let x = 0;
-  let cursor = t0;
-  const push = (a: number, b: number, w: number, idle: boolean) => {
-    segs.push({ t0: a, t1: b, x0: x, x1: x + w, idle });
-    x += w;
-  };
-  for (const [s, e] of active) {
-    if (s > cursor) push(cursor, s, IDLE_WIDTH, true);
-    push(s, e, Math.max(4, (e - s) * px), false);
-    cursor = e;
-  }
-  if (t1 > cursor) push(cursor, t1, IDLE_WIDTH, true);
-  if (segs.length === 0) push(t0, t1, Math.max(320, (t1 - t0) * px), false);
-
-  // Auto-fit: if rounding/`Math.max(4, …)` left us short, pad the last active seg.
-  if (fillWidth !== undefined && x < fillWidth && segs.length > 0) {
-    const pad = fillWidth - x;
-    let target = -1;
-    for (let i = segs.length - 1; i >= 0; i--) {
-      if (!segs[i]!.idle) {
-        target = i;
-        break;
-      }
-    }
-    if (target < 0) target = segs.length - 1;
-    for (let i = target; i < segs.length; i++) {
-      const s = segs[i]!;
-      if (i === target) {
-        s.x1 += pad;
-      } else {
-        s.x0 += pad;
-        s.x1 += pad;
-      }
-    }
-    x = fillWidth;
-  }
-
-  return { segs, width: fillWidth !== undefined ? Math.max(x, fillWidth) : Math.max(320, x) };
-}
-
-function projectX(segs: Seg[], t: number): number {
-  for (const s of segs) {
-    if (t <= s.t1) {
-      const frac = s.t1 === s.t0 ? 0 : (t - s.t0) / (s.t1 - s.t0);
-      return s.x0 + clamp(frac, 0, 1) * (s.x1 - s.x0);
-    }
-  }
-  const last = segs[segs.length - 1];
-  return last ? last.x1 : 0;
-}
-
-/**
- * Solve for px/ms so the projected width of [rangeStart, rangeEnd] matches
- * `targetWidth` under the compressed (idle-gutter) scale.
- */
-function scaleForProjectedWidth(
-  active: Array<[number, number]>,
-  t0: number,
-  t1: number,
-  rangeStart: number,
-  rangeEnd: number,
-  targetWidth: number,
-): number {
-  const widthAt = (px: number) => {
-    const model = buildScale(active, t0, t1, px);
-    return projectX(model.segs, rangeEnd) - projectX(model.segs, rangeStart);
-  };
-  // Monotone in px for ranges that fall on active time; binary-search the match.
-  let lo = SCALE_MIN;
-  let hi = SCALE_MAX;
-  if (widthAt(lo) >= targetWidth) return lo;
-  if (widthAt(hi) <= targetWidth) return hi;
-  for (let i = 0; i < 28; i++) {
-    const mid = (lo + hi) / 2;
-    if (widthAt(mid) < targetWidth) lo = mid;
-    else hi = mid;
-  }
-  return clamp((lo + hi) / 2, SCALE_MIN, SCALE_MAX);
-}
-
-function projectT(segs: Seg[], x: number): number {
-  for (const s of segs) {
-    if (x <= s.x1) {
-      const frac = s.x1 === s.x0 ? 0 : (x - s.x0) / (s.x1 - s.x0);
-      return s.t0 + clamp(frac, 0, 1) * (s.t1 - s.t0);
-    }
-  }
-  const last = segs[segs.length - 1];
-  return last ? last.t1 : 0;
-}
-
-function sessionBounds(
-  interactions: Interaction[],
-  commits: CommitSummary[],
-): { t0: number; t1: number; span: number } {
-  let t0 = Infinity;
-  let t1 = -Infinity;
-  for (const it of interactions) {
-    t0 = Math.min(t0, it.start);
-    t1 = Math.max(t1, it.end);
-  }
-  for (const c of commits) {
-    t0 = Math.min(t0, c.timestamp);
-    t1 = Math.max(t1, c.timestamp);
-  }
-  if (!isFinite(t0)) {
-    t0 = 0;
-    t1 = 1;
-  }
-  return { t0, t1, span: Math.max(1, t1 - t0) };
-}
-
-function buildTicks(segs: Seg[], t0: number): Array<{ x: number; major: boolean; label: string }> {
-  const ticks: Array<{ x: number; t: number; major: boolean; label: string }> = [];
-  const seenX = new Set<number>();
-  const pushTick = (t: number, major: boolean) => {
-    const x = Math.round(projectX(segs, t) * 10) / 10;
-    if (seenX.has(x)) return;
-    seenX.add(x);
-    ticks.push({ x, t, major, label: "" });
-  };
-
-  // Boundary ticks for every scale segment (active + idle) so gutters aren't blank.
-  for (const s of segs) {
-    pushTick(s.t0, true);
-    pushTick(s.t1, true);
-  }
-
-  // Interior ticks only on active time — idle is already a single compressed cell.
-  for (const s of segs) {
-    if (s.idle) continue;
-    const span = s.t1 - s.t0;
-    const pxSpan = Math.max(1, s.x1 - s.x0);
-    // ~1 tick per 48px → a label can sit between adjacent tick lines.
-    const targetSteps = Math.max(1, Math.floor(pxSpan / 48));
-    const step = niceStep(span / targetSteps);
-    // Walk from the first step strictly inside the segment (edges already added).
-    let t = Math.ceil((s.t0 + step * 0.25) / step) * step;
-    while (t < s.t1 - step * 0.25) {
-      pushTick(t, false);
-      t += step;
-    }
-  }
-
-  ticks.sort((a, b) => a.x - b.x);
-
-  // Label every tick that has room — not only "major" — so each cell gets a time.
-  let lastLabelX = -Infinity;
-  let lastLabelText = "";
-  for (const tick of ticks) {
-    if (tick.x - lastLabelX < 40) continue;
-    const label = timeAxis(tick.t - t0);
-    // Gutter boundaries sit close in time; identical rounded labels are noise.
-    if (label === lastLabelText) continue;
-    tick.label = label;
-    tick.major = true;
-    lastLabelX = tick.x;
-    lastLabelText = label;
-  }
-  return ticks.map(({ x, major, label }) => ({ x, major, label }));
-}
-
-function niceStep(raw: number): number {
-  if (raw <= 0) return 1;
-  const pow = Math.pow(10, Math.floor(Math.log10(raw)));
-  const n = raw / pow;
-  if (n < 1.5) return pow;
-  if (n < 3.5) return 2 * pow;
-  if (n < 7.5) return 5 * pow;
-  return 10 * pow;
-}
-
-/** Short gap label for the 34px idle gutter. */
-function compactGap(msVal: number): string {
-  if (msVal >= 60_000) return `${Math.round(msVal / 60_000)}m`;
-  if (msVal >= 1000) {
-    const s = msVal / 1000;
-    return s >= 10 ? `${Math.round(s)}s` : `${s.toFixed(1)}s`;
-  }
-  return `${Math.round(msVal)}ms`;
-}
-
 function heatScale(value: number, max: number): number {
   if (max <= 0) return 0;
   return Math.log1p(value) / Math.log1p(max);
@@ -1839,24 +1429,6 @@ function heatColor(msVal: number): string {
   return "rgb(248,113,113)";
 }
 
-function nearest(interactions: Interaction[], t: number): Interaction | null {
-  let best: Interaction | null = null;
-  let dist = Infinity;
-  for (const it of interactions) {
-    const d = t < it.start ? it.start - t : t > it.end ? t - it.end : 0;
-    if (d < dist) {
-      dist = d;
-      best = it;
-    }
-  }
-  return best;
-}
-
-function clamp(v: number, lo: number, hi: number): number {
-  return Math.max(lo, Math.min(hi, v));
-}
-
-/** Chronological unique component ids across commits from `fromT` onward. */
 function sessionComponentIds(commits: CommitSummary[], fromT = -Infinity): ComponentId[] {
   const out: ComponentId[] = [];
   const seen = new Set<ComponentId>();
