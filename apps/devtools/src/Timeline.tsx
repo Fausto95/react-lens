@@ -728,6 +728,7 @@ export function Timeline({
           >
             <IconSkipForward size={13} />
           </button>
+          <span className="rl-zoom-sep" />
           {travel && (
             <button
               className={`rl-icon-btn rl-tl-travel${travel.on ? " active" : ""}`}
@@ -759,7 +760,7 @@ export function Timeline({
           <button
             className="rl-icon-btn"
             onClick={() => zoomButtons(0.8)}
-            title="Zoom out"
+            title="Zoom out (-) · ⌘scroll"
             aria-label="Zoom out"
           >
             <IconMinus size={13} />
@@ -767,7 +768,7 @@ export function Timeline({
           <button
             className="rl-icon-btn"
             onClick={() => zoomButtons(1.25)}
-            title="Zoom in"
+            title="Zoom in (+) · ⌘scroll"
             aria-label="Zoom in"
           >
             <IconPlus size={13} />
@@ -927,7 +928,7 @@ export function Timeline({
                         type="button"
                         className={`rl-tl-bar-hit${bad ? " anomaly" : ""}`}
                         style={{ left: xOf(c.timestamp) }}
-                        title={`Commit · ${ms(c.totalSelfTime)} · ${c.componentIds.length} components`}
+                        title={`Commit · ${ms(c.totalSelfTime)} · ${c.componentIds.length} components — double-click to A/B this commit`}
                         onPointerDown={(e) => {
                           e.stopPropagation();
                           onCursor({ t: c.timestamp, mode: "historical" });
@@ -938,6 +939,19 @@ export function Timeline({
                             (i) => c.timestamp >= i.start && c.timestamp <= i.end,
                           );
                           setSelectedId(byId?.id ?? byTime?.id ?? null);
+                        }}
+                        onDoubleClick={(e) => {
+                          // A/B around this one commit: A = the state just
+                          // before it, B = just after — the diff is exactly
+                          // what this commit changed.
+                          e.stopPropagation();
+                          const idx = commits.findIndex((x) => x.commitId === c.commitId);
+                          const prev = idx > 0 ? commits[idx - 1]! : null;
+                          onSetAB({
+                            a: prev ? prev.endTimestamp : Math.max(bounds.t0, c.timestamp - 0.1),
+                            b: c.endTimestamp,
+                          });
+                          setAbPanelOpen(true);
                         }}
                       >
                         <span
