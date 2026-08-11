@@ -81,3 +81,49 @@ describe("statsInRegion", () => {
     expect(stats.selfMs).toBe(4);
   });
 });
+
+describe("statsInRegion — per instance", () => {
+  const id = (n: number) => n as Clip["componentId"];
+  /** One type, three instances — the shape that made the tree lie. */
+  const shared = lane("t:Insertion", [
+    clip({ renderId: 1 as Clip["renderId"], t0: 0, t1: 5, componentId: id(10) }),
+    clip({ renderId: 2 as Clip["renderId"], t0: 10, t1: 15, componentId: id(10) }),
+    clip({ renderId: 3 as Clip["renderId"], t0: 20, t1: 25, componentId: id(11) }),
+    clip({ renderId: 4 as Clip["renderId"], t0: 30, t1: 35, componentId: id(12), wasted: true }),
+  ]);
+
+  it("attributes renders to the instance that rendered, not the type", () => {
+    // The reported defect: every instance row showed the type's total, so a
+    // single <Insertion> in a Chakra app claimed all 1409 of them.
+    const { byComponent } = statsInRegion([shared], 0, 100);
+    expect(byComponent.get(id(10))?.renders).toBe(2);
+    expect(byComponent.get(id(11))?.renders).toBe(1);
+    expect(byComponent.get(id(12))?.renders).toBe(1);
+  });
+
+  it("still reports the type total, for group and lane rows", () => {
+    const stats = statsInRegion([shared], 0, 100);
+    expect(stats.byLane.get("t:Insertion" as LaneKey)?.renders).toBe(4);
+    // The parts add up to the whole — the two views cannot drift apart.
+    const summed = [...stats.byComponent.values()].reduce((n, v) => n + v.renders, 0);
+    expect(summed).toBe(stats.renders);
+  });
+
+  it("scopes per-instance counts to the region like everything else", () => {
+    const { byComponent } = statsInRegion([shared], 0, 12);
+    expect(byComponent.get(id(10))?.renders).toBe(2);
+    expect(byComponent.has(id(11))).toBe(false);
+  });
+
+  it("tracks waste and self time per instance", () => {
+    const { byComponent } = statsInRegion([shared], 0, 100);
+    expect(byComponent.get(id(12))?.wasted).toBe(1);
+    expect(byComponent.get(id(10))?.selfMs).toBe(2);
+  });
+
+  it("drops waste from the instance rows under the fix preview too", () => {
+    const { byComponent } = statsInRegion([shared], 0, 100, { excludeWasted: true });
+    expect(byComponent.has(id(12))).toBe(false);
+    expect(byComponent.get(id(10))?.renders).toBe(2);
+  });
+});
