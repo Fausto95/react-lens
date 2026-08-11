@@ -305,6 +305,7 @@
 .rl-pip.waste { background: var(--rl-suspicious); }
 .rl-pip.suspended { background: var(--rl-warn); opacity: 0.7; }
 .rl-pip.frozen { background: var(--rl-render); }
+.rl-pip.norewind { background: transparent; border: 1px solid var(--rl-suspicious); }
 .rl-pip.server { background: var(--rl-network); border-radius: 1px; }
 .rl-pip.compiled { background: var(--rl-healthy); width: 5px; height: 5px; }
 .rl-pip.warn {
@@ -693,6 +694,23 @@
   justify-content: flex-start; white-space: nowrap; overflow: hidden;
 }
 .rl-tl-live-dot { width: 6px; height: 6px; flex: 0 0 auto; border-radius: 50%; background: currentColor; }
+
+/* Set-wide restore feedback while time traveling. */
+.rl-tl-restore {
+  display: inline-flex; align-items: center; gap: 3px;
+  height: 20px; padding: 0 7px; margin-left: 2px; border-radius: 10px;
+  border: 1px solid var(--rl-border-strong); background: var(--rl-bg-hover);
+  color: var(--rl-text-dim); font-size: 10px; white-space: nowrap;
+  font-variant-numeric: tabular-nums; cursor: default; flex: 0 0 auto;
+}
+.rl-tl-restore.partial {
+  color: var(--rl-suspicious);
+  border-color: rgba(251, 146, 60, 0.35);
+  background: rgba(251, 146, 60, 0.08);
+  cursor: pointer;
+}
+.rl-tl-restore:disabled { opacity: 0.9; }
+.rl-tl-restore-fail { font-weight: 600; }
 .rl-tl-live-label { overflow: hidden; text-overflow: ellipsis; }
 .rl-tl-live.live { color: var(--rl-severe); }
 .rl-tl-live.live .rl-tl-live-dot { animation: rl-pulse 1.6s ease-in-out infinite; }
@@ -1384,6 +1402,15 @@
 }
 .rl-wf-bar.dim {
   opacity: 0.38;
+}
+/* Time travel could not restore this component — hatched, not colored. */
+.rl-wf-bar.rl-wf-bar-norewind {
+  border-color: rgba(251, 146, 60, 0.5);
+  background-image: repeating-linear-gradient(
+    -45deg,
+    transparent 0 4px,
+    rgba(251, 146, 60, 0.12) 4px 6px
+  );
 }
 .rl-wf-bar-label {
   flex: 1 1 auto;

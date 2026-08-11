@@ -10,7 +10,12 @@ import { diagnoseAll } from "./doctor.js";
 import { createDoctorClient, type DoctorResult } from "./doctorClient.js";
 import { CommandPalette, type Command } from "./CommandPalette.js";
 import type { TimeCursor, ABMarks } from "./timeCursor.js";
-import { createPanelTimeTravel, type TimeTravelApi } from "./timeTravelController.js";
+import {
+  createPanelTimeTravel,
+  type RestoreStatus,
+  type TimeTravelApi,
+} from "./timeTravelController.js";
+import { loadPanelPrefs, savePanelPrefs } from "./panelPrefs.js";
 import { AgentPane } from "./AgentPane.js";
 import { SettingsPopover } from "./SettingsPopover.js";
 import {
@@ -131,9 +136,18 @@ export function Panel({
   }, [selectComponent, onSelectConsumed]);
 
   // Real time travel: while the cursor is historical (and the toggle is on),
-  // the page's state follows the playhead. On by default when supported.
-  const [travelOn, setTravelOn] = useState(true);
+  // the page's state follows the playhead. On by default when supported;
+  // the toggle persists across sessions.
+  const [travelOn, setTravelOnState] = useState(() => loadPanelPrefs().travelOn);
+  const setTravelOn = (update: (v: boolean) => boolean) =>
+    setTravelOnState((v) => {
+      const next = update(v);
+      savePanelPrefs({ travelOn: next });
+      return next;
+    });
   const [travelSupported, setTravelSupported] = useState(false);
+  // Set-wide restore feedback while traveling (partial-restore pill + markers).
+  const [restoreStatus, setRestoreStatus] = useState<RestoreStatus | null>(null);
   useEffect(() => {
     if (!timeTravel) return;
     let alive = true;
@@ -145,7 +159,7 @@ export function Panel({
     };
   }, [timeTravel]);
   const travelCtl = useMemo(
-    () => (timeTravel ? createPanelTimeTravel(store, timeTravel) : null),
+    () => (timeTravel ? createPanelTimeTravel(store, timeTravel, setRestoreStatus) : null),
     [store, timeTravel],
   );
   useEffect(() => () => travelCtl?.dispose(), [travelCtl]);
@@ -462,6 +476,9 @@ export function Panel({
             onModeHintConsumed={() => setTreeModeHint(null)}
             onAskAI={askAI}
             {...(frozenSet ? { frozen: frozenSet } : {})}
+            {...(restoreStatus && restoreStatus.failedIds.size > 0
+              ? { unrestorable: new Set(restoreStatus.failedIds.keys()) }
+              : {})}
           />
         </div>
 
@@ -509,6 +526,7 @@ export function Panel({
                 on: travelOn && travelSupported,
                 supported: travelSupported,
                 toggle: () => setTravelOn((v) => !v),
+                status: restoreStatus,
               },
             }
           : {})}

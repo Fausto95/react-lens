@@ -54,7 +54,12 @@ function ExtensionPanel() {
           const pending = pendingTravel.current.get(msg.requestId);
           if (pending) {
             pendingTravel.current.delete(msg.requestId);
-            pending({ applied: msg.applied, failed: msg.failed, supported: msg.supported });
+            pending({
+              applied: msg.applied,
+              failed: msg.failed,
+              supported: msg.supported,
+              failures: msg.failures ?? [],
+            });
           }
         }
         if (msg.kind === "inspect-picked") {
@@ -173,7 +178,7 @@ function ExtensionPanel() {
   const travelRequest = useCallback(
     (build: (requestId: string) => PortMessage): Promise<TimeTravelResult> => {
       return new Promise((resolve) => {
-        const nothing: TimeTravelResult = { applied: 0, failed: 0, supported: false };
+        const nothing: TimeTravelResult = { applied: 0, failed: 0, supported: false, failures: [] };
         const port = portRef.current;
         if (!port) {
           resolve(nothing);

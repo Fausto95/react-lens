@@ -182,6 +182,7 @@ window.addEventListener("message", (event: MessageEvent) => {
       applied: data.applied,
       failed: data.failed,
       supported: data.supported,
+      failures: data.failures,
     });
     return;
   }

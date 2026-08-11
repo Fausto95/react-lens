@@ -28,8 +28,10 @@ import { SLOW_SELF_MS, renderFixPrompt, commitFixPrompt } from "./perfBudget.js"
 import { useTraceVersion } from "./useLens.js";
 import { ms, timeAxis } from "@react-lens/ui";
 import type { TimeCursor, ABMarks } from "./timeCursor.js";
+import type { RestoreStatus } from "./timeTravelController.js";
 import { NarrativeCard } from "./NarrativeCard.js";
 import { diagnoseOne } from "./doctor.js";
+import { RestoreStatusPill, type RestoreFailureItem } from "./timeline/RestoreStatusPill.js";
 
 type Mode = "collapsed" | "compact" | "expanded";
 /** Open sizes always include the phase waterfall; collapsed hides the tracks. */
@@ -72,7 +74,13 @@ export function Timeline({
   onSetAB: (ab: ABMarks) => void;
   onReplay?: (ids: ComponentId[]) => void;
   /** Real time travel: page state follows the playhead while scrubbing. */
-  travel?: { on: boolean; supported: boolean; toggle: () => void };
+  travel?: {
+    on: boolean;
+    supported: boolean;
+    toggle: () => void;
+    /** Set-wide restore state (null while live / not traveling). */
+    status?: RestoreStatus | null;
+  };
   onSelectComponent?: (id: ComponentId) => void;
   /** Highlight DOM hosts on the page (same as tree hover). */
   onHighlight?: (id: ComponentId | null) => void;
@@ -507,6 +515,14 @@ export function Timeline({
 
   const live = cursor.mode === "live";
   const cursorT = live ? bounds.t1 : cursor.t;
+  const restoreStatus = travel?.on && !live ? (travel.status ?? null) : null;
+  const restoreFailures: RestoreFailureItem[] = restoreStatus
+    ? [...restoreStatus.failedIds].map(([id, reason]) => ({
+        id,
+        name: store.instance(id)?.name ?? `#${id}`,
+        reason,
+      }))
+    : [];
   const cursorCommit = store.commitAt(cursorT);
   const cursorAnomaly = cursorCommit && anomaly.isAnomaly(cursorCommit) ? cursorCommit : null;
   const cursorX = xOf(cursorT);
@@ -586,6 +602,13 @@ export function Timeline({
             >
               <IconRewind size={13} />
             </button>
+          )}
+          {restoreStatus && (
+            <RestoreStatusPill
+              applied={restoreStatus.applied}
+              failures={restoreFailures}
+              {...(onSelectComponent ? { onSelect: onSelectComponent } : {})}
+            />
           )}
           <span className="rl-zoom-sep" />
           <button
@@ -800,6 +823,7 @@ export function Timeline({
                     maxRows={mode === "expanded" ? 8 : 4}
                     scrollLeft={scrollLeft}
                     xOf={xOf}
+                    {...(restoreStatus ? { unrestorable: restoreStatus.failedIds } : {})}
                     onSelectComponent={onSelectComponent}
                     onHighlight={onHighlight}
                     selectedComponent={selectedComponent}
@@ -1143,6 +1167,7 @@ function PhaseWaterfall({
   maxRows,
   scrollLeft,
   xOf,
+  unrestorable,
   onSelectComponent,
   onHighlight,
   selectedComponent = null,
@@ -1159,6 +1184,8 @@ function PhaseWaterfall({
   maxRows: number;
   scrollLeft: number;
   xOf: (t: number) => number;
+  /** While traveling: components whose state could not be restored. */
+  unrestorable?: ReadonlyMap<ComponentId, unknown>;
   onSelectComponent?: (id: ComponentId) => void;
   onHighlight?: (id: ComponentId | null) => void;
   selectedComponent?: ComponentId | null;
@@ -1263,6 +1290,7 @@ function PhaseWaterfall({
           if (!barVisible(bar)) return null;
           const underPlayhead = playheadT >= bar.t0 - 0.25 && playheadT <= bar.t1;
           const dim = selectedId != null && selectedId !== bar.phaseId;
+          const noRewind = unrestorable?.has(bar.id) ?? false;
           const rgb = componentRgb(bar.id);
           const fillA = 0.07 + bar.heat * 0.1;
           const borderA = 0.22 + bar.heat * 0.12;
@@ -1275,7 +1303,7 @@ function PhaseWaterfall({
             <Fragment key={`${bar.phaseId}-${bar.renderId}`}>
               <button
                 type="button"
-                className={`rl-wf-bar${narrow ? " narrow" : ""}${bar.wasted ? " wasted" : ""}${underPlayhead ? " under-playhead" : ""}${dim ? " dim" : ""}`}
+                className={`rl-wf-bar${narrow ? " narrow" : ""}${bar.wasted ? " wasted" : ""}${underPlayhead ? " under-playhead" : ""}${dim ? " dim" : ""}${noRewind ? " rl-wf-bar-norewind" : ""}`}
                 style={{
                   left: bar.left,
                   width: bar.width,

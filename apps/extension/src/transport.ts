@@ -3,6 +3,7 @@ import type {
   RenderId,
   ComponentId,
   TimeTravelEntry,
+  TimeTravelFailure,
 } from "@react-lens/protocol";
 
 /** Envelope for page(MAIN) ↔ content(ISOLATED) hops over window.postMessage. */
@@ -50,6 +51,7 @@ export type PageToContent =
       applied: number;
       failed: number;
       supported: boolean;
+      failures: TimeTravelFailure[];
     };
 
 export type ContentToPage =
@@ -150,6 +152,7 @@ export type PortMessage =
       applied: number;
       failed: number;
       supported: boolean;
+      failures: TimeTravelFailure[];
     };
 
 export const PANEL_PORT_PREFIX = "react-lens/panel:";

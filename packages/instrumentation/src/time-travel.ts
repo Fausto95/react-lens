@@ -1,4 +1,12 @@
-import type { ComponentId, RenderId, TimeTravelEntry, TimeTravelResult } from "@react-lens/protocol";
+import {
+  TIME_TRAVEL_RETENTION,
+  type ComponentId,
+  type RenderId,
+  type TimeTravelEntry,
+  type TimeTravelFailure,
+  type TimeTravelFailureReason,
+  type TimeTravelResult,
+} from "@react-lens/protocol";
 import type { Fiber, FiberBridge, LiveState } from "@react-lens/fiber";
 import { captureStateHooks, inspectClassState } from "@react-lens/fiber";
 
@@ -27,17 +35,24 @@ interface CapturedState {
   classState?: unknown;
 }
 
-const DEFAULT_MAX_ENTRIES = 5_000;
-
 export function createTimeTravel(deps: {
   fiber: FiberBridge;
-  maxEntries?: number;
+  /** Raw-state renders retained per component (mirrors the panel's render ring). */
+  rendersPerComponent?: number;
+  /** Component histories retained, least-recently-captured evicted first. */
+  maxComponents?: number;
 }): TimeTravelController {
   const { fiber } = deps;
-  const maxEntries = deps.maxEntries ?? DEFAULT_MAX_ENTRIES;
+  const rendersPerComponent =
+    deps.rendersPerComponent ?? TIME_TRAVEL_RETENTION.rendersPerComponent;
+  const maxComponents = deps.maxComponents ?? TIME_TRAVEL_RETENTION.maxComponents;
 
-  /** renderId → raw state at that render; insertion-ordered for eviction. */
-  const history = new Map<RenderId, CapturedState>();
+  /**
+   * componentId → (renderId → raw state), both insertion-ordered. Retention is
+   * per component so one chatty component cannot evict another's history; the
+   * outer map is LRU on capture so long-dead components eventually free theirs.
+   */
+  const history = new Map<ComponentId, Map<RenderId, CapturedState>>();
   /**
    * Live state per component at the moment travel first touched it. goLive
    * restores these — robust even when the newest render was ring-evicted.
@@ -60,52 +75,68 @@ export function createTimeTravel(deps: {
         ? { hooks: [], classState }
         : { hooks: captureStateHooks(target) };
     // Stateless components would produce no-op entries; keep them out of the
-    // ring so frequent stateless renders can't evict restorable history.
+    // rings so frequent stateless renders can't evict restorable history.
     if (state.hooks.length === 0 && classState === undefined) {
       stateless.add(componentId);
       return;
     }
     stateless.delete(componentId);
-    history.set(renderId, state);
-    if (history.size > maxEntries) {
-      const oldest = history.keys().next().value;
-      if (oldest !== undefined) history.delete(oldest);
+    let ring = history.get(componentId);
+    if (ring) {
+      // Re-insert to refresh the component's LRU position.
+      history.delete(componentId);
+    } else {
+      ring = new Map();
+    }
+    history.set(componentId, ring);
+    ring.set(renderId, state);
+    if (ring.size > rendersPerComponent) {
+      const oldest = ring.keys().next().value;
+      if (oldest !== undefined) ring.delete(oldest);
+    }
+    if (history.size > maxComponents) {
+      const lru = history.keys().next().value;
+      if (lru !== undefined) history.delete(lru);
     }
   }
 
   function apply(entries: TimeTravelEntry[]): TimeTravelResult {
-    if (!supported()) return { applied: 0, failed: entries.length, supported: false };
+    if (!supported()) {
+      return { applied: 0, failed: entries.length, supported: false, failures: [] };
+    }
     let applied = 0;
-    let failed = 0;
+    const failures: TimeTravelFailure[] = [];
+    const fail = (entry: TimeTravelEntry, reason: TimeTravelFailureReason) =>
+      failures.push({ componentId: entry.componentId, renderId: entry.renderId, reason });
     for (const entry of entries) {
-      const state = history.get(entry.renderId);
+      const state = history.get(entry.componentId)?.get(entry.renderId);
       if (!state) {
-        if (!stateless.has(entry.componentId)) failed++;
+        if (!stateless.has(entry.componentId)) fail(entry, "no-history");
         continue;
       }
       if (!fiber.hasFiber(entry.componentId)) {
-        failed++;
+        fail(entry, "no-fiber");
         continue;
       }
       const live = fiber.captureLiveState(entry.componentId);
       if (!live || !shapeMatches(state, live)) {
         // Hook list changed shape since capture (e.g. hot reload) — overriding
         // by index would corrupt an unrelated hook. Refuse instead.
-        failed++;
+        fail(entry, "shape-mismatch");
         continue;
       }
       if (!baselines.has(entry.componentId)) baselines.set(entry.componentId, live);
       active = true;
       if (restore(entry.componentId, state)) applied++;
-      else failed++;
+      else fail(entry, "write-failed");
     }
-    return { applied, failed, supported: true };
+    return { applied, failed: failures.length, supported: true, failures };
   }
 
   function goLive(): TimeTravelResult {
     if (baselines.size === 0) {
       active = false;
-      return { applied: 0, failed: 0, supported: supported() };
+      return { applied: 0, failed: 0, supported: supported(), failures: [] };
     }
     let applied = 0;
     let failed = 0;
@@ -123,7 +154,7 @@ export function createTimeTravel(deps: {
     setTimeout(() => {
       active = false;
     }, 0);
-    return { applied, failed, supported: supported() };
+    return { applied, failed, supported: supported(), failures: [] };
   }
 
   function restore(componentId: ComponentId, state: CapturedState): boolean {

@@ -31,6 +31,7 @@ export function Tree({
   onHover,
   onAskAI,
   frozen,
+  unrestorable,
   doctor,
   suspended,
   modeHint,
@@ -45,6 +46,8 @@ export function Tree({
   onAskAI?: (question: string) => void;
   /** Freeze Frame: component ids that rendered in the frozen commit. */
   frozen?: Set<ComponentId>;
+  /** While traveling: components whose state could not be restored. */
+  unrestorable?: Set<ComponentId>;
   /** Components with at least one Doctor diagnostic. */
   doctor?: Set<ComponentId>;
   /** Components under a currently-suspended Suspense boundary. */
@@ -189,6 +192,7 @@ export function Tree({
                   onHover={onHover}
                   {...(onAskAI ? { onAskAI } : {})}
                   frozen={frozen}
+                  unrestorable={unrestorable}
                   doctor={doctor}
                   suspended={suspended}
                 />
@@ -211,6 +215,7 @@ function TreeRow({
   onHover,
   onAskAI,
   frozen,
+  unrestorable,
   doctor,
   suspended,
 }: {
@@ -223,6 +228,7 @@ function TreeRow({
   onHover?: (id: ComponentId | null) => void;
   onAskAI?: (question: string) => void;
   frozen?: Set<ComponentId>;
+  unrestorable?: Set<ComponentId>;
   doctor?: Set<ComponentId>;
   suspended?: Set<ComponentId>;
 }) {
@@ -265,6 +271,7 @@ function TreeRow({
             <span className="rl-tree-name">{node.datum.name}</span>
             <TreePips
               frozen={!!inFrozen}
+              norewind={!!unrestorable?.has(node.id)}
               server={node.datum.kind === "server-boundary"}
               suspended={!!suspended?.has(node.id)}
               doctor={!!doctor?.has(node.id)}
@@ -324,6 +331,7 @@ function TreeRow({
 
 function TreePips({
   frozen,
+  norewind,
   server,
   suspended,
   doctor,
@@ -331,6 +339,8 @@ function TreePips({
   waste,
 }: {
   frozen: boolean;
+  /** Time travel could not restore this component's state at the playhead. */
+  norewind: boolean;
   server: boolean;
   suspended: boolean;
   doctor: boolean;
@@ -350,6 +360,9 @@ function TreePips({
   return (
     <span className="rl-tree-pips">
       {frozen && <span className="rl-pip frozen" title="In frozen commit" />}
+      {norewind && (
+        <span className="rl-pip norewind" title="State couldn't be rewound at this playhead" />
+      )}
       {severity && <span className={`rl-pip ${severity}`} title={title} />}
       {server && <span className="rl-pip server" title="RSC / Flight" />}
       {compiled && !severity && <span className="rl-pip compiled" title="Compiler optimized" />}
