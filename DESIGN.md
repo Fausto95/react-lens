@@ -255,15 +255,19 @@ Scrubbing the timeline playhead restores the inspected app's real state (Redux
 DevTools semantics), not a re-enactment. Three decisions make it sound:
 
 1. **Raw values never leave the page.** `SerializedValue` is lossy by design
-   and has no inverse. Instead, the page-side instrumentation keeps a bounded
-   ring (`renderId → raw state/reducer hook values + class state`, 5000
-   entries, references not clones, dev builds only). The panel computes only
-   *which* `(componentId, renderId)` pairs constitute time t —
-   `applySetAt(store, t)` over `renderAtOrBefore` — and sends that apply set;
-   the page looks up raw values and writes them back via the renderer's
-   dev-only `overrideHookState` (empty path = whole-value replace, raw
-   hook-list index) and, for classes, fiber `memoizedState`/`baseState`
-   rewrite + `forceUpdate`.
+   and has no inverse. Instead, the page-side instrumentation keeps bounded
+   per-component rings (`componentId → renderId → raw state/reducer hook
+   values + class state`, `TIME_TRAVEL_RETENTION` mirrors the panel's render
+   ring so both sides evict together; references not clones, dev builds
+   only). The panel computes only *which* `(componentId, renderId)` pairs
+   constitute time t — `applySetAt(store, t)` over `renderAtOrBefore` — and
+   sends that apply set plus the cursor time; the page looks up raw values
+   and writes them back via the renderer's dev-only `overrideHookState`
+   (empty path = whole-value replace, raw hook-list index) and, for classes,
+   fiber `memoizedState`/`baseState` rewrite + `forceUpdate`. Failures come
+   back per entry (`no-history` / `no-fiber` / `shape-mismatch` /
+   `write-failed`) and surface in the panel as a partial-restore pill and
+   per-component markers.
 
 2. **Recording pauses while traveling** (suppressed at the instrumentation
    source, not tag-and-filtered). The restore flush commits through the same
@@ -277,13 +281,37 @@ DevTools semantics), not a re-enactment. Three decisions make it sound:
    diffs the apply set against what was last applied (`diffApplySet`), so a
    drag re-applies just the components whose target render changed.
 
+**External stores are opt-in, not inferred.** Overriding a
+`useSyncExternalStore` hook's memoized value cannot work generically: the
+value would revert on the store's next notification, and the store itself
+would still hold the live state. Instead the page registers
+`TimeTravelStoreAdapter { id, getSnapshot, applySnapshot }`
+(`runtime.timeTravel.registerStore(...)`); snapshots are captured per commit
+into the same retention-bounded history and rewound to the snapshot at or
+before the cursor time sent with each apply. Zustand maps to
+`getState`/`setState(s, true)`, Redux to `getState`/a hydrate action. The
+playground's `ExternalStoreDemo` is the reference.
+
+**Explicitly out of scope** (deliberate, not deferred):
+
+- *Generic `useSyncExternalStore` rewind* — see above; the adapter seam is
+  the supported path.
+- *Props overrides* — props derive from parent state; rewinding the parent
+  already covers them, and a second writer would fight the reconciler.
+- *Mount/unmount topology patches* — components mounted after t stay mounted
+  (the tree dims them); unmounted ones cannot come back (ROADMAP: deferred).
+- *Uncontrolled inputs* — writing `.value` fights focus/selection; the
+  offline commit DOM snapshots show their values instead.
+
 Known limits (documented in the toggle tooltip): only `useState`/`useReducer`/
-class state rewinds — not refs, external stores (`useSyncExternalStore`),
+class state and registered store adapters rewind — not refs, unregistered
 module state, uncontrolled inputs, or server state; effects re-run against
-rewound values; components mounted after t stay mounted (the tree dims them);
-production React builds have no override API, so the toggle is disabled. In
-the extension, the content script auto-sends go-live when the panel port
-disconnects so a closed panel never leaves the app in the past.
+rewound values; production React builds have no override API, so the toggle
+is disabled. Imported sessions never drive the live page (their renderIds
+belong to a different run) — they play back throttled whole-page DOM
+snapshots instead (§ CommitSnapshot). In the extension, the content script
+auto-sends go-live when the panel port disconnects so a closed panel never
+leaves the app in the past.
 
 ---
 

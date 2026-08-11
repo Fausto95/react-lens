@@ -98,6 +98,7 @@ function connect(): void {
           kind: "time-travel-apply",
           requestId: msg.requestId,
           entries: msg.entries,
+          ...(msg.atT !== undefined ? { atT: msg.atT } : {}),
         } satisfies ContentToPage,
         "*",
       );

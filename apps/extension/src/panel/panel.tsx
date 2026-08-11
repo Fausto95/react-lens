@@ -219,8 +219,13 @@ function ExtensionPanel() {
         }
         return false;
       },
-      apply: (entries: TimeTravelEntry[]) =>
-        travelRequest((requestId) => ({ kind: "time-travel-apply", requestId, entries })),
+      apply: (entries: TimeTravelEntry[], atT?: number) =>
+        travelRequest((requestId) => ({
+          kind: "time-travel-apply",
+          requestId,
+          entries,
+          ...(atT !== undefined ? { atT } : {}),
+        })),
       goLive: () => travelRequest((requestId) => ({ kind: "time-travel-live", requestId })),
     }),
     [travelRequest],

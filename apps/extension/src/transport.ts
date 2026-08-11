@@ -92,6 +92,8 @@ export type ContentToPage =
       kind: "time-travel-apply";
       requestId: string;
       entries: TimeTravelEntry[];
+      /** Cursor time — lets the page rewind registered store adapters too. */
+      atT?: number;
     }
   | { source: typeof CONTENT_SOURCE; kind: "time-travel-live"; requestId: string };
 
@@ -144,7 +146,7 @@ export type PortMessage =
       mode?: "react" | "dom";
       error?: string;
     }
-  | { kind: "time-travel-apply"; requestId: string; entries: TimeTravelEntry[] }
+  | { kind: "time-travel-apply"; requestId: string; entries: TimeTravelEntry[]; atT?: number }
   | { kind: "time-travel-live"; requestId: string }
   | {
       kind: "time-travel-result";

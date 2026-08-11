@@ -145,7 +145,7 @@ window.addEventListener("message", (event: MessageEvent) => {
   } else if (data.kind === "inspect-stop") {
     inspect.stop();
   } else if (data.kind === "time-travel-apply") {
-    const result = instrumentation.timeTravel.apply(data.entries);
+    const result = instrumentation.timeTravel.apply(data.entries, data.atT);
     window.postMessage(
       { source: PAGE_SOURCE, kind: "time-travel-result", requestId: data.requestId, ...result },
       "*",

@@ -1,6 +1,10 @@
 import { createSerializer } from "@react-lens/serializer";
 import { createFiberBridge, type CommitObservation, type Dispose } from "@react-lens/fiber";
-import { createInstrumentation, type Instrumentation } from "@react-lens/instrumentation";
+import {
+  createInstrumentation,
+  type Instrumentation,
+  type TimeTravelStoreAdapter,
+} from "@react-lens/instrumentation";
 import { TraceStore } from "@react-lens/trace-engine";
 import { createCausality, type Causality } from "@react-lens/causality";
 import type {
@@ -34,8 +38,10 @@ export interface LensRuntime {
   /** Real time travel: restore captured raw state on the page (dev builds). */
   timeTravel: {
     supported(): boolean;
-    apply(entries: TimeTravelEntry[]): TimeTravelResult;
+    apply(entries: TimeTravelEntry[], atT?: number): TimeTravelResult;
     goLive(): TimeTravelResult;
+    /** Opt-in external-store rewind (Zustand/Redux/module state). */
+    registerStore(adapter: TimeTravelStoreAdapter): () => void;
   };
   start(): void;
   stop(): void;
@@ -70,8 +76,9 @@ export function createEmbeddedRuntime(): LensRuntime {
     setHookState: (id, hookIndex, path, value) => fiber.setHookState(id, hookIndex, path, value),
     timeTravel: {
       supported: () => instrumentation.timeTravel.supported(),
-      apply: (entries) => instrumentation.timeTravel.apply(entries),
+      apply: (entries, atT) => instrumentation.timeTravel.apply(entries, atT),
       goLive: () => instrumentation.timeTravel.goLive(),
+      registerStore: (adapter) => instrumentation.timeTravel.registerStore(adapter),
     },
     start() {
       instrumentation.start({

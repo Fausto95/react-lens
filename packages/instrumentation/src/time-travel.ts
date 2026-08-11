@@ -11,10 +11,24 @@ import type { Fiber, FiberBridge, LiveState } from "@react-lens/fiber";
 import { captureStateHooks, inspectClassState } from "@react-lens/fiber";
 
 /**
+ * Opt-in seam for state living outside React (Zustand, Redux, module
+ * singletons). The page registers adapters; snapshots are captured per commit
+ * and restored alongside component state when the cursor moves. Values never
+ * leave the page.
+ */
+export interface TimeTravelStoreAdapter {
+  /** Stable identifier, unique per registered store. */
+  id: string;
+  /** An immutable (or safely re-applicable) snapshot of the store's state. */
+  getSnapshot(): unknown;
+  applySnapshot(snapshot: unknown): void;
+}
+
+/**
  * Page-side time travel: a bounded history of RAW state values per render,
  * and an applier that writes them back through the renderer's dev-only
  * override API. Raw references never leave the page — the panel only sends
- * (componentId, renderId) pairs.
+ * (componentId, renderId) pairs plus the cursor time for store adapters.
  */
 export interface TimeTravelController {
   /** Whether the renderer exposes the override API (dev builds only). */
@@ -23,8 +37,15 @@ export interface TimeTravelController {
   isActive(): boolean;
   /** Record the raw state a component had at `renderId`. Called per commit. */
   capture(renderId: RenderId, componentId: ComponentId, fiber: Fiber): void;
-  /** Restore each entry's captured state. Enters active mode. */
-  apply(entries: TimeTravelEntry[]): TimeTravelResult;
+  /** Snapshot every registered store adapter. Called per commit. */
+  captureStores(timestamp: number): void;
+  /** Opt-in external-store rewind. Returns an unregister function. */
+  registerStore(adapter: TimeTravelStoreAdapter): () => void;
+  /**
+   * Restore each entry's captured state; with `atT`, also restore every
+   * registered store to its snapshot at or before that time. Enters active mode.
+   */
+  apply(entries: TimeTravelEntry[], atT?: number): TimeTravelResult;
   /** Restore the pre-travel live baselines and resume normal recording. */
   goLive(): TimeTravelResult;
   clear(): void;
@@ -35,17 +56,28 @@ interface CapturedState {
   classState?: unknown;
 }
 
+interface StoreRegistration {
+  adapter: TimeTravelStoreAdapter;
+  /** timestamp → snapshot, insertion-ordered ring. */
+  history: Map<number, unknown>;
+}
+
+const DEFAULT_SNAPSHOTS_PER_STORE = 200;
+
 export function createTimeTravel(deps: {
   fiber: FiberBridge;
   /** Raw-state renders retained per component (mirrors the panel's render ring). */
   rendersPerComponent?: number;
   /** Component histories retained, least-recently-captured evicted first. */
   maxComponents?: number;
+  /** Snapshots retained per registered external store. */
+  snapshotsPerStore?: number;
 }): TimeTravelController {
   const { fiber } = deps;
   const rendersPerComponent =
     deps.rendersPerComponent ?? TIME_TRAVEL_RETENTION.rendersPerComponent;
   const maxComponents = deps.maxComponents ?? TIME_TRAVEL_RETENTION.maxComponents;
+  const snapshotsPerStore = deps.snapshotsPerStore ?? DEFAULT_SNAPSHOTS_PER_STORE;
 
   /**
    * componentId → (renderId → raw state), both insertion-ordered. Retention is
@@ -60,6 +92,10 @@ export function createTimeTravel(deps: {
   const baselines = new Map<ComponentId, CapturedState>();
   /** Components with nothing to restore — apply treats them as no-ops, not failures. */
   const stateless = new Set<ComponentId>();
+  /** Opt-in external stores, keyed by adapter id. */
+  const stores = new Map<string, StoreRegistration>();
+  /** Live store snapshots at the moment travel first touched them. */
+  const storeBaselines = new Map<string, unknown>();
   let active = false;
 
   function supported(): boolean {
@@ -100,7 +136,57 @@ export function createTimeTravel(deps: {
     }
   }
 
-  function apply(entries: TimeTravelEntry[]): TimeTravelResult {
+  function captureStores(timestamp: number): void {
+    if (active) return; // never record the rewound values as history
+    for (const reg of stores.values()) {
+      try {
+        reg.history.set(timestamp, reg.adapter.getSnapshot());
+      } catch {
+        continue; // a broken getSnapshot must not break capture for others
+      }
+      if (reg.history.size > snapshotsPerStore) {
+        const oldest = reg.history.keys().next().value;
+        if (oldest !== undefined) reg.history.delete(oldest);
+      }
+    }
+  }
+
+  function registerStore(adapter: TimeTravelStoreAdapter): () => void {
+    stores.set(adapter.id, { adapter, history: new Map() });
+    return () => {
+      stores.delete(adapter.id);
+      storeBaselines.delete(adapter.id);
+    };
+  }
+
+  /** Restore every registered store to its snapshot at or before `t`. */
+  function applyStores(t: number): { applied: number; failed: number } {
+    let applied = 0;
+    let failed = 0;
+    for (const [id, reg] of stores) {
+      // History is insertion-ordered by capture time; walk for the last ≤ t.
+      let best: { has: boolean; value: unknown } = { has: false, value: undefined };
+      for (const [ts, value] of reg.history) {
+        if (ts <= t) best = { has: true, value };
+        else break;
+      }
+      if (!best.has) {
+        failed++;
+        continue;
+      }
+      try {
+        if (!storeBaselines.has(id)) storeBaselines.set(id, reg.adapter.getSnapshot());
+        reg.adapter.applySnapshot(best.value);
+        active = true;
+        applied++;
+      } catch {
+        failed++;
+      }
+    }
+    return { applied, failed };
+  }
+
+  function apply(entries: TimeTravelEntry[], atT?: number): TimeTravelResult {
     if (!supported()) {
       return { applied: 0, failed: entries.length, supported: false, failures: [] };
     }
@@ -130,16 +216,38 @@ export function createTimeTravel(deps: {
       if (restore(entry.componentId, state)) applied++;
       else fail(entry, "write-failed");
     }
-    return { applied, failed: failures.length, supported: true, failures };
+    let failed = failures.length;
+    if (atT !== undefined && stores.size > 0) {
+      const storeResult = applyStores(atT);
+      applied += storeResult.applied;
+      failed += storeResult.failed;
+    }
+    return { applied, failed, supported: true, failures };
   }
 
   function goLive(): TimeTravelResult {
-    if (baselines.size === 0) {
-      active = false;
-      return { applied: 0, failed: 0, supported: supported(), failures: [] };
-    }
     let applied = 0;
     let failed = 0;
+    for (const [id, baseline] of storeBaselines) {
+      const reg = stores.get(id);
+      if (!reg) continue;
+      try {
+        reg.adapter.applySnapshot(baseline);
+        applied++;
+      } catch {
+        failed++;
+      }
+    }
+    storeBaselines.clear();
+    if (baselines.size === 0) {
+      if (active) {
+        // Store restores flush like any commit; resume recording next macrotask.
+        setTimeout(() => {
+          active = false;
+        }, 0);
+      }
+      return { applied, failed, supported: supported(), failures: [] };
+    }
     for (const [componentId, baseline] of baselines) {
       if (!fiber.hasFiber(componentId)) {
         failed++;
@@ -179,12 +287,16 @@ export function createTimeTravel(deps: {
     supported,
     isActive: () => active,
     capture,
+    captureStores,
+    registerStore,
     apply,
     goLive,
     clear: () => {
       history.clear();
       baselines.clear();
       stateless.clear();
+      for (const reg of stores.values()) reg.history.clear();
+      storeBaselines.clear();
       active = false;
     },
   };

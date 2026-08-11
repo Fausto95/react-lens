@@ -7,6 +7,7 @@ import { SuspenseDemo } from "./scenarios/SuspenseDemo.js";
 import { TransitionDemo } from "./scenarios/TransitionDemo.js";
 import { BigList } from "./scenarios/BigList.js";
 import { Shop } from "./scenarios/Shop.js";
+import { ExternalStoreDemo } from "./scenarios/ExternalStoreDemo.js";
 
 /**
  * Playground root — each scenario lives in its own module under `scenarios/`
@@ -30,6 +31,7 @@ export function App() {
       <TransitionDemo />
       <BigList />
       <Shop />
+      <ExternalStoreDemo />
     </div>
   );
 }

@@ -14,7 +14,8 @@ import type { TimeCursor } from "./timeCursor.js";
  */
 export interface TimeTravelApi {
   supported(): boolean | Promise<boolean>;
-  apply(entries: TimeTravelEntry[]): TimeTravelResult | Promise<TimeTravelResult>;
+  /** `atT` lets the page also rewind registered external-store adapters. */
+  apply(entries: TimeTravelEntry[], atT?: number): TimeTravelResult | Promise<TimeTravelResult>;
   goLive(): TimeTravelResult | Promise<TimeTravelResult>;
 }
 
@@ -104,11 +105,13 @@ export function createPanelTimeTravel(
     const next = applyCursor.moveTo(t);
     const delta = diffApplySet(lastApplied, next);
     lastApplied = next;
-    if (delta.length === 0) return;
+    // External-store adapters follow the cursor even between component
+    // deltas, so an empty delta still applies once travel has begun.
+    if (delta.length === 0 && !traveling) return;
     traveling = true;
     const gen = ++generation;
     Promise.resolve()
-      .then(() => api.apply(delta))
+      .then(() => api.apply(delta, t))
       .then(
         (result) => ingestResult(gen, t, delta, result),
         () =>

@@ -160,6 +160,7 @@ export function createInstrumentation(deps: {
     const interactionId = activeInteractionId();
 
     captureCommitDom(commit);
+    if (config.captureStateHistory !== false) timeTravel.captureStores(commit.timestamp);
     for (const id of commit.rendered) {
       const detail = commit.details.get(id);
       const instance = fiber.getInstance(id);
