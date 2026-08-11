@@ -5,10 +5,10 @@ import {
   type TraceStore,
   type Interaction,
   type CommitSummary,
-} from "@react-lens/trace-engine";
-import type { Causality } from "@react-lens/causality";
-import type { ComponentId, RenderId } from "@react-lens/protocol";
-import { explainInteraction, type LensRef, type NarrativeNextClick } from "@react-lens/explain";
+} from "@reactlens/trace-engine";
+import type { Causality } from "@reactlens/causality";
+import type { ComponentId, RenderId } from "@reactlens/protocol";
+import { explainInteraction, type LensRef, type NarrativeNextClick } from "@reactlens/explain";
 import {
   IconChevronDown,
   IconChevronRight,
@@ -23,10 +23,10 @@ import {
   IconSkipBack,
   IconSkipForward,
   IconSparkle,
-} from "@react-lens/icons";
+} from "@reactlens/icons";
 import { SLOW_SELF_MS, renderFixPrompt, commitFixPrompt } from "./perfBudget.js";
 import { useTraceVersion } from "./useLens.js";
-import { ms, timeAxis } from "@react-lens/ui";
+import { ms, timeAxis } from "@reactlens/ui";
 import type { TimeCursor, ABMarks } from "./timeCursor.js";
 import type { RestoreStatus } from "./timeTravelController.js";
 import { NarrativeCard } from "./NarrativeCard.js";
@@ -56,7 +56,7 @@ import { aggregateBars, visibleChunkRange, type ChunkRange } from "./timeline/lo
 import { ABDiffPanel } from "./timeline/ABDiffPanel.js";
 import { DomSnapshotView } from "./timeline/DomSnapshotView.js";
 import { loadPanelPrefs, savePanelPrefs } from "./panelPrefs.js";
-import { compareApplySets } from "@react-lens/trace-engine";
+import { compareApplySets } from "@reactlens/trace-engine";
 
 const SNAP_PX = 6;
 /** Shift-drag must travel this many px before it becomes a zoom band (else it's a B mark). */

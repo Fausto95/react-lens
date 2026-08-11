@@ -1,5 +1,5 @@
-import type { ComponentId } from "@react-lens/protocol";
-import type { CommitObservation } from "@react-lens/fiber";
+import type { ComponentId } from "@reactlens/protocol";
+import type { CommitObservation } from "@reactlens/fiber";
 import type { LensRuntime } from "./runtime.js";
 
 /**

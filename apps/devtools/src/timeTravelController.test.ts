@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { TraceStore } from "@react-lens/trace-engine";
+import { TraceStore } from "@reactlens/trace-engine";
 import type {
   ComponentId,
   RenderId,
@@ -10,7 +10,7 @@ import type {
   EventsBatchMessage,
   TimeTravelEntry,
   TimeTravelResult,
-} from "@react-lens/protocol";
+} from "@reactlens/protocol";
 import {
   createPanelTimeTravel,
   type RestoreStatus,

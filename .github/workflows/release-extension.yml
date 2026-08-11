@@ -52,7 +52,7 @@ jobs:
         id: zip
         run: |
           VERSION=$(node -p "require('./apps/extension/dist/manifest.json').version")
-          ZIP="react-lens-extension-${VERSION}.zip"
+          ZIP="reactlens-extension-${VERSION}.zip"
           (cd apps/extension/dist && zip -r "../../../${ZIP}" .)
           echo "zip=${ZIP}" >> "$GITHUB_OUTPUT"
 

@@ -1,7 +1,7 @@
 import { useMemo, useState, useRef, useEffect } from "react";
-import type { TraceStore } from "@react-lens/trace-engine";
-import type { Causality } from "@react-lens/causality";
-import type { ComponentId } from "@react-lens/protocol";
+import type { TraceStore } from "@reactlens/trace-engine";
+import type { Causality } from "@reactlens/causality";
+import type { ComponentId } from "@reactlens/protocol";
 import {
   buildTree,
   flatten,
@@ -9,10 +9,10 @@ import {
   type ComponentDatum,
   type SemanticNode,
   type VisibleRow,
-} from "@react-lens/tree";
+} from "@reactlens/tree";
 import { useTraceVersion } from "./useLens.js";
-import { ms } from "@react-lens/ui";
-import { IconSparkle } from "@react-lens/icons";
+import { ms } from "@reactlens/ui";
+import { IconSparkle } from "@reactlens/icons";
 import { SLOW_SELF_MS, componentFixPrompt } from "./perfBudget.js";
 
 type TreeMode = "components" | "changed" | "waste";

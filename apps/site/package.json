@@ -1,12 +1,12 @@
 {
-  "name": "@react-lens/site",
+  "name": "@reactlens/site",
   "version": "0.0.0",
   "private": true,
   "type": "module",
   "dependencies": {
-    "@react-lens/devtools": "workspace:*",
-    "@react-lens/icons": "workspace:*",
-    "@react-lens/ui": "workspace:*",
+    "@reactlens/devtools": "workspace:*",
+    "@reactlens/icons": "workspace:*",
+    "@reactlens/ui": "workspace:*",
     "react": "^19",
     "react-dom": "^19"
   },

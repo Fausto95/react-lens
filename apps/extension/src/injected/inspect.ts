@@ -1,5 +1,5 @@
-import type { ComponentId } from "@react-lens/protocol";
-import type { FiberBridge } from "@react-lens/fiber";
+import type { ComponentId } from "@reactlens/protocol";
+import type { FiberBridge } from "@reactlens/fiber";
 import type { Highlighter } from "./highlighter.js";
 import { openInEditor } from "./openInEditor.js";
 

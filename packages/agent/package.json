@@ -1,19 +1,19 @@
 {
-  "name": "@react-lens/agent",
+  "name": "@reactlens/agent",
   "version": "0.0.0",
   "type": "module",
   "exports": {
     ".": "./src/index.ts"
   },
   "dependencies": {
-    "@react-lens/causality": "workspace:*",
-    "@react-lens/diagnostics": "workspace:*",
-    "@react-lens/diff-engine": "workspace:*",
-    "@react-lens/explain": "workspace:*",
-    "@react-lens/graph": "workspace:*",
-    "@react-lens/protocol": "workspace:*",
-    "@react-lens/source-maps": "workspace:*",
-    "@react-lens/trace-engine": "workspace:*"
+    "@reactlens/causality": "workspace:*",
+    "@reactlens/diagnostics": "workspace:*",
+    "@reactlens/diff-engine": "workspace:*",
+    "@reactlens/explain": "workspace:*",
+    "@reactlens/graph": "workspace:*",
+    "@reactlens/protocol": "workspace:*",
+    "@reactlens/source-maps": "workspace:*",
+    "@reactlens/trace-engine": "workspace:*"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",

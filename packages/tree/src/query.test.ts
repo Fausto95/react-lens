@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { parseQuery } from "./query.js";
 import type { ComponentDatum } from "./types.js";
-import type { ComponentId } from "@react-lens/protocol";
+import type { ComponentId } from "@reactlens/protocol";
 
 function datum(over: Partial<ComponentDatum>): ComponentDatum {
   return {

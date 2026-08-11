@@ -1,8 +1,8 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { createFiberBridge } from "@react-lens/fiber";
-import { createSerializer } from "@react-lens/serializer";
-import { createInstrumentation } from "@react-lens/instrumentation";
-import { TraceStore } from "@react-lens/trace-engine";
+import { createFiberBridge } from "@reactlens/fiber";
+import { createSerializer } from "@reactlens/serializer";
+import { createInstrumentation } from "@reactlens/instrumentation";
+import { TraceStore } from "@reactlens/trace-engine";
 import { createPanelTimeTravel, type RestoreStatus } from "./timeTravelController.js";
 
 (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;

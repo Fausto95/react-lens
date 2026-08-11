@@ -45,49 +45,49 @@ importers:
 
   apps/devtools:
     dependencies:
-      '@react-lens/agent':
+      '@reactlens/agent':
         specifier: workspace:*
         version: link:../../packages/agent
-      '@react-lens/causality':
+      '@reactlens/causality':
         specifier: workspace:*
         version: link:../../packages/causality
-      '@react-lens/diagnostics':
+      '@reactlens/diagnostics':
         specifier: workspace:*
         version: link:../../packages/diagnostics
-      '@react-lens/diff-engine':
+      '@reactlens/diff-engine':
         specifier: workspace:*
         version: link:../../packages/diff-engine
-      '@react-lens/explain':
+      '@reactlens/explain':
         specifier: workspace:*
         version: link:../../packages/explain
-      '@react-lens/fiber':
+      '@reactlens/fiber':
         specifier: workspace:*
         version: link:../../packages/fiber
-      '@react-lens/graph':
+      '@reactlens/graph':
         specifier: workspace:*
         version: link:../../packages/graph
-      '@react-lens/icons':
+      '@reactlens/icons':
         specifier: workspace:*
         version: link:../../packages/icons
-      '@react-lens/instrumentation':
+      '@reactlens/instrumentation':
         specifier: workspace:*
         version: link:../../packages/instrumentation
-      '@react-lens/protocol':
+      '@reactlens/protocol':
         specifier: workspace:*
         version: link:../../packages/protocol
-      '@react-lens/serializer':
+      '@reactlens/serializer':
         specifier: workspace:*
         version: link:../../packages/serializer
-      '@react-lens/source-maps':
+      '@reactlens/source-maps':
         specifier: workspace:*
         version: link:../../packages/source-maps
-      '@react-lens/trace-engine':
+      '@reactlens/trace-engine':
         specifier: workspace:*
         version: link:../../packages/trace-engine
-      '@react-lens/tree':
+      '@reactlens/tree':
         specifier: workspace:*
         version: link:../../packages/tree
-      '@react-lens/ui':
+      '@reactlens/ui':
         specifier: workspace:*
         version: link:../../packages/ui
       react:
@@ -106,25 +106,25 @@ importers:
 
   apps/extension:
     dependencies:
-      '@react-lens/causality':
+      '@reactlens/causality':
         specifier: workspace:*
         version: link:../../packages/causality
-      '@react-lens/devtools':
+      '@reactlens/devtools':
         specifier: workspace:*
         version: link:../devtools
-      '@react-lens/fiber':
+      '@reactlens/fiber':
         specifier: workspace:*
         version: link:../../packages/fiber
-      '@react-lens/instrumentation':
+      '@reactlens/instrumentation':
         specifier: workspace:*
         version: link:../../packages/instrumentation
-      '@react-lens/protocol':
+      '@reactlens/protocol':
         specifier: workspace:*
         version: link:../../packages/protocol
-      '@react-lens/serializer':
+      '@reactlens/serializer':
         specifier: workspace:*
         version: link:../../packages/serializer
-      '@react-lens/trace-engine':
+      '@reactlens/trace-engine':
         specifier: workspace:*
         version: link:../../packages/trace-engine
       react:
@@ -149,7 +149,7 @@ importers:
 
   apps/playground:
     dependencies:
-      '@react-lens/devtools':
+      '@reactlens/devtools':
         specifier: workspace:*
         version: link:../devtools
       react:
@@ -171,13 +171,13 @@ importers:
 
   apps/site:
     dependencies:
-      '@react-lens/devtools':
+      '@reactlens/devtools':
         specifier: workspace:*
         version: link:../devtools
-      '@react-lens/icons':
+      '@reactlens/icons':
         specifier: workspace:*
         version: link:../../packages/icons
-      '@react-lens/ui':
+      '@reactlens/ui':
         specifier: workspace:*
         version: link:../../packages/ui
       react:
@@ -199,28 +199,28 @@ importers:
 
   packages/agent:
     dependencies:
-      '@react-lens/causality':
+      '@reactlens/causality':
         specifier: workspace:*
         version: link:../causality
-      '@react-lens/diagnostics':
+      '@reactlens/diagnostics':
         specifier: workspace:*
         version: link:../diagnostics
-      '@react-lens/diff-engine':
+      '@reactlens/diff-engine':
         specifier: workspace:*
         version: link:../diff-engine
-      '@react-lens/explain':
+      '@reactlens/explain':
         specifier: workspace:*
         version: link:../explain
-      '@react-lens/graph':
+      '@reactlens/graph':
         specifier: workspace:*
         version: link:../graph
-      '@react-lens/protocol':
+      '@reactlens/protocol':
         specifier: workspace:*
         version: link:../protocol
-      '@react-lens/source-maps':
+      '@reactlens/source-maps':
         specifier: workspace:*
         version: link:../source-maps
-      '@react-lens/trace-engine':
+      '@reactlens/trace-engine':
         specifier: workspace:*
         version: link:../trace-engine
     devDependencies:
@@ -230,13 +230,13 @@ importers:
 
   packages/causality:
     dependencies:
-      '@react-lens/diff-engine':
+      '@reactlens/diff-engine':
         specifier: workspace:*
         version: link:../diff-engine
-      '@react-lens/protocol':
+      '@reactlens/protocol':
         specifier: workspace:*
         version: link:../protocol
-      '@react-lens/trace-engine':
+      '@reactlens/trace-engine':
         specifier: workspace:*
         version: link:../trace-engine
     devDependencies:
@@ -246,7 +246,7 @@ importers:
 
   packages/diagnostics:
     dependencies:
-      '@react-lens/protocol':
+      '@reactlens/protocol':
         specifier: workspace:*
         version: link:../protocol
       oxc-parser:
@@ -259,7 +259,7 @@ importers:
 
   packages/diff-engine:
     dependencies:
-      '@react-lens/protocol':
+      '@reactlens/protocol':
         specifier: workspace:*
         version: link:../protocol
     devDependencies:
@@ -269,16 +269,16 @@ importers:
 
   packages/explain:
     dependencies:
-      '@react-lens/causality':
+      '@reactlens/causality':
         specifier: workspace:*
         version: link:../causality
-      '@react-lens/diagnostics':
+      '@reactlens/diagnostics':
         specifier: workspace:*
         version: link:../diagnostics
-      '@react-lens/protocol':
+      '@reactlens/protocol':
         specifier: workspace:*
         version: link:../protocol
-      '@react-lens/trace-engine':
+      '@reactlens/trace-engine':
         specifier: workspace:*
         version: link:../trace-engine
     devDependencies:
@@ -288,7 +288,7 @@ importers:
 
   packages/fiber:
     dependencies:
-      '@react-lens/protocol':
+      '@reactlens/protocol':
         specifier: workspace:*
         version: link:../protocol
     devDependencies:
@@ -298,7 +298,7 @@ importers:
 
   packages/graph:
     dependencies:
-      '@react-lens/protocol':
+      '@reactlens/protocol':
         specifier: workspace:*
         version: link:../protocol
     devDependencies:
@@ -320,13 +320,13 @@ importers:
 
   packages/instrumentation:
     dependencies:
-      '@react-lens/fiber':
+      '@reactlens/fiber':
         specifier: workspace:*
         version: link:../fiber
-      '@react-lens/protocol':
+      '@reactlens/protocol':
         specifier: workspace:*
         version: link:../protocol
-      '@react-lens/serializer':
+      '@reactlens/serializer':
         specifier: workspace:*
         version: link:../serializer
     devDependencies:
@@ -342,7 +342,7 @@ importers:
 
   packages/serializer:
     dependencies:
-      '@react-lens/protocol':
+      '@reactlens/protocol':
         specifier: workspace:*
         version: link:../protocol
     devDependencies:
@@ -355,7 +355,7 @@ importers:
       '@jridgewell/trace-mapping':
         specifier: ^0.3.31
         version: 0.3.31
-      '@react-lens/protocol':
+      '@reactlens/protocol':
         specifier: workspace:*
         version: link:../protocol
     devDependencies:
@@ -365,7 +365,7 @@ importers:
 
   packages/trace-engine:
     dependencies:
-      '@react-lens/protocol':
+      '@reactlens/protocol':
         specifier: workspace:*
         version: link:../protocol
     devDependencies:
@@ -375,7 +375,7 @@ importers:
 
   packages/tree:
     dependencies:
-      '@react-lens/protocol':
+      '@reactlens/protocol':
         specifier: workspace:*
         version: link:../protocol
     devDependencies:
@@ -385,10 +385,10 @@ importers:
 
   packages/ui:
     dependencies:
-      '@react-lens/diff-engine':
+      '@reactlens/diff-engine':
         specifier: workspace:*
         version: link:../diff-engine
-      '@react-lens/protocol':
+      '@reactlens/protocol':
         specifier: workspace:*
         version: link:../protocol
     devDependencies:

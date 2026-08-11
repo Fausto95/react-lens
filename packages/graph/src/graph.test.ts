@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { buildGraph } from "./build.js";
 import { focus, neighbors } from "./focus.js";
 import { componentKey, contextKey } from "./types.js";
-import type { ComponentId, ComponentType } from "@react-lens/protocol";
+import type { ComponentId, ComponentType } from "@reactlens/protocol";
 
 const cid = (n: number) => n as ComponentId;
 const ctid = (n: number) => n as ComponentType;

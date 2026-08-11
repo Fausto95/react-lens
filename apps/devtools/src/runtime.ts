@@ -1,18 +1,18 @@
-import { createSerializer } from "@react-lens/serializer";
-import { createFiberBridge, type CommitObservation, type Dispose } from "@react-lens/fiber";
+import { createSerializer } from "@reactlens/serializer";
+import { createFiberBridge, type CommitObservation, type Dispose } from "@reactlens/fiber";
 import {
   createInstrumentation,
   type Instrumentation,
   type TimeTravelStoreAdapter,
-} from "@react-lens/instrumentation";
-import { TraceStore } from "@react-lens/trace-engine";
-import { createCausality, type Causality } from "@react-lens/causality";
+} from "@reactlens/instrumentation";
+import { TraceStore } from "@reactlens/trace-engine";
+import { createCausality, type Causality } from "@reactlens/causality";
 import type {
   ComponentId,
   ComponentInstance,
   TimeTravelEntry,
   TimeTravelResult,
-} from "@react-lens/protocol";
+} from "@reactlens/protocol";
 
 export interface LensRuntime {
   store: TraceStore;

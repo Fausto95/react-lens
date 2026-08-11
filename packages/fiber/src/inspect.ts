@@ -1,4 +1,4 @@
-import type { HookKind } from "@react-lens/protocol";
+import type { HookKind } from "@reactlens/protocol";
 import {
   type Fiber,
   ClassComponent,

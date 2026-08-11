@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { aggregateBars, visibleChunkRange, type ClusterBar } from "./lod.js";
 import type { PackedBar } from "./pack.js";
-import type { ComponentId, RenderId } from "@react-lens/protocol";
+import type { ComponentId, RenderId } from "@reactlens/protocol";
 
 let seq = 0;
 function bar(over: Partial<PackedBar>): PackedBar {

@@ -1,7 +1,7 @@
-import { createSerializer } from "@react-lens/serializer";
-import { createFiberBridge } from "@react-lens/fiber";
-import { createInstrumentation } from "@react-lens/instrumentation";
-import type { EventsBatchMessage, ComponentId } from "@react-lens/protocol";
+import { createSerializer } from "@reactlens/serializer";
+import { createFiberBridge } from "@reactlens/fiber";
+import { createInstrumentation } from "@reactlens/instrumentation";
+import type { EventsBatchMessage, ComponentId } from "@reactlens/protocol";
 import { PAGE_SOURCE, CONTENT_SOURCE, type ContentToPage } from "../transport.js";
 import { createHighlighter } from "./highlighter.js";
 import { createInspectController, tryReactTextOverride } from "./inspect.js";

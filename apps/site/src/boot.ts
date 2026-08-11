@@ -1,4 +1,4 @@
-import { createEmbeddedRuntime } from "@react-lens/devtools/runtime";
+import { createEmbeddedRuntime } from "@reactlens/devtools/runtime";
 
 /**
  * Boot must be the first import in main.tsx: it installs the owned React

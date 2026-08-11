@@ -1,8 +1,8 @@
 import { describe, it, expect } from "vitest";
-import { createFiberBridge } from "@react-lens/fiber";
-import { createSerializer } from "@react-lens/serializer";
+import { createFiberBridge } from "@reactlens/fiber";
+import { createSerializer } from "@reactlens/serializer";
 import { createInstrumentation } from "./instrumentation.js";
-import type { EventsBatchMessage } from "@react-lens/protocol";
+import type { EventsBatchMessage } from "@reactlens/protocol";
 
 (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 

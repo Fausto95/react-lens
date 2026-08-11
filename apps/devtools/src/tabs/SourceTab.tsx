@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
-import type { ComponentInstance, SourceLocation } from "@react-lens/protocol";
-import { definitionLine } from "@react-lens/diagnostics";
-import { IconCopy } from "@react-lens/icons";
-import { shortSource } from "@react-lens/ui";
+import type { ComponentInstance, SourceLocation } from "@reactlens/protocol";
+import { definitionLine } from "@reactlens/diagnostics";
+import { IconCopy } from "@reactlens/icons";
+import { shortSource } from "@reactlens/ui";
 import type { InspectorContext } from "../Inspector.js";
 import { sourceResolver as resolver } from "../sourceResolver.js";
 import { openResolvedInEditor } from "../openInEditor.js";

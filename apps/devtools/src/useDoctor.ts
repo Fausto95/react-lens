@@ -1,14 +1,14 @@
 import { useMemo, useState, useEffect } from "react";
-import type { TraceStore } from "@react-lens/trace-engine";
-import type { Causality } from "@react-lens/causality";
-import type { ComponentId } from "@react-lens/protocol";
+import type { TraceStore } from "@reactlens/trace-engine";
+import type { Causality } from "@reactlens/causality";
+import type { ComponentId } from "@reactlens/protocol";
 import {
   analyzeSource,
   analyzeSourceSmart,
   mergeStaticAndRuntime,
   type Diagnostic,
   type StaticFinding,
-} from "@react-lens/diagnostics";
+} from "@reactlens/diagnostics";
 import { diagnoseOne, buildInput } from "./doctor.js";
 import { sourceResolver } from "./sourceResolver.js";
 

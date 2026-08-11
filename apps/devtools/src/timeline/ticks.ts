@@ -1,4 +1,4 @@
-import { timeAxis } from "@react-lens/ui";
+import { timeAxis } from "@reactlens/ui";
 import { projectX, type Seg } from "./geometry.js";
 
 export interface Tick {

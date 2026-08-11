@@ -1,4 +1,4 @@
-import type { SerializedValue, DOMSnapshot } from "@react-lens/protocol";
+import type { SerializedValue, DOMSnapshot } from "@reactlens/protocol";
 
 /**
  * The universal diff input. One engine handles every target via a strategy

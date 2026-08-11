@@ -1,4 +1,4 @@
-import type { SerializedValue } from "@react-lens/protocol";
+import type { SerializedValue } from "@reactlens/protocol";
 import type { DiffChange, ChangeKind } from "./types.js";
 
 type Path = Array<string | number>;

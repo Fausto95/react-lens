@@ -1,5 +1,5 @@
-import type { EventId, RenderEvent, SourceLocation } from "@react-lens/protocol";
-import type { DiffResult } from "@react-lens/diff-engine";
+import type { EventId, RenderEvent, SourceLocation } from "@reactlens/protocol";
+import type { DiffResult } from "@reactlens/diff-engine";
 
 export interface TraceEdge {
   from: EventId;

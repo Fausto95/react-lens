@@ -1,10 +1,10 @@
 {
-  "name": "@react-lens/playground",
+  "name": "@reactlens/playground",
   "version": "0.0.0",
   "private": true,
   "type": "module",
   "dependencies": {
-    "@react-lens/devtools": "workspace:*",
+    "@reactlens/devtools": "workspace:*",
     "react": "^19",
     "react-dom": "^19"
   },

@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
-import { TraceStore } from "@react-lens/trace-engine";
-import { createCausality } from "@react-lens/causality";
-import { createSourceResolver } from "@react-lens/source-maps";
+import { TraceStore } from "@reactlens/trace-engine";
+import { createCausality } from "@reactlens/causality";
+import { createSourceResolver } from "@reactlens/source-maps";
 import { buildEvidencePack, formatEvidencePack } from "./evidence.js";
 import { createToolHandlers } from "./handlers.js";
 import { SYSTEM_PROMPT, TOOL_DEFINITIONS } from "./tools.js";
@@ -13,7 +13,7 @@ import type {
   EventId,
   ComponentInstance,
   EventsBatchMessage,
-} from "@react-lens/protocol";
+} from "@reactlens/protocol";
 
 let seq = 0;
 const cid = (n: number) => n as ComponentId;

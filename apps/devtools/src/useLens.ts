@@ -1,5 +1,5 @@
 import { useReducer, useEffect } from "react";
-import type { TraceStore, TraceSelector } from "@react-lens/trace-engine";
+import type { TraceStore, TraceSelector } from "@reactlens/trace-engine";
 
 /**
  * Re-render the component whenever a relevant slice of the trace store ingests.

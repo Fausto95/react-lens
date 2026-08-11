@@ -6,9 +6,9 @@ import {
   type TimeTravelFailure,
   type TimeTravelFailureReason,
   type TimeTravelResult,
-} from "@react-lens/protocol";
-import type { Fiber, FiberBridge, LiveState } from "@react-lens/fiber";
-import { captureStateHooks, inspectClassState } from "@react-lens/fiber";
+} from "@reactlens/protocol";
+import type { Fiber, FiberBridge, LiveState } from "@reactlens/fiber";
+import { captureStateHooks, inspectClassState } from "@reactlens/fiber";
 
 /**
  * Opt-in seam for state living outside React (Zustand, Redux, module

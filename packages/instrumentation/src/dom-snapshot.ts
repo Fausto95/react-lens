@@ -1,4 +1,4 @@
-import type { DOMSnapshot, DOMNodeSnapshot } from "@react-lens/protocol";
+import type { DOMSnapshot, DOMNodeSnapshot } from "@reactlens/protocol";
 
 const MAX_DEPTH = 6;
 const MAX_CHILDREN = 32;

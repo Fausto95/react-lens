@@ -1,6 +1,6 @@
 import { useState } from "react";
-import type { RenderId } from "@react-lens/protocol";
-import type { WhyResult } from "@react-lens/causality";
+import type { RenderId } from "@reactlens/protocol";
+import type { WhyResult } from "@reactlens/causality";
 import type { InspectorContext } from "../Inspector.js";
 import { DiffLines, EmptyTab } from "./shared.js";
 

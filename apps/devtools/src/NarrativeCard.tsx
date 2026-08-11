@@ -1,6 +1,6 @@
-import type { Narrative, LensRef, NarrativeNextClick } from "@react-lens/explain";
-import type { ComponentId, RenderId } from "@react-lens/protocol";
-import { ms } from "@react-lens/ui";
+import type { Narrative, LensRef, NarrativeNextClick } from "@reactlens/explain";
+import type { ComponentId, RenderId } from "@reactlens/protocol";
+import { ms } from "@reactlens/ui";
 
 export function NarrativeCard({
   narrative,

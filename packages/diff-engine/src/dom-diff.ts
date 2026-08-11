@@ -1,4 +1,4 @@
-import type { DOMSnapshot, DOMNodeSnapshot } from "@react-lens/protocol";
+import type { DOMSnapshot, DOMNodeSnapshot } from "@reactlens/protocol";
 import type { DiffChange } from "./types.js";
 
 type Path = Array<string | number>;

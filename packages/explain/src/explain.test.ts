@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { TraceStore } from "@react-lens/trace-engine";
-import { createCausality } from "@react-lens/causality";
+import { TraceStore } from "@reactlens/trace-engine";
+import { createCausality } from "@reactlens/causality";
 import type {
   RenderEvent,
   RenderReason,
@@ -12,9 +12,9 @@ import type {
   RenderSnapshot,
   SerializedValue,
   InteractionId,
-} from "@react-lens/protocol";
-import type { Interaction } from "@react-lens/trace-engine";
-import type { Diagnostic } from "@react-lens/diagnostics";
+} from "@reactlens/protocol";
+import type { Interaction } from "@reactlens/trace-engine";
+import type { Diagnostic } from "@reactlens/diagnostics";
 import { explainInteraction } from "./explain.js";
 
 let seq = 0;

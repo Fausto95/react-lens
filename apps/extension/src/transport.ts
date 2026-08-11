@@ -4,7 +4,7 @@ import type {
   ComponentId,
   TimeTravelEntry,
   TimeTravelFailure,
-} from "@react-lens/protocol";
+} from "@reactlens/protocol";
 
 /** Envelope for page(MAIN) ↔ content(ISOLATED) hops over window.postMessage. */
 export const PAGE_SOURCE = "react-lens/page";

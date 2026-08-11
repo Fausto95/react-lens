@@ -9,7 +9,7 @@ import type {
   CommitSnapshot,
   RenderSnapshot,
   EventsBatchMessage,
-} from "@react-lens/protocol";
+} from "@reactlens/protocol";
 import { RingBuffer } from "./ring-buffer.js";
 import { buildInteractions, type Interaction } from "./interactions.js";
 

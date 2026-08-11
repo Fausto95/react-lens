@@ -1,5 +1,5 @@
 import { TraceMap, originalPositionFor, sourceContentFor } from "@jridgewell/trace-mapping";
-import type { SourceLocation } from "@react-lens/protocol";
+import type { SourceLocation } from "@reactlens/protocol";
 
 export interface OriginalSource {
   /** Normalized original path, e.g. src/App.tsx. */

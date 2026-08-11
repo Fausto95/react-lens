@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import type { ComponentId, ComponentInstance } from "@react-lens/protocol";
+import type { ComponentId, ComponentInstance } from "@reactlens/protocol";
 import { createInspectController } from "./inspectController.js";
 import type { LensRuntime } from "./runtime.js";
 

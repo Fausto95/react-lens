@@ -1,9 +1,9 @@
 import { useState, useCallback, useEffect, useMemo, useRef } from "react";
-import type { TraceStore } from "@react-lens/trace-engine";
-import type { Causality } from "@react-lens/causality";
-import type { ComponentId, RenderId } from "@react-lens/protocol";
+import type { TraceStore } from "@reactlens/trace-engine";
+import type { Causality } from "@reactlens/causality";
+import type { ComponentId, RenderId } from "@reactlens/protocol";
 import { useTraceVersion } from "./useLens.js";
-import { timeAxis } from "@react-lens/ui";
+import { timeAxis } from "@reactlens/ui";
 import { Inspector, type EditApi } from "./Inspector.js";
 import { Tree } from "./Tree.js";
 import { Timeline } from "./Timeline.js";
@@ -18,7 +18,7 @@ import {
 } from "./timeTravelController.js";
 import { loadPanelPrefs, savePanelPrefs } from "./panelPrefs.js";
 import { loadAgentSettings } from "./settings.js";
-import type { AgentSettings } from "@react-lens/agent";
+import type { AgentSettings } from "@reactlens/agent";
 import { AgentPane } from "./AgentPane.js";
 import { SettingsPopover } from "./SettingsPopover.js";
 import {
@@ -30,7 +30,7 @@ import {
   IconUpload,
   IconCrosshair,
   IconSliders,
-} from "@react-lens/icons";
+} from "@reactlens/icons";
 import { PanelMenu } from "./PanelMenu.js";
 import { applyThemePref, type ThemePref } from "./theme.js";
 import {

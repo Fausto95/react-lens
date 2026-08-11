@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { mergeStaticAndRuntime } from "./fuse.js";
 import type { Diagnostic } from "./types.js";
 import type { StaticFinding } from "./static.js";
-import type { ComponentId } from "@react-lens/protocol";
+import type { ComponentId } from "@reactlens/protocol";
 
 const CID = 1 as ComponentId;
 

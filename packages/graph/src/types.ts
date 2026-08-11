@@ -1,4 +1,4 @@
-import type { ComponentId, ComponentType } from "@react-lens/protocol";
+import type { ComponentId, ComponentType } from "@reactlens/protocol";
 
 export type NodeKind = "component" | "context";
 

@@ -1,4 +1,4 @@
-import type { LensRef } from "@react-lens/explain";
+import type { LensRef } from "@reactlens/explain";
 import { SYSTEM_PROMPT } from "./tools.js";
 import {
   appendAssistant,

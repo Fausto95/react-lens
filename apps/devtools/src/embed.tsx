@@ -1,6 +1,6 @@
 import { StrictMode, useState, useMemo, useEffect, useRef, useCallback } from "react";
 import { createRoot } from "react-dom/client";
-import type { ComponentId } from "@react-lens/protocol";
+import type { ComponentId } from "@reactlens/protocol";
 import { Panel } from "./Panel.js";
 import type { LensRuntime } from "./runtime.js";
 import { createHighlighter } from "./highlighter.js";

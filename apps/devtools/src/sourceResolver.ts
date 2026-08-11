@@ -1,4 +1,4 @@
-import { createSourceResolver, type Fetcher, type SourceResolver } from "@react-lens/source-maps";
+import { createSourceResolver, type Fetcher, type SourceResolver } from "@reactlens/source-maps";
 
 /**
  * Panel source resolver. Embedded mode uses default same-origin fetch; the

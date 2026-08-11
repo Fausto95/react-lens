@@ -8,7 +8,7 @@ name: Release packages
 # and publishes the bumped packages to npm.
 #
 # Requires the NPM_TOKEN secret (npm automation token with publish
-# rights on the @react-lens scope). Without it the publish step fails
+# rights on the @reactlens scope). Without it the publish step fails
 # only when a release is actually attempted.
 
 on:

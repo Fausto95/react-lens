@@ -1,8 +1,8 @@
-import type { SerializedValue } from "@react-lens/protocol";
-import { formatValue } from "@react-lens/ui";
+import type { SerializedValue } from "@reactlens/protocol";
+import { formatValue } from "@reactlens/ui";
 
-// DiffLines now lives in @react-lens/ui; re-export for the tabs that use it.
-export { DiffLines } from "@react-lens/ui";
+// DiffLines now lives in @reactlens/ui; re-export for the tabs that use it.
+export { DiffLines } from "@reactlens/ui";
 
 /** A labelled value row with an optional status pill (props/state/hooks). */
 export function ValueRow({

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { TraceStore } from "@react-lens/trace-engine";
-import type { Causality } from "@react-lens/causality";
-import type { ComponentId, RenderId } from "@react-lens/protocol";
+import type { TraceStore } from "@reactlens/trace-engine";
+import type { Causality } from "@reactlens/causality";
+import type { ComponentId, RenderId } from "@reactlens/protocol";
 import {
   createToolHandlers,
   createAgentSession,
@@ -12,9 +12,9 @@ import {
   type AgentStep,
   type ChatMessage,
   type ToolName,
-} from "@react-lens/agent";
-import type { LensRef } from "@react-lens/explain";
-import { IconCopy } from "@react-lens/icons";
+} from "@reactlens/agent";
+import type { LensRef } from "@reactlens/explain";
+import { IconCopy } from "@reactlens/icons";
 import { diagnoseOne } from "./doctor.js";
 import { getSourceResolver } from "./sourceResolver.js";
 import { loadAgentSettings } from "./settings.js";

@@ -1,4 +1,4 @@
-import type { SerializedValue } from "@react-lens/protocol";
+import type { SerializedValue } from "@reactlens/protocol";
 
 /**
  * Compact, depth-limited digest of a SerializedValue for agent tool results.

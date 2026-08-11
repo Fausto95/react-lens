@@ -1,9 +1,9 @@
 import { describe, it, expect } from "vitest";
 import { TOOL_DEFINITIONS, SYSTEM_PROMPT } from "./tools.js";
 import { createToolHandlers } from "./handlers.js";
-import { TraceStore } from "@react-lens/trace-engine";
-import { createCausality } from "@react-lens/causality";
-import { createSourceResolver } from "@react-lens/source-maps";
+import { TraceStore } from "@reactlens/trace-engine";
+import { createCausality } from "@reactlens/causality";
+import { createSourceResolver } from "@reactlens/source-maps";
 import type {
   ComponentId,
   RenderId,
@@ -11,7 +11,7 @@ import type {
   EventId,
   RenderEvent,
   ComponentInstance,
-} from "@react-lens/protocol";
+} from "@reactlens/protocol";
 
 describe("agent tools", () => {
   it("exposes a closed tool set", () => {

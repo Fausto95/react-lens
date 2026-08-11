@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { diff } from "./diff.js";
-import type { SerializedValue, DOMSnapshot } from "@react-lens/protocol";
+import type { SerializedValue, DOMSnapshot } from "@reactlens/protocol";
 
 const prim = (value: number): SerializedValue => ({ k: "primitive", type: "number", value });
 const str = (value: string): SerializedValue => ({ k: "primitive", type: "string", value });

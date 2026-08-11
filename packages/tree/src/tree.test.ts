@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { buildTree } from "./build.js";
 import { flatten } from "./flatten.js";
 import type { ComponentDatum, GroupNode, ComponentNode } from "./types.js";
-import type { ComponentId } from "@react-lens/protocol";
+import type { ComponentId } from "@reactlens/protocol";
 
 let seq = 0;
 function datum(

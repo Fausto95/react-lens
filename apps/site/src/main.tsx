@@ -2,7 +2,7 @@
 import { runtime } from "./boot.js";
 
 import { createRoot } from "react-dom/client";
-import { mountEmbedded } from "@react-lens/devtools/embed";
+import { mountEmbedded } from "@reactlens/devtools/embed";
 import { App } from "./App.js";
 import "./site.css";
 

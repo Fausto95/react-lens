@@ -1,5 +1,5 @@
-import type { TraceStore, Interaction } from "@react-lens/trace-engine";
-import type { ComponentId, RenderId } from "@react-lens/protocol";
+import type { TraceStore, Interaction } from "@reactlens/trace-engine";
+import type { ComponentId, RenderId } from "@reactlens/protocol";
 
 /**
  * Safety valve, not routine truncation: LOD clustering keeps the DOM small,

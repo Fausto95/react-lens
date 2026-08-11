@@ -1,4 +1,4 @@
-import type { ComponentId, TimeTravelFailureReason } from "@react-lens/protocol";
+import type { ComponentId, TimeTravelFailureReason } from "@reactlens/protocol";
 
 const REASON_LABEL: Record<TimeTravelFailureReason, string> = {
   "no-history": "history no longer retained",

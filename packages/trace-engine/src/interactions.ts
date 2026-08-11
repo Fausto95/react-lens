@@ -5,7 +5,7 @@ import type {
   ComponentId,
   RenderId,
   CommitId,
-} from "@react-lens/protocol";
+} from "@reactlens/protocol";
 
 /**
  * The interaction is the timeline's primary unit (redesign §1-2): developers

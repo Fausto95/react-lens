@@ -4,8 +4,8 @@ import type {
   TimeTravelEntry,
   TimeTravelFailureReason,
   TimeTravelResult,
-} from "@react-lens/protocol";
-import { createApplySetCursor, diffApplySet, type TraceStore } from "@react-lens/trace-engine";
+} from "@reactlens/protocol";
+import { createApplySetCursor, diffApplySet, type TraceStore } from "@reactlens/trace-engine";
 import type { TimeCursor } from "./timeCursor.js";
 
 /**

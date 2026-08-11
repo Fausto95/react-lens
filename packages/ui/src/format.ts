@@ -1,4 +1,4 @@
-import type { SerializedValue } from "@react-lens/protocol";
+import type { SerializedValue } from "@reactlens/protocol";
 
 /** Compact human rendering of a serialized value for inspector rows. */
 export function formatValue(v: SerializedValue | undefined): string {

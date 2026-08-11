@@ -1,4 +1,4 @@
-import type { ComponentId, SourceLocation } from "@react-lens/protocol";
+import type { ComponentId, SourceLocation } from "@reactlens/protocol";
 
 /**
  * Runtime evidence for one component, assembled by the caller from the trace

@@ -1,8 +1,8 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { createFiberBridge, type FiberBridge } from "@react-lens/fiber";
-import { createSerializer } from "@react-lens/serializer";
+import { createFiberBridge, type FiberBridge } from "@reactlens/fiber";
+import { createSerializer } from "@reactlens/serializer";
 import { createInstrumentation } from "./instrumentation.js";
-import type { EventsBatchMessage, RenderEvent } from "@react-lens/protocol";
+import type { EventsBatchMessage, RenderEvent } from "@reactlens/protocol";
 
 // Marks this as a valid React test environment for act().
 (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;

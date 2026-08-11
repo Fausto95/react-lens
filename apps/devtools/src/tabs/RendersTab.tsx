@@ -1,8 +1,8 @@
-import type { RenderEvent, RenderSnapshot } from "@react-lens/protocol";
+import type { RenderEvent, RenderSnapshot } from "@reactlens/protocol";
 import type { InspectorContext } from "../Inspector.js";
-import { ms, timeAxis } from "@react-lens/ui";
+import { ms, timeAxis } from "@reactlens/ui";
 import { DiffLines, EmptyTab } from "./shared.js";
-import { diff, type DiffResult } from "@react-lens/diff-engine";
+import { diff, type DiffResult } from "@reactlens/diff-engine";
 
 /**
  * Render history as an activity feed: newest first, each row carrying its

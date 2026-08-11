@@ -1,4 +1,4 @@
-import { IconLens } from "@react-lens/icons";
+import { IconLens } from "@reactlens/icons";
 
 const REPO = "https://github.com/Fausto95/react-lens";
 

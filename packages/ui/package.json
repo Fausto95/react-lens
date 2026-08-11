@@ -1,13 +1,13 @@
 {
-  "name": "@react-lens/ui",
+  "name": "@reactlens/ui",
   "version": "0.0.0",
   "type": "module",
   "exports": {
     ".": "./src/index.tsx"
   },
   "dependencies": {
-    "@react-lens/protocol": "workspace:*",
-    "@react-lens/diff-engine": "workspace:*"
+    "@reactlens/protocol": "workspace:*",
+    "@reactlens/diff-engine": "workspace:*"
   },
   "peerDependencies": {
     "react": "^19"

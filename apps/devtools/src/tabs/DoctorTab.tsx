@@ -1,6 +1,6 @@
-import type { Diagnostic, StaticFinding } from "@react-lens/diagnostics";
-import { shortSource } from "@react-lens/ui";
-import { IconSparkle } from "@react-lens/icons";
+import type { Diagnostic, StaticFinding } from "@reactlens/diagnostics";
+import { shortSource } from "@reactlens/ui";
+import { IconSparkle } from "@reactlens/icons";
 import { EmptyTab } from "./shared.js";
 
 /** Doctor findings as quiet severity strips — impact chip + one-line fix. */

@@ -1,12 +1,12 @@
 {
-  "name": "@react-lens/source-maps",
+  "name": "@reactlens/source-maps",
   "version": "0.0.0",
   "type": "module",
   "exports": {
     ".": "./src/index.ts"
   },
   "dependencies": {
-    "@react-lens/protocol": "workspace:*",
+    "@reactlens/protocol": "workspace:*",
     "@jridgewell/trace-mapping": "^0.3.31"
   },
   "scripts": {

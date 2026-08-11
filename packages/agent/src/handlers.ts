@@ -4,14 +4,14 @@ import type {
   RenderEvent,
   EffectEvent,
   HookSnapshot,
-} from "@react-lens/protocol";
-import type { TraceStore } from "@react-lens/trace-engine";
-import type { Causality } from "@react-lens/causality";
-import { diff, type DiffResult } from "@react-lens/diff-engine";
-import { definitionSpan, type Diagnostic } from "@react-lens/diagnostics";
-import { explainInteraction, type LensRef } from "@react-lens/explain";
-import type { SourceResolver } from "@react-lens/source-maps";
-import { buildGraph, neighbors, componentKey } from "@react-lens/graph";
+} from "@reactlens/protocol";
+import type { TraceStore } from "@reactlens/trace-engine";
+import type { Causality } from "@reactlens/causality";
+import { diff, type DiffResult } from "@reactlens/diff-engine";
+import { definitionSpan, type Diagnostic } from "@reactlens/diagnostics";
+import { explainInteraction, type LensRef } from "@reactlens/explain";
+import type { SourceResolver } from "@reactlens/source-maps";
+import { buildGraph, neighbors, componentKey } from "@reactlens/graph";
 import type { CauseSummary, HooksDiffRow, ToolHandlers } from "./types.js";
 import { summarizeValue } from "./summarize.js";
 

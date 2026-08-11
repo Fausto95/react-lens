@@ -1,4 +1,4 @@
-import type { ComponentId } from "@react-lens/protocol";
+import type { ComponentId } from "@reactlens/protocol";
 
 /** Flat input: what the trace store knows about each component instance. */
 export interface ComponentDatum {

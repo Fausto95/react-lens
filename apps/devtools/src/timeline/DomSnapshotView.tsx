@@ -1,6 +1,6 @@
 import { useState } from "react";
-import type { DOMNodeSnapshot, DOMSnapshot } from "@react-lens/protocol";
-import { timeAxis } from "@react-lens/ui";
+import type { DOMNodeSnapshot, DOMSnapshot } from "@reactlens/protocol";
+import { timeAxis } from "@reactlens/ui";
 
 const MAX_RENDERED_NODES = 400;
 

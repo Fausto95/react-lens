@@ -11,7 +11,7 @@ import type {
   ComponentInstance,
   RenderSnapshot,
   EventsBatchMessage,
-} from "@react-lens/protocol";
+} from "@reactlens/protocol";
 
 let eventSeq = 0;
 function renderEvent(over: Partial<RenderEvent> = {}): RenderEvent {

@@ -3,7 +3,7 @@ import { createFiberBridge } from "./bridge.js";
 import { captureStateHooks, inspectHooks } from "./inspect.js";
 import type { Fiber } from "./react-internals.js";
 import { FunctionComponent } from "./react-internals.js";
-import type { ComponentId } from "@react-lens/protocol";
+import type { ComponentId } from "@reactlens/protocol";
 
 (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 

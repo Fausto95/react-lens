@@ -1,6 +1,6 @@
 import { useMemo } from "react";
-import type { ComponentId } from "@react-lens/protocol";
-import { buildGraph, neighbors, componentKey, type Graph } from "@react-lens/graph";
+import type { ComponentId } from "@reactlens/protocol";
+import { buildGraph, neighbors, componentKey, type Graph } from "@reactlens/graph";
 import type { InspectorContext } from "../Inspector.js";
 import { EmptyTab } from "./shared.js";
 

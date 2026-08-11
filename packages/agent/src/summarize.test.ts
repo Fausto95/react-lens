@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import type { SerializedValue } from "@react-lens/protocol";
+import type { SerializedValue } from "@reactlens/protocol";
 import { summarizeValue } from "./summarize.js";
 
 const num = (value: number): SerializedValue => ({ k: "primitive", type: "number", value });

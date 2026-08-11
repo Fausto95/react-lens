@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { createSourceResolver } from "./resolver.js";
-import type { SourceLocation } from "@react-lens/protocol";
+import type { SourceLocation } from "@reactlens/protocol";
 
 function inlineModule(map: object): string {
   const b64 = btoa(JSON.stringify(map));

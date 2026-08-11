@@ -1,4 +1,4 @@
-import { anomalyStats, type TraceStore } from "@react-lens/trace-engine";
+import { anomalyStats, type TraceStore } from "@reactlens/trace-engine";
 
 /**
  * A ~1-2KB session digest prepended to the first user turn so the model never

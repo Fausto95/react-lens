@@ -1,6 +1,6 @@
 import { useMemo, useState, useEffect, useRef } from "react";
-import type { TraceStore } from "@react-lens/trace-engine";
-import type { ComponentId } from "@react-lens/protocol";
+import type { TraceStore } from "@reactlens/trace-engine";
+import type { ComponentId } from "@reactlens/protocol";
 import { fuzzyScore } from "./fuzzy.js";
 
 export interface Command {

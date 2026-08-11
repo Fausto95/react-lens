@@ -3,7 +3,7 @@ import {
   normalizeProvider,
   type AgentSettings,
   type AgentProvider,
-} from "@react-lens/agent";
+} from "@reactlens/agent";
 
 const KEY = "react-lens/agent-settings";
 

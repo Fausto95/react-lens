@@ -1,4 +1,4 @@
-import type { ComponentId } from "@react-lens/protocol";
+import type { ComponentId } from "@reactlens/protocol";
 import type { ComponentDatum, SemanticNode, ComponentNode, GroupNode, BuildOptions } from "./types.js";
 
 const DEFAULT_GROUP_THRESHOLD = 3;

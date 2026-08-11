@@ -1,7 +1,7 @@
-import type { ComponentId, RenderEvent } from "@react-lens/protocol";
-import type { TraceStore, Interaction } from "@react-lens/trace-engine";
-import type { Causality } from "@react-lens/causality";
-import type { Diagnostic } from "@react-lens/diagnostics";
+import type { ComponentId, RenderEvent } from "@reactlens/protocol";
+import type { TraceStore, Interaction } from "@reactlens/trace-engine";
+import type { Causality } from "@reactlens/causality";
+import type { Diagnostic } from "@reactlens/diagnostics";
 import type {
   LensRef,
   Narrative,

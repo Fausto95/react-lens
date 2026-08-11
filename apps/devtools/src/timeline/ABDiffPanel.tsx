@@ -1,7 +1,7 @@
-import type { TraceStore, ApplySetComparison } from "@react-lens/trace-engine";
-import type { ComponentId } from "@react-lens/protocol";
-import { ms, timeAxis } from "@react-lens/ui";
-import { IconClose } from "@react-lens/icons";
+import type { TraceStore, ApplySetComparison } from "@reactlens/trace-engine";
+import type { ComponentId } from "@reactlens/protocol";
+import { ms, timeAxis } from "@reactlens/ui";
+import { IconClose } from "@reactlens/icons";
 
 const ROW_CAP = 200;
 

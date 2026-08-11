@@ -1,5 +1,5 @@
 /**
- * `@react-lens/diagnostics` eagerly imports `oxc-parser` for AST-backed static
+ * `@reactlens/diagnostics` eagerly imports `oxc-parser` for AST-backed static
  * analysis, but oxc-parser's native/WASM binding isn't browser-bundleable. The
  * diagnostics layer already anticipates this: `analyzeSourceSmart` catches a
  * failing parse and falls back to its regex analyzer (the "browser without

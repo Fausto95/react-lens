@@ -8,9 +8,9 @@
   "baseBranch": "main",
   "updateInternalDependencies": "patch",
   "ignore": [
-    "@react-lens/devtools",
-    "@react-lens/playground",
-    "@react-lens/extension",
-    "@react-lens/site"
+    "@reactlens/devtools",
+    "@reactlens/playground",
+    "@reactlens/extension",
+    "@reactlens/site"
   ]
 }

@@ -15,12 +15,12 @@ import type {
   EventsBatchMessage,
   HookSnapshot,
   SerializedValue,
-} from "@react-lens/protocol";
-import { createIdFactory } from "@react-lens/protocol";
-import type { ContextSnapshot } from "@react-lens/protocol";
-import type { FiberBridge, CommitObservation, RenderDetail, RawHook } from "@react-lens/fiber";
-import { inspectHooks, inspectContexts, inspectClassState } from "@react-lens/fiber";
-import type { Serializer } from "@react-lens/serializer";
+} from "@reactlens/protocol";
+import { createIdFactory } from "@reactlens/protocol";
+import type { ContextSnapshot } from "@reactlens/protocol";
+import type { FiberBridge, CommitObservation, RenderDetail, RawHook } from "@reactlens/fiber";
+import { inspectHooks, inspectContexts, inspectClassState } from "@reactlens/fiber";
+import type { Serializer } from "@reactlens/serializer";
 import { snapshotDom } from "./dom-snapshot.js";
 import { createTimeTravel, type TimeTravelController } from "./time-travel.js";
 

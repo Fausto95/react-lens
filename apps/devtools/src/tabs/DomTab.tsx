@@ -1,6 +1,6 @@
 import { useState } from "react";
-import type { DOMNodeSnapshot } from "@react-lens/protocol";
-import { IconCrosshair } from "@react-lens/icons";
+import type { DOMNodeSnapshot } from "@reactlens/protocol";
+import { IconCrosshair } from "@reactlens/icons";
 import type { InspectorContext } from "../Inspector.js";
 import { EmptyTab } from "./shared.js";
 

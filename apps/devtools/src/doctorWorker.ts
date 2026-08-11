@@ -1,13 +1,13 @@
 /// <reference lib="webworker" />
-import { TraceStore } from "@react-lens/trace-engine";
-import { createCausality } from "@react-lens/causality";
-import type { EventsBatchMessage, ComponentId } from "@react-lens/protocol";
+import { TraceStore } from "@reactlens/trace-engine";
+import { createCausality } from "@reactlens/causality";
+import type { EventsBatchMessage, ComponentId } from "@reactlens/protocol";
 import {
   analyzeSource,
   analyzeSourceSmart,
   mergeStaticAndRuntime,
   type Diagnostic,
-} from "@react-lens/diagnostics";
+} from "@reactlens/diagnostics";
 import { diagnoseAll, buildInput } from "./doctor.js";
 
 /**

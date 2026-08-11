@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { TraceStore } from "@react-lens/trace-engine";
+import { TraceStore } from "@reactlens/trace-engine";
 import type {
   ComponentId,
   RenderId,
@@ -7,7 +7,7 @@ import type {
   EventId,
   RenderEvent,
   ComponentInstance,
-} from "@react-lens/protocol";
+} from "@reactlens/protocol";
 import { MIN_BAR_PX, greedyPack, packPhaseBars } from "./pack.js";
 
 describe("greedyPack", () => {

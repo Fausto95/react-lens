@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
-import { TraceStore } from "@react-lens/trace-engine";
-import { createCausality } from "@react-lens/causality";
-import type { ComponentId, TimeTravelEntry, TimeTravelResult } from "@react-lens/protocol";
-import { Panel, configureSourceFetcher } from "@react-lens/devtools/panel";
-import type { EditApi, TimeTravelApi } from "@react-lens/devtools/panel";
+import { TraceStore } from "@reactlens/trace-engine";
+import { createCausality } from "@reactlens/causality";
+import type { ComponentId, TimeTravelEntry, TimeTravelResult } from "@reactlens/protocol";
+import { Panel, configureSourceFetcher } from "@reactlens/devtools/panel";
+import type { EditApi, TimeTravelApi } from "@reactlens/devtools/panel";
 import { PANEL_PORT_PREFIX, type EditPrimitive, type PortMessage } from "../transport.js";
 
 /**

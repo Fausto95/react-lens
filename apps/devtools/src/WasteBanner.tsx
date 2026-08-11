@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from "react";
-import type { TraceStore, Interaction } from "@react-lens/trace-engine";
-import type { Causality } from "@react-lens/causality";
-import type { ComponentId } from "@react-lens/protocol";
+import type { TraceStore, Interaction } from "@reactlens/trace-engine";
+import type { Causality } from "@reactlens/causality";
+import type { ComponentId } from "@reactlens/protocol";
 import { useTraceVersion } from "./useLens.js";
-import { IconClose } from "@react-lens/icons";
+import { IconClose } from "@reactlens/icons";
 
 const WASTE_THRESHOLD = 5;
 const QUIET_MS = 450;

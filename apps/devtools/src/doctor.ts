@@ -1,7 +1,7 @@
-import type { TraceStore } from "@react-lens/trace-engine";
-import type { Causality } from "@react-lens/causality";
-import type { ComponentId } from "@react-lens/protocol";
-import { analyze, analyzeOne, type Diagnostic, type DiagnosticInput } from "@react-lens/diagnostics";
+import type { TraceStore } from "@reactlens/trace-engine";
+import type { Causality } from "@reactlens/causality";
+import type { ComponentId } from "@reactlens/protocol";
+import { analyze, analyzeOne, type Diagnostic, type DiagnosticInput } from "@reactlens/diagnostics";
 
 /** Assemble the runtime evidence the Doctor rules consume for one component. */
 export function buildInput(

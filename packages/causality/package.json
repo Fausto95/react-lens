@@ -1,14 +1,14 @@
 {
-  "name": "@react-lens/causality",
+  "name": "@reactlens/causality",
   "version": "0.0.0",
   "type": "module",
   "exports": {
     ".": "./src/index.ts"
   },
   "dependencies": {
-    "@react-lens/protocol": "workspace:*",
-    "@react-lens/trace-engine": "workspace:*",
-    "@react-lens/diff-engine": "workspace:*"
+    "@reactlens/protocol": "workspace:*",
+    "@reactlens/trace-engine": "workspace:*",
+    "@reactlens/diff-engine": "workspace:*"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",

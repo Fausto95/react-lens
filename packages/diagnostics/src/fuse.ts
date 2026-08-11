@@ -1,4 +1,4 @@
-import type { ComponentId } from "@react-lens/protocol";
+import type { ComponentId } from "@reactlens/protocol";
 import type { Diagnostic } from "./types.js";
 import type { StaticFinding } from "./static.js";
 

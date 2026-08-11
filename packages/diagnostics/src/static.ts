@@ -1,5 +1,5 @@
 import type { Severity } from "./types.js";
-import type { SourceLocation } from "@react-lens/protocol";
+import type { SourceLocation } from "@reactlens/protocol";
 
 export interface StaticFinding {
   ruleId: string;

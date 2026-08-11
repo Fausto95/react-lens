@@ -4,7 +4,7 @@ import {
   PROVIDER_PRESETS,
   type AgentSettings,
   type AgentProvider,
-} from "@react-lens/agent";
+} from "@reactlens/agent";
 import {
   applyProvider,
   defaultAgentSettings,

@@ -1,4 +1,4 @@
-import type { ComponentId, RenderId, TimeTravelEntry } from "@react-lens/protocol";
+import type { ComponentId, RenderId, TimeTravelEntry } from "@reactlens/protocol";
 import type { TraceStore } from "./trace-store.js";
 
 /**

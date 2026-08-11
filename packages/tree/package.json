@@ -1,12 +1,12 @@
 {
-  "name": "@react-lens/tree",
+  "name": "@reactlens/tree",
   "version": "0.0.0",
   "type": "module",
   "exports": {
     ".": "./src/index.ts"
   },
   "dependencies": {
-    "@react-lens/protocol": "workspace:*"
+    "@reactlens/protocol": "workspace:*"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",

@@ -1,12 +1,12 @@
 {
-  "name": "@react-lens/diagnostics",
+  "name": "@reactlens/diagnostics",
   "version": "0.0.0",
   "type": "module",
   "exports": {
     ".": "./src/index.ts"
   },
   "dependencies": {
-    "@react-lens/protocol": "workspace:*",
+    "@reactlens/protocol": "workspace:*",
     "oxc-parser": "^0.144.0"
   },
   "scripts": {

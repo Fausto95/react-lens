@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { createFiberBridge } from "@react-lens/fiber";
-import { createSerializer } from "@react-lens/serializer";
+import { createFiberBridge } from "@reactlens/fiber";
+import { createSerializer } from "@reactlens/serializer";
 import { createInstrumentation } from "./instrumentation.js";
 import { createTimeTravel } from "./time-travel.js";
 import type {
@@ -8,7 +8,7 @@ import type {
   ComponentId,
   RenderId,
   TimeTravelEntry,
-} from "@react-lens/protocol";
+} from "@reactlens/protocol";
 
 (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 

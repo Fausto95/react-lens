@@ -1,6 +1,6 @@
-import type { ComponentId, RenderId } from "@react-lens/protocol";
-import type { Diagnostic } from "@react-lens/diagnostics";
-import type { Cause } from "@react-lens/causality";
+import type { ComponentId, RenderId } from "@reactlens/protocol";
+import type { Diagnostic } from "@reactlens/diagnostics";
+import type { Cause } from "@reactlens/causality";
 
 /** Citation into Lens IDs — UI jumps Timeline / Tree / Why / Doctor from these. */
 export type LensRef =

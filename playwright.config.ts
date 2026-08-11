@@ -24,7 +24,7 @@ export default defineConfig({
     trace: "retain-on-failure",
   },
   webServer: {
-    command: `pnpm --filter @react-lens/playground exec vite --port ${PORT} --strictPort`,
+    command: `pnpm --filter @reactlens/playground exec vite --port ${PORT} --strictPort`,
     url: `http://localhost:${PORT}`,
     reuseExistingServer: !process.env.CI,
     stdout: "ignore",

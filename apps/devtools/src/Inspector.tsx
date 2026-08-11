@@ -1,11 +1,11 @@
 import { useState, useEffect } from "react";
-import { Section, DiffLines } from "@react-lens/ui";
-import type { TraceStore } from "@react-lens/trace-engine";
-import type { Causality } from "@react-lens/causality";
-import type { ComponentId, RenderId, RenderSnapshot } from "@react-lens/protocol";
-import { diff, type DiffResult } from "@react-lens/diff-engine";
+import { Section, DiffLines } from "@reactlens/ui";
+import type { TraceStore } from "@reactlens/trace-engine";
+import type { Causality } from "@reactlens/causality";
+import type { ComponentId, RenderId, RenderSnapshot } from "@reactlens/protocol";
+import { diff, type DiffResult } from "@reactlens/diff-engine";
 import { useTraceVersion } from "./useLens.js";
-import { ms, shortSource } from "@react-lens/ui";
+import { ms, shortSource } from "@reactlens/ui";
 import type { TimeCursor, ABMarks } from "./timeCursor.js";
 import { WhySection } from "./tabs/OverviewTab.js";
 import { PropsTab } from "./tabs/PropsTab.js";

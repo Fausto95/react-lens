@@ -1,5 +1,5 @@
 {
-  "name": "@react-lens/protocol",
+  "name": "@reactlens/protocol",
   "version": "0.0.0",
   "type": "module",
   "exports": {

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { TraceStore } from "@react-lens/trace-engine";
+import { TraceStore } from "@reactlens/trace-engine";
 import { createCausality } from "./why.js";
 import type {
   RenderEvent,
@@ -11,7 +11,7 @@ import type {
   ComponentInstance,
   RenderSnapshot,
   SerializedValue,
-} from "@react-lens/protocol";
+} from "@reactlens/protocol";
 
 let seq = 0;
 const CID = 1 as ComponentId;

@@ -9,7 +9,7 @@ import type {
   CommitId,
   EventId,
   InteractionId,
-} from "@react-lens/protocol";
+} from "@reactlens/protocol";
 
 let seq = 0;
 function render(over: Partial<RenderEvent> = {}): RenderEvent {

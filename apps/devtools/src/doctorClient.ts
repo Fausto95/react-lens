@@ -1,5 +1,5 @@
-import type { EventsBatchMessage, ComponentId } from "@react-lens/protocol";
-import type { Diagnostic } from "@react-lens/diagnostics";
+import type { EventsBatchMessage, ComponentId } from "@reactlens/protocol";
+import type { Diagnostic } from "@reactlens/diagnostics";
 
 export interface DoctorResult {
   count: number;

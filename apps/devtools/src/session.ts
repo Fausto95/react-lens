@@ -1,5 +1,5 @@
-import type { TraceStore } from "@react-lens/trace-engine";
-import { PROTOCOL_VERSION, type EventsBatchMessage } from "@react-lens/protocol";
+import type { TraceStore } from "@reactlens/trace-engine";
+import { PROTOCOL_VERSION, type EventsBatchMessage } from "@reactlens/protocol";
 
 /** On-disk / IDB session format — TraceStore export plus protocol version. */
 export interface LensSessionFile {

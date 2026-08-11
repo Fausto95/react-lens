@@ -1,9 +1,9 @@
-import type { ComponentId, RenderId, SourceLocation, HookKind } from "@react-lens/protocol";
+import type { ComponentId, RenderId, SourceLocation, HookKind } from "@reactlens/protocol";
 import type { ValueSummary } from "./summarize.js";
-import type { LensRef, Narrative } from "@react-lens/explain";
-import type { Diagnostic } from "@react-lens/diagnostics";
-import type { DiffChange, DiffSummary } from "@react-lens/diff-engine";
-import type { InteractionMetrics } from "@react-lens/trace-engine";
+import type { LensRef, Narrative } from "@reactlens/explain";
+import type { Diagnostic } from "@reactlens/diagnostics";
+import type { DiffChange, DiffSummary } from "@reactlens/diff-engine";
+import type { InteractionMetrics } from "@reactlens/trace-engine";
 
 /** BYOK chat provider. `zml` is Z.AI GLM (Anthropic-compatible). */
 export type AgentProvider = "openai" | "anthropic" | "zml";

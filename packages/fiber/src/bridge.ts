@@ -7,8 +7,8 @@ import type {
   CommitInfo,
   CompilerStatus,
   SourceLocation,
-} from "@react-lens/protocol";
-import { createIdFactory } from "@react-lens/protocol";
+} from "@reactlens/protocol";
+import { createIdFactory } from "@reactlens/protocol";
 import {
   type Fiber,
   type FiberRoot,

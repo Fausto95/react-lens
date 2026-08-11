@@ -1,4 +1,4 @@
-import type { DiffResult } from "@react-lens/diff-engine";
+import type { DiffResult } from "@reactlens/diff-engine";
 import { formatValue } from "./format.js";
 
 /** Renders the changed entries of a DiffResult as before → after lines. */

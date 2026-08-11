@@ -1,12 +1,12 @@
-import type { TraceStore } from "@react-lens/trace-engine";
+import type { TraceStore } from "@reactlens/trace-engine";
 import type {
   RenderEvent,
   RenderReason,
   RenderId,
   RenderSnapshot,
   SerializedValue,
-} from "@react-lens/protocol";
-import { diff, type DiffResult } from "@react-lens/diff-engine";
+} from "@reactlens/protocol";
+import { diff, type DiffResult } from "@reactlens/diff-engine";
 import type { Cause, WhyResult } from "./types.js";
 
 /**
