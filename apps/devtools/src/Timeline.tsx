@@ -50,6 +50,7 @@ import {
 } from "./timeline/geometry.js";
 import { buildTicks, compactGap } from "./timeline/ticks.js";
 import { startReplayTicker, type ReplayTicker } from "./timeline/replayTicker.js";
+import { timelineKeyAction } from "./timeline/keymap.js";
 import { packPhaseBars, type PackedBar } from "./timeline/pack.js";
 import { aggregateBars, visibleChunkRange, type ChunkRange } from "./timeline/lod.js";
 import { ABDiffPanel } from "./timeline/ABDiffPanel.js";
@@ -476,34 +477,45 @@ export function Timeline({
   );
 
 
-  // Keyboard: T, L, F, [ ], Space, arrows
+  // Keyboard: T, L, F, [ ], Space, arrows — matching lives in timeline/keymap
+  // so bindings stay layout-independent (AZERTY etc.).
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const el = document.activeElement;
       if (el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA")) return;
-      if (e.metaKey || e.ctrlKey || e.altKey) return;
-      if (e.key === "t" || e.key === "T") setCollapsed((v) => !v);
-      else if (e.key === "Escape" && bandAnchor.current) {
-        bandAnchor.current = null;
-        setBand(null);
-      }
-      else if (e.key === "l" || e.key === "L") onCursor({ t: bounds.t1, mode: "live" });
-      else if (e.key === "f" || e.key === "F") {
-        if (selected) fitSelection(selected);
-        else fitSession();
-      } else if (e.key === "[") stepInteraction(-1);
-      else if (e.key === "]") stepInteraction(1);
-      else if (e.key === "+" || e.key === "=") zoomButtons(1.25);
-      else if (e.key === "-" || e.key === "_") zoomButtons(0.8);
-      else if (e.key === " " || e.code === "Space") {
-        e.preventDefault();
-        togglePlay();
-      } else if (e.key === "ArrowLeft") {
-        e.preventDefault();
-        stepCommit(-1);
-      } else if (e.key === "ArrowRight") {
-        e.preventDefault();
-        stepCommit(1);
+      const action = timelineKeyAction(e);
+      if (!action) return;
+      switch (action.kind) {
+        case "toggle-collapse":
+          setCollapsed((v) => !v);
+          break;
+        case "escape-band":
+          if (bandAnchor.current) {
+            bandAnchor.current = null;
+            setBand(null);
+          }
+          break;
+        case "go-live":
+          onCursor({ t: bounds.t1, mode: "live" });
+          break;
+        case "fit":
+          if (selected) fitSelection(selected);
+          else fitSession();
+          break;
+        case "step-interaction":
+          stepInteraction(action.dir);
+          break;
+        case "zoom":
+          zoomButtons(action.factor);
+          break;
+        case "toggle-play":
+          e.preventDefault();
+          togglePlay();
+          break;
+        case "step-commit":
+          e.preventDefault();
+          stepCommit(action.dir);
+          break;
       }
     };
     window.addEventListener("keydown", onKey);
