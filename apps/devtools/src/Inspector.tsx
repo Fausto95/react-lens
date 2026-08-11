@@ -19,6 +19,7 @@ import { DomTab } from "./tabs/DomTab.js";
 import { RelationsTab } from "./tabs/RelationsTab.js";
 import { DoctorTab } from "./tabs/DoctorTab.js";
 import { openInEditor } from "./openInEditor.js";
+import { diagnosticFixPrompt } from "./perfBudget.js";
 import { useDoctor } from "./useDoctor.js";
 
 export interface EditApi {
@@ -60,6 +61,7 @@ export function Inspector({
   highlight,
   onSelectComponent,
   onRequestSnapshot,
+  onAskAI,
 }: {
   store: TraceStore;
   causality: Causality;
@@ -70,6 +72,8 @@ export function Inspector({
   highlight?: (id: ComponentId | null) => void;
   onSelectComponent?: (id: ComponentId) => void;
   onRequestSnapshot?: (renderId: RenderId) => void;
+  /** Ask the AI drawer a targeted question (doctor Fix-with-AI). */
+  onAskAI?: (question: string) => void;
 }) {
   useTraceVersion(store, { kind: "component", id: componentId });
   const inst = store.instance(componentId);
@@ -188,39 +192,46 @@ export function Inspector({
 
       {doctor.total > 0 && (
         <Section title="Doctor" count={doctor.total} defaultOpen>
-          <DoctorTab runtime={doctor.runtime} staticFindings={doctor.staticFindings} />
+          <DoctorTab
+            runtime={doctor.runtime}
+            staticFindings={doctor.staticFindings}
+            {...(onAskAI
+              ? {
+                  onFixWithAI: (f: { title: string; detail: string }) =>
+                    onAskAI(
+                      diagnosticFixPrompt(inst.name, componentId as number, f.title, f.detail),
+                    ),
+                }
+              : {})}
+          />
         </Section>
       )}
 
-      {propCount > 0 && (
-        <Section title="Props" count={propCount} defaultOpen>
-          <PropsTab ctx={ctx} />
-        </Section>
-      )}
+      {/* Value sections keep a stable order and stay present when empty, so
+          the panel doesn't reflow as selection moves between components. */}
+      <Section title="Props" count={propCount} defaultOpen={propCount > 0}>
+        {propCount > 0 ? <PropsTab ctx={ctx} /> : <SectionEmpty>No props</SectionEmpty>}
+      </Section>
 
-      {stateCount > 0 && (
-        <Section title="State" count={stateCount} defaultOpen>
-          <StateTab ctx={ctx} />
-        </Section>
-      )}
+      <Section title="State" count={stateCount} defaultOpen={stateCount > 0}>
+        {stateCount > 0 ? <StateTab ctx={ctx} /> : <SectionEmpty>No state hooks</SectionEmpty>}
+      </Section>
 
-      {hooks.length > 0 && (
-        <Section title="Hooks" count={hooks.length}>
-          <HooksTab ctx={ctx} />
-        </Section>
-      )}
+      <Section title="Hooks" count={hooks.length}>
+        {hooks.length > 0 ? <HooksTab ctx={ctx} /> : <SectionEmpty>No hooks</SectionEmpty>}
+      </Section>
 
-      {contextCount > 0 && (
-        <Section title="Context" count={contextCount}>
+      <Section title="Context" count={contextCount}>
+        {contextCount > 0 ? (
           <ContextTab ctx={ctx} />
-        </Section>
-      )}
+        ) : (
+          <SectionEmpty>No context reads</SectionEmpty>
+        )}
+      </Section>
 
-      {effectCount > 0 && (
-        <Section title="Effects" count={effectCount}>
-          <EffectsTab ctx={ctx} />
-        </Section>
-      )}
+      <Section title="Effects" count={effectCount}>
+        {effectCount > 0 ? <EffectsTab ctx={ctx} /> : <SectionEmpty>No effects</SectionEmpty>}
+      </Section>
 
       <Section title="Stack">
         <RelationsTab ctx={ctx} />
@@ -241,6 +252,11 @@ export function Inspector({
       )}
     </div>
   );
+}
+
+/** Quiet placeholder so empty sections hold their place without noise. */
+function SectionEmpty({ children }: { children: React.ReactNode }) {
+  return <div className="rl-section-empty">{children}</div>;
 }
 
 interface ABDiff {

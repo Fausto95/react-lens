@@ -2002,3 +2002,9 @@
   color: var(--rl-text-faint); font-size: 10px;
 }
 .rl-menu-foot strong { color: var(--rl-text-dim); font-weight: 500; }
+
+/* Quiet empty-state row inside always-present inspector sections. */
+.rl-section-empty {
+  padding: 2px var(--rl-s4) var(--rl-s2);
+  font-size: 11px; color: var(--rl-text-faint); font-style: italic;
+}

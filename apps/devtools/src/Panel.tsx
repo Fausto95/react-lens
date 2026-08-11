@@ -574,6 +574,7 @@ export function Panel({
               cursor={cursor}
               ab={ab}
               onSelectComponent={setSelected}
+              onAskAI={askAI}
               {...(edit ? { edit } : {})}
               {...(onHighlight ? { highlight: onHighlight } : {})}
               {...(onRequestSnapshot ? { onRequestSnapshot } : {})}

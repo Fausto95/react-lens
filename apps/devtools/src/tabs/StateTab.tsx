@@ -29,6 +29,14 @@ export function StateTab({ ctx }: { ctx: InspectorContext }) {
             ) : (
               <span className="rl-val rl-muted">—</span>
             )}
+            {edit && h.kind === "reducer" && (
+              <span
+                className="rl-badge dim"
+                title="Reducer state can only change through dispatched actions — direct writes would bypass the reducer."
+              >
+                read-only
+              </span>
+            )}
           </div>
         );
       })}

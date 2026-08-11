@@ -19,3 +19,13 @@ export function renderFixPrompt(name: string, componentId: number, renderId: num
 export function commitFixPrompt(commitId: number, totalSelfMs: number, componentCount: number): string {
   return `Commit ${commitId} cost ${Math.round(totalSelfMs)}ms across ${componentCount} components — an outlier for this session. Which components dominate it? Pull the runtime profile (component_runtime) of the worst one, explain why it rendered, and propose a fix grounded in its source and compiler status — plus the expected ms saved.`;
 }
+
+/** Targeted agent question for a specific doctor finding (inspector strip). */
+export function diagnosticFixPrompt(
+  name: string,
+  componentId: number,
+  title: string,
+  detail: string,
+): string {
+  return `The doctor flagged "${title}" on ${name} [component:${componentId}]: ${detail} Verify the diagnosis against the component's runtime profile (component_runtime) and its actual prop/hook values, read the source of the offending site, then propose the smallest concrete fix — respecting its compiler status — and state what improves.`;
+}
