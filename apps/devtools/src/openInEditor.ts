@@ -1,41 +1,52 @@
 /**
- * Open a file:line in a local editor via custom URL schemes.
- * Tries Cursor, then VS Code, then JetBrains — first navigation wins in practice
- * (OS handler registration). No-op when `file` is empty or a URL.
+ * Open a file:line in a local editor via a custom URL scheme.
+ *
+ * Exactly ONE navigation per call: browsers show a single external-protocol
+ * dialog at a time, so a second scheme fired while it is up cancels it — and
+ * removing the carrier iframe early dismisses it too. The editor is chosen
+ * from a persisted preference (localStorage "react-lens:editor"), defaulting
+ * to vscode. No-op when `file` is empty or a URL.
  */
-export function openInEditor(
-  file: string,
-  line = 1,
-  column = 1,
-): boolean {
+
+export type EditorId = keyof typeof EDITOR_SCHEMES;
+
+const EDITOR_SCHEMES = {
+  vscode: (p: string, l: number, c: number) => `vscode://file/${p}:${l}:${c}`,
+  cursor: (p: string, l: number, c: number) => `cursor://file/${p}:${l}:${c}`,
+  windsurf: (p: string, l: number, c: number) => `windsurf://file/${p}:${l}:${c}`,
+  webstorm: (p: string, l: number, c: number) =>
+    `webstorm://open?file=${encodeURIComponent(p)}&line=${l}&column=${c}`,
+} as const;
+
+const EDITOR_PREF_KEY = "react-lens:editor";
+const DEFAULT_EDITOR: EditorId = "vscode";
+/** Long enough to answer the browser's open-app dialog. */
+const IFRAME_TTL_MS = 60_000;
+
+export function preferredEditor(): EditorId {
+  try {
+    const v = localStorage.getItem(EDITOR_PREF_KEY);
+    return v && v in EDITOR_SCHEMES ? (v as EditorId) : DEFAULT_EDITOR;
+  } catch {
+    return DEFAULT_EDITOR;
+  }
+}
+
+export function openInEditor(file: string, line = 1, column = 1): boolean {
   const path = normalizeEditorPath(file);
   if (!path) return false;
-  const loc = `${path}:${Math.max(1, line)}:${Math.max(1, column)}`;
-  const schemes = [
-    `cursor://file/${loc}`,
-    `vscode://file/${loc}`,
-    `windsurf://file/${loc}`,
-    `webstorm://open?file=${encodeURIComponent(path)}&line=${line}&column=${column}`,
-  ];
-  // Prefer an invisible iframe so we don't navigate the DevTools panel away.
+  const url = EDITOR_SCHEMES[preferredEditor()](path, Math.max(1, line), Math.max(1, column));
+  // An invisible iframe so we don't navigate the DevTools panel away.
   try {
     const iframe = document.createElement("iframe");
     iframe.style.display = "none";
-    iframe.src = schemes[0]!;
+    iframe.src = url;
     document.documentElement.appendChild(iframe);
-    setTimeout(() => iframe.remove(), 1500);
-    // Also poke vscode as fallback for users without Cursor.
-    setTimeout(() => {
-      const iframe2 = document.createElement("iframe");
-      iframe2.style.display = "none";
-      iframe2.src = schemes[1]!;
-      document.documentElement.appendChild(iframe2);
-      setTimeout(() => iframe2.remove(), 1500);
-    }, 80);
+    setTimeout(() => iframe.remove(), IFRAME_TTL_MS);
     return true;
   } catch {
     try {
-      window.open(schemes[0], "_blank");
+      window.open(url, "_blank");
       return true;
     } catch {
       return false;

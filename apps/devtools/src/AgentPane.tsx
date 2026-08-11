@@ -171,29 +171,37 @@ export function AgentPane({
     else void ask(askRequest.question);
   }, [open, askRequest, running, ask]);
 
+  // Navigate to the cited evidence, then close the drawer: it overlays the
+  // inspector and timeline it just pointed at, so staying open makes the jump
+  // invisible. The conversation survives — reopening (⌘I) resumes it.
   const onCitation = useCallback(
     (ref: CitationRef | LensRef) => {
+      let navigated = false;
       if (ref.kind === "component") {
         onSelectComponent?.(ref.id as ComponentId);
-        return;
-      }
-      if (ref.kind === "doctor") {
+        navigated = onSelectComponent !== undefined;
+      } else if (ref.kind === "doctor") {
         onSelectComponent?.(ref.componentId as ComponentId);
-        return;
-      }
-      if (ref.kind === "render") {
+        navigated = onSelectComponent !== undefined;
+      } else if (ref.kind === "render") {
         const ev = store.getRender(ref.id as RenderId);
         if (ev) {
           onSelectComponent?.(ev.componentId);
           onCursor({ t: ev.timestamp, mode: "historical" });
+          navigated = true;
         }
-        return;
+      } else {
+        // Interaction: seek the timeline to its start.
+        const interaction = store.interactions().find((i) => String(i.id) === String(ref.id));
+        if (interaction) {
+          onCursor({ t: interaction.start, mode: "historical" });
+          navigated = true;
+        }
       }
-      // Interaction: seek the timeline to its start.
-      const interaction = store.interactions().find((i) => String(i.id) === String(ref.id));
-      if (interaction) onCursor({ t: interaction.start, mode: "historical" });
+      // Closing aborts an in-flight run — mid-stream, navigate but stay open.
+      if (navigated && !running) onClose();
     },
-    [onSelectComponent, onCursor, store],
+    [onSelectComponent, onCursor, onClose, store, running],
   );
 
   if (!open) return null;
