@@ -1,6 +1,10 @@
 import { describe, it, expect } from "vitest";
 import {
   IDLE_GAP_MS,
+  PANE_MIN_H,
+  PANE_MAX_H,
+  clampPaneHeight,
+  fitPlan,
   IDLE_WIDTH,
   buildScale,
   clamp,
@@ -147,5 +151,43 @@ describe("clamp / nearest", () => {
     expect(nearest(spans, 50)).toBe(spans[0]);
     expect(nearest(spans, 350)).toBe(spans[1]);
     expect(nearest([], 10)).toBeNull();
+  });
+});
+
+describe("fitPlan", () => {
+  const active: Array<[number, number]> = [
+    [0, 500],
+    [2000, 2600],
+  ];
+  const bounds = { t0: 0, t1: 3000 };
+
+  it("projects the range to ~85% of the port width, centered", () => {
+    const plan = fitPlan(active, bounds, { start: 2100, end: 2500 }, 800);
+    const model = buildScale(active, bounds.t0, bounds.t1, plan.scale);
+    const x0 = projectX(model.segs, 2100);
+    const x1 = projectX(model.segs, 2500);
+    expect(Math.abs(x1 - x0 - 800 * 0.85)).toBeLessThanOrEqual(1.5);
+    expect(plan.scrollLeft).toBeCloseTo(Math.max(0, (x0 + x1) / 2 - 400), 0);
+  });
+
+  it("expands a degenerate range to a 16ms context window", () => {
+    const plan = fitPlan(active, bounds, { start: 100, end: 100 }, 800);
+    const model = buildScale(active, bounds.t0, bounds.t1, plan.scale);
+    const w = projectX(model.segs, 108) - projectX(model.segs, 92);
+    expect(Math.abs(w - 800 * 0.85)).toBeLessThanOrEqual(1.5);
+  });
+
+  it("clamps the range to session bounds", () => {
+    const plan = fitPlan(active, bounds, { start: -500, end: 100 }, 800);
+    expect(plan.scale).toBeGreaterThan(0);
+    expect(plan.scrollLeft).toBeGreaterThanOrEqual(0);
+  });
+});
+
+describe("clampPaneHeight", () => {
+  it("clamps into the allowed waterfall-lane range", () => {
+    expect(clampPaneHeight(50)).toBe(PANE_MIN_H);
+    expect(clampPaneHeight(9999)).toBe(PANE_MAX_H);
+    expect(clampPaneHeight(300)).toBe(300);
   });
 });

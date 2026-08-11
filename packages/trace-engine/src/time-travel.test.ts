@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { TraceStore } from "./trace-store.js";
-import { applySetAt, createApplySetCursor, diffApplySet } from "./time-travel.js";
+import { applySetAt, compareApplySets, createApplySetCursor, diffApplySet } from "./time-travel.js";
 import type {
   RenderEvent,
   ComponentId,
@@ -224,5 +224,52 @@ describe("createApplySetCursor — commits whose renders span time", () => {
     expect(cursor.moveTo(120)).toEqual(applySetAt(store, 120));
     expect(cursor.moveTo(250)).toEqual(applySetAt(store, 250));
     expect(cursor.moveTo(120)).toEqual(applySetAt(store, 120));
+  });
+});
+
+describe("compareApplySets", () => {
+  it("classifies components as changed/added/removed between A and B", () => {
+    const store = new TraceStore();
+    store.ingest(
+      batch({
+        instances: [instance(1, "Same"), instance(2, "Changed"), instance(3, "Born")],
+        events: [
+          renderEvent({ componentId: cid(1), renderId: rid(10), timestamp: 100 }),
+          renderEvent({ componentId: cid(2), renderId: rid(11), timestamp: 100 }),
+          renderEvent({ componentId: cid(2), renderId: rid(12), timestamp: 300 }),
+          renderEvent({ componentId: cid(3), renderId: rid(13), timestamp: 350 }),
+        ],
+      }),
+    );
+    const result = compareApplySets(store, 150, 400);
+    const byId = new Map(result.changed.map((c) => [c.componentId, c]));
+    expect(byId.has(cid(1))).toBe(false); // same render both sides
+    expect(result.unchangedCount).toBe(1);
+    expect(byId.get(cid(2))).toEqual({
+      componentId: cid(2),
+      renderA: rid(11),
+      renderB: rid(12),
+    });
+    expect(byId.get(cid(3))).toEqual({
+      componentId: cid(3),
+      renderA: null,
+      renderB: rid(13),
+    });
+  });
+
+  it("is symmetric-aware: components only present at A report renderB null", () => {
+    const store = new TraceStore({ maxRendersPerComponent: 1 });
+    store.ingest(
+      batch({
+        instances: [instance(1, "Evicted")],
+        events: [
+          renderEvent({ componentId: cid(1), renderId: rid(10), timestamp: 100 }),
+          renderEvent({ componentId: cid(1), renderId: rid(11), timestamp: 500 }),
+        ],
+      }),
+    );
+    // Ring keeps only render 11 (t=500): at A=200 nothing retained, at B=600 render 11.
+    const result = compareApplySets(store, 200, 600);
+    expect(result.changed).toEqual([{ componentId: cid(1), renderA: null, renderB: rid(11) }]);
   });
 });
