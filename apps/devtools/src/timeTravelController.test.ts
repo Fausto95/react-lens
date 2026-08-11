@@ -249,3 +249,27 @@ describe("createPanelTimeTravel — restore status", () => {
     ctl.dispose();
   });
 });
+
+describe("createPanelTimeTravel — hidden-tab scheduling", () => {
+  it("applies via the timeout fallback when rAF never fires", async () => {
+    // Hidden/backgrounded tabs pause requestAnimationFrame entirely; the
+    // controller must not stall scrubs behind it.
+    const api = fakeApi();
+    const ctl = createPanelTimeTravel(makeStore(), api);
+    ctl.onCursor({ t: 250, mode: "historical" }, true);
+    // No flushRaf() on purpose — only timers run.
+    await new Promise((r) => setTimeout(r, 50));
+    expect(api.applies).toHaveLength(1);
+    ctl.dispose();
+  });
+
+  it("does not double-apply when both rAF and the fallback fire", async () => {
+    const api = fakeApi();
+    const ctl = createPanelTimeTravel(makeStore(), api);
+    ctl.onCursor({ t: 250, mode: "historical" }, true);
+    flushRaf();
+    await new Promise((r) => setTimeout(r, 50));
+    expect(api.applies).toHaveLength(1);
+    ctl.dispose();
+  });
+});
