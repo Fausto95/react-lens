@@ -41,7 +41,6 @@ export function Timeline({
   onCursor,
   lanes,
   fixApplied = false,
-  replayFollow = false,
   onSelectComponent,
   onHighlight,
   transport,
@@ -51,8 +50,6 @@ export function Timeline({
   onCursor: (c: TimeCursor) => void;
   lanes?: LaneControls;
   fixApplied?: boolean;
-  /** Replay scrolls to keep the playhead in view (panel setting, off by default). */
-  replayFollow?: boolean;
   onSelectComponent?: (id: ComponentId) => void;
   onHighlight?: (id: ComponentId | null) => void;
   /** Panel-owned controls rendered into the footer (travel, A/B…). */
@@ -220,12 +217,11 @@ export function Timeline({
   }, [state.playing, dispatch]);
 
   /**
-   * Follow the playhead while replaying. Opt-in: above "fit" this slides the
-   * content under the reader, which makes a cascade harder to follow than the
-   * playhead simply leaving the view.
+   * Follow the playhead while replaying. A replay whose playhead walks off the
+   * edge is not showing you anything, so this is not optional.
    */
   useEffect(() => {
-    if (!replayFollow || !state.playing) return;
+    if (!state.playing) return;
     const next = followScroll(
       NAME_W + xOf(model.playhead),
       state.viewport.scrollLeft,
@@ -234,7 +230,6 @@ export function Timeline({
     );
     if (next !== null) dispatch({ type: "scrolled", scrollLeft: next });
   }, [
-    replayFollow,
     state.playing,
     model.playhead,
     state.viewport.scrollLeft,

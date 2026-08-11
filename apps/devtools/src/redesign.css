@@ -1669,3 +1669,23 @@
 .rl-redesign .clip.bare {
   padding: 0;
 }
+
+/* ── Ruler stacking ─────────────────────────────────────────────────────────
+   Markers sat at z-index 2 while the tick labels were `auto`, and their two
+   bands clear each other by about 4px. Any nudge — a longer interaction name,
+   a different font, browser zoom — and the marker painted over the time
+   label. That is the wrong thing to lose: markers annotate the axis, so the
+   axis has to stay readable underneath them. */
+.rl-redesign .tick span {
+  z-index: 3;
+}
+/* A marker is one line, always. A long interaction name ("Click
+   TimeMachineSpecimen") must truncate rather than grow the band down into the
+   labels or sprawl across its neighbours. */
+.rl-redesign .marker {
+  z-index: 2;
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.15;
+}
