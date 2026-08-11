@@ -330,7 +330,9 @@ function ExtensionPanel() {
         send({ kind: "record", recording: next });
       }}
       onRequestSnapshot={(renderId) => send({ kind: "snapshot-request", renderId })}
-      onHighlight={(componentId) => send({ kind: "highlight", componentId })}
+      onHighlight={(componentId, opts) =>
+        send({ kind: "highlight", componentId, ...(opts?.reveal ? { reveal: true } : {}) })
+      }
       onReplayCommit={(componentIds) => send({ kind: "replay", componentIds })}
       timeTravel={timeTravel}
     />

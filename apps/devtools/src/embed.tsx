@@ -115,13 +115,15 @@ function EmbeddedPanel({ runtime, host }: { runtime: LensRuntime; host: HTMLElem
       onReplayCommit={replayWave}
       timeTravel={runtime.timeTravel}
       {...(edit ? { edit } : {})}
-      onHighlight={(id: ComponentId | null) => {
+      onHighlight={(id: ComponentId | null, opts?: { reveal?: boolean }) => {
         if (id === null) {
           if (waveTimers.current.length > 0) return;
           highlighter.hide();
           return;
         }
-        highlighter.show(runtime.domNodesOf(id));
+        const nodes = runtime.domNodesOf(id);
+        if (opts?.reveal) highlighter.reveal(nodes);
+        else highlighter.show(nodes);
       }}
       onToggleRecording={() => {
         if (recording) runtime.stop();

@@ -25,6 +25,7 @@ export function PanelMenu({
   theme,
   onThemeChange,
   overlay,
+  reveal,
   reading,
 }: {
   open: boolean;
@@ -33,6 +34,8 @@ export function PanelMenu({
   onThemeChange: (pref: ThemePref) => void;
   /** Render overlay control (embedded runtime only). */
   overlay?: { enabled: boolean; toggle: () => void } | undefined;
+  /** Scroll the inspected page to the selected component when it's off-screen. */
+  reveal?: { enabled: boolean; toggle: () => void } | undefined;
   /** Where the panel reads from: embedded page or extension devtools. */
   reading: string;
 }) {
@@ -85,8 +88,26 @@ export function PanelMenu({
             type="button"
             role="switch"
             aria-checked={overlay.enabled}
+            aria-label="Render overlay"
             className={`rl-menu-switch${overlay.enabled ? " on" : ""}`}
             onClick={overlay.toggle}
+          >
+            <span className="rl-menu-switch-knob" />
+          </button>
+        </div>
+      )}
+      {reveal && (
+        <div className="rl-menu-row">
+          <span className="rl-menu-label" title="Selecting a component scrolls the page to it">
+            Scroll to selection
+          </span>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={reveal.enabled}
+            aria-label="Scroll to selection"
+            className={`rl-menu-switch${reveal.enabled ? " on" : ""}`}
+            onClick={reveal.toggle}
           >
             <span className="rl-menu-switch-knob" />
           </button>

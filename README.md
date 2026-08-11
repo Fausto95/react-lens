@@ -46,6 +46,10 @@ one or two clicks:
   Z.AI; your key never leaves the browser) that answers through typed tools
   over the live trace. Every claim cites a Lens ID — clickable chips that jump
   to the exact render, component, or interaction.
+- **Bidirectional selection** — click an element on the page to select it in
+  the tree, or select anything in the panel to scroll the page to it and
+  outline it. Off-screen components only, so walking the tree with ↑/↓ doesn't
+  drag the app around.
 - **Render causes** — why-did-this-render at three levels of depth, including
   a "no observable change" verdict when a render was avoidable.
 - **AST Doctor** — static analysis (OXC parser, regex fallback) fused with

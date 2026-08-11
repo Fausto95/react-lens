@@ -68,7 +68,13 @@ export type ContentToPage =
   | { source: typeof CONTENT_SOURCE; kind: "record"; recording: boolean }
   | { source: typeof CONTENT_SOURCE; kind: "snapshot-request"; renderId: RenderId }
   | { source: typeof CONTENT_SOURCE; kind: "source-request"; requestId: string; url: string }
-  | { source: typeof CONTENT_SOURCE; kind: "highlight"; componentId: ComponentId | null }
+  | {
+      source: typeof CONTENT_SOURCE;
+      kind: "highlight";
+      componentId: ComponentId | null;
+      /** Also scroll the page to the component when it's out of view. */
+      reveal?: boolean;
+    }
   | { source: typeof CONTENT_SOURCE; kind: "replay"; componentIds: ComponentId[] }
   | { source: typeof CONTENT_SOURCE; kind: "inspect-start" }
   | { source: typeof CONTENT_SOURCE; kind: "inspect-stop" }
@@ -123,7 +129,7 @@ export type PortMessage =
   | { kind: "snapshot"; frame: EventsBatchMessage["payload"] }
   | { kind: "source-request"; requestId: string; url: string }
   | { kind: "source"; requestId: string; url: string; body?: string; error?: string }
-  | { kind: "highlight"; componentId: ComponentId | null }
+  | { kind: "highlight"; componentId: ComponentId | null; reveal?: boolean }
   | { kind: "replay"; componentIds: ComponentId[] }
   | { kind: "inspect-start" }
   | { kind: "inspect-stop" }
