@@ -14,15 +14,23 @@ export default defineConfig({
   },
   plugins: lazyPlugins(() => [
     react({
-      // React Compiler on for the playground's OWN source only (DESIGN §1.4).
-      // Excluding the devtools workspace package matches how the panel runs in
-      // the real extension (uncompiled) and, crucially, keeps the compiler from
-      // memoizing the panel's external-store reads (which would freeze the UI).
+      // React Compiler on for the playground's own source AND the panel, which
+      // now matches how the real extension builds it.
+      //
+      // The panel used to be excluded because compiling its external-store
+      // reads froze the UI. That hazard is real but narrow: it only affects
+      // files whose memos key on the trace version counter without reading it.
+      // Those files opt out individually with `"use no memo"`, so the rest of
+      // the panel gets compiled here exactly as it does in the extension.
       babel: {
         plugins: [
           [
             "babel-plugin-react-compiler",
-            { target: "19", sources: (filename: string) => filename.includes("/apps/playground/") },
+            {
+              target: "19",
+              sources: (filename: string) =>
+                filename.includes("/apps/playground/") || filename.includes("/apps/devtools/"),
+            },
           ],
         ],
       },

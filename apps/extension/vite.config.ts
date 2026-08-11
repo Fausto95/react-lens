@@ -17,7 +17,31 @@ export default defineConfig({
       },
     ],
   },
-  plugins: lazyPlugins(() => [react(), crx({ manifest: manifest as never })]),
+  plugins: lazyPlugins(() => [
+    react({
+      // The panel is React 19 written for the Compiler — no hand-written
+      // `useCallback`/`memo` anywhere (see the repo's engineering rules), so
+      // without this every handler and child re-rendered with nothing
+      // collecting the debt. Compiling covers the extension shell and the
+      // devtools package it renders.
+      //
+      // Files that key memos on the trace store's version counter opt out with
+      // `"use no memo"`, and say why at the top of each.
+      babel: {
+        plugins: [
+          [
+            "babel-plugin-react-compiler",
+            {
+              target: "19",
+              sources: (filename: string) =>
+                filename.includes("/apps/extension/") || filename.includes("/apps/devtools/"),
+            },
+          ],
+        ],
+      },
+    }),
+    crx({ manifest: manifest as never }),
+  ]),
   build: {
     target: "chrome116",
     // Chrome 116 supports native ESM + <link rel=modulepreload>, so the polyfill
