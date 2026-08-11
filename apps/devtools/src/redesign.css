@@ -1268,3 +1268,122 @@
 .rl-redesign .lanes-body::-webkit-scrollbar-track {
   background: transparent;
 }
+
+/* ══ Timeline canvas (rewrite) ══════════════════════════════════════════════
+   The ruler and the lanes share ONE horizontal scroller, so there is a single
+   scroll offset for the whole view and nothing to keep in sync. The ruler
+   sticks to the top and the name gutter to the left, so both stay put while
+   the tracks slide underneath. */
+.rl-redesign .tl {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+.rl-redesign .lanes {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+}
+.rl-redesign .lanes-body {
+  height: 100%;
+  overflow: auto;
+  overscroll-behavior-x: contain;
+}
+.rl-redesign .lanes-inner {
+  position: relative;
+  /* width is set inline from the scale (gutter + content) */
+}
+
+/* Ruler rides along the top of the canvas. */
+.rl-redesign .lanes-inner > .ruler {
+  position: sticky;
+  top: 0;
+  z-index: 7;
+  background: var(--panel);
+}
+.rl-redesign .rspacer {
+  position: sticky;
+  left: 0;
+  z-index: 2;
+  flex: 0 0 148px;
+  background: var(--panel);
+}
+.rl-redesign .rtrack {
+  position: relative;
+  flex: 0 0 auto;
+}
+
+/* Lane rows span the full canvas width; the name gutter stays pinned. */
+.rl-redesign .lane {
+  width: 100%;
+}
+.rl-redesign .lname {
+  position: sticky;
+  left: 0;
+  z-index: 6;
+  flex: 0 0 148px;
+  background: var(--bg);
+}
+.rl-redesign .lane.sub .lname {
+  background: var(--panel-2);
+}
+.rl-redesign .track {
+  position: relative;
+  flex: 1 1 auto;
+  height: 100%;
+}
+
+/* Chrome (idle gutters, region, playhead) is positioned in canvas pixels, so
+   it lives inside the scrolled content and travels with it. */
+.rl-redesign .lanes-chrome {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 4;
+}
+.rl-redesign .lanes-chrome .rhandle {
+  pointer-events: auto;
+}
+/* Compression stays honest: each gutter says how much time it stands for. */
+.rl-redesign .idle {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  display: grid;
+  place-items: center;
+  font-family: var(--mono);
+  font-size: 8.5px;
+  line-height: 1;
+  color: var(--text-3);
+  border-left: 1px dashed var(--line-strong);
+  border-right: 1px dashed var(--line-strong);
+  z-index: 1;
+}
+
+/* `<svg>` is a replaced element: `inset: 0` positions but does not stretch it,
+   so the arrow layer would collapse to the SVG default 300x150 and clip every
+   path out of existence. */
+.rl-redesign .arrows {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  pointer-events: none;
+  z-index: 5;
+}
+
+.rl-redesign .lanes-body::-webkit-scrollbar {
+  height: 9px;
+  width: 9px;
+}
+.rl-redesign .lanes-body::-webkit-scrollbar-thumb {
+  background: var(--line-strong);
+  border-radius: 99px;
+}
+.rl-redesign .lanes-body::-webkit-scrollbar-track {
+  background: transparent;
+}
