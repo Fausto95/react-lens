@@ -97,7 +97,5 @@ async function originalNameOf(
   } catch {
     // No sourcesContent (maps can omit it) — fall through to the map name.
   }
-  return original.name && COMPONENT_NAME.test(original.name)
-    ? { originalName: original.name }
-    : {};
+  return original.name && COMPONENT_NAME.test(original.name) ? { originalName: original.name } : {};
 }

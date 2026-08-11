@@ -58,8 +58,12 @@ export interface PanelProps {
   recording: boolean;
   onToggleRecording?: () => void;
   embedded?: boolean;
-  /** Highlight a component's DOM on the page (bidirectional selection). */
-  onHighlight?: (id: ComponentId | null) => void;
+  /**
+   * Highlight a component's DOM on the page (bidirectional selection). With
+   * `reveal`, the page also scrolls to the component when it's out of view —
+   * the panel only asks for that on selection, never on hover.
+   */
+  onHighlight?: (id: ComponentId | null, opts?: { reveal?: boolean }) => void;
   /** Live value editing; omit to make the inspector read-only. */
   edit?: EditApi;
   /** Render-overlay toggle (embedded only). */
@@ -103,6 +107,25 @@ export function Panel({
 }: PanelProps) {
   useTraceVersion(store, { kind: "global" });
   const [selected, setSelected] = useState<ComponentId | null>(null);
+  // Scroll the inspected page to a newly selected component (off-screen only).
+  // Persisted so a user who finds it intrusive turns it off once.
+  const [revealOnSelect, setRevealOnSelectState] = useState(() => loadPanelPrefs().revealOnSelect);
+  const setRevealOnSelect = useCallback((next: boolean) => {
+    setRevealOnSelectState(next);
+    savePanelPrefs({ revealOnSelect: next });
+  }, []);
+  /**
+   * The one writer for selection: every pick — tree, ⌘K, timeline, relations,
+   * waste banner, page inspect — flows through here so reveal can't drift out
+   * of sync with what the inspector shows.
+   */
+  const select = useCallback(
+    (id: ComponentId) => {
+      setSelected(id);
+      if (revealOnSelect) onHighlight?.(id, { reveal: true });
+    },
+    [revealOnSelect, onHighlight],
+  );
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [treeModeHint, setTreeModeHint] = useState<"components" | "waste" | null>(null);
   const [sessionLabel, setSessionLabel] = useState<string | null>(null);
@@ -163,9 +186,9 @@ export function Panel({
 
   useEffect(() => {
     if (selectComponent == null) return;
-    setSelected(selectComponent);
+    select(selectComponent);
     onSelectConsumed?.();
-  }, [selectComponent, onSelectConsumed]);
+  }, [selectComponent, onSelectConsumed, select]);
 
   // Real time travel: while the cursor is historical (and the toggle is on),
   // the page's state follows the playhead. On by default when supported;
@@ -524,6 +547,14 @@ export function Panel({
                 ? { enabled: overlayEnabled ?? false, toggle: onToggleOverlay }
                 : undefined
             }
+            reveal={
+              onHighlight
+                ? {
+                    enabled: revealOnSelect,
+                    toggle: () => setRevealOnSelect(!revealOnSelect),
+                  }
+                : undefined
+            }
             reading={embedded ? "embedded" : "devtools"}
           />
         </span>
@@ -543,7 +574,7 @@ export function Panel({
         causality={causality}
         onInspect={({ worstId }) => {
           setTreeModeHint("waste");
-          if (worstId) setSelected(worstId);
+          if (worstId) select(worstId);
         }}
       />
 
@@ -558,7 +589,7 @@ export function Panel({
             store={store}
             causality={causality}
             selected={selected}
-            onSelect={setSelected}
+            onSelect={select}
             onHover={onHighlight}
             doctor={affected}
             suspended={suspended}
@@ -588,7 +619,7 @@ export function Panel({
               componentId={selected}
               cursor={cursor}
               ab={ab}
-              onSelectComponent={setSelected}
+              onSelectComponent={select}
               onAskAI={askAI}
               {...(edit ? { edit } : {})}
               {...(onHighlight ? { highlight: onHighlight } : {})}
@@ -605,7 +636,7 @@ export function Panel({
         ab={ab}
         onCursor={setCursor}
         onSetAB={setAB}
-        onSelectComponent={setSelected}
+        onSelectComponent={select}
         selectedComponent={selected}
         explainToken={explainToken}
         onAskAI={askAI}
@@ -679,7 +710,7 @@ export function Panel({
         <CommandPalette
           store={store}
           commands={commands}
-          onSelectComponent={setSelected}
+          onSelectComponent={select}
           onClose={() => setPaletteOpen(false)}
         />
       )}
@@ -693,7 +724,7 @@ export function Panel({
         askRequest={agentAsk}
         onClose={() => setAgentOpen(false)}
         onOpenSettings={() => setSettingsOpen(true)}
-        onSelectComponent={setSelected}
+        onSelectComponent={select}
         onCursor={setCursor}
       />
       {settingsOpen && (

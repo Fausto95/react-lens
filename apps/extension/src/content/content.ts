@@ -58,6 +58,7 @@ function connect(): void {
         source: CONTENT_SOURCE,
         kind: "highlight",
         componentId: msg.componentId,
+        ...(msg.reveal ? { reveal: true } : {}),
       };
       window.postMessage(toPage, "*");
     } else if (msg.kind === "replay") {

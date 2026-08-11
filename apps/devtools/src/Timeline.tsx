@@ -767,17 +767,19 @@ export function Timeline({
               <IconRewind size={13} />
             </button>
           )}
-          {travel && !travel.supported && !offline && (
-            // A disabled button plus a tooltip is not an answer to "why didn't
-            // the page change?". Say it inline: production React ships no state
-            // override API, so replay can only move the panel's own views.
-            <span
-              className="rl-tl-prod-chip"
-              title="Production React build — the page cannot be rewound (React only exposes its state-override API in development). Scrubbing still moves the panel and replays captured DOM."
-            >
-              prod
-            </span>
-          )}
+          {travel &&
+            !travel.supported &&
+            !offline && (
+              // A disabled button plus a tooltip is not an answer to "why didn't
+              // the page change?". Say it inline: production React ships no state
+              // override API, so replay can only move the panel's own views.
+              <span
+                className="rl-tl-prod-chip"
+                title="Production React build — the page cannot be rewound (React only exposes its state-override API in development). Scrubbing still moves the panel and replays captured DOM."
+              >
+                prod
+              </span>
+            )}
           {restoreStatus && (
             <RestoreStatusPill
               applied={restoreStatus.applied}

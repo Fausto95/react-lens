@@ -55,11 +55,7 @@ describe("bridge.locateComponent", () => {
     function Stateful({ label }: { label: string }) {
       const [n, setN] = React.useState(0);
       renders++;
-      return React.createElement(
-        "button",
-        { onClick: () => setN(n + 1) },
-        `${label}:${n}`,
-      );
+      return React.createElement("button", { onClick: () => setN(n + 1) }, `${label}:${n}`);
     }
     const root = createRoot(document.getElementById("root")!);
     await act(async () => {
@@ -75,9 +71,7 @@ describe("bridge.locateComponent", () => {
     expect(renders).toBe(rendersBefore);
     expect(document.querySelector("button")!.textContent).toBe("hits:0");
     await act(async () => {
-      document.querySelector("button")!.dispatchEvent(
-        new MouseEvent("click", { bubbles: true }),
-      );
+      document.querySelector("button")!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
     expect(document.querySelector("button")!.textContent).toBe("hits:1");
   });

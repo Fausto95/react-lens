@@ -136,7 +136,11 @@ window.addEventListener("message", (event: MessageEvent) => {
     if (data.componentId === null) {
       if (waveTimers.length > 0) return;
       highlighter.hide();
-    } else highlighter.show(fiber.domNodesOf(data.componentId));
+    } else {
+      const nodes = fiber.domNodesOf(data.componentId);
+      if (data.reveal) highlighter.reveal(nodes);
+      else highlighter.show(nodes);
+    }
   } else if (data.kind === "replay") {
     replayWave(data.componentIds);
   } else if (data.kind === "inspect-start") {

@@ -30,6 +30,12 @@
       "runtimeExecutable": "pnpm",
       "runtimeArgs": ["--filter", "@reactlens/site", "dev", "--port", "5183", "--strictPort"],
       "port": 5183
+    },
+    {
+      "name": "site-b",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["--filter", "@reactlens/site", "dev", "--port", "5187", "--strictPort"],
+      "port": 5187
     }
   ]
 }

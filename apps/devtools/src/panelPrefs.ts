@@ -16,6 +16,8 @@ export interface PanelPrefs {
   dockWidth: number | null;
   /** Tree/inspector split as a percent of the body width. */
   splitPct: number;
+  /** Selecting a component scrolls the inspected page to it when off-screen. */
+  revealOnSelect: boolean;
 }
 
 const KEY = "react-lens/panel-prefs";
@@ -27,6 +29,7 @@ const DEFAULTS: PanelPrefs = {
   theme: "dark",
   dockWidth: null,
   splitPct: 50,
+  revealOnSelect: true,
 };
 
 export function loadPanelPrefs(): PanelPrefs {
@@ -50,6 +53,10 @@ export function loadPanelPrefs(): PanelPrefs {
         typeof parsed.splitPct === "number" && Number.isFinite(parsed.splitPct)
           ? Math.max(22, Math.min(78, parsed.splitPct))
           : DEFAULTS.splitPct,
+      revealOnSelect:
+        typeof parsed.revealOnSelect === "boolean"
+          ? parsed.revealOnSelect
+          : DEFAULTS.revealOnSelect,
     };
   } catch {
     return { ...DEFAULTS };

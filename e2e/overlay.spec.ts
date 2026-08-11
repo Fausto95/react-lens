@@ -9,7 +9,7 @@ test("render overlay flashes on commit and clears when disabled", async ({ page 
   await boot(page);
 
   await page.getByRole("button", { name: "Panel settings" }).click();
-  await page.locator(".rl-menu-switch").click();
+  await page.getByRole("switch", { name: "Render overlay" }).click();
   await page.keyboard.press("Escape");
 
   // Heavy work makes flash elements easier to catch before the 420ms fade.
@@ -19,7 +19,7 @@ test("render overlay flashes on commit and clears when disabled", async ({ page 
     .toBeGreaterThan(0);
 
   await page.getByRole("button", { name: "Panel settings" }).click();
-  await page.locator(".rl-menu-switch").click();
+  await page.getByRole("switch", { name: "Render overlay" }).click();
   await page.keyboard.press("Escape");
 
   await page.waitForTimeout(500);

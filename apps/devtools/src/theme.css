@@ -3791,8 +3791,13 @@
 
 /* Production build: replay can't drive the page. Stated inline, not hidden. */
 .rl-tl-prod-chip {
-  font-size: 9px; text-transform: uppercase; letter-spacing: 0.06em;
-  padding: 1px 5px; border-radius: 4px; cursor: help; white-space: nowrap;
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 1px 5px;
+  border-radius: 4px;
+  cursor: help;
+  white-space: nowrap;
   color: var(--rl-text-faint);
   background: var(--rl-bg-hover);
   border: 1px solid var(--rl-border);

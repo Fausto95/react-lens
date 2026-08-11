@@ -247,6 +247,17 @@ Three separated stores, never merged:
 Timeline and large graphs render to **Canvas** (worker produces draw commands
 from a viewport query), not thousands of DOM nodes.
 
+**Bidirectional selection.** Every pick — tree, ⌘K, timeline bar, relations,
+waste banner, page inspect — goes through one writer in `Panel` (`select`), so
+the page can never disagree with the inspector. That writer asks the page to
+_reveal_ the component: highlight it and, when its box sits outside the
+viewport, scroll it into view (`revealGeometry.ts` owns the decision;
+`prefers-reduced-motion` is honoured, and the pref is user-disableable). Hover
+only ever highlights — a mousemove-rate event must not move the page. Because
+the highlight boxes are `position: fixed`, the highlighter tracks capture-phase
+scroll and resize while visible, coalesced to one repaint per frame; without
+that the outline drifts off its component the moment anything moves.
+
 ---
 
 ## 10. Build sequence (vertical slices)

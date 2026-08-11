@@ -279,9 +279,10 @@ function disableLogs(): () => void {
  * (`at Name (url:1:2)` / `at url:1:2`) and Firefox/Safari (`Name@url:1:2`).
  */
 export function parseFrameLocation(frame: string): FrameLocation | null {
-  const m = /\(?((?:[a-z]+:\/\/[^\s)]+?)|(?:\/[^\s)]+?)|(?:[A-Za-z]:[\\/][^\s)]+?)):(\d+):(\d+)\)?\s*$/.exec(
-    frame.trim(),
-  );
+  const m =
+    /\(?((?:[a-z]+:\/\/[^\s)]+?)|(?:\/[^\s)]+?)|(?:[A-Za-z]:[\\/][^\s)]+?)):(\d+):(\d+)\)?\s*$/.exec(
+      frame.trim(),
+    );
   if (!m) return null;
   return {
     file: m[1]!.split("?")[0]!,
