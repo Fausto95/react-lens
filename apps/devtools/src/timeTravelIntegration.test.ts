@@ -91,3 +91,68 @@ describe("panel → page time travel (full seam)", () => {
     inst.stop();
   });
 });
+
+describe("panel → page replay (forward play)", () => {
+  it("playing from session start walks the DOM through intermediate states", async () => {
+    document.body.innerHTML = "<div id='root'></div>";
+    if (!sharedBridge) {
+      sharedBridge = createFiberBridge(globalThis);
+      sharedBridge.install();
+    }
+    const React = await import("react");
+    const { createRoot } = await import("react-dom/client");
+
+    const store = new TraceStore();
+    const inst = createInstrumentation({ fiber: sharedBridge, serializer: createSerializer() });
+    inst.start({ captureDOM: false, interactionWindowMs: 200, onFrame: (f) => store.ingest(f) });
+
+    let setCount: (n: number) => void;
+    function Counter() {
+      const [count, set] = React.useState(0);
+      setCount = set;
+      return React.createElement("output", null, `count:${count}`);
+    }
+    const root = createRoot(document.getElementById("root")!);
+    await React.act(async () => {
+      root.render(React.createElement(Counter));
+    });
+    await flush();
+    for (const n of [1, 2, 3]) {
+      await React.act(async () => setCount!(n));
+      await flush();
+    }
+    expect(document.querySelector("output")!.textContent).toBe("count:3");
+
+    const ctl = createPanelTimeTravel(store, inst.timeTravel);
+    const commits = store.commits();
+    const t0 = commits[0]!.timestamp;
+    const t1 = commits.at(-1)!.timestamp;
+
+    // Simulate play(): the cursor streams forward from just before the first
+    // commit to the end, one flush per animation frame, then jumps live.
+    const seen: string[] = [];
+    const steps = 24;
+    for (let i = 0; i <= steps; i++) {
+      const t = t0 - 0.5 + ((t1 - t0 + 1) * i) / steps;
+      await React.act(async () => {
+        ctl.onCursor({ t, mode: "historical" }, true);
+        flushRaf();
+        await flush();
+      });
+      const text = document.querySelector("output")!.textContent!;
+      if (seen.at(-1) !== text) seen.push(text);
+    }
+    await React.act(async () => {
+      ctl.onCursor({ t: t1, mode: "live" }, true);
+      await flush();
+    });
+
+    // The replay must pass through the intermediate states, not sit on the
+    // final value the whole time.
+    expect(seen).toEqual(["count:3", "count:0", "count:1", "count:2", "count:3"]);
+    expect(document.querySelector("output")!.textContent).toBe("count:3");
+
+    ctl.dispose();
+    inst.stop();
+  });
+});
