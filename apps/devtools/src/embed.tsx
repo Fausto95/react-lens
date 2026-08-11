@@ -32,6 +32,9 @@ function EmbeddedPanel({
         highlighter,
         // Sticky pick: keep inspect active so double-click text edit still works.
         onPick: (pick) => setPickedId(pick.componentId),
+        // Controller owns the mode; the button state follows it, so Escape
+        // and window blur un-light the crosshair too.
+        onStateChange: setInspecting,
         ignoreRoot: () => host,
       }),
     [runtime, highlighter, host],
@@ -89,12 +92,8 @@ function EmbeddedPanel({
   );
 
   const onToggleInspect = useCallback(() => {
-    setInspecting((on) => {
-      const next = !on;
-      if (next) inspect.start();
-      else inspect.stop();
-      return next;
-    });
+    if (inspect.isActive()) inspect.stop();
+    else inspect.start();
   }, [inspect]);
 
   return (

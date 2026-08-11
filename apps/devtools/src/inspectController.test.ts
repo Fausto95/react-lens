@@ -50,6 +50,13 @@ function mouseMove(target: Element, x = 40, y = 40): void {
   target.dispatchEvent(new MouseEvent("mousemove", { bubbles: true, clientX: x, clientY: y }));
 }
 
+/** happy-dom's WheelEvent constructor drops modifier keys — patch altKey on. */
+function altWheel(target: Element, deltaY: number): void {
+  const ev = new WheelEvent("wheel", { bubbles: true, cancelable: true, deltaY });
+  Object.defineProperty(ev, "altKey", { value: true });
+  target.dispatchEvent(ev);
+}
+
 beforeEach(() => {
   document.body.innerHTML = "";
   document.getElementById("react-lens-inspect-tip")?.remove();
@@ -128,11 +135,11 @@ describe("inspect mode — ancestor walking", () => {
     mouseMove(inner);
     expect(highlighter.show).toHaveBeenLastCalledWith([inner]);
 
-    inner.dispatchEvent(new WheelEvent("wheel", { bubbles: true, altKey: true, deltaY: -1 }));
+    altWheel(inner, -1);
     expect(highlighter.show).toHaveBeenLastCalledWith([outer]);
     expect(document.getElementById("react-lens-inspect-tip")!.textContent).toContain("Outer");
 
-    inner.dispatchEvent(new WheelEvent("wheel", { bubbles: true, altKey: true, deltaY: 1 }));
+    altWheel(inner, 1);
     expect(highlighter.show).toHaveBeenLastCalledWith([inner]);
     ctl.dispose();
   });
@@ -153,7 +160,7 @@ describe("inspect mode — ancestor walking", () => {
     });
     ctl.start();
     mouseMove(inner);
-    inner.dispatchEvent(new WheelEvent("wheel", { bubbles: true, altKey: true, deltaY: -1 }));
+    altWheel(inner, -1);
     inner.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     expect(picks).toEqual([1]);
     ctl.dispose();

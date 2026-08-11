@@ -1,4 +1,5 @@
 import type { ComponentId } from "@react-lens/protocol";
+import type { ComponentInstance } from "@react-lens/protocol";
 import type { LensRuntime } from "./runtime.js";
 import type { Highlighter } from "./highlighter.js";
 import { openInEditor } from "./openInEditor.js";
@@ -17,20 +18,34 @@ export interface InspectController {
   dispose(): void;
 }
 
+/** How many DOM ancestors to scan when building the hover component chain. */
+const CHAIN_MAX = 12;
+
 /** Embedded-page inspect mode (same UX as the extension MAIN-world controller). */
 export function createInspectController(opts: {
   runtime: LensRuntime;
   highlighter: Highlighter;
   onPick: (pick: InspectPick) => void;
+  /** Single source of truth for the host's button state — fires on every start/stop. */
+  onStateChange?: (active: boolean) => void;
   ignoreRoot?: () => Node | null;
 }): InspectController {
-  const { runtime, highlighter, onPick, ignoreRoot } = opts;
+  const { runtime, highlighter, onPick, onStateChange, ignoreRoot } = opts;
   let active = false;
   let tooltip: HTMLDivElement | null = null;
+  let backdrop: HTMLDivElement | null = null;
   let tipSource: { file: string; line: number } | null = null;
   let editing: HTMLElement | null = null;
   let editingId: ComponentId | null = null;
+  /** Text before a double-click edit began — Escape restores it. */
+  let editingOriginal: string | null = null;
   let ephemeralBadge: HTMLDivElement | null = null;
+  // Hover state: the component chain under the pointer (deepest → outermost)
+  // and the index the user has walked to with Alt+wheel. Click picks the
+  // walked component, not the deepest.
+  let chain: ComponentInstance[] = [];
+  let chainIndex = 0;
+  let pointer = { x: 0, y: 0 };
 
   function ignored(target: EventTarget | null): boolean {
     if (target instanceof Element && target.closest("#react-lens-inspect-tip")) return true;
@@ -49,11 +64,11 @@ export function createInspectController(opts: {
       pointerEvents: "auto",
       padding: "4px 8px",
       borderRadius: "6px",
-      background: "rgba(18,21,26,0.94)",
-      color: "#e6e9ef",
+      background: "var(--rl-inspect-tip-bg, rgba(18,21,26,0.94))",
+      color: "var(--rl-inspect-tip-text, #e6e9ef)",
       font: "11px ui-sans-serif, system-ui, sans-serif",
-      border: "1px solid #2f3644",
-      maxWidth: "320px",
+      border: "1px solid var(--rl-inspect-tip-border, #2f3644)",
+      maxWidth: "360px",
       whiteSpace: "nowrap",
       overflow: "hidden",
       textOverflow: "ellipsis",
@@ -68,6 +83,55 @@ export function createInspectController(opts: {
     document.documentElement.appendChild(el);
     tooltip = el;
     return el;
+  }
+
+  /** Page dim with a cut-out over the highlighted nodes (crosshair focus). */
+  function ensureBackdrop(): HTMLDivElement {
+    if (backdrop) return backdrop;
+    const el = document.createElement("div");
+    el.id = "react-lens-inspect-backdrop";
+    Object.assign(el.style, {
+      position: "fixed",
+      zIndex: "2147483644",
+      pointerEvents: "none",
+      borderRadius: "4px",
+      boxShadow: "0 0 0 100000px var(--rl-inspect-dim, rgba(8,10,14,0.28))",
+      display: "none",
+    } satisfies Partial<CSSStyleDeclaration>);
+    document.documentElement.appendChild(el);
+    backdrop = el;
+    return el;
+  }
+
+  function showBackdrop(nodes: Node[]): void {
+    const el = ensureBackdrop();
+    let rect: DOMRect | null = null;
+    for (const node of nodes) {
+      if (!(node instanceof Element)) continue;
+      const r = node.getBoundingClientRect();
+      if (r.width === 0 && r.height === 0) continue;
+      rect = rect
+        ? DOMRect.fromRect({
+            x: Math.min(rect.x, r.x),
+            y: Math.min(rect.y, r.y),
+            width: Math.max(rect.right, r.right) - Math.min(rect.x, r.x),
+            height: Math.max(rect.bottom, r.bottom) - Math.min(rect.y, r.y),
+          })
+        : r;
+    }
+    if (!rect) {
+      el.style.display = "none";
+      return;
+    }
+    el.style.display = "block";
+    el.style.left = `${rect.left - 3}px`;
+    el.style.top = `${rect.top - 3}px`;
+    el.style.width = `${rect.width + 6}px`;
+    el.style.height = `${rect.height + 6}px`;
+  }
+
+  function hideBackdrop(): void {
+    if (backdrop) backdrop.style.display = "none";
   }
 
   function showTip(
@@ -91,25 +155,79 @@ export function createInspectController(opts: {
     if (tooltip) tooltip.style.display = "none";
   }
 
+  /** Highlight + tooltip + backdrop for one instance (hover or walked-to). */
+  function focusInstance(inst: ComponentInstance): void {
+    const nodes = runtime.domNodesOf(inst.id);
+    highlighter.show(nodes);
+    showBackdrop(nodes);
+    const src = inst.source;
+    const loc = src ? `${src.file.split("/").pop()}:${src.line}` : null;
+    const renders = runtime.store.renderCount(inst.id);
+    const self = runtime.store.selfTimeTotal(inst.id);
+    const stats = `${renders}× · ${Number(self.toFixed(1))}ms`;
+    const depth = chain.length > 1 ? ` · ${chainIndex + 1}/${chain.length} ⌥scroll` : "";
+    showTip(
+      loc ? `${inst.name} · ${stats} · ${loc}${depth}` : `${inst.name} · ${stats}${depth}`,
+      pointer.x,
+      pointer.y,
+      src ? { file: src.file, line: src.line } : null,
+    );
+  }
+
+  /** Component chain under a DOM node: deepest → outermost, distinct ids. */
+  function chainFor(node: Node): ComponentInstance[] {
+    const out: ComponentInstance[] = [];
+    const seen = new Set<ComponentId>();
+    let cur: Node | null = node;
+    let hops = 0;
+    while (cur && out.length < CHAIN_MAX && hops < 200) {
+      const inst = runtime.resolveComponent(cur);
+      if (!inst) break;
+      if (!seen.has(inst.id)) {
+        seen.add(inst.id);
+        out.push(inst);
+      }
+      // Continue above this component's outermost DOM node.
+      const nodes = runtime.domNodesOf(inst.id);
+      const top = nodes.find((n) => n instanceof Element) as Element | undefined;
+      cur = (top ?? (cur as Element)).parentNode;
+      hops++;
+    }
+    return out;
+  }
+
   function onMove(e: MouseEvent): void {
     if (!active || ignored(e.target)) return;
     const node = e.target;
     if (!(node instanceof Node)) return;
-    const inst = runtime.resolveComponent(node);
-    if (!inst) {
+    pointer = { x: e.clientX, y: e.clientY };
+    const next = chainFor(node);
+    if (next.length === 0) {
+      chain = [];
+      chainIndex = 0;
       highlighter.hide();
+      hideBackdrop();
       hideTip();
       return;
     }
-    highlighter.show(runtime.domNodesOf(inst.id));
-    const src = inst.source;
-    const loc = src ? `${src.file.split("/").pop()}:${src.line}` : null;
-    showTip(
-      loc ? `${inst.name} · ${loc}` : inst.name,
-      e.clientX,
-      e.clientY,
-      src ? { file: src.file, line: src.line } : null,
-    );
+    // A new hover target resets the walk to the deepest component.
+    if (next[0]!.id !== chain[0]?.id) {
+      chain = next;
+      chainIndex = 0;
+    } else {
+      chain = next;
+      chainIndex = Math.min(chainIndex, chain.length - 1);
+    }
+    focusInstance(chain[chainIndex]!);
+  }
+
+  function onWheel(e: WheelEvent): void {
+    if (!active || !e.altKey || chain.length === 0 || ignored(e.target)) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const dir = e.deltaY < 0 ? 1 : -1; // scroll up → outward
+    chainIndex = Math.max(0, Math.min(chain.length - 1, chainIndex + dir));
+    focusInstance(chain[chainIndex]!);
   }
 
   function onClick(e: MouseEvent): void {
@@ -118,7 +236,9 @@ export function createInspectController(opts: {
     e.stopPropagation();
     const node = e.target;
     if (!(node instanceof Node)) return;
-    const inst = runtime.resolveComponent(node);
+    // Pick what the user SEES: the walked-to component when Alt+wheel was
+    // used, else the deepest component under the pointer.
+    const inst = chain[chainIndex] ?? runtime.resolveComponent(node);
     if (!inst) return;
     onPick({
       componentId: inst.id,
@@ -141,6 +261,12 @@ export function createInspectController(opts: {
       stop();
       e.preventDefault();
     }
+  }
+
+  function onWindowBlur(): void {
+    // Leaving the window (app switch, devtools focus) disarms the picker so
+    // it never fires on a stale return click.
+    stop();
   }
 
   function onDblClick(e: MouseEvent): void {
@@ -170,8 +296,12 @@ export function createInspectController(opts: {
     cancelEdit();
     editing = el;
     editingId = id;
+    editingOriginal = el.textContent ?? "";
     el.contentEditable = "true";
-    Object.assign(el.style, { outline: "2px solid #60a5fa", outlineOffset: "2px" });
+    Object.assign(el.style, {
+      outline: "2px solid var(--rl-inspect-edit, #60a5fa)",
+      outlineOffset: "2px",
+    });
     el.focus();
     const onKeyEdit = (ev: KeyboardEvent) => {
       if (ev.key === "Enter" && !ev.shiftKey) {
@@ -198,6 +328,7 @@ export function createInspectController(opts: {
     cleanupEditChrome(el);
     editing = null;
     editingId = null;
+    editingOriginal = null;
     const ok =
       runtime.canEditValues() &&
       (runtime.setProp(id, ["children"], text) ||
@@ -210,9 +341,12 @@ export function createInspectController(opts: {
   function cancelEdit(): void {
     const el = editing;
     if (!el) return;
+    // Cancel means CANCEL: put the pre-edit text back.
+    if (editingOriginal !== null) el.textContent = editingOriginal;
     cleanupEditChrome(el);
     editing = null;
     editingId = null;
+    editingOriginal = null;
   }
 
   function cleanupEditChrome(el: HTMLElement): void {
@@ -231,8 +365,8 @@ export function createInspectController(opts: {
       zIndex: "2147483647",
       padding: "3px 8px",
       borderRadius: "4px",
-      background: "rgba(251,146,60,0.95)",
-      color: "#0b0d10",
+      background: "var(--rl-inspect-badge, rgba(251,146,60,0.95))",
+      color: "var(--rl-inspect-badge-text, #0b0d10)",
       font: "10px ui-sans-serif, system-ui, sans-serif",
       pointerEvents: "none",
     } satisfies Partial<CSSStyleDeclaration>);
@@ -255,19 +389,28 @@ export function createInspectController(opts: {
     document.addEventListener("click", onClick, true);
     document.addEventListener("dblclick", onDblClick, true);
     document.addEventListener("keydown", onKey, true);
+    document.addEventListener("wheel", onWheel, { capture: true, passive: false });
+    window.addEventListener("blur", onWindowBlur);
+    onStateChange?.(true);
   }
 
   function stop(): void {
     if (!active) return;
     active = false;
     cancelEdit();
+    chain = [];
+    chainIndex = 0;
     document.documentElement.style.cursor = "";
     document.removeEventListener("mousemove", onMove, true);
     document.removeEventListener("click", onClick, true);
     document.removeEventListener("dblclick", onDblClick, true);
     document.removeEventListener("keydown", onKey, true);
+    document.removeEventListener("wheel", onWheel, { capture: true });
+    window.removeEventListener("blur", onWindowBlur);
     highlighter.hide();
+    hideBackdrop();
     hideTip();
+    onStateChange?.(false);
   }
 
   return {
@@ -277,6 +420,7 @@ export function createInspectController(opts: {
     dispose: () => {
       stop();
       tooltip?.remove();
+      backdrop?.remove();
       ephemeralBadge?.remove();
     },
   };
