@@ -187,33 +187,134 @@ describe("time travel — real state rewind", () => {
   });
 });
 
+/** Minimal fiber bridge double: one useState-like hook per component. */
+function makeFakeFiber(over: Partial<Record<string, unknown>> = {}) {
+  return {
+    canEditValues: () => true,
+    hasFiber: () => true,
+    setHookState: () => true,
+    setClassState: () => true,
+    captureLiveState: () => ({ hooks: [{ index: 0, value: 0 }] }),
+    ...over,
+  };
+}
+
+const entry = (r: number, c = 1): TimeTravelEntry => ({
+  componentId: c as ComponentId,
+  renderId: r as RenderId,
+});
+
+/** A fiber whose single state hook holds `value` (shape matches the fake bridge). */
+const hookFiber = (value: unknown) =>
+  ({ tag: 0, memoizedState: { memoizedState: value, queue: {}, next: null } }) as never;
+
 describe("time travel controller — history bounds", () => {
   it("counts evicted or unknown renders as failed", () => {
-    const calls: unknown[] = [];
-    const fakeFiber = {
-      canEditValues: () => true,
-      hasFiber: () => true,
-      setHookState: (...args: unknown[]) => (calls.push(args), true),
-      setClassState: () => true,
-      captureLiveState: () => ({ hooks: [{ index: 0, value: 0 }] }),
-    };
-    const tt = createTimeTravel({ fiber: fakeFiber as never, maxEntries: 2 });
-    const entry = (r: number, c = 1): TimeTravelEntry => ({
-      componentId: c as ComponentId,
-      renderId: r as RenderId,
-    });
-    const captured = (r: number) =>
-      tt.capture(r as RenderId, 1 as ComponentId, {
-        tag: 0,
-        memoizedState: { memoizedState: r, queue: {}, next: null },
-      } as never);
-
-    captured(1);
-    captured(2);
-    captured(3); // evicts renderId 1
+    const tt = createTimeTravel({ fiber: makeFakeFiber() as never, rendersPerComponent: 2 });
+    tt.capture(1 as RenderId, 1 as ComponentId, hookFiber(1));
+    tt.capture(2 as RenderId, 1 as ComponentId, hookFiber(2));
+    tt.capture(3 as RenderId, 1 as ComponentId, hookFiber(3)); // evicts renderId 1
 
     expect(tt.apply([entry(1)])).toMatchObject({ applied: 0, failed: 1 });
     expect(tt.apply([entry(2)])).toMatchObject({ applied: 1, failed: 0 });
     expect(tt.apply([entry(99)])).toMatchObject({ applied: 0, failed: 1 });
+  });
+
+  it("a chatty component cannot evict another component's history", () => {
+    const tt = createTimeTravel({ fiber: makeFakeFiber() as never, rendersPerComponent: 2 });
+    tt.capture(1 as RenderId, 1 as ComponentId, hookFiber(0));
+    // Component 2 renders far more often than component 1's retention cap.
+    for (let r = 10; r < 30; r++) tt.capture(r as RenderId, 2 as ComponentId, hookFiber(r));
+    expect(tt.apply([entry(1, 1)])).toMatchObject({ applied: 1, failed: 0 });
+  });
+
+  it("evicts whole components least-recently-captured past maxComponents", () => {
+    const tt = createTimeTravel({
+      fiber: makeFakeFiber() as never,
+      rendersPerComponent: 5,
+      maxComponents: 2,
+    });
+    tt.capture(1 as RenderId, 1 as ComponentId, hookFiber(0));
+    tt.capture(2 as RenderId, 2 as ComponentId, hookFiber(0));
+    tt.capture(3 as RenderId, 3 as ComponentId, hookFiber(0)); // evicts component 1
+    expect(tt.apply([entry(1, 1)])).toMatchObject({ applied: 0, failed: 1 });
+    expect(tt.apply([entry(2, 2)])).toMatchObject({ applied: 1, failed: 0 });
+    expect(tt.apply([entry(3, 3)])).toMatchObject({ applied: 1, failed: 0 });
+  });
+
+  it("re-capturing keeps a component alive in the LRU order", () => {
+    const tt = createTimeTravel({
+      fiber: makeFakeFiber() as never,
+      rendersPerComponent: 5,
+      maxComponents: 2,
+    });
+    tt.capture(1 as RenderId, 1 as ComponentId, hookFiber(0));
+    tt.capture(2 as RenderId, 2 as ComponentId, hookFiber(0));
+    tt.capture(3 as RenderId, 1 as ComponentId, hookFiber(1)); // refresh component 1
+    tt.capture(4 as RenderId, 3 as ComponentId, hookFiber(0)); // evicts component 2
+    expect(tt.apply([entry(1, 1)])).toMatchObject({ applied: 1, failed: 0 });
+    expect(tt.apply([entry(2, 2)])).toMatchObject({ applied: 0, failed: 1 });
+  });
+});
+
+describe("time travel controller — failure reasons", () => {
+  it("reports no-history for unknown or evicted renders", () => {
+    const tt = createTimeTravel({ fiber: makeFakeFiber() as never });
+    const result = tt.apply([entry(99, 7)]);
+    expect(result.failures).toEqual([
+      { componentId: 7 as ComponentId, renderId: 99 as RenderId, reason: "no-history" },
+    ]);
+  });
+
+  it("reports no-fiber when the component is no longer mounted", () => {
+    const tt = createTimeTravel({ fiber: makeFakeFiber({ hasFiber: () => false }) as never });
+    tt.capture(1 as RenderId, 1 as ComponentId, hookFiber(0));
+    const result = tt.apply([entry(1, 1)]);
+    expect(result.failures).toEqual([
+      { componentId: 1 as ComponentId, renderId: 1 as RenderId, reason: "no-fiber" },
+    ]);
+  });
+
+  it("reports shape-mismatch when the hook list changed since capture", () => {
+    const tt = createTimeTravel({
+      fiber: makeFakeFiber({
+        captureLiveState: () => ({
+          hooks: [
+            { index: 0, value: 0 },
+            { index: 1, value: 0 },
+          ],
+        }),
+      }) as never,
+    });
+    tt.capture(1 as RenderId, 1 as ComponentId, hookFiber(0));
+    const result = tt.apply([entry(1, 1)]);
+    expect(result.failures).toEqual([
+      { componentId: 1 as ComponentId, renderId: 1 as RenderId, reason: "shape-mismatch" },
+    ]);
+  });
+
+  it("reports write-failed when the renderer refuses the write", () => {
+    const tt = createTimeTravel({ fiber: makeFakeFiber({ setHookState: () => false }) as never });
+    tt.capture(1 as RenderId, 1 as ComponentId, hookFiber(0));
+    const result = tt.apply([entry(1, 1)]);
+    expect(result.failures).toEqual([
+      { componentId: 1 as ComponentId, renderId: 1 as RenderId, reason: "write-failed" },
+    ]);
+  });
+
+  it("stateless components are silent no-ops, not failures", () => {
+    const tt = createTimeTravel({ fiber: makeFakeFiber() as never });
+    tt.capture(1 as RenderId, 1 as ComponentId, { tag: 0, memoizedState: null } as never);
+    const result = tt.apply([entry(1, 1)]);
+    expect(result).toMatchObject({ applied: 0, failed: 0 });
+    expect(result.failures).toEqual([]);
+  });
+
+  it("successful applies report an empty failures list", () => {
+    const tt = createTimeTravel({ fiber: makeFakeFiber() as never });
+    tt.capture(1 as RenderId, 1 as ComponentId, hookFiber(0));
+    const result = tt.apply([entry(1, 1)]);
+    expect(result).toMatchObject({ applied: 1, failed: 0 });
+    expect(result.failures).toEqual([]);
   });
 });
