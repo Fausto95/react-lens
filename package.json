@@ -2,7 +2,7 @@
   "name": "react-lens",
   "version": "0.0.0",
   "private": true,
-  "description": "Know why every render happened. Dev-time React observability — from interaction to cause to fix.",
+  "description": "Know why every render happened. Dev-time React observability \u2014 from interaction to cause to fix.",
   "type": "module",
   "packageManager": "pnpm@9.1.2",
   "engines": {
@@ -18,9 +18,11 @@
     "dev:devtools": "pnpm --filter @react-lens/devtools dev",
     "dev:site": "pnpm --filter @react-lens/site dev",
     "build:extension": "pnpm --filter @react-lens/extension build",
-    "build:site": "pnpm --filter @react-lens/site build"
+    "build:site": "pnpm --filter @react-lens/site build",
+    "test:e2e": "playwright test"
   },
   "devDependencies": {
+    "@playwright/test": "1.60.0",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "happy-dom": "^15.11.7",

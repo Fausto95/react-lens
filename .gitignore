@@ -6,3 +6,5 @@ coverage/
 apps/extension/.output/
 *.log
 apps/extension/dist/
+test-results/
+playwright-report/
