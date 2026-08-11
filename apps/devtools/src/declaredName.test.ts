@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vite-plus/test";
-import { declaredNameAtLine } from "./declaredName.js";
+import { declaredNameAtLine, declaredNameNear } from "./declaredName.js";
 
 /**
  * Recovering a component's real name on a minified build. Source maps often
@@ -49,5 +49,43 @@ describe("declaredNameAtLine", () => {
     expect(declaredNameAtLine(src("  return <div />;"), 1)).toBeNull();
     expect(declaredNameAtLine(src("function App() {"), 99)).toBeNull();
     expect(declaredNameAtLine("", 1)).toBeNull();
+  });
+});
+
+describe("declaredNameNear", () => {
+  const file = src(
+    "import { useState } from \"react\";",
+    "",
+    "let seq = 0;",
+    "function Ticker() {",
+    "  const label = useState(0);",
+    "  return null;",
+    "}",
+    "",
+    "export function Toolbar() {",
+    "  return <Ticker />;",
+    "}",
+  );
+
+  it("finds the enclosing declaration when the frame lands on a statement", () => {
+    // A located frame often points at the component's first statement (the
+    // hook call that threw), not at its signature.
+    expect(declaredNameNear(file, 5)).toBe("Ticker");
+    expect(declaredNameNear(file, 6)).toBe("Ticker");
+  });
+
+  it("still prefers the declaration on its own line", () => {
+    expect(declaredNameNear(file, 4)).toBe("Ticker");
+    expect(declaredNameNear(file, 9)).toBe("Toolbar");
+  });
+
+  it("does not leak past a closed block into an earlier component", () => {
+    // Line 8 is blank, after Ticker's closing brace: nothing encloses it.
+    expect(declaredNameNear(file, 8)).toBeNull();
+  });
+
+  it("returns null when nothing is in range", () => {
+    expect(declaredNameNear(file, 1)).toBeNull();
+    expect(declaredNameNear("", 1)).toBeNull();
   });
 });
