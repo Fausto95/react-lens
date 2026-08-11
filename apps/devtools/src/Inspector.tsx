@@ -18,6 +18,7 @@ import { SourceTab } from "./tabs/SourceTab.js";
 import { DomTab } from "./tabs/DomTab.js";
 import { RelationsTab } from "./tabs/RelationsTab.js";
 import { DoctorTab } from "./tabs/DoctorTab.js";
+import { openInEditor } from "./openInEditor.js";
 import { useDoctor } from "./useDoctor.js";
 
 export interface EditApi {
@@ -154,9 +155,20 @@ export function Inspector({
           <span className="rl-insp-chip">{ms(selfTotal)} total</span>
           {activeSelf != null && <span className="rl-insp-chip accent">{ms(activeSelf)} this</span>}
           {doctor.total > 0 && <span className="rl-insp-chip warn">{doctor.total} issues</span>}
-          <span className="rl-insp-source">
-            {inst.source ? `${shortSource(inst.source.file)}:${inst.source.line}` : "no source"}
-          </span>
+          {inst.source ? (
+            <button
+              type="button"
+              className="rl-insp-source rl-insp-source-link"
+              title="Open in editor"
+              onClick={() =>
+                openInEditor(inst.source!.file, inst.source!.line, inst.source!.column ?? 1)
+              }
+            >
+              {shortSource(inst.source.file)}:{inst.source.line}
+            </button>
+          ) : (
+            <span className="rl-insp-source">no source</span>
+          )}
         </div>
       </div>
 

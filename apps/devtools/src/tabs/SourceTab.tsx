@@ -82,27 +82,27 @@ export function SourceTab({ inst }: { inst: ComponentInstance; ctx: InspectorCon
         >
           Open in editor
         </button>
-        <button
-          className="rl-icon-btn"
-          onClick={() => copy(location)}
-          title="Copy location"
-          aria-label="Copy location"
-        >
-          <IconCopy size={14} />
-        </button>
-        <button
-          className="rl-icon-btn"
-          onClick={() => copy(shown.file)}
-          title="Copy file path"
-          aria-label="Copy file path"
-        >
-          <IconCopy size={14} />
-        </button>
+        <CopyButton label="Copy line" value={location} />
+        <CopyButton label="Copy path" value={shown.file} />
       </div>
     </div>
   );
 }
 
-function copy(text: string): void {
-  void navigator.clipboard?.writeText(text);
+/** Labeled copy action with transient confirmation — no icon guessing. */
+function CopyButton({ label, value }: { label: string; value: string }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <button
+      className="rl-btn"
+      onClick={() => {
+        void navigator.clipboard?.writeText(value);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 1200);
+      }}
+      title={value}
+    >
+      <IconCopy size={12} /> {copied ? "Copied" : label}
+    </button>
+  );
 }

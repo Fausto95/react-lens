@@ -16,6 +16,8 @@ import {
   type TimeTravelApi,
 } from "./timeTravelController.js";
 import { loadPanelPrefs, savePanelPrefs } from "./panelPrefs.js";
+import { loadAgentSettings } from "./settings.js";
+import type { AgentSettings } from "@react-lens/agent";
 import { AgentPane } from "./AgentPane.js";
 import { SettingsPopover } from "./SettingsPopover.js";
 import {
@@ -111,6 +113,17 @@ export function Panel({
   const [agentOpen, setAgentOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsVersion, setSettingsVersion] = useState(0);
+  // Loaded once (and on save) so AgentPane doesn't re-read storage per ask.
+  const [agentSettings, setAgentSettings] = useState<AgentSettings | null>(null);
+  useEffect(() => {
+    let alive = true;
+    void loadAgentSettings().then((s) => {
+      if (alive) setAgentSettings(s);
+    });
+    return () => {
+      alive = false;
+    };
+  }, [settingsVersion]);
   const [agentAsk, setAgentAsk] = useState<{ token: number; question: string } | null>(null);
   const askAI = useCallback((question: string) => {
     setAgentOpen(true);
@@ -260,6 +273,7 @@ export function Panel({
   const suspended = new Set(store.allInstances().filter((i) => i.suspended).map((i) => i.id));
 
   // ⌘K / Ctrl+K opens the command palette; ⌘\ toggles page inspect.
+  // Plain keys (R, ?) match the hints the palette advertises.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
@@ -274,10 +288,15 @@ export function Panel({
         e.preventDefault();
         setAgentOpen((v) => !v);
       }
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      const el = document.activeElement;
+      if (el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA")) return;
+      if ((e.key === "r" || e.key === "R") && onToggleRecording) onToggleRecording();
+      else if (e.key === "?") setExplainToken((n) => n + 1);
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [onToggleInspect]);
+  }, [onToggleInspect, onToggleRecording]);
 
   useEffect(() => {
     if (!paletteOpen) return;
@@ -591,7 +610,7 @@ export function Panel({
         open={agentOpen}
         store={store}
         causality={causality}
-        settings={null}
+        settings={agentSettings}
         settingsVersion={settingsVersion}
         askRequest={agentAsk}
         onClose={() => setAgentOpen(false)}

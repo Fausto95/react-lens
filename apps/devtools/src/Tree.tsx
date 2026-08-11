@@ -70,10 +70,11 @@ export function Tree({
   const [openGroups, setOpenGroups] = useState<Set<string>>(new Set());
 
   const data = useMemo(
-    () => buildData(store, causality, mode),
-    // Recompute when the store changes or the mode switches.
+    () => buildData(store, causality),
+    // Recompute when the store ingests (version); verdicts are memoized per
+    // last render inside verdictOf, so steady components stay cheap.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [store, causality, mode, version],
+    [store, causality, version],
   );
 
   const roots = useMemo(() => {
@@ -377,8 +378,7 @@ function rowRenders(row: VisibleRow): number {
   return row.node.kind === "component" ? row.node.datum.renders : row.node.renders;
 }
 
-function buildData(store: TraceStore, causality: Causality, mode: TreeMode): ComponentDatum[] {
-  const needVerdict = mode !== "components";
+function buildData(store: TraceStore, causality: Causality): ComponentDatum[] {
   return store
     .allInstances()
     .filter((i) => store.renderCount(i.id) > 0)
@@ -393,23 +393,41 @@ function buildData(store: TraceStore, causality: Causality, mode: TreeMode): Com
         ...(i.parentId !== undefined ? { parentId: i.parentId } : {}),
         ...(i.kind && i.kind !== "component" ? { kind: i.kind } : {}),
       };
-      void needVerdict;
       return datum;
     });
 }
+
+/**
+ * A verdict only depends on a component's LAST render, but buildData runs on
+ * every store version bump — memoize per (causality, component, renderId) so
+ * steady components cost a map lookup instead of a causality walk.
+ */
+const verdictCache = new WeakMap<
+  Causality,
+  Map<ComponentId, { renderId: number; verdict: boolean | null }>
+>();
 
 function verdictOf(store: TraceStore, causality: Causality, id: ComponentId): boolean | null {
   const renders = store.rendersOf(id);
   const last = renders.at(-1);
   if (!last) return null;
+  let byId = verdictCache.get(causality);
+  if (!byId) {
+    byId = new Map();
+    verdictCache.set(causality, byId);
+  }
+  const hit = byId.get(id);
+  if (hit && hit.renderId === last.renderId) return hit.verdict;
+  let verdict: boolean | null;
   try {
     const why = causality.why(last.renderId);
-    if (why.verdict === "no-observable-change") return false;
-    if (why.verdict === "expected") return true;
-    return null;
+    verdict =
+      why.verdict === "no-observable-change" ? false : why.verdict === "expected" ? true : null;
   } catch {
-    return null;
+    verdict = null;
   }
+  byId.set(id, { renderId: last.renderId, verdict });
+  return verdict;
 }
 
 function includeFor(mode: TreeMode): ((d: ComponentDatum) => boolean) | undefined {
