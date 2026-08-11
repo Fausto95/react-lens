@@ -10,7 +10,9 @@ test("light mode applies from the settings menu and survives a reload", async ({
   await expect(page.locator("html")).toHaveAttribute("data-rl-theme", "light");
   const bg = await page.locator(".rl-root").evaluate((el) => getComputedStyle(el).backgroundColor);
   expect(bg).toBe("rgb(255, 255, 255)");
-  const toolbarBg = await page.locator(".rl-redesign .toolbar").evaluate((el) => getComputedStyle(el).backgroundColor);
+  const toolbarBg = await page
+    .locator(".rl-redesign .toolbar")
+    .evaluate((el) => getComputedStyle(el).backgroundColor);
   // --panel → --rl-bg-raised (#f7f8fa)
   expect(toolbarBg).toBe("rgb(247, 248, 250)");
   const colorScheme = await page.locator("html").evaluate((el) => getComputedStyle(el).colorScheme);
