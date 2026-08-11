@@ -30,6 +30,7 @@
     "@reactlens/trace-engine": "workspace:*",
     "@reactlens/tree": "workspace:*",
     "@reactlens/ui": "workspace:*",
+    "@tanstack/react-virtual": "^3.14.9",
     "react": "^19",
     "react-dom": "^19"
   },

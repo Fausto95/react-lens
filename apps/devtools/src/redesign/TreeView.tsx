@@ -1,4 +1,6 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
+import { useVirtualizer } from "@tanstack/react-virtual";
+
 import type { ComponentId } from "@reactlens/protocol";
 import type { SemanticNode, VisibleRow } from "@reactlens/tree";
 import { laneVisibility, typeLaneKey, type LaneControls, type LaneKey } from "../laneFilter.js";
@@ -29,6 +31,20 @@ const BASE_PL = 10;
  * the guide rail matters more than the exact depth once you're this deep.
  */
 const MAX_INDENT_DEPTH = 8;
+
+/*
+ * Note: the React Compiler skips this file, by its own choice — `useVirtualizer`
+ * returns functions it will not memoize across ("Use of incompatible library"),
+ * so it declines the whole component rather than risk stale UI.
+ *
+ * That is the right trade here. Virtualization already removes the cost the
+ * Compiler would have been fighting: this component used to mount every row of
+ * the tree, thousands in a real app, and now mounts about thirty. Compiling
+ * thirty rows saves far less than not rendering the other few thousand.
+ */
+
+/** Fixed row height (`.node` in redesign.css) — the virtualizer's estimate. */
+const ROW_H = 26;
 
 export function treeViewRows(rows: VisibleRow[]): TreeViewRow[] {
   return rows.map((row) => ({
@@ -127,12 +143,39 @@ export function TreeView({
   };
 
   const scrollRef = useRef<HTMLDivElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
+
+  /**
+   * Only the rows near the viewport are mounted.
+   *
+   * The redesign dropped the windowing v1 had, so every row of the tree was in
+   * the DOM at once — a few thousand nodes in a real app, re-rendered on every
+   * trace ingest. Rows are a fixed 26px, and `scrollMargin` accounts for the
+   * watchlist section sitting above the list inside the same scroller.
+   */
+  const [scrollMargin, setScrollMargin] = useState(0);
+  useEffect(() => {
+    const list = listRef.current;
+    const scroller = scrollRef.current;
+    if (!list || !scroller) return;
+    setScrollMargin(list.offsetTop - scroller.offsetTop);
+  }, [watchlist.length]);
+
+  const virtualizer = useVirtualizer({
+    count: rows.length,
+    getScrollElement: () => scrollRef.current,
+    estimateSize: () => ROW_H,
+    overscan: 10,
+    scrollMargin,
+  });
+
   useEffect(() => {
     if (flashId === null && selected === null) return;
     const id = flashId ?? selected;
-    const el = scrollRef.current?.querySelector(`[data-component="${String(id)}"]`);
-    el?.scrollIntoView({ block: "nearest" });
-  }, [flashId, selected]);
+    const index = rows.findIndex(({ row }) => row.node.kind === "component" && row.node.id === id);
+    // The row may not be mounted, so ask the virtualizer rather than the DOM.
+    if (index >= 0) virtualizer.scrollToIndex(index, { align: "auto" });
+  }, [flashId, selected, rows, virtualizer]);
 
   /**
    * A row's own numbers.
@@ -203,7 +246,7 @@ export function TreeView({
               flashId === entry.id ? " flash" : ""
             }`}
             data-component={entry.id}
-            style={{ ["--pl" as string]: "14px" }}
+            style={{ "--pl": "14px" } as CSSProperties}
             onClick={() => onSelect(entry.id)}
             onMouseEnter={() => onHover?.(entry.id)}
           >
@@ -214,9 +257,7 @@ export function TreeView({
               {h.waste > 0 && <span className="waste">{h.waste}</span>}
               <div className="hbar">
                 <i
-                  style={{
-                    ["--w" as string]: `${Math.round((h.self / heatDenom) * 100)}%`,
-                  }}
+                  style={{ "--w": `${Math.round((h.self / heatDenom) * 100)}%` } as CSSProperties}
                 />
               </div>
               <span className="cnt">{h.renders}</span>
@@ -225,110 +266,124 @@ export function TreeView({
         );
       })}
       {watchlist.length > 0 && <div className="sect">App</div>}
-      {rows.map(({ row, pl }) => {
-        const { node, expandable, expanded } = row;
-        const isComponent = node.kind === "component";
-        const name = isComponent ? node.datum.name : node.name;
-        const laneKey = typeLaneKey(name);
-        const state = lanes ? laneVisibility(lanes.filter, laneKey) : "visible";
-        const hasDoctor = isComponent && !!doctor?.has(node.id);
-        const glyph = glyphFor(node, hasDoctor);
-        const fallbackRenders = isComponent ? node.datum.renders : node.renders;
-        const fallbackSelf = isComponent ? node.datum.selfTime : node.selfTime;
-        const fallbackWaste = node.kind === "group" ? node.suspicious : 0;
-        const h = heatFor(
-          isComponent ? { componentId: node.id } : { name },
-          fallbackRenders,
-          fallbackSelf,
-          fallbackWaste,
-        );
-        const soloed = lanes?.filter.solo.has(laneKey) ?? false;
-        const muted = lanes?.filter.muted.has(laneKey) ?? false;
-        const flashing = isComponent && flashId === node.id;
+      <div ref={listRef} style={{ height: virtualizer.getTotalSize(), position: "relative" }}>
+        {virtualizer.getVirtualItems().map((virtual) => {
+          const { row, pl } = rows[virtual.index]!;
+          const { node, expandable, expanded } = row;
+          const isComponent = node.kind === "component";
+          const name = isComponent ? node.datum.name : node.name;
+          const laneKey = typeLaneKey(name);
+          const state = lanes ? laneVisibility(lanes.filter, laneKey) : "visible";
+          const hasDoctor = isComponent && !!doctor?.has(node.id);
+          const glyph = glyphFor(node, hasDoctor);
+          const fallbackRenders = isComponent ? node.datum.renders : node.renders;
+          const fallbackSelf = isComponent ? node.datum.selfTime : node.selfTime;
+          const fallbackWaste = node.kind === "group" ? node.suspicious : 0;
+          const h = heatFor(
+            isComponent ? { componentId: node.id } : { name },
+            fallbackRenders,
+            fallbackSelf,
+            fallbackWaste,
+          );
+          const soloed = lanes?.filter.solo.has(laneKey) ?? false;
+          const muted = lanes?.filter.muted.has(laneKey) ?? false;
+          const flashing = isComponent && flashId === node.id;
 
-        return (
-          <div
-            key={row.key}
-            // `rl-tree-row` / `rl-tree-name` and the treeitem role are the
-            // panel's stable contract (e2e, and anything scripting the panel).
-            // The concept's class names sit alongside them, not instead.
-            className={`node rl-tree-row${isComponent && node.id === selected ? " sel rl-selected" : ""}${
-              state === "muted" ? " is-muted" : ""
-            }${flashing ? " flash" : ""}`}
-            role="treeitem"
-            aria-selected={isComponent && node.id === selected}
-            aria-expanded={expandable ? expanded : undefined}
-            data-component={isComponent ? node.id : undefined}
-            style={{ ["--pl" as string]: `${pl}px` }}
-            onClick={() => {
-              if (isComponent) onSelect(node.id);
-              else onToggle(node.key);
-            }}
-            onMouseEnter={() => isComponent && onHover?.(node.id)}
-          >
-            <span
-              className="chev"
-              onClick={(e) => {
-                if (!expandable) return;
-                e.stopPropagation();
-                onToggle(node.key);
+          return (
+            <div
+              key={row.key}
+              // `rl-tree-row` / `rl-tree-name` and the treeitem role are the
+              // panel's stable contract (e2e, and anything scripting the panel).
+              // The concept's class names sit alongside them, not instead.
+              className={`node rl-tree-row${isComponent && node.id === selected ? " sel rl-selected" : ""}${
+                state === "muted" ? " is-muted" : ""
+              }${flashing ? " flash" : ""}`}
+              role="treeitem"
+              aria-selected={isComponent && node.id === selected}
+              aria-expanded={expandable ? expanded : undefined}
+              data-component={isComponent ? node.id : undefined}
+              style={
+                {
+                  "--pl": `${pl}px`,
+                  position: "absolute",
+                  top: 0,
+                  left: 0,
+                  width: "100%",
+                  transform: `translateY(${virtual.start - virtualizer.options.scrollMargin}px)`,
+                } as CSSProperties
+              }
+              onClick={() => {
+                if (isComponent) onSelect(node.id);
+                else onToggle(node.key);
               }}
+              onMouseEnter={() => isComponent && onHover?.(node.id)}
             >
-              {expandable ? (expanded ? "▾" : "▸") : ""}
-            </span>
-            {glyph && <span className={`glyph ${glyph.cls}`}>{glyph.text}</span>}
-            <span className="nm rl-tree-name">{name}</span>
-            {node.kind === "group" && <span className="x nm">×{node.count}</span>}
+              <span
+                className="chev"
+                onClick={(e) => {
+                  if (!expandable) return;
+                  e.stopPropagation();
+                  onToggle(node.key);
+                }}
+              >
+                {expandable ? (expanded ? "▾" : "▸") : ""}
+              </span>
+              {glyph && <span className={`glyph ${glyph.cls}`}>{glyph.text}</span>}
+              <span className="nm rl-tree-name">{name}</span>
+              {node.kind === "group" && <span className="x nm">×{node.count}</span>}
 
-            {lanes && (
-              <div className={`rowact${soloed || muted ? " pinned" : ""}`}>
-                <span
-                  className={`ra${soloed ? " on" : ""}`}
-                  data-act="solo"
-                  title={`Solo ${name} — trace only this`}
-                  role="button"
-                  aria-pressed={soloed}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    lanes.toggleSolo(laneKey);
-                  }}
-                >
-                  S
-                </span>
-                <span
-                  className={`ra${muted ? " on" : ""}`}
-                  data-act="mute"
-                  title={
-                    muted
-                      ? `Unmute ${name} — its history was never dropped`
-                      : `Mute ${name} — hide it from every view (still recorded)`
-                  }
-                  role="button"
-                  aria-pressed={muted}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    lanes.toggleMute(laneKey);
-                  }}
-                >
-                  M
-                </span>
-              </div>
-            )}
+              {lanes && (
+                <div className={`rowact${soloed || muted ? " pinned" : ""}`}>
+                  <span
+                    className={`ra${soloed ? " on" : ""}`}
+                    data-act="solo"
+                    title={`Solo ${name} — trace only this`}
+                    role="button"
+                    aria-pressed={soloed}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      lanes.toggleSolo(laneKey);
+                    }}
+                  >
+                    S
+                  </span>
+                  <span
+                    className={`ra${muted ? " on" : ""}`}
+                    data-act="mute"
+                    title={
+                      muted
+                        ? `Unmute ${name} — its history was never dropped`
+                        : `Mute ${name} — hide it from every view (still recorded)`
+                    }
+                    role="button"
+                    aria-pressed={muted}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      lanes.toggleMute(laneKey);
+                    }}
+                  >
+                    M
+                  </span>
+                </div>
+              )}
 
-            <div className="heat">
-              {h.waste > 0 && <span className="waste">{h.waste}</span>}
-              <div className="hbar">
-                <i
-                  style={{
-                    ["--w" as string]: `${heatDenom > 0 ? Math.round((h.self / heatDenom) * 100) : 0}%`,
-                  }}
-                />
+              <div className="heat">
+                {h.waste > 0 && <span className="waste">{h.waste}</span>}
+                <div className="hbar">
+                  <i
+                    style={
+                      {
+                        "--w": `${heatDenom > 0 ? Math.round((h.self / heatDenom) * 100) : 0}%`,
+                      } as CSSProperties
+                    }
+                  />
+                </div>
+                <span className="cnt">{h.renders}</span>
               </div>
-              <span className="cnt">{h.renders}</span>
             </div>
-          </div>
-        );
-      })}
+          );
+        })}
+      </div>
     </div>
   );
 }
