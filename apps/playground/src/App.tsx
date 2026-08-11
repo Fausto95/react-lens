@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { CartCascade } from "./scenarios/CartCascade.js";
+import { Storefront } from "./scenarios/Storefront.js";
 import { Showcase } from "./scenarios/Showcase.js";
 import { DeepTree } from "./scenarios/DeepTree.js";
 import { Expensive } from "./scenarios/Expensive.js";
@@ -29,7 +29,7 @@ export function App() {
         </p>
       </header>
 
-      <CartCascade />
+      <Storefront />
 
       <div style={{ marginTop: 32 }}>
         {!more ? (
