@@ -1,7 +1,13 @@
 import { describe, it, expect } from "vite-plus/test";
 import type { CommitId, ComponentId } from "@reactlens/protocol";
 import type { CommitSummary } from "@reactlens/trace-engine";
-import { replaySchedule, stopIndexAt, type ReplayStop } from "./schedule.js";
+import {
+  advanceReplay,
+  replaySchedule,
+  replaySpan,
+  linearSweep,
+  type ReplayStop,
+} from "./schedule.js";
 
 const commit = (id: number, t: number, dur = 5): CommitSummary => ({
   commitId: id as CommitId,
@@ -75,31 +81,107 @@ describe("replaySchedule", () => {
   });
 });
 
-describe("stopIndexAt", () => {
-  const stops = replaySchedule(COMMITS, null, BOUNDS);
-
-  it("walks the stops from first to last as progress runs 0→1", () => {
-    expect(stopIndexAt(stops, 0)).toBe(0);
-    expect(stopIndexAt(stops, 1)).toBe(stops.length - 1);
+describe("replaySpan", () => {
+  it("is the whole session when no region is set", () => {
+    expect(replaySpan(null, BOUNDS)).toEqual({ lo: 0, hi: 400 });
   });
 
-  it("is monotonic, so replay never jumps backwards mid-sweep", () => {
-    let prev = -1;
-    for (let f = 0; f <= 1; f += 0.02) {
-      const i = stopIndexAt(stops, f);
-      expect(i).toBeGreaterThanOrEqual(prev);
-      prev = i;
+  it("is the region, normalised, when one is", () => {
+    expect(replaySpan({ start: 250, end: 120 }, BOUNDS)).toEqual({ lo: 120, hi: 250 });
+  });
+});
+
+describe("advanceReplay", () => {
+  const stops = replaySchedule(COMMITS, null, BOUNDS);
+  const span = replaySpan(null, BOUNDS);
+  const along = linearSweep(span);
+
+  /** Runs a whole replay at a given frame count, collecting what was emitted. */
+  const sweep = (frames: number) => {
+    const emitted: { t: number; live: boolean }[] = [];
+    let visited = 0;
+    for (let f = 0; f <= frames; f++) {
+      const step = advanceReplay(stops, along, f / frames, visited);
+      visited = step.visited;
+      emitted.push({ t: step.t, live: step.live });
+    }
+    return emitted;
+  };
+
+  it("moves between stops instead of teleporting from one to the next", () => {
+    // The defect this fixes: the playhead only ever held commit timestamps, so
+    // a four-commit session looked like four jumps rather than playback.
+    const emitted = sweep(120);
+    const offStop = emitted.filter((e) => !stops.some((s) => s.t === e.t));
+    expect(offStop.length).toBeGreaterThan(emitted.length / 2);
+  });
+
+  it("never runs backwards", () => {
+    let prev = -Infinity;
+    for (const { t } of sweep(120)) {
+      expect(t).toBeGreaterThanOrEqual(prev);
+      prev = t;
     }
   });
 
-  it("clamps out-of-range progress instead of indexing past the end", () => {
-    expect(stopIndexAt(stops, -5)).toBe(0);
-    expect(stopIndexAt(stops, 99)).toBe(stops.length - 1);
+  it("lands on every commit, even when frames are coarser than the commits", () => {
+    // Free sweeping alone would step straight over a 5 ms commit; each frame
+    // may only advance as far as the next unvisited stop.
+    for (const frames of [8, 20, 120]) {
+      const seen = new Set(sweep(frames).map((e) => e.t));
+      for (const stop of stops) expect(seen.has(stop.t)).toBe(true);
+    }
   });
 
-  it("gives every stop a turn — none is stepped over", () => {
-    const seen = new Set<number>();
-    for (let f = 0; f <= 1; f += 0.001) seen.add(stopIndexAt(stops, f));
-    expect(seen.size).toBe(stops.length);
+  it("stays inside the span and finishes live", () => {
+    const emitted = sweep(120);
+    for (const { t } of emitted) {
+      expect(t).toBeGreaterThanOrEqual(span.lo);
+      expect(t).toBeLessThanOrEqual(span.hi);
+    }
+    expect(emitted.at(-1)!.live).toBe(true);
+  });
+
+  it("reports live only on the closing stop", () => {
+    const early = sweep(120).slice(0, -1);
+    expect(early.some((e) => e.live)).toBe(false);
+  });
+
+  it("holds still on an empty schedule rather than dividing by nothing", () => {
+    const step = advanceReplay([], along, 0.5, 0);
+    expect(Number.isFinite(step.t)).toBe(true);
+    expect(step.visited).toBe(0);
+  });
+});
+
+describe("linearSweep", () => {
+  it("runs the span end to end and clamps outside 0→1", () => {
+    const sweep = linearSweep({ lo: 100, hi: 300 });
+    expect(sweep(0)).toBe(100);
+    expect(sweep(0.5)).toBe(200);
+    expect(sweep(1)).toBe(300);
+    expect(sweep(-1)).toBe(100);
+    expect(sweep(2)).toBe(300);
+  });
+
+  it("is the seam a compressed scale replaces", () => {
+    // A session that is 90% idle: swept in wall-clock time the playhead spends
+    // 90% of the replay inside a 34 px gutter, looking frozen. A screen-uniform
+    // sweep crosses the same gap in a proportional slice of the replay.
+    const stops = replaySchedule([commit(1, 0), commit(2, 9000)], null, { t0: 0, t1: 9010 });
+    const wallClock = linearSweep({ lo: 0, hi: 9010 });
+    // Stand-in for the compressed projection: half the screen per active end.
+    const screen: (p: number) => number = (p) => (p < 0.5 ? p * 10 : 9000 + (p - 0.5) * 20);
+
+    const inGap = (t: number) => t > 10 && t < 9000;
+    const frac = (s: (p: number) => number) => {
+      let n = 0;
+      for (let f = 0; f <= 1; f += 0.01) {
+        if (inGap(advanceReplay(stops, s, f, 2).t)) n++;
+      }
+      return n / 101;
+    };
+    expect(frac(wallClock)).toBeGreaterThan(0.9);
+    expect(frac(screen)).toBeLessThan(0.1);
   });
 });
