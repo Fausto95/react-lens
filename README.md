@@ -1,12 +1,13 @@
 <p align="center">
-  <img src="apps/site/public/og.png" alt="React Lens — know why every render happened. Time travel, AI agent, render causes, AST Doctor, waste detection, Suspense & RSC." width="800" />
+  <img src="apps/site/public/og.png" alt="React Lens — rewind any render, then ask why. Time travel, AI agent, render causes, AST Doctor, waste detection, Suspense & RSC." width="800" />
 </p>
 
 <h1 align="center">React Lens</h1>
 
 <p align="center">
-  <strong>Know why every render happened.</strong><br />
-  Dev-time React observability — from interaction to cause to fix, in one panel.
+  <strong>Rewind any render. Then ask why.</strong><br />
+  Replay your app's real state at any commit — then a trace-grounded AI agent
+  answers, citing the exact render, component, and line.
 </p>
 
 <p align="center">
