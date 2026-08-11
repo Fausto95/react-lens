@@ -1413,3 +1413,30 @@
 .rl-redesign .tick span {
   bottom: 11px;
 }
+
+/* ── Lane name gutter: truncate, never overflow ─────────────────────────────
+   The concept's fixture names are short ("CartBadge"), so nothing there tests
+   the gutter's limits. Real apps have `DirectoryResourceConsultationField`,
+   which printed straight across the track and over the clips. The name
+   truncates; the ×N count and the muted tag keep their space, since those are
+   the parts that stop making sense when clipped. The full name stays on hover
+   via the row's title. */
+.rl-redesign .lname {
+  overflow: hidden;
+  min-width: 0;
+}
+.rl-redesign .lane-nm {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.rl-redesign .lname .chev,
+.rl-redesign .lname .x,
+.rl-redesign .lname .mtag {
+  flex: 0 0 auto;
+}
+.rl-redesign .lname .x {
+  margin-left: 4px;
+}

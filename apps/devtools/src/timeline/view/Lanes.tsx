@@ -92,8 +92,10 @@ export function Lanes({
               }}
             >
               {row.expandable && <span className="chev">{row.expanded ? "▾" : "▸"}</span>}
-              {row.label}
-              {row.suffix && <span className="x"> {row.suffix}</span>}
+              {/* Wrapped, not a bare text node: a text node cannot ellipsis,
+                  so a long component name printed straight over the clips. */}
+              <span className="lane-nm">{row.label}</span>
+              {row.suffix && <span className="x">{row.suffix}</span>}
               {state === "muted" && <span className="mtag">muted</span>}
             </div>
 
