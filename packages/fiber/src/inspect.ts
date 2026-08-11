@@ -143,22 +143,48 @@ function classify(node: HookNode, index: number): RawHook {
 }
 
 export function inspectContexts(fiber: Fiber): RawContext[] {
+  return listContextDeps(fiber).map((dep) => ({
+    displayName: contextDisplayName(dep.context),
+    value: dep.memoizedValue,
+  }));
+}
+
+/**
+ * Contexts whose memoized value changed vs the alternate fiber. Used to tell
+ * a real context update apart from "state-or-parent" when the fiber bridge
+ * can't see React's context bit.
+ */
+export function changedContexts(fiber: Fiber): RawContext[] {
+  const curr = listContextDeps(fiber);
+  if (curr.length === 0) return [];
+  const prev = listContextDeps(fiber.alternate);
+  const out: RawContext[] = [];
+  for (const dep of curr) {
+    const before = prev.find((p) => p.context === dep.context);
+    if (!before || !Object.is(before.memoizedValue, dep.memoizedValue)) {
+      out.push({
+        displayName: contextDisplayName(dep.context),
+        value: dep.memoizedValue,
+      });
+    }
+  }
+  return out;
+}
+
+function listContextDeps(fiber: Fiber | null | undefined): ContextDep[] {
+  if (!fiber) return [];
   const deps = fiber.dependencies as { firstContext?: ContextDep | null } | null;
   const firstContext = deps?.firstContext;
   if (!firstContext) return [];
-
-  const contexts: RawContext[] = [];
+  const out: ContextDep[] = [];
   let dep: ContextDep | null = firstContext;
   let guard = 0;
   while (dep && guard < 100) {
-    contexts.push({
-      displayName: contextDisplayName(dep.context),
-      value: dep.memoizedValue,
-    });
+    out.push(dep);
     dep = dep.next;
     guard++;
   }
-  return contexts;
+  return out;
 }
 
 interface ContextDep {

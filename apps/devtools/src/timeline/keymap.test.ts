@@ -41,8 +41,11 @@ describe("timelineKeyAction — layout-independent bindings", () => {
     expect(timelineKeyAction(ev({ key: "l", code: "KeyL", ctrlKey: true }))).toBeNull();
   });
 
+  it("no longer binds T — the timeline is a column, not a collapsible dock", () => {
+    expect(timelineKeyAction(ev({ key: "t", code: "KeyT" }))).toBeNull();
+  });
+
   it("keeps the character-based bindings", () => {
-    expect(timelineKeyAction(ev({ key: "t", code: "KeyT" }))).toEqual({ kind: "toggle-collapse" });
     expect(timelineKeyAction(ev({ key: "L", code: "KeyL" }))).toEqual({ kind: "go-live" });
     expect(timelineKeyAction(ev({ key: "f", code: "KeyF" }))).toEqual({ kind: "fit" });
     expect(timelineKeyAction(ev({ key: "Escape", code: "Escape" }))).toEqual({

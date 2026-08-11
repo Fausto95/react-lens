@@ -8,6 +8,7 @@ import {
   IDLE_WIDTH,
   buildScale,
   clamp,
+  clipActiveToView,
   countIdleGutters,
   mergeActive,
   nearest,
@@ -16,7 +17,7 @@ import {
   scaleForProjectedWidth,
   sessionBounds,
   stickyLabelShift,
-} from "./geometry.js";
+} from "./scale.js";
 
 const span = (start: number, end: number) => ({ start, end });
 
@@ -43,6 +44,25 @@ describe("mergeActive", () => {
 
   it("gives sub-ms spans a minimum 1ms extent", () => {
     expect(mergeActive([span(10, 10)])).toEqual([[10, 11]]);
+  });
+});
+
+describe("clipActiveToView", () => {
+  it("clips overlapping spans and drops ones outside the view", () => {
+    expect(
+      clipActiveToView(
+        [
+          [0, 100],
+          [500, 800],
+          [2000, 2100],
+        ],
+        50,
+        600,
+      ),
+    ).toEqual([
+      [50, 100],
+      [500, 600],
+    ]);
   });
 });
 

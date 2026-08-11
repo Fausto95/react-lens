@@ -1,5 +1,5 @@
 import { timeAxis } from "@reactlens/ui";
-import { projectX, type Seg } from "./geometry.js";
+import { projectX, type Seg } from "./model/scale.js";
 
 export interface Tick {
   x: number;

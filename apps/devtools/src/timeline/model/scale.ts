@@ -45,6 +45,20 @@ export function mergeActive(spans: readonly TimeSpan[]): Array<[number, number]>
   return merged;
 }
 
+/** Keep only the parts of merged active spans that fall inside `[t0, t1]`. */
+export function clipActiveToView(
+  active: readonly [number, number][],
+  t0: number,
+  t1: number,
+): Array<[number, number]> {
+  const out: Array<[number, number]> = [];
+  for (const [s, e] of active) {
+    if (e <= t0 || s >= t1) continue;
+    out.push([Math.max(s, t0), Math.min(e, t1)]);
+  }
+  return out;
+}
+
 export function countIdleGutters(active: Array<[number, number]>, t0: number, t1: number): number {
   let n = 0;
   let cursor = t0;

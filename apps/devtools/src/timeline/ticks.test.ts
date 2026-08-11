@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vite-plus/test";
-import { buildScale } from "./geometry.js";
+import { buildScale } from "./model/scale.js";
 import { buildTicks, compactGap, niceStep } from "./ticks.js";
 
 describe("niceStep", () => {

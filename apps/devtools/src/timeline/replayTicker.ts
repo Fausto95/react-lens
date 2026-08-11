@@ -1,4 +1,4 @@
-import { clamp } from "./geometry.js";
+import { clamp } from "./model/scale.js";
 
 /**
  * Replay pacing: frame-delta accumulation over a fixed duration. A stalled

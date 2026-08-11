@@ -6,7 +6,6 @@
  */
 
 export type TimelineKeyAction =
-  | { kind: "toggle-collapse" }
   | { kind: "escape-band" }
   | { kind: "go-live" }
   | { kind: "fit" }
@@ -46,7 +45,6 @@ const BINDINGS: Binding[] = [
     allowAlt: true,
     action: { kind: "step-interaction", dir: 1 },
   },
-  { keys: ["t", "T"], action: { kind: "toggle-collapse" } },
   { keys: ["Escape"], action: { kind: "escape-band" } },
   { keys: ["l", "L"], action: { kind: "go-live" } },
   { keys: ["f", "F"], action: { kind: "fit" } },

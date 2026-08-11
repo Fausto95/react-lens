@@ -56,6 +56,12 @@ describe("parseQuery", () => {
     expect(p(datum({ observableChange: null }))).toBe(true); // unknown → treated as no change
   });
 
+  it("wasted:true is an alias for no observable change", () => {
+    expect(pred("wasted:true")(datum({ observableChange: false }))).toBe(true);
+    expect(pred("wasted:true")(datum({ observableChange: true }))).toBe(false);
+    expect(pred("wasted:false")(datum({ observableChange: true }))).toBe(true);
+  });
+
   it("AND-combines tokens", () => {
     const p = pred("renders:>10 card compiled:true");
     expect(p(datum({ name: "ProductCard", renders: 52, compiled: true }))).toBe(true);

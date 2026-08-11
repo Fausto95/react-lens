@@ -165,7 +165,10 @@
   right: 0;
   top: 0;
   bottom: 0;
-  width: 420px;
+  /* Three columns (272 + 6 + timeline + 6 + 320) need real width; the dock is
+     resizable and remembers, this is just a sane first run. */
+  width: min(1180px, 88vw);
+  min-width: 720px;
   border-left: 1px solid var(--rl-border-strong);
   box-shadow: -8px 0 24px rgba(var(--rl-shadow-rgb), 0.4);
   z-index: 2147483000;
@@ -2129,7 +2132,7 @@
   height: 18px;
   border-bottom: 1px solid var(--rl-border);
 }
-.rl-tl-open .rl-tl-label:nth-child(3) {
+.rl-tl-open .rl-tl-label-cmt {
   height: 36px;
 }
 .rl-tl-label-wf {
@@ -3801,4 +3804,540 @@
   color: var(--rl-text-faint);
   background: var(--rl-bg-hover);
   border: 1px solid var(--rl-border);
+}
+
+/* ── Solo / mute lanes (view-only filter) ────────────────────────────────────
+   Hidden lanes stay in the tree, dimmed, so the switch that hid them is always
+   where the user left it. Mute reads differently from "not soloed": muting is
+   a deliberate act and gets the stronger dim plus a persistent toggle. */
+.rl-tree-row.rl-lane-muted .rl-tree-name,
+.rl-tree-row.rl-lane-muted .rl-tree-stats {
+  opacity: 0.4;
+}
+.rl-tree-row.rl-lane-unsoloed .rl-tree-name,
+.rl-tree-row.rl-lane-unsoloed .rl-tree-stats {
+  opacity: 0.55;
+}
+
+.rl-lane-acts {
+  display: none;
+  gap: 2px;
+  flex: 0 0 auto;
+  margin-left: 4px;
+}
+.rl-tree-row:hover .rl-lane-acts,
+.rl-lane-acts.pinned,
+.rl-lane-acts:focus-within {
+  display: inline-flex;
+}
+.rl-lane-act {
+  -webkit-app-region: no-drag;
+  display: grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border: none;
+  border-radius: 4px;
+  background: none;
+  font: inherit;
+  font-size: 9px;
+  font-weight: 600;
+  line-height: 1;
+  color: var(--rl-text-faint);
+  cursor: pointer;
+  transition:
+    color 100ms ease,
+    background 100ms ease;
+}
+.rl-lane-act:hover {
+  color: var(--rl-text);
+  background: var(--rl-bg-hover);
+}
+.rl-lane-act.on {
+  color: var(--rl-interaction);
+  background: rgba(var(--rl-interaction-rgb), 0.16);
+}
+.rl-lane-act:focus-visible {
+  outline: 1px solid var(--rl-interaction);
+  outline-offset: 1px;
+}
+
+.rl-status-filtered {
+  color: var(--rl-interaction);
+}
+
+/* Inline text button — "undo this filter" affordances inside empty states. */
+.rl-link-btn {
+  padding: 0;
+  border: none;
+  background: none;
+  font: inherit;
+  color: var(--rl-interaction);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+.rl-link-btn:hover {
+  color: var(--rl-text);
+}
+
+/* ══ Timeline lanes ══════════════════════════════════════════════════════════
+   One lane per component type; renders are clips on a real time axis (width =
+   duration, color = cause). Cascades read as vertical waterfalls down lanes.
+   Cause palette maps onto the existing semantic tokens:
+     props → interaction (blue) · state → healthy (green)
+     context → render (purple) · cascade → muted (gray) */
+
+.rl-lane-labels {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+.rl-lane-label {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 0 6px 0 10px;
+  border-bottom: 1px solid var(--rl-border);
+  font-family: var(--rl-mono, ui-monospace, "SF Mono", Menlo, monospace);
+  font-size: 10.5px;
+  color: var(--rl-text-dim);
+  cursor: pointer;
+  box-sizing: border-box;
+  white-space: nowrap;
+}
+.rl-lane-label:hover {
+  background: var(--rl-bg-hover);
+  color: var(--rl-text);
+}
+.rl-lane-label.sel {
+  background: rgba(var(--rl-interaction-rgb), 0.1);
+  box-shadow: inset 2px 0 0 var(--rl-interaction);
+  color: var(--rl-text);
+}
+.rl-lane-label.rl-lane-sub {
+  padding-left: 24px;
+  color: var(--rl-text-faint);
+}
+.rl-lane-label.rl-lane-muted,
+.rl-lane-label.rl-lane-unsoloed {
+  opacity: 0.42;
+}
+.rl-lane-caret {
+  width: 9px;
+  flex: 0 0 auto;
+  font-size: 8px;
+  color: var(--rl-text-faint);
+}
+.rl-lane-caret.hidden {
+  visibility: hidden;
+}
+.rl-lane-nm {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.rl-lane-x {
+  color: var(--rl-text-faint);
+}
+.rl-lane-tag {
+  margin-left: auto;
+  padding: 1px 4px;
+  border: 1px solid var(--rl-border-strong);
+  border-radius: 3px;
+  font-size: 8.5px;
+  color: var(--rl-text-faint);
+}
+.rl-lane-acts.pinned-hover {
+  display: none;
+  gap: 2px;
+  margin-left: auto;
+}
+.rl-lane-label:hover .rl-lane-acts.pinned-hover,
+.rl-lane-acts.pinned-hover:focus-within {
+  display: inline-flex;
+}
+
+.rl-lane-canvas-scroll {
+  height: 100%;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+.rl-lane-canvas {
+  position: relative;
+}
+.rl-lane-row {
+  position: absolute;
+  left: 0;
+  right: 0;
+  border-bottom: 1px solid var(--rl-border);
+  box-sizing: border-box;
+}
+.rl-lane-row.rl-lane-sub {
+  background: rgba(var(--rl-ink-rgb), 0.012);
+}
+.rl-lane-row.hl {
+  background: rgba(var(--rl-interaction-rgb), 0.045);
+}
+.rl-lane-row.rl-lane-muted,
+.rl-lane-row.rl-lane-unsoloed {
+  opacity: 0.28;
+}
+
+/* ── Clips ── */
+.rl-clip {
+  position: absolute;
+  top: 4px;
+  bottom: 4px;
+  padding: 0 4px;
+  border: 1px solid;
+  border-radius: 4px;
+  font-family: var(--rl-mono, ui-monospace, "SF Mono", Menlo, monospace);
+  font-size: 9px;
+  line-height: 1;
+  text-align: left;
+  color: var(--rl-text);
+  overflow: hidden;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: filter 120ms ease-out;
+}
+.rl-lane-row.rl-lane-sub .rl-clip {
+  top: 3px;
+  bottom: 3px;
+}
+.rl-clip:hover {
+  filter: brightness(1.35);
+}
+.rl-clip.sel {
+  outline: 1.5px solid var(--rl-interaction);
+  outline-offset: 1px;
+}
+.rl-clip-props {
+  background: rgba(var(--rl-interaction-rgb), 0.28);
+  border-color: rgba(var(--rl-interaction-rgb), 0.45);
+}
+.rl-clip-state {
+  background: rgba(var(--rl-healthy-rgb), 0.26);
+  border-color: rgba(var(--rl-healthy-rgb), 0.45);
+}
+.rl-clip-context {
+  background: rgba(var(--rl-render-rgb), 0.26);
+  border-color: rgba(var(--rl-render-rgb), 0.45);
+}
+.rl-clip-cascade,
+.rl-clip-other {
+  background: rgba(var(--rl-muted-rgb), 0.2);
+  border-color: rgba(var(--rl-muted-rgb), 0.35);
+  color: var(--rl-text-dim);
+}
+.rl-clip-mount {
+  background: rgba(var(--rl-network-rgb), 0.22);
+  border-color: rgba(var(--rl-network-rgb), 0.4);
+}
+/* Wasted = rendered, changed nothing observable. Hatched, never colored. */
+.rl-clip.wasted {
+  background: repeating-linear-gradient(
+    135deg,
+    rgba(var(--rl-muted-rgb), 0.18) 0 4px,
+    rgba(var(--rl-muted-rgb), 0.05) 4px 8px
+  );
+  border-style: dashed;
+  border-color: rgba(var(--rl-warn-rgb), 0.4);
+  color: var(--rl-text-faint);
+}
+.rl-clip-label {
+  pointer-events: none;
+}
+
+/* ── Density strip: a repeated type as heat, not 200 slivers ── */
+.rl-lane-density {
+  position: absolute;
+  inset: 7px 0;
+  pointer-events: none;
+}
+.rl-lane-density-cell {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  background: color-mix(
+    in srgb,
+    rgba(var(--rl-interaction-rgb), var(--rl-d-a)),
+    rgba(var(--rl-warn-rgb), var(--rl-d-a)) calc(var(--rl-d-waste) * 100%)
+  );
+}
+
+/* ── Causality arrows ── */
+.rl-lane-arrows {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  pointer-events: none;
+  overflow: visible;
+}
+.rl-lane-arrows path {
+  fill: none;
+  stroke: var(--rl-render);
+  stroke-width: 1.2;
+  opacity: 0.8;
+}
+.rl-lane-arrows marker path {
+  fill: var(--rl-render);
+  stroke: none;
+}
+
+/* ── Loop bar + region ── */
+.rl-tl-loopbar {
+  position: relative;
+  height: 10px;
+  border-bottom: 1px solid var(--rl-border);
+  background: rgba(var(--rl-ink-rgb), 0.02);
+  cursor: ew-resize;
+}
+.rl-tl-loopbar-fill {
+  position: absolute;
+  top: 2px;
+  bottom: 2px;
+  border-radius: 2px;
+  background: rgba(var(--rl-interaction-rgb), 0.55);
+}
+.rl-tl-region {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  z-index: 2;
+  background: rgba(var(--rl-interaction-rgb), 0.05);
+  border-left: 1px solid rgba(var(--rl-interaction-rgb), 0.35);
+  border-right: 1px solid rgba(var(--rl-interaction-rgb), 0.35);
+  pointer-events: none;
+}
+.rl-tl-region.looping {
+  background: rgba(var(--rl-interaction-rgb), 0.09);
+}
+.rl-tl-region-handle {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 8px;
+  z-index: 6;
+  cursor: ew-resize;
+}
+
+/* ── Footer stats ── */
+.rl-tl-foot {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 30px;
+  flex: none;
+  padding: 0 10px;
+  border-top: 1px solid var(--rl-border);
+  background: var(--rl-bg-raised);
+  font-size: 10.5px;
+  color: var(--rl-text-dim);
+}
+.rl-tl-foot-label {
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-size: 9px;
+  color: var(--rl-text-faint);
+}
+.rl-tl-foot-metric b {
+  color: var(--rl-text);
+}
+.rl-tl-foot-metric.warn {
+  color: var(--rl-warn);
+}
+.rl-tl-foot-metric.dim {
+  color: var(--rl-text-faint);
+}
+.rl-tl-foot-legend {
+  display: flex;
+  gap: 10px;
+  color: var(--rl-text-faint);
+  font-size: 10px;
+}
+.rl-tl-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.rl-tl-legend-sw {
+  width: 8px;
+  height: 8px;
+  border-radius: 2.5px;
+  border: 1px solid;
+}
+
+/* ── Lane label column sizing ────────────────────────────────────────────────
+   Lanes are named by component type, so the gutter needs real width (the old
+   IXN/CMT/CMP stubs fit in 64px). Critically the lane list must be height-
+   bounded: left to grow with its rows it inflated the whole timeline and
+   squeezed the tree/inspector to zero. */
+.rl-tl-labels {
+  flex: 0 0 148px;
+  width: 148px;
+  max-width: 148px;
+  min-height: 0;
+}
+.rl-tl-open .rl-lane-labels {
+  height: var(--rl-tl-wf-h, 250px);
+  flex: 0 0 var(--rl-tl-wf-h, 250px);
+  min-height: 0;
+}
+@container timeline (max-width: 560px) {
+  .rl-tl-labels {
+    flex: 0 0 104px;
+    width: 104px;
+    max-width: 104px;
+  }
+}
+
+/* The inner canvas is a flex column: fixed-height strips must not be shrunk
+   by their siblings, or the loop bar collapses to its border. */
+.rl-tl-loopbar {
+  flex: 0 0 10px;
+}
+/* Ruler(18) + loop(10) + int(30) + commits(36) + lanes. */
+.rl-tl-open .rl-tl-scroll {
+  height: calc(var(--rl-tl-wf-h, 250px) + 94px);
+}
+.rl-tl-foot > * {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+.rl-tl-foot .rl-spacer {
+  flex: 1 1 auto;
+}
+
+.rl-tl-label-loop {
+  height: 10px;
+  flex: 0 0 10px;
+  border-bottom: 1px solid var(--rl-border);
+}
+
+/* ══ Three-column shell: components · timeline · inspector ═══════════════════
+   The timeline is a column, not a bottom dock, so the time axis gets the width
+   and the lanes get the height. */
+.rl-root {
+  grid-template-rows: 40px auto minmax(0, 1fr) 26px;
+  grid-template-areas:
+    "topbar"
+    "banner"
+    "main"
+    "status";
+}
+.rl-pane-timeline {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  padding: 0;
+}
+.rl-tl {
+  grid-area: auto;
+  flex: 1 1 auto;
+  min-height: 0;
+  border-top: none;
+  background: var(--rl-bg);
+}
+/* Lanes take every pixel the fixed chrome above them doesn't. */
+.rl-tl-open .rl-tl-scroll {
+  height: auto;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: hidden;
+}
+.rl-tl-body {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+.rl-tl-inner {
+  display: flex;
+  flex-direction: column;
+  min-height: 100%;
+}
+.rl-tl-open .rl-tl-track-wf {
+  flex: 1 1 auto;
+  height: auto;
+  min-height: 0;
+}
+.rl-tl-open .rl-lane-labels {
+  flex: 1 1 auto;
+  height: auto;
+  min-height: 0;
+  overflow: hidden;
+}
+.rl-tl-open .rl-tl-label-wf {
+  height: auto !important;
+}
+
+/* ── Toolbar: recording pill, hint, cause legend ── */
+.rl-rec-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 9px;
+  border: 1px solid var(--rl-border);
+  border-radius: 99px;
+  font-size: 11px;
+  color: var(--rl-text-dim);
+  white-space: nowrap;
+}
+.rl-rec-pill i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--rl-text-faint);
+}
+.rl-rec-pill.on i {
+  background: var(--rl-severe);
+  animation: rl-rec-pulse 2s infinite;
+}
+@keyframes rl-rec-pulse {
+  50% {
+    opacity: 0.35;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .rl-rec-pill.on i {
+    animation: none;
+  }
+}
+.rl-topbar-hint {
+  font-size: 10.5px;
+  color: var(--rl-text-faint);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.rl-cause-legend {
+  display: flex;
+  gap: 10px;
+  font-size: 10px;
+  color: var(--rl-text-dim);
+  white-space: nowrap;
+}
+@container timeline (max-width: 900px) {
+  .rl-topbar-hint {
+    display: none;
+  }
+}
+
+/* ── Timeline column header ── */
+.rl-tl-title {
+  display: flex;
+  align-items: center;
+  flex: none;
+}
+.rl-tl-title-range {
+  margin-left: auto;
+  font-family: var(--rl-mono, ui-monospace, "SF Mono", Menlo, monospace);
+  font-size: 9.5px;
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--rl-text-faint);
 }

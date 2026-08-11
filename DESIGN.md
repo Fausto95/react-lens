@@ -41,9 +41,16 @@ unsupported mutation), not because of a developer mistake. Compiler status is a
 **first-class input to the causality engine**, captured per component and
 surfaced as evidence. Consequences:
 
-- We never recommend adding `useMemo`/`useCallback`/`memo`. When a render is
-  "suspicious", the explanation references compiler bailout reasons, not manual
-  memoization.
+- The inspector's **Fix** section proposes concrete source changes, including
+  manual memoization (`useMemo` / `useCallback` / `memo`) when the evidence
+  points there — e.g. a prop that is referentially new but structurally
+  identical every render. _(Amended: this rule previously forbade recommending
+  manual memoization outright. The panel redesign's Cause → Change → Cost →
+  Fix inspector is only useful if the Fix step is actionable, so the
+  prohibition was lifted deliberately.)_
+- Bailout reasons remain the **preferred** explanation. When compiler status is
+  known and the Compiler could not memoize a component, the headline says why
+  it bailed out rather than suggesting the developer hand-memoize around it.
 - The playground runs with the Compiler on so our heuristics are validated
   against compiled output, not hand-memoized code.
 

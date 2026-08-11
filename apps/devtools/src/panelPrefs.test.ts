@@ -28,16 +28,30 @@ describe("panel prefs", () => {
     expect(loadPanelPrefs().travelOn).toBe(true);
   });
 
-  it("round-trips dock width and split percent", () => {
-    savePanelPrefs({ dockWidth: 520, splitPct: 35 });
+  it("round-trips dock and column widths", () => {
+    savePanelPrefs({ dockWidth: 520, treeWidth: 300, inspectorWidth: 360 });
     expect(loadPanelPrefs().dockWidth).toBe(520);
-    expect(loadPanelPrefs().splitPct).toBe(35);
+    expect(loadPanelPrefs().treeWidth).toBe(300);
+    expect(loadPanelPrefs().inspectorWidth).toBe(360);
   });
 
-  it("clamps splitPct into the drag range", () => {
-    savePanelPrefs({ splitPct: 5 });
-    expect(loadPanelPrefs().splitPct).toBe(22);
-    savePanelPrefs({ splitPct: 99 });
-    expect(loadPanelPrefs().splitPct).toBe(78);
+  it("clamps column widths into their drag ranges", () => {
+    savePanelPrefs({ treeWidth: 10, inspectorWidth: 9999 });
+    expect(loadPanelPrefs().treeWidth).toBe(180);
+    expect(loadPanelPrefs().inspectorWidth).toBe(560);
+  });
+
+  it("round-trips the solo/mute filter", () => {
+    savePanelPrefs({ laneFilter: { v: 1, solo: ["t:Cart"], muted: ["t:Tooltip"] } });
+    expect(loadPanelPrefs().laneFilter).toEqual({
+      v: 1,
+      solo: ["t:Cart"],
+      muted: ["t:Tooltip"],
+    });
+  });
+
+  it("drops a corrupt lane filter rather than hiding lanes forever", () => {
+    savePanelPrefs({ laneFilter: { v: 1, solo: "nope", muted: [7] } as never });
+    expect(loadPanelPrefs().laneFilter).toEqual({ v: 1, solo: [], muted: [] });
   });
 });

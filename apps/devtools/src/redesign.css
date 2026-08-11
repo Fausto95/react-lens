@@ -1,0 +1,1270 @@
+/* React Lens — panel redesign.
+
+   Ported from the interactive concept (reactlens-interactive.html) with its
+   rules intact. Two deliberate deviations:
+
+   1. Every selector is scoped under `.rl-redesign`. The embedded panel is
+      injected into the inspected page, where bare `.app` / `.grid` / `.tree` /
+      `.node` would collide with the host application's own styles.
+   2. The concept's page chrome (body padding, the 1420px centered card) is
+      replaced by a fill-the-container box — the panel is a pane, not a page.
+
+   Loaded after theme.css so it wins. */
+
+.rl-redesign {
+  --bg: #0a0a0b;
+  --panel: #0f0f11;
+  --panel-2: #121214;
+  --line: rgba(255, 255, 255, 0.07);
+  --line-strong: rgba(255, 255, 255, 0.12);
+  --text: #e8e8eb;
+  --text-2: #9a9aa3;
+  --text-3: #5c5c66;
+  --accent: #6e9bff;
+  --props: #4c8dff;
+  --state: #3ecf8e;
+  --ctx: #a78bfa;
+  --cascade: #4a4a54;
+  --warn: #f5a623;
+  --bad: #ff6b6b;
+  --mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, monospace;
+  --sans: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", sans-serif;
+  --r: 6px;
+}
+.rl-redesign * {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+.rl-redesign {
+  width: 1420px;
+  max-width: 100%;
+  background: var(--bg);
+  border: 1px solid var(--line-strong);
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 40px 120px rgba(0, 0, 0, 0.6);
+  user-select: none;
+}
+.rl-redesign .toolbar {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  height: 44px;
+  padding: 0 14px;
+  border-bottom: 1px solid var(--line);
+  background: var(--panel);
+}
+.rl-redesign .dots {
+  display: flex;
+  gap: 7px;
+}
+.rl-redesign .dots i {
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background: #2a2a30;
+  display: block;
+}
+.rl-redesign .brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+  font-size: 13px;
+  letter-spacing: -0.01em;
+}
+.rl-redesign .brand .lens {
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  border: 1.5px solid var(--accent);
+  position: relative;
+}
+.rl-redesign .brand .lens::after {
+  content: "";
+  position: absolute;
+  inset: 3.5px;
+  border-radius: 50%;
+  background: var(--accent);
+  opacity: 0.85;
+}
+.rl-redesign .rec {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border: 1px solid var(--line);
+  border-radius: 99px;
+  color: var(--text-2);
+  font-size: 11.5px;
+}
+.rl-redesign .rec i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--bad);
+  animation: pulse 2s infinite;
+}
+@keyframes pulse {
+  50% {
+    opacity: 0.35;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .rl-redesign .rec i {
+    animation: none;
+  }
+}
+.rl-redesign .legend {
+  display: flex;
+  gap: 12px;
+  margin-left: auto;
+  color: var(--text-2);
+  font-size: 11px;
+}
+.rl-redesign .legend span {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.rl-redesign .sw {
+  width: 8px;
+  height: 8px;
+  border-radius: 2.5px;
+}
+.rl-redesign .kbd {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--text-3);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 2px 6px;
+  background: var(--panel-2);
+}
+.rl-redesign .hint {
+  font-size: 10.5px;
+  color: var(--text-3);
+}
+.rl-redesign .grid {
+  display: grid;
+  grid-template-columns: 272px 1fr 320px;
+  height: 676px;
+}
+.rl-redesign .col {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.rl-redesign .col + .col {
+  border-left: 1px solid var(--line);
+}
+.rl-redesign .colhead {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 36px;
+  padding: 0 12px;
+  border-bottom: 1px solid var(--line);
+  color: var(--text-2);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  flex: none;
+}
+.rl-redesign .colhead .right {
+  margin-left: auto;
+  text-transform: none;
+  font-weight: 400;
+  font-family: var(--mono);
+  font-size: 9.5px;
+  color: var(--text-3);
+}
+.rl-redesign .filter {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 10px 10px 4px;
+  padding: 6px 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  background: var(--panel-2);
+  flex: none;
+}
+.rl-redesign .filter input {
+  background: none;
+  border: none;
+  outline: none;
+  color: var(--text-2);
+  font-size: 11.5px;
+  width: 100%;
+  min-width: 48px;
+  font-family: var(--sans);
+}
+.rl-redesign .filter input::placeholder {
+  color: var(--text-3);
+}
+.rl-redesign .filter .chip {
+  font-family: var(--mono);
+  font-size: 10px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: rgba(110, 155, 255, 0.12);
+  color: var(--accent);
+  white-space: nowrap;
+  cursor: pointer;
+  flex: none;
+}
+.rl-redesign .filter .chip:hover {
+  background: rgba(110, 155, 255, 0.22);
+}
+.rl-redesign .tree {
+  overflow-y: auto;
+  padding: 6px 0 12px;
+  flex: 1;
+}
+.rl-redesign .sect {
+  padding: 10px 12px 4px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+.rl-redesign .node {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 26px;
+  padding: 0 10px 0 var(--pl, 10px);
+  cursor: pointer;
+  position: relative;
+}
+.rl-redesign .node:hover {
+  background: rgba(255, 255, 255, 0.03);
+}
+.rl-redesign .node.sel {
+  background: rgba(110, 155, 255, 0.1);
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+.rl-redesign .node.flash {
+  animation: rl-node-flash 0.7s ease-out;
+}
+@keyframes rl-node-flash {
+  0% {
+    background: rgba(110, 155, 255, 0.28);
+  }
+  100% {
+    background: transparent;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .rl-redesign .node.flash {
+    animation: none;
+    background: rgba(110, 155, 255, 0.14);
+  }
+}
+.rl-redesign .node.hidden {
+  display: none;
+}
+.rl-redesign .chev {
+  width: 10px;
+  color: var(--text-3);
+  font-size: 9px;
+  flex: none;
+  text-align: center;
+  cursor: pointer;
+}
+.rl-redesign .nm {
+  font-family: var(--mono);
+  font-size: 11.5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.rl-redesign .nm .x {
+  color: var(--text-3);
+}
+.rl-redesign .glyph {
+  font-size: 10px;
+  flex: none;
+}
+.rl-redesign .g-ok {
+  color: var(--state);
+}
+.rl-redesign .g-warn {
+  color: var(--warn);
+}
+.rl-redesign .g-ctx {
+  color: var(--ctx);
+}
+.rl-redesign .heat {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: none;
+}
+.rl-redesign .hbar {
+  width: 34px;
+  height: 3px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.07);
+  overflow: hidden;
+}
+.rl-redesign .hbar i {
+  display: block;
+  height: 100%;
+  border-radius: 2px;
+  background: linear-gradient(90deg, #3ecf8e, #f5a623, #ff6b6b);
+  width: var(--w, 20%);
+}
+.rl-redesign .cnt {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--text-3);
+  min-width: 24px;
+  text-align: right;
+}
+.rl-redesign .waste {
+  font-family: var(--mono);
+  font-size: 9.5px;
+  color: var(--warn);
+  background: rgba(245, 166, 35, 0.12);
+  border-radius: 4px;
+  padding: 1px 5px;
+}
+.rl-redesign .rowact {
+  display: none;
+  gap: 2px;
+  margin-left: 4px;
+}
+.rl-redesign .node:hover .rowact,
+.rl-redesign .node .rowact.pinned {
+  display: flex;
+}
+.rl-redesign .ra {
+  width: 18px;
+  height: 18px;
+  display: grid;
+  place-items: center;
+  border-radius: 4px;
+  color: var(--text-3);
+  font-size: 10px;
+  cursor: pointer;
+}
+.rl-redesign .ra:hover {
+  background: rgba(255, 255, 255, 0.07);
+  color: var(--text-2);
+}
+.rl-redesign .ra.on {
+  color: var(--accent);
+  background: rgba(110, 155, 255, 0.12);
+}
+.rl-redesign .node.is-muted .nm,
+.rl-redesign .node.is-muted .cnt {
+  opacity: 0.45;
+}
+.rl-redesign .tl {
+  position: relative;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+  min-height: 0;
+}
+.rl-redesign .ruler {
+  position: relative;
+  height: 30px;
+  border-bottom: 1px solid var(--line);
+  flex: none;
+  display: flex;
+}
+.rl-redesign .rspacer {
+  width: 148px;
+  flex: none;
+  border-right: 1px solid var(--line);
+}
+.rl-redesign .rtrack {
+  position: relative;
+  flex: 1;
+  cursor: ew-resize;
+  font-family: var(--mono);
+  font-size: 9.5px;
+  color: var(--text-3);
+}
+.rl-redesign .tick {
+  position: absolute;
+  bottom: 0;
+  height: 7px;
+  border-left: 1px solid var(--line-strong);
+}
+.rl-redesign .tick span {
+  position: absolute;
+  bottom: 9px;
+  left: 3px;
+  white-space: nowrap;
+}
+.rl-redesign .marker {
+  position: absolute;
+  top: 3px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 9.5px;
+  color: var(--text-2);
+  transform: translateX(-4px);
+  pointer-events: none;
+  white-space: nowrap;
+}
+.rl-redesign .marker i {
+  width: 9px;
+  height: 9px;
+  border-radius: 2.5px;
+  background: var(--panel-2);
+  border: 1px solid var(--line-strong);
+  display: grid;
+  place-items: center;
+  font-size: 6.5px;
+  font-style: normal;
+  flex: none;
+}
+.rl-redesign .marker.long i {
+  border-color: rgba(245, 166, 35, 0.5);
+  color: var(--warn);
+}
+.rl-redesign .lanes {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+.rl-redesign .lanes-body {
+  position: relative;
+  height: 100%;
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+.rl-redesign .lanes-inner {
+  position: relative;
+  min-height: 100%;
+}
+.rl-redesign .lanes-chrome {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 4;
+}
+.rl-redesign .lane {
+  display: flex;
+  align-items: center;
+  height: 34px;
+  border-bottom: 1px solid var(--line);
+  position: relative;
+}
+.rl-redesign .lane.sub {
+  height: 26px;
+  background: rgba(255, 255, 255, 0.012);
+}
+.rl-redesign .lane.dim {
+  opacity: 0.28;
+}
+.rl-redesign .lname {
+  width: 148px;
+  flex: none;
+  padding: 0 8px 0 14px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--text-2);
+  border-right: 1px solid var(--line);
+  height: 100%;
+  cursor: pointer;
+}
+.rl-redesign .lane.sub .lname {
+  padding-left: 28px;
+  color: var(--text-3);
+}
+.rl-redesign .lane.hl .lname {
+  color: var(--text);
+}
+.rl-redesign .lane.hl {
+  background: rgba(110, 155, 255, 0.045);
+}
+.rl-redesign .mtag {
+  font-size: 8.5px;
+  color: var(--text-3);
+  border: 1px solid var(--line-strong);
+  padding: 1px 4px;
+  border-radius: 3px;
+  margin-left: auto;
+}
+.rl-redesign .track {
+  position: relative;
+  flex: 1;
+  height: 100%;
+  cursor: ew-resize;
+}
+.rl-redesign .clip {
+  position: absolute;
+  top: 8px;
+  height: 18px;
+  border-radius: 4px;
+  font-family: var(--mono);
+  font-size: 9px;
+  display: flex;
+  align-items: center;
+  padding: 0 5px;
+  color: rgba(255, 255, 255, 0.92);
+  white-space: nowrap;
+  overflow: hidden;
+  cursor: pointer;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  transition: filter 0.12s ease-out;
+}
+.rl-redesign .lane.sub .clip {
+  top: 5px;
+  height: 15px;
+}
+.rl-redesign .c-props {
+  background: rgba(76, 141, 255, 0.28);
+  border-color: rgba(76, 141, 255, 0.45);
+}
+.rl-redesign .c-state {
+  background: rgba(62, 207, 142, 0.26);
+  border-color: rgba(62, 207, 142, 0.45);
+}
+.rl-redesign .c-context {
+  background: rgba(167, 139, 250, 0.26);
+  border-color: rgba(167, 139, 250, 0.45);
+}
+.rl-redesign .c-cascade {
+  background: rgba(118, 118, 130, 0.2);
+  border-color: rgba(118, 118, 130, 0.35);
+  color: var(--text-2);
+}
+.rl-redesign .clip.wasted {
+  background: repeating-linear-gradient(
+    135deg,
+    rgba(118, 118, 130, 0.16) 0 4px,
+    rgba(118, 118, 130, 0.05) 4px 8px
+  );
+  border-style: dashed;
+  color: var(--text-3);
+}
+.rl-redesign .clip.sel {
+  outline: 1.5px solid var(--accent);
+  outline-offset: 1px;
+}
+.rl-redesign .clip:hover {
+  filter: brightness(1.35);
+}
+.rl-redesign .clip.fadeout {
+  opacity: 0.12;
+  pointer-events: none;
+}
+.rl-redesign .density {
+  position: absolute;
+  top: 11px;
+  height: 12px;
+  border-radius: 3px;
+  background: linear-gradient(
+    90deg,
+    rgba(76, 141, 255, 0.12),
+    rgba(76, 141, 255, 0.55) 30%,
+    rgba(255, 107, 107, 0.55) 55%,
+    rgba(76, 141, 255, 0.2)
+  );
+  cursor: pointer;
+}
+.rl-redesign .density.fixedmode {
+  background: linear-gradient(
+    90deg,
+    rgba(76, 141, 255, 0.12),
+    rgba(76, 141, 255, 0.4) 40%,
+    rgba(76, 141, 255, 0.15)
+  );
+}
+.rl-redesign .region {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  background: rgba(110, 155, 255, 0.05);
+  border-left: 1px solid rgba(110, 155, 255, 0.35);
+  border-right: 1px solid rgba(110, 155, 255, 0.35);
+  pointer-events: none;
+  z-index: 3;
+}
+.rl-redesign .idle {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  background: repeating-linear-gradient(
+    -45deg,
+    transparent,
+    transparent 3px,
+    rgba(255, 255, 255, 0.03) 3px,
+    rgba(255, 255, 255, 0.03) 6px
+  );
+  border-left: 1px solid rgba(255, 255, 255, 0.04);
+  border-right: 1px solid rgba(255, 255, 255, 0.04);
+  pointer-events: none;
+  z-index: 1;
+}
+.rl-redesign .region::after {
+  content: "loop";
+  position: absolute;
+  top: 2px;
+  right: 5px;
+  font-family: var(--mono);
+  font-size: 8.5px;
+  color: var(--accent);
+  opacity: 0.7;
+}
+.rl-redesign .rhandle {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 8px;
+  cursor: ew-resize;
+  z-index: 7;
+  pointer-events: auto;
+}
+.rl-redesign .playhead {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 1.5px;
+  background: var(--accent);
+  z-index: 5;
+  box-shadow: 0 0 12px rgba(110, 155, 255, 0.55);
+  pointer-events: none;
+}
+.rl-redesign .playhead::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: -4.5px;
+  border: 5px solid transparent;
+  border-top: 6px solid var(--accent);
+}
+.rl-redesign .ph-chip {
+  position: absolute;
+  top: 4px;
+  z-index: 6;
+  font-family: var(--mono);
+  font-size: 9.5px;
+  color: var(--accent);
+  background: rgba(110, 155, 255, 0.12);
+  border: 1px solid rgba(110, 155, 255, 0.35);
+  padding: 2px 7px;
+  border-radius: 4px;
+  backdrop-filter: blur(4px);
+  pointer-events: none;
+}
+.rl-redesign .arrows {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 4;
+}
+.rl-redesign .tlfoot {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  height: 34px;
+  border-top: 1px solid var(--line);
+  padding: 0 12px;
+  font-size: 10.5px;
+  color: var(--text-2);
+  background: var(--panel);
+}
+.rl-redesign .tlfoot b {
+  color: var(--text);
+  font-weight: 600;
+}
+.rl-redesign .tlfoot .mono {
+  font-family: var(--mono);
+  font-size: 10px;
+}
+.rl-redesign .btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 24px;
+  height: 22px;
+  padding: 0 7px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: var(--panel-2);
+  color: var(--text-2);
+  font-size: 10.5px;
+  cursor: pointer;
+}
+.rl-redesign .btn:hover {
+  border-color: var(--line-strong);
+  color: var(--text);
+}
+.rl-redesign .btn.active {
+  color: var(--accent);
+  border-color: rgba(110, 155, 255, 0.5);
+  background: rgba(110, 155, 255, 0.1);
+}
+.rl-redesign .zoom {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-3);
+}
+.rl-redesign input[type="range"] {
+  -webkit-appearance: none;
+  width: 90px;
+  height: 3px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.1);
+  outline: none;
+}
+.rl-redesign input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background: #3a3a44;
+  border: 1px solid var(--line-strong);
+  cursor: pointer;
+}
+.rl-redesign .fixnote {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--state);
+  display: none;
+}
+.rl-redesign .fixnote.show {
+  display: inline;
+}
+.rl-redesign .insp {
+  overflow-y: auto;
+  background: var(--panel);
+}
+.rl-redesign .crumb {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 10px 14px 8px;
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--text-3);
+  flex-wrap: wrap;
+  border-bottom: 1px solid var(--line);
+}
+.rl-redesign .crumb b {
+  color: var(--text);
+  font-weight: 500;
+}
+.rl-redesign .isect {
+  border-bottom: 1px solid var(--line);
+  padding: 12px 14px;
+}
+.rl-redesign .ihead {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-3);
+  margin-bottom: 9px;
+}
+.rl-redesign .ihead .n {
+  width: 14px;
+  height: 14px;
+  border-radius: 4px;
+  display: grid;
+  place-items: center;
+  font-size: 8.5px;
+  color: var(--text-2);
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+}
+.rl-redesign .why {
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--text-2);
+}
+.rl-redesign .why b {
+  color: var(--text);
+  font-weight: 500;
+}
+.rl-redesign .chain {
+  margin-top: 9px;
+  display: flex;
+  flex-direction: column;
+  font-family: var(--mono);
+  font-size: 10.5px;
+}
+.rl-redesign .chain .step {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+  color: var(--text-2);
+}
+.rl-redesign .chain .step::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--ctx);
+  flex: none;
+  margin-left: 2px;
+}
+.rl-redesign .chain .step.src::before {
+  background: var(--state);
+}
+.rl-redesign .chain .step.dst::before {
+  background: var(--props);
+}
+.rl-redesign .chain .pipe {
+  width: 1px;
+  height: 8px;
+  background: var(--line-strong);
+  margin-left: 4.5px;
+}
+.rl-redesign .diff {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  overflow: hidden;
+  background: var(--panel-2);
+}
+.rl-redesign .diff .row {
+  display: flex;
+  gap: 8px;
+  padding: 5px 9px;
+}
+.rl-redesign .diff .row + .row {
+  border-top: 1px solid var(--line);
+}
+.rl-redesign .diff .del {
+  color: #ff8080;
+  background: rgba(255, 107, 107, 0.06);
+}
+.rl-redesign .diff .add {
+  color: #6fdca8;
+  background: rgba(62, 207, 142, 0.06);
+}
+.rl-redesign .diff .neutral {
+  color: var(--text-3);
+}
+.rl-redesign .refwarn {
+  margin-top: 8px;
+  display: flex;
+  gap: 7px;
+  align-items: flex-start;
+  font-size: 11px;
+  color: var(--warn);
+  background: rgba(245, 166, 35, 0.08);
+  border: 1px solid rgba(245, 166, 35, 0.25);
+  border-radius: var(--r);
+  padding: 7px 9px;
+  line-height: 1.45;
+}
+.rl-redesign .phases {
+  display: flex;
+  height: 8px;
+  border-radius: 4px;
+  overflow: hidden;
+  margin: 4px 0 8px;
+  background: rgba(255, 255, 255, 0.04);
+}
+.rl-redesign .phases i {
+  display: block;
+  height: 100%;
+}
+.rl-redesign .plegend {
+  display: flex;
+  gap: 12px;
+  font-size: 10px;
+  color: var(--text-2);
+}
+.rl-redesign .plegend em {
+  font-style: normal;
+  font-family: var(--mono);
+  color: var(--text-3);
+}
+.rl-redesign .fix {
+  font-size: 11.5px;
+  line-height: 1.55;
+  color: var(--text-2);
+}
+.rl-redesign .code {
+  margin-top: 8px;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  background: #0b0b0d;
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  padding: 9px 11px;
+  line-height: 1.6;
+  color: #c9c9d1;
+  position: relative;
+  white-space: pre;
+}
+.rl-redesign .code .k {
+  color: #a78bfa;
+}
+.rl-redesign .code .f {
+  color: #6e9bff;
+}
+.rl-redesign .code .s {
+  color: #6fdca8;
+}
+.rl-redesign .copy {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  font-size: 9px;
+  color: var(--text-3);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 2px 6px;
+  background: var(--panel-2);
+  cursor: pointer;
+}
+.rl-redesign .copy:hover {
+  color: var(--text-2);
+}
+.rl-redesign .apply {
+  margin-top: 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--text);
+  background: rgba(110, 155, 255, 0.14);
+  border: 1px solid rgba(110, 155, 255, 0.4);
+  padding: 5px 11px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.rl-redesign .apply:hover {
+  background: rgba(110, 155, 255, 0.22);
+}
+.rl-redesign .apply.undone {
+  color: var(--text-2);
+  background: var(--panel-2);
+  border-color: var(--line-strong);
+}
+
+/* ── Deviations from the concept's page chrome ─────────────────────────────
+   The concept renders a fixed 1420 x 676 card centered on a page. The panel
+   fills whatever the extension / dock gives it, so the frame is fluid and the
+   lane grid stretches instead of clipping. */
+.rl-redesign {
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.rl-redesign .grid {
+  flex: 1 1 auto;
+  height: auto;
+  min-height: 0;
+}
+
+/* The dock keeps its own width — redesign.css loads after theme.css, so the
+   fill-the-container rule above would otherwise swallow `.rl-embedded`. */
+.rl-redesign.rl-embedded {
+  width: min(1180px, 88vw);
+  min-width: 720px;
+  left: auto;
+  right: 0;
+  border-left: 1px solid var(--line-strong);
+}
+
+/* The concept's footer sits in a 1420px card and never wraps; in a narrower
+   column its items broke onto two lines. Keep them on one row. */
+.rl-redesign .tlfoot > span {
+  white-space: nowrap;
+}
+.rl-redesign .tlfoot {
+  overflow: hidden;
+}
+
+/* `<svg>` is a replaced element: `inset: 0` positions it but does NOT stretch
+   it, so the arrows layer collapsed to the SVG default 300x150 and every path
+   fell outside its viewport and was clipped. Give it an explicit size. */
+.rl-redesign .arrows {
+  width: 100%;
+  height: 100%;
+  top: 0;
+  left: 0;
+  overflow: visible;
+}
+
+/* Column dividers + the embedded dock's left edge. The concept has fixed
+   272 / 1fr / 320 columns; real sessions need to trade width between the tree,
+   the time axis and the inspector. */
+.rl-redesign .grid {
+  position: relative;
+}
+.rl-redesign .colresize {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 7px;
+  margin-left: -3px;
+  z-index: 8;
+  cursor: col-resize;
+  background: transparent;
+  transition: background 100ms ease;
+}
+.rl-redesign .colresize:hover,
+.rl-redesign .colresize:active {
+  background: rgba(110, 155, 255, 0.35);
+}
+.rl-redesign.rl-embedded .rl-resize-handle {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 7px;
+  z-index: 20;
+  cursor: col-resize;
+  background: transparent;
+  transition: background 100ms ease;
+}
+.rl-redesign.rl-embedded .rl-resize-handle:hover,
+.rl-redesign.rl-embedded .rl-resize-handle:active {
+  background: rgba(110, 155, 255, 0.35);
+}
+
+/* ── Toolbar layout ─────────────────────────────────────────────────────────
+   The concept's toolbar sits in a 1420px card where nothing competes for
+   space. In a resizable dock its children shrank below their content width
+   and wrapped onto two lines, and the action buttons overlapped. Nothing in
+   the bar wraps; the hint is the only thing allowed to give up space. */
+.rl-redesign .toolbar {
+  flex: none;
+  min-width: 0;
+  overflow: hidden;
+}
+.rl-redesign .toolbar > * {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+.rl-redesign .brand,
+.rl-redesign .rec,
+.rl-redesign .legend,
+.rl-redesign .legend span,
+.rl-redesign .kbd {
+  white-space: nowrap;
+}
+/* The hint is the shock absorber: it truncates, then disappears entirely. */
+.rl-redesign .hint {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Panel actions (inspect, AI, ⌘K, sessions, settings, record). */
+.rl-redesign .rl-toolbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex: 0 0 auto;
+  margin-left: 4px;
+}
+.rl-redesign .rl-toolbar-actions .rl-icon-btn {
+  display: inline-grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  flex: 0 0 auto;
+  border: none;
+  border-radius: 6px;
+  background: none;
+  color: var(--text-2);
+  cursor: pointer;
+}
+.rl-redesign .rl-toolbar-actions .rl-icon-btn:hover {
+  background: var(--panel-2);
+  color: var(--text);
+}
+.rl-redesign .rl-toolbar-actions .rl-icon-btn.active {
+  color: var(--accent);
+  background: rgba(110, 155, 255, 0.14);
+}
+/* The "views are filtered" affordance is a chip, not an icon button. */
+.rl-redesign .rl-toolbar-actions .rl-filtered-chip {
+  width: auto;
+  padding: 0 8px;
+  font-size: 10.5px;
+  font-family: var(--mono);
+  color: var(--accent);
+  background: rgba(110, 155, 255, 0.14);
+  border: 1px solid rgba(110, 155, 255, 0.35);
+}
+.rl-redesign .rl-toolbar-actions .rl-icon-btn.recording .rl-rec-pulse {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--bad);
+  display: block;
+}
+@container timeline (max-width: 1040px) {
+  .rl-redesign .hint {
+    display: none;
+  }
+}
+
+/* Status bar sits under the three columns. */
+.rl-redesign .rl-statusbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: none;
+  height: 26px;
+  padding: 0 12px;
+  border-top: 1px solid var(--line);
+  background: var(--panel);
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--text-2);
+}
+.rl-redesign .rl-statusbar .rl-spacer {
+  flex: 1 1 auto;
+}
+.rl-redesign .rl-status-metric {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+}
+.rl-redesign .rl-status-metric.warn {
+  color: var(--warn);
+}
+.rl-redesign .rl-status-k {
+  color: var(--text-3);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.rl-redesign .rl-status-rec-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--text-3);
+}
+.rl-redesign .rl-status-rec.on .rl-status-rec-dot {
+  background: var(--bad);
+}
+
+.rl-redesign .rl-insp-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px 6px;
+}
+.rl-redesign .rl-insp-head h2 {
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  font-family: var(--mono);
+  color: var(--text);
+}
+
+.rl-redesign .rl-tree-search-count {
+  position: absolute;
+  right: 18px;
+  font-family: var(--mono);
+  font-size: 9.5px;
+  color: var(--text-3);
+}
+.rl-redesign .rl-tree-search-count.invalid {
+  color: var(--bad);
+}
+.rl-redesign .filter {
+  position: relative;
+}
+.rl-redesign .tree:focus-visible {
+  outline: none;
+}
+
+/* ── Continuous, scrollable timeline ────────────────────────────────────────
+   The scale spans the whole session at the current zoom, so the canvas is
+   wider than the viewport and scrolls horizontally — an NLE axis. The name
+   gutter is sticky so it stays pinned while the tracks slide under it. */
+.rl-redesign .lanes-body {
+  overflow-x: auto;
+  overflow-y: auto;
+  overscroll-behavior-x: contain;
+}
+.rl-redesign .lanes-inner {
+  /* width is set inline from the scale (NAME_W + content) */
+  position: relative;
+}
+.rl-redesign .lane {
+  width: 100%;
+}
+.rl-redesign .lname {
+  position: sticky;
+  left: 0;
+  z-index: 6;
+  background: var(--bg);
+  flex: 0 0 148px;
+}
+.rl-redesign .lane.sub .lname {
+  background: var(--panel-2);
+}
+.rl-redesign .track {
+  position: relative;
+  flex: 1 1 auto;
+  height: 100%;
+}
+/* The chrome layer spans the whole canvas, not the viewport. */
+.rl-redesign .lanes-chrome {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+}
+/* Idle gutters read as a labelled gap, so a 40 s pause is visible rather than
+   silently deleted — the compression is honest about what it hid. */
+.rl-redesign .idle {
+  display: grid;
+  place-items: center;
+  font-family: var(--mono);
+  font-size: 8.5px;
+  line-height: 1;
+  color: var(--text-3);
+  border-left: 1px dashed var(--line-strong);
+  border-right: 1px dashed var(--line-strong);
+  pointer-events: none;
+  z-index: 1;
+}
+.rl-redesign .lanes-body::-webkit-scrollbar {
+  height: 9px;
+  width: 9px;
+}
+.rl-redesign .lanes-body::-webkit-scrollbar-thumb {
+  background: var(--line-strong);
+  border-radius: 99px;
+}
+.rl-redesign .lanes-body::-webkit-scrollbar-track {
+  background: transparent;
+}

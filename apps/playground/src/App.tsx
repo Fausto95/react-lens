@@ -1,4 +1,5 @@
-import { Toolbar } from "./scenarios/Toolbar.js";
+import { useState } from "react";
+import { CartCascade } from "./scenarios/CartCascade.js";
 import { Showcase } from "./scenarios/Showcase.js";
 import { DeepTree } from "./scenarios/DeepTree.js";
 import { Expensive } from "./scenarios/Expensive.js";
@@ -10,28 +11,57 @@ import { Shop } from "./scenarios/Shop.js";
 import { ExternalStoreDemo } from "./scenarios/ExternalStoreDemo.js";
 
 /**
- * Playground root — each scenario lives in its own module under `scenarios/`
- * and exercises a different part of React Lens.
+ * Default mount is ONLY the cart cascade — `<details>` still mounts children
+ * when closed, which flooded the timeline with BigList/DeepTree mounts and
+ * buried the setCart → ctx → props story.
  */
 export function App() {
+  const [more, setMore] = useState(false);
+
   return (
     <div>
-      <header>
-        <h1 style={{ fontSize: 22, marginBottom: 4 }}>React Lens Playground</h1>
-        <p style={{ color: "#5f6878", marginTop: 0 }}>
-          Each section exercises a different part of the tool.
+      <header style={{ marginBottom: 20 }}>
+        <h1 style={{ fontSize: 22, marginBottom: 6 }}>React Lens Playground</h1>
+        <p style={{ color: "#5f6878", margin: 0, maxWidth: 540, lineHeight: 1.45 }}>
+          Click <b>Add to cart</b>. On the timeline you should see{" "}
+          <b>setCart → ctx → casc / props → wasted</b>. Select a clip for Cause → Change → Cost →
+          Fix. Space loops that interaction.
         </p>
       </header>
-      <Toolbar />
-      <Showcase />
-      <DeepTree />
-      <Expensive />
-      <WasteZone />
-      <SuspenseDemo />
-      <TransitionDemo />
-      <BigList />
-      <Shop />
-      <ExternalStoreDemo />
+
+      <CartCascade />
+
+      <div style={{ marginTop: 32 }}>
+        {!more ? (
+          <button
+            type="button"
+            onClick={() => setMore(true)}
+            style={{
+              fontSize: 13,
+              color: "#5f6878",
+              background: "transparent",
+              border: "1px solid #d0d4dc",
+              borderRadius: 6,
+              padding: "6px 12px",
+              cursor: "pointer",
+            }}
+          >
+            Load more scenarios…
+          </button>
+        ) : (
+          <>
+            <Showcase />
+            <DeepTree />
+            <Expensive />
+            <WasteZone />
+            <SuspenseDemo />
+            <TransitionDemo />
+            <BigList />
+            <Shop />
+            <ExternalStoreDemo />
+          </>
+        )}
+      </div>
     </div>
   );
 }

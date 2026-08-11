@@ -294,4 +294,52 @@ describe("interaction attribution — ignored containers", () => {
     inst.stop();
     panel.remove();
   });
+
+  it("attributes context consumers as context, not state/parent", async () => {
+    const frames: Frame[] = [];
+    const { React, createRoot, act, bridge } = await react();
+    const inst = createInstrumentation({ fiber: bridge, serializer: createSerializer() });
+    inst.start({ captureDOM: false, interactionWindowMs: 200, onFrame: (f) => frames.push(f) });
+
+    const Cart = React.createContext<{ n: number }>({ n: 0 });
+    Cart.displayName = "Cart";
+
+    function Badge() {
+      const { n } = React.useContext(Cart);
+      return React.createElement("span", null, String(n));
+    }
+    function Provider() {
+      const [n, setN] = React.useState(0);
+      return React.createElement(
+        Cart.Provider,
+        { value: { n } },
+        React.createElement("button", { onClick: () => setN((x) => x + 1) }, "inc"),
+        React.createElement(Badge),
+      );
+    }
+
+    const root = createRoot(document.getElementById("root")!);
+    await act(async () => {
+      root.render(React.createElement(Provider));
+    });
+    await flush();
+    frames.length = 0;
+
+    await act(async () => {
+      document.querySelector("button")!.click();
+    });
+    await flush();
+
+    const renders = allRenders(frames);
+    const badgeUpdate = renders.find(
+      (r) =>
+        nameOf(frames, r.componentId as unknown as number) === "Badge" &&
+        !r.reasons.some((reason) => reason.type === "mount"),
+    );
+    expect(badgeUpdate).toBeDefined();
+    expect(badgeUpdate!.reasons.some((r) => r.type === "context")).toBe(true);
+    expect(badgeUpdate!.reasons.some((r) => r.type === "state" || r.type === "parent")).toBe(false);
+
+    inst.stop();
+  });
 });

@@ -14,6 +14,7 @@ import { useTraceVersion } from "./useLens.js";
 import { ms } from "@reactlens/ui";
 import { IconSparkle } from "@reactlens/icons";
 import { SLOW_SELF_MS, componentFixPrompt } from "./perfBudget.js";
+import { laneVisibility, typeLaneKey, type LaneControls } from "./laneFilter.js";
 
 type TreeMode = "components" | "changed" | "waste";
 
@@ -41,6 +42,7 @@ export function Tree({
   suspended,
   modeHint,
   onModeHintConsumed,
+  lanes,
 }: {
   store: TraceStore;
   causality: Causality;
@@ -60,6 +62,11 @@ export function Tree({
   /** External request to switch mode (e.g. waste banner → Potential Waste). */
   modeHint?: TreeMode | null;
   onModeHintConsumed?: () => void;
+  /**
+   * Solo / mute. Rows stay in the tree when hidden — dimmed, not removed —
+   * so the control that hid them is always where you left it.
+   */
+  lanes?: LaneControls;
 }) {
   const version = useTraceVersion(store, { kind: "global" });
   const [mode, setMode] = useState<TreeMode>("components");
@@ -269,6 +276,7 @@ export function Tree({
                   unrestorable={unrestorable}
                   doctor={doctor}
                   suspended={suspended}
+                  {...(lanes ? { lanes } : {})}
                 />
               ))}
             </div>
@@ -294,6 +302,7 @@ function TreeRow({
   unrestorable,
   doctor,
   suspended,
+  lanes,
 }: {
   row: VisibleRow;
   maxSelf: number;
@@ -309,6 +318,7 @@ function TreeRow({
   unrestorable?: Set<ComponentId>;
   doctor?: Set<ComponentId>;
   suspended?: Set<ComponentId>;
+  lanes?: LaneControls;
 }) {
   const { node, depth, expandable, expanded } = row;
   const self = rowSelfTime(row);
@@ -319,10 +329,14 @@ function TreeRow({
   const frozenClass = inFrozen === false ? " rl-frozen-out" : "";
   const selClass = isSelected ? " rl-selected" : inSelection ? " rl-in-selection" : "";
   const kbClass = kbFocused ? " rl-kb-focus" : "";
+  // One lane per component type — a group row and its instances share a key.
+  const laneKey = typeLaneKey(node.kind === "component" ? node.datum.name : node.name);
+  const laneState = lanes ? laneVisibility(lanes.filter, laneKey) : "visible";
+  const laneClass = laneState === "visible" ? "" : ` rl-lane-${laneState}`;
 
   return (
     <div
-      className={`rl-tree-row${selClass}${frozenClass}${kbClass}`}
+      className={`rl-tree-row${selClass}${frozenClass}${kbClass}${laneClass}`}
       role="treeitem"
       aria-selected={isSelected}
       onClick={() => {
@@ -371,6 +385,14 @@ function TreeRow({
         )}
       </div>
 
+      {lanes && (
+        <LaneActions
+          lanes={lanes}
+          laneKey={laneKey}
+          name={node.kind === "component" ? node.datum.name : node.name}
+        />
+      )}
+
       {node.kind === "component" && onAskAI && self >= SLOW_SELF_MS && (
         <span
           role="button"
@@ -405,6 +427,57 @@ function TreeRow({
         </span>
       </span>
     </div>
+  );
+}
+
+/**
+ * DAW solo/mute for one component type, on hover (Figma layer-eye pattern).
+ * Active toggles stay pinned so a hidden lane never loses its own switch.
+ */
+function LaneActions({
+  lanes,
+  laneKey,
+  name,
+}: {
+  lanes: LaneControls;
+  laneKey: string;
+  name: string;
+}) {
+  const soloed = lanes.filter.solo.has(laneKey);
+  const muted = lanes.filter.muted.has(laneKey);
+  return (
+    <span className={`rl-lane-acts${soloed || muted ? " pinned" : ""}`}>
+      <button
+        type="button"
+        className={`rl-lane-act${soloed ? " on" : ""}`}
+        title={soloed ? `Unsolo ${name}` : `Solo ${name} — trace only this`}
+        aria-label={soloed ? `Unsolo ${name}` : `Solo ${name}`}
+        aria-pressed={soloed}
+        onClick={(e) => {
+          e.stopPropagation();
+          lanes.toggleSolo(laneKey);
+        }}
+      >
+        S
+      </button>
+      <button
+        type="button"
+        className={`rl-lane-act${muted ? " on" : ""}`}
+        title={
+          muted
+            ? `Unmute ${name} — its history was never dropped`
+            : `Mute ${name} — hide it from every view (still recorded)`
+        }
+        aria-label={muted ? `Unmute ${name}` : `Mute ${name}`}
+        aria-pressed={muted}
+        onClick={(e) => {
+          e.stopPropagation();
+          lanes.toggleMute(laneKey);
+        }}
+      >
+        M
+      </button>
+    </span>
   );
 }
 

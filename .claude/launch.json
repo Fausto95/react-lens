@@ -20,6 +20,12 @@
       "port": 5185
     },
     {
+      "name": "playground-c",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["--filter", "@reactlens/playground", "dev", "--port", "5189", "--strictPort"],
+      "port": 5189
+    },
+    {
       "name": "site",
       "runtimeExecutable": "pnpm",
       "runtimeArgs": ["--filter", "@reactlens/site", "dev"],
