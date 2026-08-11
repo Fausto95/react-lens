@@ -359,6 +359,7 @@ export function RedesignShell({
               watchlist={watchlist}
               lanes={lanes}
               regionHeat={timeline.statsRaw.byLane}
+              componentHeat={timeline.statsRaw.byComponent}
               fixApplied={fixApplied}
               flashId={flashId}
               {...(doctor ? { doctor } : {})}

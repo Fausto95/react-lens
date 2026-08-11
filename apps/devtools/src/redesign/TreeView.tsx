@@ -54,6 +54,7 @@ export function TreeView({
   lanes,
   watchlist = [],
   regionHeat,
+  componentHeat,
   fixApplied = false,
   flashId = null,
   onSelect,
@@ -69,6 +70,8 @@ export function TreeView({
   lanes?: LaneControls;
   /** When set, heat/count/waste come from the timeline selection, not the session. */
   regionHeat?: Map<LaneKey, LaneHeat>;
+  /** Per-instance heat — what a component row shows. */
+  componentHeat?: Map<ComponentId, LaneHeat>;
   /** Theatrical replay: hide waste badges and cool the heat. */
   fixApplied?: boolean;
   /** Clip→tree flash — briefly highlights the matching row. */
@@ -131,14 +134,25 @@ export function TreeView({
     el?.scrollIntoView({ block: "nearest" });
   }, [flashId, selected]);
 
+  /**
+   * A row's own numbers.
+   *
+   * A tree row is one *instance*, so it reads `componentHeat`. Reading the
+   * type lane here was the bug behind the implausible counts: in a Chakra app
+   * every one of hundreds of `<Insertion>` rows showed the total for all of
+   * them. Group rows keep the aggregate, because a group genuinely is one.
+   */
   const heatFor = (
-    name: string,
+    key: { componentId: ComponentId } | { name: string },
     fallbackRenders: number,
     fallbackSelf: number,
     fallbackWaste: number,
   ): { renders: number; self: number; waste: number } => {
     if (regionHeat) {
-      const heat = regionHeat.get(typeLaneKey(name));
+      const heat =
+        "componentId" in key
+          ? componentHeat?.get(key.componentId)
+          : regionHeat.get(typeLaneKey(key.name));
       if (!heat) return { renders: 0, self: 0, waste: 0 };
       if (fixApplied) {
         return {
@@ -156,8 +170,16 @@ export function TreeView({
     };
   };
 
+  // The bar is comparable only against the same population the rows show:
+  // scaling instance rows by the largest *type* total flattened every bar in
+  // an app with one hot type.
   const regionMaxSelf = regionHeat
-    ? Math.max(1, ...[...regionHeat.values()].map((h) => h.selfMs), 1)
+    ? Math.max(
+        1,
+        ...[...(componentHeat?.values() ?? [])].map((h) => h.selfMs),
+        ...[...regionHeat.values()].map((h) => h.selfMs),
+        1,
+      )
     : maxSelf;
   const heatDenom = regionHeat ? regionMaxSelf : maxSelf;
 
@@ -173,7 +195,7 @@ export function TreeView({
     >
       {watchlist.length > 0 && <div className="sect">Watchlist</div>}
       {watchlist.map((entry) => {
-        const h = heatFor(entry.name, entry.renders, entry.renders, entry.issues);
+        const h = heatFor({ componentId: entry.id }, entry.renders, entry.renders, entry.issues);
         return (
           <div
             key={`w:${entry.id}`}
@@ -214,7 +236,12 @@ export function TreeView({
         const fallbackRenders = isComponent ? node.datum.renders : node.renders;
         const fallbackSelf = isComponent ? node.datum.selfTime : node.selfTime;
         const fallbackWaste = node.kind === "group" ? node.suspicious : 0;
-        const h = heatFor(name, fallbackRenders, fallbackSelf, fallbackWaste);
+        const h = heatFor(
+          isComponent ? { componentId: node.id } : { name },
+          fallbackRenders,
+          fallbackSelf,
+          fallbackWaste,
+        );
         const soloed = lanes?.filter.solo.has(laneKey) ?? false;
         const muted = lanes?.filter.muted.has(laneKey) ?? false;
         const flashing = isComponent && flashId === node.id;

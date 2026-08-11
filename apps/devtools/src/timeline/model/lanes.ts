@@ -261,8 +261,14 @@ export interface RegionStats {
   renders: number;
   wasted: number;
   selfMs: number;
-  /** Renders per component type inside the region — drives tree heat. */
+  /** Renders per component type inside the region — lane and group rows. */
   byLane: Map<LaneKey, { renders: number; wasted: number; selfMs: number }>;
+  /**
+   * Renders per *instance*. A tree row is one instance, and reading the type
+   * total there made every `<Insertion>` in a Chakra app claim all 1409 of
+   * them. The two views come from the same pass, so they cannot drift.
+   */
+  byComponent: Map<ComponentId, { renders: number; wasted: number; selfMs: number }>;
 }
 
 export function statsInRegion(
@@ -275,6 +281,7 @@ export function statsInRegion(
   const hi = Math.max(t0, t1);
   const excludeWasted = options.excludeWasted === true;
   const byLane = new Map<LaneKey, { renders: number; wasted: number; selfMs: number }>();
+  const byComponent = new Map<ComponentId, { renders: number; wasted: number; selfMs: number }>();
   let renders = 0;
   let wasted = 0;
   let selfMs = 0;
@@ -289,6 +296,12 @@ export function statsInRegion(
       laneRenders++;
       if (clip.wasted) laneWasted++;
       laneSelf += clip.self;
+
+      const own = byComponent.get(clip.componentId) ?? { renders: 0, wasted: 0, selfMs: 0 };
+      own.renders++;
+      if (clip.wasted && !excludeWasted) own.wasted++;
+      own.selfMs += clip.self;
+      byComponent.set(clip.componentId, own);
     }
     if (laneRenders === 0) continue;
     byLane.set(lane.key, {
@@ -300,7 +313,7 @@ export function statsInRegion(
     wasted += excludeWasted ? 0 : laneWasted;
     selfMs += laneSelf;
   }
-  return { renders, wasted, selfMs, byLane };
+  return { renders, wasted, selfMs, byLane, byComponent };
 }
 
 /**
