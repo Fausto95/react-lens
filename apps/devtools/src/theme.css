@@ -1893,9 +1893,61 @@
   pointer-events: none;
 }
 
+/* Toolbar pill: sits beside the .rl-icon-btn row, so it shares its metrics. */
 .rl-tl-ab-btn {
+  -webkit-app-region: no-drag;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex: 0 0 auto;
+  height: 26px;
+  padding: 0 9px;
+  margin: 0;
+  border-radius: 6px;
+  border: 1px solid var(--rl-border);
+  background: transparent;
+  color: var(--rl-text-dim);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
+  cursor: pointer;
+  transition:
+    color 100ms,
+    background 100ms,
+    border-color 100ms;
+}
+.rl-tl-ab-btn:hover {
+  color: var(--rl-text);
+  background: var(--rl-bg-hover);
+  border-color: var(--rl-border-strong);
+}
+.rl-tl-ab-btn:focus-visible {
+  outline: 1px solid var(--rl-render);
+  outline-offset: 1px;
+}
+.rl-tl-ab-btn.primary {
+  color: var(--rl-render);
+  background: rgba(var(--rl-render-rgb), 0.14);
+  border-color: rgba(var(--rl-render-rgb), 0.35);
+}
+.rl-tl-ab-btn.primary:hover {
+  background: rgba(var(--rl-render-rgb), 0.22);
+  color: var(--rl-text);
+}
+/* The A→B label is the affordance; the count is the payload. */
+.rl-tl-ab-btn b {
+  font-weight: 600;
+  color: var(--rl-text);
+}
+.rl-tl-ab-btn.is-empty b {
+  color: inherit;
+  font-weight: 500;
+}
+.rl-tl-ab-sep {
+  color: var(--rl-text-faint);
 }
 
 /* Offline playback: structural page DOM at the cursor (imported sessions). */

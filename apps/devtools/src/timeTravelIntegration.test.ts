@@ -68,16 +68,27 @@ describe("panel → page time travel (full seam)", () => {
     const statuses: Array<RestoreStatus | null> = [];
     const ctl = createPanelTimeTravel(store, inst.timeTravel, (s) => statuses.push(s));
 
-    // Scrub to just after the count:1 commit.
+    // Scrub between the count:1 and count:2 commits. Derived from the data
+    // rather than a fixed epsilon, so clock granularity can't move the cursor
+    // onto the wrong commit — and asserted first, so a future clock change
+    // fails here with the timings instead of surfacing as a puzzling
+    // "expected count:1" further down.
+    const gaps = commitTimes.slice(1).map((t, i) => t - commitTimes[i]!);
+    expect(
+      gaps.every((g) => g > 0),
+      `commits must be distinguishable to scrub between them (times=${JSON.stringify(commitTimes)})`,
+    ).toBe(true);
+    const cursorT = (commitTimes[0]! + commitTimes[1]!) / 2;
     await React.act(async () => {
-      ctl.onCursor({ t: commitTimes[0]! + 0.1, mode: "historical" }, true);
+      ctl.onCursor({ t: cursorT, mode: "historical" }, true);
       flushRaf();
       await flush();
     });
-    expect(document.querySelector("output")!.textContent).toBe("count:1");
+    const context = `cursor=${cursorT} commits=${JSON.stringify(commitTimes)} gaps=${JSON.stringify(gaps)}`;
+    expect(document.querySelector("output")!.textContent, context).toBe("count:1");
     const last = statuses.at(-1);
-    expect(last).not.toBeNull();
-    expect(last!.applied).toBeGreaterThan(0);
+    expect(last, context).not.toBeNull();
+    expect(last!.applied, context).toBeGreaterThan(0);
 
     // Back to live restores the pre-travel state.
     await React.act(async () => {
@@ -125,17 +136,19 @@ describe("panel → page replay (forward play)", () => {
 
     const ctl = createPanelTimeTravel(store, inst.timeTravel);
     const commits = store.commits();
-    const t0 = commits[0]!.timestamp;
-    const t1 = commits.at(-1)!.timestamp;
+    const liveT = commits.at(-1)!.timestamp;
 
-    // Simulate play(): the cursor streams forward from just before the first
-    // commit to the end, one flush per animation frame, then jumps live.
-    const seen: string[] = [];
-    const steps = 24;
-    for (let i = 0; i <= steps; i++) {
-      const t = t0 - 0.5 + ((t1 - t0 + 1) * i) / steps;
+    // Simulate play(): the cursor visits every commit in order, one flush per
+    // animation frame, then jumps live. Stepping the commits themselves (rather
+    // than sampling arbitrary fractions of the span) means the walk can't skip
+    // a state just because two commits landed close together.
+    // Seeded with the live value, so the sequence reads "started live, walked
+    // every commit, ended live" (the old first sample did this implicitly by
+    // scrubbing to a point before the first commit).
+    const seen: string[] = [document.querySelector("output")!.textContent!];
+    for (const commit of commits) {
       await React.act(async () => {
-        ctl.onCursor({ t, mode: "historical" }, true);
+        ctl.onCursor({ t: commit.timestamp, mode: "historical" }, true);
         flushRaf();
         await flush();
       });
@@ -143,7 +156,7 @@ describe("panel → page replay (forward play)", () => {
       if (seen.at(-1) !== text) seen.push(text);
     }
     await React.act(async () => {
-      ctl.onCursor({ t: t1, mode: "live" }, true);
+      ctl.onCursor({ t: liveT, mode: "live" }, true);
       await flush();
     });
 

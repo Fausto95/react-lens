@@ -698,12 +698,15 @@ export function Timeline({
         {abComparison && (
           <>
             <button
-              className={`rl-btn rl-tl-ab-btn${abPanelOpen ? " primary" : ""}`}
+              className={`rl-btn rl-tl-ab-btn${abPanelOpen ? " primary" : ""}${
+                abComparison.changed.length === 0 ? " is-empty" : ""
+              }`}
               onClick={() => setAbPanelOpen((v) => !v)}
               title="What changed between the A and B marks"
               aria-pressed={abPanelOpen}
             >
-              A→B · {abComparison.changed.length} changed
+              A→B<span className="rl-tl-ab-sep">·</span>
+              <b>{abComparison.changed.length}</b> changed
             </button>
             <button
               className="rl-icon-btn"

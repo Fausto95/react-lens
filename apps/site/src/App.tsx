@@ -4,6 +4,7 @@ import { TraceSection } from "./sections/TraceSection.js";
 import { TimeTravelSection } from "./sections/TimeTravelSection.js";
 import { GraphSection } from "./sections/GraphSection.js";
 import { DiffSection } from "./sections/DiffSection.js";
+import { CompareSection } from "./sections/CompareSection.js";
 import { Features } from "./sections/Features.js";
 import { Coachmark } from "./sections/Coachmark.js";
 
@@ -21,6 +22,7 @@ export function App() {
       <TimeTravelSection />
       <GraphSection />
       <DiffSection />
+      <CompareSection />
       <Features />
       <Coachmark />
     </main>
