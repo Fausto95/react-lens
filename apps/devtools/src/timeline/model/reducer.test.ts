@@ -67,6 +67,19 @@ describe("zoom", () => {
     expect(s.viewport.scrollLeft).toBeGreaterThanOrEqual(0);
   });
 
+  it("zoomTo sets an absolute scale, so a slider can drive it directly", () => {
+    const s = timelineReducer(start(), { type: "zoomTo", pxPerMs: 3 }, CTX);
+    expect(resolveZoom(s.viewport, CTX.bounds, CTX.active)).toBeCloseTo(3, 6);
+  });
+
+  it("zoomTo keeps the anchor time fixed, like zoomBy", () => {
+    const base = timelineReducer(start(), { type: "zoomBy", factor: 4 }, CTX);
+    const anchorX = 250;
+    const before = timeAt(base, anchorX);
+    const zoomed = timelineReducer(base, { type: "zoomTo", pxPerMs: 12, anchorX }, CTX);
+    expect(Math.abs(timeAt(zoomed, anchorX) - before)).toBeLessThan(1);
+  });
+
   it("fitRange frames a span inside the viewport", () => {
     const s = timelineReducer(start(), { type: "fitRange", span: { start: 1000, end: 1600 } }, CTX);
     const scale = viewportScale(s.viewport, CTX.bounds, CTX.active);

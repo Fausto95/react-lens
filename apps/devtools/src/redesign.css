@@ -31,10 +31,35 @@
   --sans: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", sans-serif;
   --r: 6px;
 }
-.rl-redesign * {
+/* The concept's reset was `* { margin: 0; padding: 0 }`. Scoped to the panel
+   it also stripped every padding from the panes that predate the redesign —
+   the AI drawer, the settings popover, the menu, tooltips — because this
+   stylesheet loads after theme.css and the specificity ties. Reset only what
+   the concept's own markup relies on. */
+.rl-redesign *,
+.rl-redesign *::before,
+.rl-redesign *::after {
+  box-sizing: border-box;
+}
+.rl-redesign h1,
+.rl-redesign h2,
+.rl-redesign h3,
+.rl-redesign p,
+.rl-redesign ul,
+.rl-redesign ol,
+.rl-redesign figure,
+.rl-redesign blockquote {
   margin: 0;
   padding: 0;
-  box-sizing: border-box;
+}
+.rl-redesign .toolbar,
+.rl-redesign .grid,
+.rl-redesign .col,
+.rl-redesign .lane,
+.rl-redesign .track,
+.rl-redesign .lanes,
+.rl-redesign .tl {
+  margin: 0;
 }
 .rl-redesign {
   width: 1420px;
@@ -1482,4 +1507,36 @@
 .rl-redesign .tl {
   container-type: inline-size;
   container-name: timeline;
+}
+
+/* The playhead chip must never wrap or leave the column — it was breaking
+   "t = 16,195 ms" across three lines and spilling over the inspector. */
+.rl-redesign .ph-chip {
+  white-space: nowrap;
+  max-width: none;
+}
+
+/* ── Overlay panes ──────────────────────────────────────────────────────────
+   These predate the redesign and were positioned against the old 40px topbar.
+   The concept's toolbar is 44px, so the AI drawer overlapped it. They also sit
+   above the timeline's own chrome (sticky ruler 7, column dividers 8). */
+.rl-redesign .rl-agent {
+  top: 44px;
+  z-index: 60;
+}
+.rl-redesign .rl-settings-anchor {
+  z-index: 70;
+}
+.rl-redesign .rl-menu-anchor .rl-menu {
+  z-index: 70;
+}
+.rl-redesign .rl-cmdk,
+.rl-redesign .rl-cmdk-backdrop {
+  z-index: 80;
+}
+/* The tooltip layer is appended to the panel root and must clear everything. */
+.rl-redesign .rl-tooltip {
+  z-index: 90;
+  padding: 5px 9px;
+  line-height: 1.35;
 }

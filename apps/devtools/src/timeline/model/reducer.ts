@@ -50,6 +50,7 @@ export interface TimelineContext {
 export type TimelineAction =
   | { type: "measure"; width: number }
   | { type: "zoomBy"; factor: number; anchorX?: number }
+  | { type: "zoomTo"; pxPerMs: number; anchorX?: number }
   | { type: "fit" }
   | { type: "fitRange"; span: TimeSpan }
   | { type: "scrolled"; scrollLeft: number }
@@ -103,6 +104,7 @@ export function timelineReducer(
       };
     }
 
+    case "zoomTo":
     case "zoomBy": {
       const width = state.viewport.width;
       const anchorX = action.anchorX ?? width / 2;
@@ -110,8 +112,9 @@ export function timelineReducer(
       // The time under the anchor must not move. Capture it first, then solve
       // the scroll offset that puts it back under the same pixel.
       const anchorT = projectT(before.segs, state.viewport.scrollLeft + anchorX);
+      const current = resolveZoom(state.viewport, ctx.bounds, ctx.active);
       const zoom = clamp(
-        resolveZoom(state.viewport, ctx.bounds, ctx.active) * action.factor,
+        action.type === "zoomTo" ? action.pxPerMs : current * action.factor,
         SCALE_MIN,
         SCALE_MAX,
       );

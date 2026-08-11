@@ -285,6 +285,8 @@ export function Timeline({
               playhead={model.playhead}
               origin={bounds.t0}
               looping={state.playing}
+              canvasWidth={NAME_W + scale.width}
+              viewportRight={state.viewport.scrollLeft + state.viewport.width + NAME_W}
               xOf={xOf}
               onRegionEdge={(side, clientX) => {
                 if (!state.region) {
@@ -307,9 +309,7 @@ export function Timeline({
         isFit={state.viewport.zoom === "fit"}
         {...(transport ? { extra: transport } : {})}
         onPlayToggle={() => dispatch({ type: state.playing ? "pause" : "play" })}
-        onZoomIn={() => dispatch({ type: "zoomBy", factor: 1.4 })}
-        onZoomOut={() => dispatch({ type: "zoomBy", factor: 1 / 1.4 })}
-        onZoomTo={(px) => dispatch({ type: "zoomBy", factor: px / Math.max(pxPerMs, 1e-6) })}
+        onZoomTo={(px) => dispatch({ type: "zoomTo", pxPerMs: px })}
         onFit={() => dispatch({ type: "fit" })}
       />
     </div>
