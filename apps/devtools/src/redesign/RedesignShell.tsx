@@ -40,6 +40,7 @@ export function RedesignShell({
   onSelect,
   onHighlight,
   sessionSpanMs,
+  replayFollow = false,
   toolbarActions,
   transport,
   windowChrome = false,
@@ -55,6 +56,8 @@ export function RedesignShell({
   onSelect: (id: ComponentId) => void;
   onHighlight?: (id: ComponentId | null) => void;
   sessionSpanMs: number;
+  /** Replay scrolls to keep the playhead in view (panel setting). */
+  replayFollow?: boolean;
   /** Panel actions (⌘K, agent, sessions…) rendered into the toolbar. */
   toolbarActions?: React.ReactNode;
   /** Panel-owned timeline controls (travel toggle, A/B…) for the footer. */
@@ -383,6 +386,7 @@ export function RedesignShell({
             onCursor={onCursor}
             lanes={lanes}
             fixApplied={fixApplied}
+            replayFollow={replayFollow}
             onSelectComponent={(id) => {
               onSelect(id);
               setFlashId(id);

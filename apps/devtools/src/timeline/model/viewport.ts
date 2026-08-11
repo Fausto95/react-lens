@@ -86,3 +86,34 @@ export function windowOf(scale: TimeScale, scrollLeft: number, width: number): T
 function mutable(active: ActiveSpans): Array<[number, number]> {
   return active as Array<[number, number]>;
 }
+
+/** Keep the playhead this far inside the viewport before following it. */
+const FOLLOW_MARGIN_PX = 48;
+/** Where a follow lands the playhead: a third in, leaving room ahead. */
+const FOLLOW_LEAD = 1 / 3;
+
+/**
+ * The scroll offset needed to keep the playhead in view, or null when the
+ * view already shows it.
+ *
+ * Null rather than the current offset is the point: following runs every
+ * frame of a replay, and returning a value unconditionally would dispatch a
+ * scroll action sixty times a second that changes nothing.
+ *
+ * The playhead lands a third of the way in rather than against the edge, so a
+ * replay moving steadily forward scrolls in occasional jumps instead of
+ * dragging the content under a pinned cursor.
+ */
+export function followScroll(
+  playheadX: number,
+  scrollLeft: number,
+  width: number,
+  max: number,
+): number | null {
+  const inside =
+    playheadX >= scrollLeft + FOLLOW_MARGIN_PX &&
+    playheadX <= scrollLeft + width - FOLLOW_MARGIN_PX;
+  if (inside) return null;
+  const next = Math.max(0, Math.min(max, playheadX - width * FOLLOW_LEAD));
+  return Math.abs(next - scrollLeft) < 1 ? null : next;
+}

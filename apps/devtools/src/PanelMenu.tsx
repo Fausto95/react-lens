@@ -26,6 +26,7 @@ export function PanelMenu({
   onThemeChange,
   overlay,
   reveal,
+  replayFollow,
   reading,
 }: {
   open: boolean;
@@ -36,6 +37,8 @@ export function PanelMenu({
   overlay?: { enabled: boolean; toggle: () => void } | undefined;
   /** Scroll the inspected page to the selected component when it's off-screen. */
   reveal?: { enabled: boolean; toggle: () => void } | undefined;
+  /** Scroll the timeline to keep the playhead in view during replay. */
+  replayFollow?: { enabled: boolean; toggle: () => void } | undefined;
   /** Where the panel reads from: embedded page or extension devtools. */
   reading: string;
 }) {
@@ -108,6 +111,26 @@ export function PanelMenu({
             aria-label="Scroll to selection"
             className={`rl-menu-switch${reveal.enabled ? " on" : ""}`}
             onClick={reveal.toggle}
+          >
+            <span className="rl-menu-switch-knob" />
+          </button>
+        </div>
+      )}
+      {replayFollow && (
+        <div className="rl-menu-row">
+          <span
+            className="rl-menu-label"
+            title="During replay, scroll the timeline so the playhead stays visible"
+          >
+            Replay scrolls timeline
+          </span>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={replayFollow.enabled}
+            aria-label="Replay scrolls timeline"
+            className={`rl-menu-switch${replayFollow.enabled ? " on" : ""}`}
+            onClick={replayFollow.toggle}
           >
             <span className="rl-menu-switch-knob" />
           </button>

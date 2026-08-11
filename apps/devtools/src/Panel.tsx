@@ -214,6 +214,7 @@ export function Panel({
   // the page's state follows the playhead. On by default when supported;
   // the toggle persists across sessions.
   const [travelOn, setTravelOn] = useState(() => loadPanelPrefs().travelOn);
+  const [replayFollow, setReplayFollow] = useState(() => loadPanelPrefs().replayFollow);
   const [travelSupported, setTravelSupported] = useState(false);
   // Set-wide restore feedback while traveling (partial-restore pill + markers).
   const [, setRestoreStatus] = useState<RestoreStatus | null>(null);
@@ -473,6 +474,7 @@ export function Panel({
         selected={selected}
         onSelect={select}
         sessionSpanMs={sessionSpanMs}
+        replayFollow={replayFollow}
         {...(onHighlight ? { onHighlight } : {})}
         transport={
           timeTravel ? (
@@ -588,6 +590,14 @@ export function Panel({
                     ? { enabled: revealOnSelect, toggle: () => setRevealOnSelect(!revealOnSelect) }
                     : undefined
                 }
+                replayFollow={{
+                  enabled: replayFollow,
+                  toggle: () =>
+                    setReplayFollow((on) => {
+                      savePanelPrefs({ replayFollow: !on });
+                      return !on;
+                    }),
+                }}
                 reading={embedded ? "embedded" : "devtools"}
               />
             </span>

@@ -4,7 +4,7 @@ import type { LaneControls } from "../../laneFilter.js";
 import type { TimeCursor } from "../../timeCursor.js";
 import { projectT, projectX, type TimeSpan } from "../model/scale.js";
 import { visibleChunkRange, sameChunkRange, type ChunkRange } from "../model/culling.js";
-import { resolveZoom } from "../model/viewport.js";
+import { followScroll, maxScroll, resolveZoom } from "../model/viewport.js";
 import { advanceReplay, stepStop } from "../model/schedule.js";
 import { timelineKeyAction } from "../keymap.js";
 import { clipAtTime } from "../model/lanes.js";
@@ -40,6 +40,7 @@ export function Timeline({
   onCursor,
   lanes,
   fixApplied = false,
+  replayFollow = false,
   onSelectComponent,
   onHighlight,
   transport,
@@ -49,6 +50,8 @@ export function Timeline({
   onCursor: (c: TimeCursor) => void;
   lanes?: LaneControls;
   fixApplied?: boolean;
+  /** Replay scrolls to keep the playhead in view (panel setting, off by default). */
+  replayFollow?: boolean;
   onSelectComponent?: (id: ComponentId) => void;
   onHighlight?: (id: ComponentId | null) => void;
   /** Panel-owned controls rendered into the footer (travel, A/B…). */
@@ -219,6 +222,31 @@ export function Timeline({
     // Deliberately NOT keyed on the schedule or bounds: those change on every
     // store ingest, which would tear the ticker down and restart it each frame.
   }, [state.playing, dispatch]);
+
+  /**
+   * Follow the playhead while replaying. Opt-in: above "fit" this slides the
+   * content under the reader, which makes a cascade harder to follow than the
+   * playhead simply leaving the view.
+   */
+  useEffect(() => {
+    if (!replayFollow || !state.playing) return;
+    const next = followScroll(
+      NAME_W + xOf(model.playhead),
+      state.viewport.scrollLeft,
+      state.viewport.width,
+      maxScroll(scale, state.viewport.width),
+    );
+    if (next !== null) dispatch({ type: "scrolled", scrollLeft: next });
+  }, [
+    replayFollow,
+    state.playing,
+    model.playhead,
+    state.viewport.scrollLeft,
+    state.viewport.width,
+    scale,
+    xOf,
+    dispatch,
+  ]);
 
   // Reveal the lanes a selected cascade reaches, so its arrows have targets.
   const revealKey = model.lanesToReveal.join("|");

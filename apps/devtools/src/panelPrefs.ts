@@ -30,6 +30,12 @@ export interface PanelPrefs {
   /** Selecting a component scrolls the inspected page to it when off-screen. */
   revealOnSelect: boolean;
   /**
+   * Replay scrolls the timeline to keep the playhead in view. Off by default:
+   * above "fit" the content moves under you, which makes it hard to read a
+   * cascade while it plays.
+   */
+  replayFollow: boolean;
+  /**
    * Solo / mute lanes. View-only (the store keeps recording muted lanes), but
    * persisted so a noisy component stays hidden across reloads.
    */
@@ -49,6 +55,7 @@ const DEFAULTS: PanelPrefs = {
   treeCollapsed: false,
   inspectorCollapsed: false,
   revealOnSelect: true,
+  replayFollow: false,
   laneFilter: serializeLaneFilter(EMPTY_LANE_FILTER),
 };
 
@@ -87,6 +94,8 @@ export function loadPanelPrefs(): PanelPrefs {
         typeof parsed.revealOnSelect === "boolean"
           ? parsed.revealOnSelect
           : DEFAULTS.revealOnSelect,
+      replayFollow:
+        typeof parsed.replayFollow === "boolean" ? parsed.replayFollow : DEFAULTS.replayFollow,
       // Round-tripped through the filter's own parser so a corrupt entry
       // degrades to "show everything" instead of hiding lanes forever.
       laneFilter: serializeLaneFilter(deserializeLaneFilter(parsed.laneFilter)),
