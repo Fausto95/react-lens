@@ -274,7 +274,13 @@
   container-name: tree;
 }
 .rl-tree { display: flex; flex-direction: column; min-height: 0; flex: 1; min-width: 0; }
-.rl-tree-scroll { flex: 1; min-height: 0; overflow-y: auto; }
+.rl-tree-scroll { flex: 1; min-height: 0; overflow-y: auto; outline: none; }
+/* Keyboard cursor — visible only while the tree itself has focus. */
+.rl-tree-scroll:focus-visible .rl-tree-row.rl-kb-focus,
+.rl-tree-scroll:focus .rl-tree-row.rl-kb-focus {
+  box-shadow: inset 2px 0 0 var(--rl-render);
+  background: var(--rl-bg-hover);
+}
 .rl-tree-modes {
   display: flex; gap: 2px; padding: var(--rl-s2) var(--rl-s3);
   position: sticky; top: 26px; background: var(--rl-bg); z-index: 1;

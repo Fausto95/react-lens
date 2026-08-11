@@ -139,6 +139,53 @@ export function Tree({
     });
   };
 
+  // Keyboard navigation: ↑↓ move (components select as they focus, like
+  // Linear), →/← expand/collapse or jump to parent, Enter acts on the row.
+  const [focusIdx, setFocusIdx] = useState(0);
+  const clampedFocus = Math.min(focusIdx, Math.max(0, rows.length - 1));
+  const focusRow = (idx: number) => {
+    const next = Math.max(0, Math.min(rows.length - 1, idx));
+    setFocusIdx(next);
+    const row = rows[next];
+    if (row && row.node.kind === "component") onSelect(row.node.id);
+    // Keep the focused row inside the scrollport.
+    const el = scrollRef.current;
+    if (el) {
+      const top = next * ROW_H;
+      if (top < el.scrollTop) el.scrollTop = top;
+      else if (top + ROW_H > el.scrollTop + el.clientHeight)
+        el.scrollTop = top + ROW_H - el.clientHeight;
+    }
+  };
+  const onTreeKeyDown = (e: React.KeyboardEvent) => {
+    const row = rows[clampedFocus];
+    if (!row) return;
+    if (e.key === "ArrowDown") focusRow(clampedFocus + 1);
+    else if (e.key === "ArrowUp") focusRow(clampedFocus - 1);
+    else if (e.key === "ArrowRight") {
+      if (row.expandable && !row.expanded) toggle(row.node.key);
+      else focusRow(clampedFocus + 1);
+    } else if (e.key === "ArrowLeft") {
+      if (row.expandable && row.expanded) toggle(row.node.key);
+      else {
+        // Jump to the parent: the nearest earlier row one level up.
+        for (let i = clampedFocus - 1; i >= 0; i--) {
+          if (rows[i]!.depth < row.depth) {
+            focusRow(i);
+            break;
+          }
+        }
+      }
+    } else if (e.key === "Enter") {
+      if (row.node.kind === "component") onSelect(row.node.id);
+      else toggle(row.node.key);
+    } else {
+      return;
+    }
+    e.preventDefault();
+    e.stopPropagation();
+  };
+
   return (
     <div className="rl-tree" onMouseLeave={() => onHover?.(null)}>
       <div className="rl-tree-modes">
@@ -191,18 +238,24 @@ export function Tree({
         <div
           className="rl-tree-scroll"
           ref={scrollRef}
+          tabIndex={0}
+          role="tree"
+          aria-label="Component tree"
+          onKeyDown={onTreeKeyDown}
           onScroll={(e) => setScrollTop(e.currentTarget.scrollTop)}
         >
           <div className="rl-tree-rows" style={{ height: total, position: "relative" }}>
             <div style={{ position: "absolute", top: startIndex * ROW_H, left: 0, right: 0 }}>
-              {windowed.map((row) => (
+              {windowed.map((row, i) => (
                 <TreeRow
                   key={row.key}
                   row={row}
                   maxSelf={maxSelf}
                   selected={selected}
                   inSelection={inSelection.has(row.key)}
+                  kbFocused={startIndex + i === clampedFocus}
                   onSelect={onSelect}
+                  onFocusRow={() => setFocusIdx(startIndex + i)}
                   onToggle={toggle}
                   onHover={onHover}
                   {...(onAskAI ? { onAskAI } : {})}
@@ -225,7 +278,9 @@ function TreeRow({
   maxSelf,
   selected,
   inSelection,
+  kbFocused,
   onSelect,
+  onFocusRow,
   onToggle,
   onHover,
   onAskAI,
@@ -238,7 +293,9 @@ function TreeRow({
   maxSelf: number;
   selected: ComponentId | null;
   inSelection: boolean;
+  kbFocused?: boolean;
   onSelect: (id: ComponentId) => void;
+  onFocusRow?: () => void;
   onToggle: (key: string) => void;
   onHover?: (id: ComponentId | null) => void;
   onAskAI?: (question: string) => void;
@@ -255,11 +312,15 @@ function TreeRow({
   const inFrozen = frozen && isComponent ? frozen.has(node.id) : undefined;
   const frozenClass = inFrozen === false ? " rl-frozen-out" : "";
   const selClass = isSelected ? " rl-selected" : inSelection ? " rl-in-selection" : "";
+  const kbClass = kbFocused ? " rl-kb-focus" : "";
 
   return (
     <div
-      className={`rl-tree-row${selClass}${frozenClass}`}
+      className={`rl-tree-row${selClass}${frozenClass}${kbClass}`}
+      role="treeitem"
+      aria-selected={isSelected}
       onClick={() => {
+        onFocusRow?.();
         if (isComponent) onSelect(node.id);
         else onToggle(node.key);
       }}
