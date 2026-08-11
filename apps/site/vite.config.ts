@@ -28,5 +28,10 @@ export default defineConfig({
       },
     }),
   ]),
+  // The site inspects ITSELF with the real panel, so it ships as a production
+  // React build: names are minified and no _debugStack exists. Publishing maps
+  // lets the panel resolve components to src/... with their original names —
+  // the demo then shows what the extension does on any deployed site.
+  build: { sourcemap: true },
   server: { port: 5179, host: true },
 });
