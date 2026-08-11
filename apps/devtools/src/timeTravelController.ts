@@ -52,6 +52,8 @@ export function createPanelTimeTravel(
   let lastApplied = new Map<ComponentId, RenderId>();
   let pendingT: number | null = null;
   let raf = 0;
+  /** rAF is paused in hidden tabs — a timer guarantees the flush still runs. */
+  let fallbackTimer: ReturnType<typeof setTimeout> | null = null;
   let traveling = false;
   // Incremental apply-set resolution across scrub frames; any ingest (rare
   // while traveling — recording is suppressed) invalidates it.
@@ -85,8 +87,17 @@ export function createPanelTimeTravel(
     publish(t);
   }
 
-  function flush(): void {
+  function unschedule(): void {
+    cancelAnimationFrame(raf);
     raf = 0;
+    if (fallbackTimer !== null) {
+      clearTimeout(fallbackTimer);
+      fallbackTimer = null;
+    }
+  }
+
+  function flush(): void {
+    unschedule();
     if (pendingT === null) return;
     const t = pendingT;
     pendingT = null;
@@ -112,8 +123,7 @@ export function createPanelTimeTravel(
   }
 
   function goLive(): void {
-    cancelAnimationFrame(raf);
-    raf = 0;
+    unschedule();
     pendingT = null;
     lastApplied = new Map();
     restoredIds.clear();
@@ -134,6 +144,8 @@ export function createPanelTimeTravel(
       }
       pendingT = cursor.t;
       if (!raf) raf = requestAnimationFrame(flush);
+      // Hidden/backgrounded tabs never fire rAF; whichever fires first wins.
+      if (fallbackTimer === null) fallbackTimer = setTimeout(flush, 32);
     },
     goLive,
     dispose: () => {
