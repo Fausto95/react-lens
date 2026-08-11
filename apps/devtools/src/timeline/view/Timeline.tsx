@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import type { ComponentId } from "@reactlens/protocol";
+import type { ComponentId, RenderId } from "@reactlens/protocol";
 import type { LaneControls } from "../../laneFilter.js";
 import type { TimeCursor } from "../../timeCursor.js";
 import { projectT, projectX, type TimeSpan } from "../model/scale.js";
@@ -166,10 +166,24 @@ export function Timeline({
    * Fix follows the cursor. Skipped while live, so recording doesn't thrash.
    */
   const lastPlayhead = useRef(model.playhead);
+  /**
+   * The clip the user picked by hand, pinned while the playhead is still
+   * inside it.
+   *
+   * Clicking a clip updates two owners — the timeline's reducer (selection)
+   * and the panel's cursor — which can commit in separate renders. When the
+   * cursor landed first, this effect ran with the *previous* selected lane, so
+   * `clipAtTime` had no lane preference and adopted whatever clip happened to
+   * sit nearest that instant. The click appeared to select a different clip.
+   */
+  const pinned = useRef<{ renderId: RenderId; t0: number; t1: number } | null>(null);
   useEffect(() => {
     if (lastPlayhead.current === model.playhead) return;
     lastPlayhead.current = model.playhead;
     if (cursor.mode === "live") return;
+    const hold = pinned.current;
+    if (hold && model.playhead >= hold.t0 - 0.5 && model.playhead <= hold.t1 + 0.5) return;
+    pinned.current = null;
     const clip = clipAtTime(model.lanes, model.playhead, state.selectedLane);
     if (!clip || clip.renderId === state.selectedRender) return;
     dispatch({ type: "selectClip", renderId: clip.renderId, laneKey: clip.laneKey });
@@ -251,6 +265,10 @@ export function Timeline({
               onToggleExpand={(key) => dispatch({ type: "toggleLane", key })}
               onSelectLane={(laneKey) => dispatch({ type: "selectLane", laneKey })}
               onSelectClip={(clip) => {
+                // Pin before moving the cursor: an explicit pick outranks the
+                // playhead-follow until the playhead leaves this clip.
+                pinned.current = { renderId: clip.renderId, t0: clip.t0, t1: clip.t1 };
+                lastPlayhead.current = clip.t0;
                 dispatch({ type: "selectClip", renderId: clip.renderId, laneKey: clip.laneKey });
                 onSelectComponent?.(clip.componentId);
                 onHighlight?.(clip.componentId);
