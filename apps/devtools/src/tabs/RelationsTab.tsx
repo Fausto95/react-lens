@@ -26,42 +26,54 @@ export function RelationsTab({ ctx }: { ctx: InspectorContext }) {
     parents.length + children.length + causedBy.length + causes.length + readsContext.length;
   if (anything === 0) return <EmptyTab>No relations captured for this component.</EmptyTab>;
 
-  const label = (key: string) => graph.nodes.get(key)?.label ?? key;
-  const refOf = (key: string) => graph.nodes.get(key)?.ref;
-
-  const Group = ({ title, keys }: { title: string; keys: string[] }) => {
-    if (keys.length === 0) return null;
-    const unique = [...new Set(keys)];
-    return (
-      <div className="rl-rel-group">
-        <div className="rl-rel-title">{title}</div>
-        {unique.map((key) => {
-          const node = graph.nodes.get(key);
-          const clickable = node?.kind === "component" && onSelectComponent;
-          return (
-            <button
-              key={key}
-              className={`rl-rel-item${clickable ? " link" : ""}`}
-              onClick={() => {
-                if (clickable) onSelectComponent(refOf(key) as ComponentId);
-              }}
-            >
-              <span className={`rl-rel-dot ${node?.kind ?? ""}`} />
-              {label(key)}
-            </button>
-          );
-        })}
-      </div>
-    );
-  };
-
   return (
     <div className="rl-rel">
-      <Group title="Parent" keys={parents} />
-      <Group title="Children" keys={children} />
-      <Group title="Rendered because of" keys={causedBy} />
-      <Group title="Triggers renders of" keys={causes} />
-      <Group title="Reads context" keys={readsContext} />
+      <RelationGroup title="Parent" keys={parents} graph={graph} onSelectComponent={onSelectComponent} />
+      <RelationGroup title="Children" keys={children} graph={graph} onSelectComponent={onSelectComponent} />
+      <RelationGroup title="Rendered because of" keys={causedBy} graph={graph} onSelectComponent={onSelectComponent} />
+      <RelationGroup title="Triggers renders of" keys={causes} graph={graph} onSelectComponent={onSelectComponent} />
+      <RelationGroup title="Reads context" keys={readsContext} graph={graph} onSelectComponent={onSelectComponent} />
+    </div>
+  );
+}
+
+/**
+ * Module-level on purpose: defined inside RelationsTab it was a NEW component
+ * type every render, so React remounted the whole group subtree per render —
+ * any ingest between pointerup and click left the click on a detached button.
+ */
+function RelationGroup({
+  title,
+  keys,
+  graph,
+  onSelectComponent,
+}: {
+  title: string;
+  keys: string[];
+  graph: Graph;
+  onSelectComponent: ((id: ComponentId) => void) | undefined;
+}) {
+  if (keys.length === 0) return null;
+  const unique = [...new Set(keys)];
+  return (
+    <div className="rl-rel-group">
+      <div className="rl-rel-title">{title}</div>
+      {unique.map((key) => {
+        const node = graph.nodes.get(key);
+        const clickable = node?.kind === "component" && onSelectComponent;
+        return (
+          <button
+            key={key}
+            className={`rl-rel-item${clickable ? " link" : ""}`}
+            onClick={() => {
+              if (clickable) onSelectComponent(node.ref as ComponentId);
+            }}
+          >
+            <span className={`rl-rel-dot ${node?.kind ?? ""}`} />
+            {node?.label ?? key}
+          </button>
+        );
+      })}
     </div>
   );
 }

@@ -1072,6 +1072,12 @@ export function Timeline({
                   }}
                   title={timeAxis(cursorT - bounds.t0)}
                 >
+                  {/* Only the head is grabbable: a full-height hit strip sat
+                      on top of whatever the playhead pointed at, swallowing
+                      clicks on the very commit a seek just landed on. Drags
+                      along the stem fall through to track scrubbing, which
+                      moves the playhead identically. */}
+                  <span className="rl-tl-playhead-hit" />
                   <span className="rl-tl-playhead-head" />
                   <span className="rl-tl-playhead-stem" />
                   <span className="rl-tl-playhead-time">{timeAxis(cursorT - bounds.t0)}</span>
