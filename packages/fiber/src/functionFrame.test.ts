@@ -83,9 +83,12 @@ describe("describeFunctionFrame", () => {
     const before = ref.H;
     const err = Error as ErrorConstructor & { prepareStackTrace?: unknown };
     const prepare = err.prepareStackTrace;
-    describeFunctionFrame(function Probe() {
-      return null;
-    }, { currentDispatcherRef: ref });
+    describeFunctionFrame(
+      function Probe() {
+        return null;
+      },
+      { currentDispatcherRef: ref },
+    );
     expect(ref.H).toBe(before);
     expect(err.prepareStackTrace).toBe(prepare);
   });
@@ -141,11 +144,13 @@ describe("describeFunctionFrame", () => {
 
 describe("parseFrameLocation", () => {
   it("parses V8 frames with a function name and parenthesized location", () => {
-    expect(parseFrameLocation("    at Card (https://app.dev/assets/index-abc.js:1:23456)")).toEqual({
-      file: "https://app.dev/assets/index-abc.js",
-      line: 1,
-      column: 23456,
-    });
+    expect(parseFrameLocation("    at Card (https://app.dev/assets/index-abc.js:1:23456)")).toEqual(
+      {
+        file: "https://app.dev/assets/index-abc.js",
+        line: 1,
+        column: 23456,
+      },
+    );
   });
 
   it("parses bare-location V8 frames and absolute paths", () => {

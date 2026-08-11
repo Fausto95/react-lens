@@ -19,7 +19,7 @@ describe("declaredNameAtLine", () => {
 
   it("reads arrow and function-expression assignments", () => {
     expect(declaredNameAtLine(src("const Button = () => {"), 1)).toBe("Button");
-    expect(declaredNameAtLine(src("export const Row = ({ a }) => (") , 1)).toBe("Row");
+    expect(declaredNameAtLine(src("export const Row = ({ a }) => ("), 1)).toBe("Row");
     expect(declaredNameAtLine(src("let Legacy = function () {"), 1)).toBe("Legacy");
   });
 
@@ -54,7 +54,7 @@ describe("declaredNameAtLine", () => {
 
 describe("declaredNameNear", () => {
   const file = src(
-    "import { useState } from \"react\";",
+    'import { useState } from "react";',
     "",
     "let seq = 0;",
     "function Ticker() {",

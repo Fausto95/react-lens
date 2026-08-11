@@ -50,8 +50,8 @@ export function SourceTab({ inst, ctx }: { inst: ComponentInstance; ctx: Inspect
   if (!compiled) {
     return (
       <EmptyTab>
-        No source location. React only exposes creation sites on development
-        builds, and this component could not be located in the shipped bundle.
+        No source location. React only exposes creation sites on development builds, and this
+        component could not be located in the shipped bundle.
       </EmptyTab>
     );
   }

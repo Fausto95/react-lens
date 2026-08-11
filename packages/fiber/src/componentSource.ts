@@ -18,7 +18,8 @@ export function unwrapComponentFunction(type: unknown): ((...args: never[]) => u
     if (typeof current === "function") return current as (...args: never[]) => unknown;
     if (current === null || typeof current !== "object") return null;
     const obj = current as { $$typeof?: unknown; render?: unknown; type?: unknown };
-    const next = obj.$$typeof === FORWARD_REF ? obj.render : obj.$$typeof === MEMO ? obj.type : null;
+    const next =
+      obj.$$typeof === FORWARD_REF ? obj.render : obj.$$typeof === MEMO ? obj.type : null;
     if (next === null || next === undefined || next === current) return null;
     current = next;
   }
