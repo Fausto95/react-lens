@@ -1,5 +1,6 @@
 import { useReducer, useEffect } from "react";
 import type { TraceStore, TraceSelector } from "@reactlens/trace-engine";
+import { createCoalescer } from "./coalesce.js";
 
 /**
  * Re-render the component whenever a relevant slice of the trace store ingests.
@@ -11,8 +12,16 @@ export function useTraceVersion(store: TraceStore, selector: TraceSelector): num
   const selectorKey = "id" in selector ? String(selector.id) : "global";
 
   useEffect(() => {
-    const dispose = store.subscribe(selector, bump);
-    return dispose;
+    // One bump per frame, however many batches land in it. A busy app commits
+    // many times per frame, and each notification re-ran every derivation
+    // keyed on this version — the tree, the lanes, the causality sweep — so
+    // the panel repeated its whole pipeline several times per paint.
+    const fire = createCoalescer(bump);
+    const dispose = store.subscribe(selector, fire);
+    return () => {
+      dispose();
+      fire.dispose();
+    };
     // Re-subscribe only when the target changes.
   }, [store, selector.kind, selectorKey]);
 
