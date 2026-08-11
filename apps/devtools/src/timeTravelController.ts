@@ -5,7 +5,7 @@ import type {
   TimeTravelFailureReason,
   TimeTravelResult,
 } from "@react-lens/protocol";
-import { applySetAt, diffApplySet, type TraceStore } from "@react-lens/trace-engine";
+import { createApplySetCursor, diffApplySet, type TraceStore } from "@react-lens/trace-engine";
 import type { TimeCursor } from "./timeCursor.js";
 
 /**
@@ -53,6 +53,10 @@ export function createPanelTimeTravel(
   let pendingT: number | null = null;
   let raf = 0;
   let traveling = false;
+  // Incremental apply-set resolution across scrub frames; any ingest (rare
+  // while traveling — recording is suppressed) invalidates it.
+  const applyCursor = createApplySetCursor(store);
+  const offIngest = store.onIngest(() => applyCursor.reset());
   /** Cumulative restore state since travel began. */
   const restoredIds = new Set<ComponentId>();
   const failedIds = new Map<ComponentId, TimeTravelFailureReason>();
@@ -86,7 +90,7 @@ export function createPanelTimeTravel(
     if (pendingT === null) return;
     const t = pendingT;
     pendingT = null;
-    const next = applySetAt(store, t);
+    const next = applyCursor.moveTo(t);
     const delta = diffApplySet(lastApplied, next);
     lastApplied = next;
     if (delta.length === 0) return;
@@ -132,6 +136,9 @@ export function createPanelTimeTravel(
       if (!raf) raf = requestAnimationFrame(flush);
     },
     goLive,
-    dispose: goLive,
+    dispose: () => {
+      offIngest();
+      goLive();
+    },
   };
 }

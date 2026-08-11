@@ -16,6 +16,8 @@ import { buildInteractions, type Interaction } from "./interactions.js";
 export interface CommitSummary {
   commitId: CommitId;
   timestamp: number;
+  /** Latest render timestamp in the commit (≥ timestamp). */
+  endTimestamp: number;
   componentIds: ComponentId[];
   interactionId?: InteractionId;
   totalSelfTime: number;
@@ -38,6 +40,7 @@ const DEFAULTS: TraceStoreConfig = {
 interface MutableCommit {
   commitId: CommitId;
   timestamp: number;
+  endTimestamp: number;
   components: Set<ComponentId>;
   interactionId?: InteractionId;
   totalSelfTime: number;
@@ -77,6 +80,8 @@ export class TraceStore {
   private readonly commitOrder: RingBuffer<CommitId>;
   /** Set when the event ring overwrites a render — commits rebuild on next read/ingest end. */
   private commitsDirty = false;
+  /** Materialized commits(), invalidated whenever any commit mutates. */
+  private commitsCache: CommitSummary[] | null = null;
   private readonly subscriptions = new Set<Subscription>();
   private readonly ingestObservers = new Set<(batch: EventsBatchMessage["payload"]) => void>();
 
@@ -183,6 +188,7 @@ export class TraceStore {
 
   /** Re-derive commit summaries from whatever renders remain in the event ring. */
   private rebuildCommitsFromEvents(): void {
+    this.commitsCache = null;
     this.commitsById.clear();
     this.commitOrder.clear();
     for (const e of this.events.toArray()) {
@@ -192,6 +198,7 @@ export class TraceStore {
   }
 
   private recordCommit(event: RenderEvent): void {
+    this.commitsCache = null;
     let commit = this.commitsById.get(event.commitId);
     if (!commit) {
       // Evict the oldest commit when the ring wraps.
@@ -202,6 +209,7 @@ export class TraceStore {
       commit = {
         commitId: event.commitId,
         timestamp: event.timestamp,
+        endTimestamp: event.timestamp,
         components: new Set(),
         totalSelfTime: 0,
         ...(event.interactionId !== undefined ? { interactionId: event.interactionId } : {}),
@@ -211,6 +219,7 @@ export class TraceStore {
     }
     commit.components.add(event.componentId);
     commit.totalSelfTime += event.selfDuration;
+    commit.endTimestamp = Math.max(commit.endTimestamp, event.timestamp);
   }
 
   private createRenderBuffer(id: ComponentId): RingBuffer<RenderEvent> {
@@ -268,23 +277,35 @@ export class TraceStore {
     return this.events.toArray();
   }
 
-  /** Ordered commits (oldest→newest) for the timeline / time-travel views. */
+  /**
+   * Ordered commits (oldest→newest) for the timeline / time-travel views.
+   * Identity-stable until the next mutation — cheap to call during scrubbing.
+   */
   commits(): CommitSummary[] {
     if (this.commitsDirty) this.rebuildCommitsFromEvents();
-    return this.commitOrder.toArray().map((id) => {
-      const c = this.commitsById.get(id)!;
-      return {
-        commitId: c.commitId,
-        timestamp: c.timestamp,
-        componentIds: [...c.components],
-        totalSelfTime: c.totalSelfTime,
-        ...(c.interactionId !== undefined ? { interactionId: c.interactionId } : {}),
-      };
-    });
+    if (!this.commitsCache) {
+      this.commitsCache = this.commitOrder
+        .toArray()
+        .map((id) => this.summarize(this.commitsById.get(id)!));
+    }
+    return this.commitsCache;
   }
 
   commit(commitId: CommitId): CommitSummary | undefined {
-    return this.commits().find((c) => c.commitId === commitId);
+    if (this.commitsDirty) this.rebuildCommitsFromEvents();
+    const c = this.commitsById.get(commitId);
+    return c ? this.summarize(c) : undefined;
+  }
+
+  private summarize(c: MutableCommit): CommitSummary {
+    return {
+      commitId: c.commitId,
+      timestamp: c.timestamp,
+      endTimestamp: c.endTimestamp,
+      componentIds: [...c.components],
+      totalSelfTime: c.totalSelfTime,
+      ...(c.interactionId !== undefined ? { interactionId: c.interactionId } : {}),
+    };
   }
 
   /** Interaction-first view of the session (redesign §1-2). */
@@ -296,12 +317,21 @@ export class TraceStore {
 
   /** Latest render of a component at or before timestamp `t`. */
   renderAtOrBefore(id: ComponentId, t: number): RenderEvent | undefined {
-    const renders = this.rendersByComponent.get(id)?.toArray();
-    if (!renders) return undefined;
+    const buf = this.rendersByComponent.get(id);
+    if (!buf || buf.size === 0) return undefined;
+    // Renders are oldest→newest: binary-search the rightmost timestamp ≤ t.
+    let lo = 0;
+    let hi = buf.size - 1;
     let best: RenderEvent | undefined;
-    for (const r of renders) {
-      if (r.timestamp <= t) best = r; // renders are oldest→newest
-      else break;
+    while (lo <= hi) {
+      const mid = (lo + hi) >> 1;
+      const r = buf.at(mid)!;
+      if (r.timestamp <= t) {
+        best = r;
+        lo = mid + 1;
+      } else {
+        hi = mid - 1;
+      }
     }
     return best;
   }
@@ -314,11 +344,18 @@ export class TraceStore {
 
   /** Nearest commit at or before `t` — the commit whose state the cursor shows. */
   commitAt(t: number): CommitSummary | undefined {
-    const commits = this.commits(); // oldest→newest
+    const commits = this.commits(); // oldest→newest, cached
+    let lo = 0;
+    let hi = commits.length - 1;
     let best: CommitSummary | undefined;
-    for (const c of commits) {
-      if (c.timestamp <= t) best = c;
-      else break;
+    while (lo <= hi) {
+      const mid = (lo + hi) >> 1;
+      if (commits[mid]!.timestamp <= t) {
+        best = commits[mid];
+        lo = mid + 1;
+      } else {
+        hi = mid - 1;
+      }
     }
     return best;
   }
@@ -383,6 +420,7 @@ export class TraceStore {
     this.commitsById.clear();
     this.commitOrder.clear();
     this.commitsDirty = false;
+    this.commitsCache = null;
     // Wake subscribers (Tree/Inspector/Timeline) so they re-render to empty.
     this.notify(new Set(), new Set());
   }

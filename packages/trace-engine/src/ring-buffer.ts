@@ -27,6 +27,13 @@ export class RingBuffer<T> {
     return this.count;
   }
 
+  /** Random access, oldest→newest (0 = oldest). Undefined out of range. */
+  at(i: number): T | undefined {
+    if (i < 0 || i >= this.count) return undefined;
+    const start = this.count < this.capacity ? 0 : this.head;
+    return this.items[(start + i) % this.capacity] as T;
+  }
+
   /** Oldest → newest. */
   toArray(): T[] {
     const out: T[] = [];

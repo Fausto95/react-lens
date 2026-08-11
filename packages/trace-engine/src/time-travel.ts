@@ -31,3 +31,53 @@ export function diffApplySet(
   }
   return delta;
 }
+
+export interface ApplySetCursor {
+  /** The apply set at `t`, recomputing only components that rendered between moves. */
+  moveTo(t: number): Map<ComponentId, RenderId>;
+  /** Forget incremental state (call after the store ingests or evicts). */
+  reset(): void;
+}
+
+/**
+ * Incremental `applySetAt` for scrubbing: consecutive moves only re-resolve
+ * components with a commit inside the crossed interval — every other entry is
+ * unchanged by construction. A full recompute stays the correctness oracle
+ * (see the property test) and runs on the first move after reset().
+ */
+export function createApplySetCursor(store: TraceStore): ApplySetCursor {
+  let current: Map<ComponentId, RenderId> | null = null;
+  let prevT = 0;
+
+  return {
+    moveTo(t: number): Map<ComponentId, RenderId> {
+      if (current === null) {
+        current = applySetAt(store, t);
+        prevT = t;
+        return new Map(current);
+      }
+      const lo = Math.min(prevT, t);
+      const hi = Math.max(prevT, t);
+      prevT = t;
+      // Components with a render in (lo, hi] are exactly those whose
+      // render-at-or-before answer can differ between the two cursors. A
+      // commit's renders span [timestamp, endTimestamp], so touch every
+      // commit whose span intersects the crossed interval.
+      const commits = store.commits();
+      const touched = new Set<ComponentId>();
+      for (const c of commits) {
+        if (c.timestamp > hi) break;
+        if (c.endTimestamp > lo) for (const id of c.componentIds) touched.add(id);
+      }
+      for (const id of touched) {
+        const render = store.renderAtOrBefore(id, t);
+        if (render) current.set(id, render.renderId);
+        else current.delete(id);
+      }
+      return new Map(current);
+    },
+    reset() {
+      current = null;
+    },
+  };
+}

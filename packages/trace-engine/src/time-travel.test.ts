@@ -203,3 +203,26 @@ describe("createApplySetCursor", () => {
     expect(cursor.moveTo(6000)).toEqual(applySetAt(store, 6000));
   });
 });
+
+describe("createApplySetCursor — commits whose renders span time", () => {
+  it("touches components whose render sits after the commit's start timestamp", () => {
+    // One commit, renders at t=100/150/200: the commit summary starts at 100,
+    // but c2's render (150) and c1's second render (200) must still be seen
+    // when the cursor crosses (120, 250].
+    const store = new TraceStore();
+    store.ingest(
+      batch({
+        instances: [instance(1, "A"), instance(2, "B")],
+        events: [
+          renderEvent({ componentId: cid(1), renderId: rid(10), commitId: 1 as CommitId, timestamp: 100 }),
+          renderEvent({ componentId: cid(2), renderId: rid(11), commitId: 1 as CommitId, timestamp: 150 }),
+          renderEvent({ componentId: cid(1), renderId: rid(12), commitId: 1 as CommitId, timestamp: 200 }),
+        ],
+      }),
+    );
+    const cursor = createApplySetCursor(store);
+    expect(cursor.moveTo(120)).toEqual(applySetAt(store, 120));
+    expect(cursor.moveTo(250)).toEqual(applySetAt(store, 250));
+    expect(cursor.moveTo(120)).toEqual(applySetAt(store, 120));
+  });
+});
