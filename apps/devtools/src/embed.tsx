@@ -6,6 +6,7 @@ import type { LensRuntime } from "./runtime.js";
 import { createHighlighter } from "./highlighter.js";
 import { createRenderOverlay } from "./renderOverlay.js";
 import { createInspectController } from "./inspectController.js";
+import { configureComponentLocator } from "./sourceLocator.js";
 
 const WAVE_MAX_GROUPS = 300;
 const WAVE_MAX_NODES = 400;
@@ -33,6 +34,13 @@ function EmbeddedPanel({ runtime, host }: { runtime: LensRuntime; host: HTMLElem
       }),
     [runtime, highlighter, host],
   );
+
+  // Same runtime, same page: locating is a direct call (the extension proxies
+  // this over its port instead).
+  useEffect(() => {
+    configureComponentLocator(async (id) => runtime.locateComponent(id) ?? null);
+    return () => configureComponentLocator(undefined);
+  }, [runtime]);
 
   useEffect(() => () => highlighter.dispose(), [highlighter]);
   useEffect(() => () => overlay.dispose(), [overlay]);

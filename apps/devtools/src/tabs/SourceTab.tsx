@@ -7,6 +7,7 @@ import type { InspectorContext } from "../Inspector.js";
 import { sourceResolver as resolver } from "../sourceResolver.js";
 import { openResolvedInEditor } from "../openInEditor.js";
 import { EmptyTab } from "./shared.js";
+import { useLocatedSource } from "../useLocatedSource.js";
 
 /**
  * Source location + copy actions. React 19 exposes only a compiled creation
@@ -14,8 +15,12 @@ import { EmptyTab } from "./shared.js";
  * module's source map, and prefer the component's DEFINITION line (found in the
  * original source) when available.
  */
-export function SourceTab({ inst }: { inst: ComponentInstance; ctx: InspectorContext }) {
-  const compiled = inst.source;
+export function SourceTab({ inst, ctx }: { inst: ComponentInstance; ctx: InspectorContext }) {
+  // Production builds expose no creation site; fall back to the component's
+  // located definition site inside the shipped bundle (cached module-wide, so
+  // this costs nothing extra when the header already asked).
+  const located = useLocatedSource(ctx.componentId, inst.source);
+  const compiled = inst.source ?? located?.compiled;
   const [original, setOriginal] = useState<SourceLocation | null>(null);
   const [defLine, setDefLine] = useState<number | null>(null);
   const [state, setState] = useState<"idle" | "resolving" | "done">("idle");
@@ -45,7 +50,8 @@ export function SourceTab({ inst }: { inst: ComponentInstance; ctx: InspectorCon
   if (!compiled) {
     return (
       <EmptyTab>
-        No source location. React 19 exposes only a compiled creation site; none was captured here.
+        No source location. React only exposes creation sites on development
+        builds, and this component could not be located in the shipped bundle.
       </EmptyTab>
     );
   }

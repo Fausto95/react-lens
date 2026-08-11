@@ -20,6 +20,7 @@ import { RelationsTab } from "./tabs/RelationsTab.js";
 import { DoctorTab } from "./tabs/DoctorTab.js";
 import { openResolvedInEditor } from "./openInEditor.js";
 import { getSourceResolver } from "./sourceResolver.js";
+import { useLocatedSource } from "./useLocatedSource.js";
 import { diagnosticFixPrompt } from "./perfBudget.js";
 import { useDoctor } from "./useDoctor.js";
 
@@ -102,6 +103,8 @@ export function Inspector({
   }, [onRequestSnapshot, activeRenderId, hasSnapshot]);
 
   const doctor = useDoctor(store, causality, componentId);
+  // Production builds carry no React-provided source; locate it in the bundle.
+  const located = useLocatedSource(componentId, inst?.source);
 
   if (!inst) return <div className="rl-empty">Component no longer mounted.</div>;
 
@@ -135,7 +138,14 @@ export function Inspector({
     <div className="rl-inspector">
       <div className="rl-insp-sticky">
         <div className="rl-insp-head">
-          <h2>{inst.name}</h2>
+          {/* On a minified build the fiber only knows the mangled name (`Qj`);
+              the source map's identifier is what the developer wrote. */}
+          <h2>{located?.originalName ?? inst.name}</h2>
+          {located?.originalName && located.originalName !== inst.name && (
+            <span className="rl-chip dim" title={`Minified as ${inst.name}`}>
+              {inst.name}
+            </span>
+          )}
           {historical && <span className="rl-chip warn">historical</span>}
           {inst.compiler.compiled && (
             <span className="rl-chip healthy" title="React Compiler optimized">
@@ -178,6 +188,22 @@ export function Inspector({
               }}
             >
               {shortSource(inst.source.file)}:{inst.source.line}
+            </button>
+          ) : located ? (
+            // Production build: React exposed no source, so this came from
+            // locating the component function in the shipped bundle.
+            <button
+              type="button"
+              className="rl-insp-source rl-insp-source-link"
+              title={
+                located.original
+                  ? `Open in editor · ${located.original.file}:${located.original.line}`
+                  : `Bundled at ${located.compiled.file}:${located.compiled.line} — deploy source maps for original paths`
+              }
+              onClick={() => openResolvedInEditor(located.compiled, located.original ?? null)}
+            >
+              {shortSource((located.original ?? located.compiled).file)}:
+              {(located.original ?? located.compiled).line}
             </button>
           ) : (
             <span className="rl-insp-source">no source</span>

@@ -12,6 +12,7 @@ import type {
   ComponentInstance,
   TimeTravelEntry,
   TimeTravelResult,
+  SourceLocation,
 } from "@reactlens/protocol";
 
 export interface LensRuntime {
@@ -28,6 +29,11 @@ export interface LensRuntime {
   onCommit(cb: (commit: CommitObservation) => void): Dispose;
   /** Whether live value editing is available (dev-build renderer). */
   canEditValues(): boolean;
+  /**
+   * Where a component is defined inside the shipped bundle — the source signal
+   * that survives a production build (no dev-only fiber fields involved).
+   */
+  locateComponent(id: ComponentId): SourceLocation | undefined;
   setProp(id: ComponentId, path: Array<string | number>, value: unknown): boolean;
   setHookState(
     id: ComponentId,
@@ -72,6 +78,7 @@ export function createEmbeddedRuntime(): LensRuntime {
     resolveComponent: (node) => fiber.resolveComponent(node),
     onCommit: (cb) => fiber.onCommit(cb),
     canEditValues: () => fiber.canEditValues(),
+    locateComponent: (id) => fiber.locateComponent(id),
     setProp: (id, path, value) => fiber.setProp(id, path, value),
     setHookState: (id, hookIndex, path, value) => fiber.setHookState(id, hookIndex, path, value),
     timeTravel: {
