@@ -7,7 +7,9 @@
     ".": "./src/index.ts",
     "./runtime": "./src/runtime.ts",
     "./embed": "./src/embed.tsx",
-    "./panel": "./src/Panel.tsx"
+    "./panel": "./src/Panel.tsx",
+    "./reveal": "./src/revealGeometry.ts",
+    "./highlighter": "./src/highlighter.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit"

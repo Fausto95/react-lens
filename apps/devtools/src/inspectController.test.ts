@@ -43,7 +43,7 @@ function makeRuntime(components: FakeComponent[]) {
 }
 
 function makeHighlighter() {
-  return { show: vi.fn(), hide: vi.fn(), dispose: vi.fn() };
+  return { show: vi.fn(), reveal: vi.fn(), hide: vi.fn(), dispose: vi.fn() };
 }
 
 function mouseMove(target: Element, x = 40, y = 40): void {
