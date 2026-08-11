@@ -6,9 +6,9 @@ import { describeFunctionFrame, parseFrameLocation, clearFrameCache } from "./fu
  * fiber fields — the only way to attribute source in a production build.
  */
 describe("describeFunctionFrame", () => {
-  it("finds the definition frame of a plain function component", () => {
-    function Card() {
-      return null;
+  it("finds the definition frame of a component that reads props", () => {
+    function Card({ title }: { title: string }) {
+      return title;
     }
     const frame = describeFunctionFrame(Card, {});
     expect(frame).toBeTruthy();
@@ -20,9 +20,27 @@ describe("describeFunctionFrame", () => {
     expect(loc!.line).toBeGreaterThan(0);
   });
 
+  it("finds the definition frame of a component that calls a hook", () => {
+    // With the dispatcher nulled, the first hook call throws — which is what
+    // produces the sample stack for the overwhelming majority of components.
+    const ref = { H: { useState: () => [0, () => {}] } as unknown };
+    function Counter() {
+      return (ref.H as { useState: () => unknown }).useState();
+    }
+    const frame = describeFunctionFrame(Counter, { currentDispatcherRef: ref });
+    expect(parseFrameLocation(frame!)!.file).toMatch(/functionFrame\.test\.ts$/);
+  });
+
   it("finds the definition frame of a class component via construct", () => {
+    // Mirrors a real React class: the constructor assigns props (what
+    // `super(props)` does), which trips the sandbox's throwing setter.
     class Widget {
-      props: unknown;
+      // `declare` emits no field initializer, so the sandbox's prototype
+      // setter isn't shadowed — the shape a real React.Component subclass has.
+      declare props: unknown;
+      constructor(props: unknown) {
+        this.props = props;
+      }
       render() {
         return null;
       }
@@ -32,17 +50,32 @@ describe("describeFunctionFrame", () => {
     expect(parseFrameLocation(frame!)!.file).toMatch(/functionFrame\.test\.ts$/);
   });
 
+  it("returns null for a component that touches neither props nor hooks", () => {
+    // Nothing throws, so there is no sample stack to diff. Inherent to the
+    // technique (React DevTools has the same hole); the toString-in-chunk
+    // locator is the fallback for these.
+    expect(
+      describeFunctionFrame(function Static() {
+        return null;
+      }, {}),
+    ).toBeNull();
+  });
+
   it("caches per function — a second call does not re-invoke the component", () => {
-    const body = vi.fn(() => null);
-    function Cached() {
-      return body();
+    let invocations = 0;
+    // Reads props in the BODY (not the signature) so the counter runs before
+    // the throw — signature destructuring aborts even earlier.
+    function Cached(props: { title: string }) {
+      invocations++;
+      return props.title;
     }
     clearFrameCache();
     const first = describeFunctionFrame(Cached, {});
-    const callsAfterFirst = body.mock.calls.length;
+    expect(first).toBeTruthy();
+    expect(invocations).toBe(1);
     const second = describeFunctionFrame(Cached, {});
     expect(second).toBe(first);
-    expect(body.mock.calls.length).toBe(callsAfterFirst);
+    expect(invocations).toBe(1); // served from cache, never called again
   });
 
   it("restores the dispatcher and Error.prepareStackTrace afterwards", () => {
