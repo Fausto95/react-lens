@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "React Lens",
   "version": "0.0.0",
-  "description": "Know why every render happened. Dev-time React observability for React apps.",
+  "description": "Rewind any render, then ask why. Dev-time React observability for React apps.",
   "minimum_chrome_version": "116",
   "devtools_page": "src/devtools/devtools.html",
   "background": {

@@ -9,11 +9,12 @@ export function Hero() {
         <IconLens size={18} /> React Lens
       </div>
       <h1>
-        Know <span className="accent">why</span> every render happened.
+        Rewind any render. Then ask <span className="accent">why</span>.
       </h1>
       <p className="hero-sub">
-        Dev-time React observability — from interaction to cause to fix, in one panel. This site is
-        inspecting itself: everything on the right is this page’s real component tree.
+        React Lens replays your app’s real state at any commit — then a trace-grounded AI agent
+        answers, citing the exact render, component, and line. This site is inspecting itself:
+        everything on the right is this page’s real component tree.
       </p>
       <div className="cta-row">
         <a className="btn primary" href="#features">

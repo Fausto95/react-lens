@@ -1,30 +1,24 @@
 import { Hero } from "./sections/Hero.js";
-import { FiveQuestions } from "./sections/FiveQuestions.js";
-import { TraceSection } from "./sections/TraceSection.js";
-import { RevealSection } from "./sections/RevealSection.js";
 import { TimeTravelSection } from "./sections/TimeTravelSection.js";
-import { GraphSection } from "./sections/GraphSection.js";
-import { DiffSection } from "./sections/DiffSection.js";
-import { CompareSection } from "./sections/CompareSection.js";
+import { WhySection } from "./sections/WhySection.js";
+import { ChangeSection } from "./sections/ChangeSection.js";
 import { Features } from "./sections/Features.js";
 import { Coachmark } from "./sections/Coachmark.js";
 
 /**
  * The site is its own demo: every section below is a real component, so the
- * React Lens panel docked on the right shows THIS page's tree. Read the pitch
- * on the left; watch the tool dissect it on the right.
+ * React Lens panel docked on the right shows THIS page's tree. One section per
+ * half of the headline — rewind, then ask why — then what changed, then the
+ * rest as one-liners. Read the pitch on the left; watch the tool dissect it on
+ * the right.
  */
 export function App() {
   return (
     <main className="site">
       <Hero />
-      <FiveQuestions />
-      <TraceSection />
-      <RevealSection />
       <TimeTravelSection />
-      <GraphSection />
-      <DiffSection />
-      <CompareSection />
+      <WhySection />
+      <ChangeSection />
       <Features />
       <Coachmark />
     </main>

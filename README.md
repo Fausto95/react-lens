@@ -1,12 +1,13 @@
 <p align="center">
-  <img src="apps/site/public/og.png" alt="React Lens — know why every render happened. Time travel, AI agent, render causes, AST Doctor, waste detection, Suspense & RSC." width="800" />
+  <img src="apps/site/public/og.png" alt="React Lens — rewind any render, then ask why. Time travel, AI agent, render causes, AST Doctor, waste detection, Suspense & RSC." width="800" />
 </p>
 
 <h1 align="center">React Lens</h1>
 
 <p align="center">
-  <strong>Know why every render happened.</strong><br />
-  Dev-time React observability — from interaction to cause to fix, in one panel.
+  <strong>Rewind any render. Then ask why.</strong><br />
+  Replay your app's real state at any commit — then a trace-grounded AI agent
+  answers, citing the exact render, component, and line.
 </p>
 
 <p align="center">
@@ -22,49 +23,41 @@ what it cost, whether it was wasted, and how to fix it. Every click, commit,
 and render lands in one event log, so answers are backed by evidence instead
 of guesses.
 
-## The five questions
-
-Debugging a React app is always the same five questions. Lens answers each in
-one or two clicks:
-
-1. **What is this element?** — pick it on the page (⌘\\), get the component,
-   its props, state, hooks, DOM, and source.
-2. **Why did it render?** — a cause chain (props / state / hooks / parent),
-   with confidence levels, not a shrug.
-3. **Why is it slow?** — an interaction-first timeline with commit heat and a
-   component waterfall.
-4. **What changed?** — value + DOM diffs per render, A/B compare any two
-   commits.
-5. **How do I fix it?** — Doctor findings stamped `file:line`, Explain
-   narratives, and an AI agent grounded in the trace.
-
 ## Features
 
 - **Time travel** — scrub the commit timeline and (in dev builds) restore real
-  page state as you go; double-click two commits to A/B them.
+  page state as you go: raw `useState` / `useReducer` / class state, put back
+  through React's own override API.
 - **AI agent, BYOK** — ⌘I opens an in-panel assistant (OpenAI / Anthropic /
   Z.AI; your key never leaves the browser) that answers through typed tools
   over the live trace. Every claim cites a Lens ID — clickable chips that jump
   to the exact render, component, or interaction.
-- **Bidirectional selection** — click an element on the page to select it in
-  the tree, or select anything in the panel to scroll the page to it and
-  outline it. Off-screen components only, so walking the tree with ↑/↓ doesn't
-  drag the app around.
-- **Render causes** — why-did-this-render at three levels of depth, including
-  a "no observable change" verdict when a render was avoidable.
+- **Render causes** — why-did-this-render at three levels of depth, with
+  confidence levels and a "no observable change" verdict when a render was
+  avoidable.
+- **Diffs, per render and across time** — value + DOM diffs for one commit;
+  A/B any two commits for a whole-app index of what ended up different.
+- **Interaction timeline** — a normalized event log of commits and
+  interactions, grouped into what you actually did, with commit heat and a
+  component waterfall.
+- **Pick it, find it** — ⌘\\ picks an element on the page and selects it in the
+  tree; selecting in the panel scrolls the page to the component and outlines
+  it (off-screen ones only, so ↑/↓ doesn't drag the app around).
+- **Inspector** — props, state, hooks, DOM, and source for the selection, with
+  live edit through the dev renderer.
 - **AST Doctor** — static analysis (OXC parser, regex fallback) fused with
   runtime evidence; findings are scoped to a component's definition and
   stamped `file:line`.
 - **Waste detection** — after an interaction settles, a banner flags renders
   that produced no visible change and jumps you to the worst offender.
+- **Explain this interaction** — one click produces a ranked narrative: cost,
+  cause chain, Doctor findings, suggested next step.
 - **Effect debugger** — timed effect run/cleanup events, durations, and a
   "possible loop" badge when an effect fires on nearly every render.
 - **Suspense & RSC aware** — suspense boundaries, server-component roles, and
   server actions are detected and badged in the tree and inspector.
 - **Sessions** — export/import the whole trace as a `.json` file; recent
   sessions persist in IndexedDB and reload from ⌘K.
-- **Explain this interaction** — one click produces a ranked narrative: cost,
-  cause chain, Doctor findings, suggested next step.
 - **React 19 + Compiler aware** — compiled components are badged ◆, and Lens
   never recommends hand-rolled `useMemo` / `useCallback`.
 

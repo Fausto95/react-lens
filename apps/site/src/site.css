@@ -13,6 +13,8 @@
   --green: #4ade80;
   --orange: #fb923c;
   --cyan: #22d3ee;
+  /* One rhythm for every card-to-card edge, stacked or side by side. */
+  --card-gap: 18px;
   --font: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   --mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, monospace;
 }
@@ -52,9 +54,13 @@ pre {
   }
 }
 
+/* Fewer sections than before, so each one gets room to breathe. */
 .site section {
-  margin: 0 0 72px;
+  margin: 0 0 112px;
   scroll-margin-top: 24px;
+}
+.site > section:first-of-type {
+  margin-bottom: 128px;
 }
 
 /* Hero */
@@ -82,9 +88,10 @@ pre {
 }
 .hero-sub {
   font-size: 19px;
+  line-height: 1.6;
   color: var(--dim);
   max-width: 60ch;
-  margin: 0 0 28px;
+  margin: 0 0 36px;
 }
 .cta-row {
   display: flex;
@@ -144,34 +151,29 @@ h2 {
 .sec-lead {
   color: var(--dim);
   font-size: 17px;
+  line-height: 1.6;
   max-width: 62ch;
-  margin: 0 0 22px;
+  margin: 0 0 30px;
 }
 
-/* Five questions */
-.questions {
+/* Feature grid — one line each, two up. */
+.feats {
   display: grid;
-  grid-template-columns: 1fr;
-  gap: 10px;
-  max-width: 640px;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 30px 36px;
+  max-width: 700px;
+  margin-top: 18px;
 }
-.q {
-  display: flex;
-  gap: 12px;
-  align-items: baseline;
-  padding: 14px 16px;
-  background: var(--raised);
-  border: 1px solid var(--border);
-  border-radius: 10px;
-}
-.q .n {
-  color: var(--accent);
-  font-family: var(--mono);
-  font-size: 13px;
-  min-width: 22px;
-}
-.q .t {
+.feat h3 {
+  margin: 0 0 4px;
   font-size: 16px;
+  letter-spacing: -0.01em;
+}
+.feat p {
+  margin: 0;
+  color: var(--dim);
+  font-size: 14px;
+  line-height: 1.5;
 }
 
 /* Cards / specimens */
@@ -179,13 +181,15 @@ h2 {
   background: var(--raised);
   border: 1px solid var(--border);
   border-radius: 12px;
-  padding: 20px;
-  max-width: 640px;
+  padding: 24px;
+  /* Same width as .changelog / .feats so every block's edges line up. */
+  max-width: 700px;
 }
 .card-hint {
   color: var(--faint);
   font-size: 13px;
-  margin-top: 14px;
+  line-height: 1.6;
+  margin-top: 18px;
   display: flex;
   align-items: center;
   gap: 6px;
@@ -218,9 +222,6 @@ h2 {
 }
 .spec-input::placeholder {
   color: var(--faint);
-}
-#time-travel .steps {
-  margin: 30px 0 34px;
 }
 .tag {
   font-size: 11px;
@@ -266,22 +267,25 @@ h2 {
 /* What's new / changelog */
 .changelog {
   display: grid;
-  grid-template-columns: 1fr;
-  gap: 14px;
+  /* Two up where there's room — each section carries exactly one pair. */
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: var(--card-gap);
   max-width: 700px;
+  /* Same as the grid gap: the specimen card above is part of the same stack. */
+  margin-top: var(--card-gap);
 }
 .change {
   background: var(--raised);
   border: 1px solid var(--border);
   border-radius: 12px;
-  padding: 18px 20px;
+  padding: 22px 24px;
 }
 .change .tag {
   display: inline-block;
   margin-bottom: 10px;
 }
 .change h3 {
-  margin: 0 0 6px;
+  margin: 0 0 8px;
   font-size: 18px;
   letter-spacing: -0.01em;
 }
@@ -289,6 +293,7 @@ h2 {
   margin: 0;
   color: var(--dim);
   font-size: 15px;
+  line-height: 1.65;
 }
 
 /* Code */
@@ -303,32 +308,6 @@ pre.code {
 }
 pre.code .k {
   color: var(--accent);
-}
-.steps {
-  counter-reset: step;
-  display: grid;
-  gap: 26px;
-  max-width: 660px;
-  margin: 26px 0 34px;
-}
-.step {
-  display: flex;
-  gap: 14px;
-  line-height: 1.75;
-}
-.step::before {
-  counter-increment: step;
-  content: counter(step);
-  flex: 0 0 24px;
-  height: 24px;
-  border-radius: 50%;
-  display: grid;
-  place-items: center;
-  background: var(--hover);
-  border: 1px solid var(--border-strong);
-  color: var(--accent);
-  font-size: 12px;
-  font-family: var(--mono);
 }
 /* Keys and gestures — a physical-looking cap so shortcuts read as input,
    not as code. */
