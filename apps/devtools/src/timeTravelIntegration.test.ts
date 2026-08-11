@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vite-plus/test";
 import { createFiberBridge } from "@reactlens/fiber";
 import { createSerializer } from "@reactlens/serializer";
 import { createInstrumentation } from "@reactlens/instrumentation";

@@ -143,7 +143,10 @@ export const TOOL_DEFINITIONS: Array<{
         required: ["componentId"],
         properties: {
           componentId: { type: "number" },
-          contextLines: { type: "number", description: "Extra lines around the definition (default 8)." },
+          contextLines: {
+            type: "number",
+            description: "Extra lines around the definition (default 8).",
+          },
         },
       },
     },

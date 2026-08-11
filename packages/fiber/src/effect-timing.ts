@@ -110,7 +110,12 @@ function wrapOne(
     (typeof effect.destroy === "function" ? effect.destroy : undefined) ??
     (typeof effect.inst?.destroy === "function" ? effect.inst.destroy : undefined);
   if (typeof existingDestroy === "function") {
-    const wrapped = wrapDestroy(existingDestroy as (...a: unknown[]) => unknown, componentId, hookIndex, sink);
+    const wrapped = wrapDestroy(
+      existingDestroy as (...a: unknown[]) => unknown,
+      componentId,
+      hookIndex,
+      sink,
+    );
     if (effect.inst && typeof effect.inst === "object") {
       effect.inst.destroy = wrapped;
     } else {

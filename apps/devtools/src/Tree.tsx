@@ -20,7 +20,12 @@ type TreeMode = "components" | "changed" | "waste";
 const MODES: Array<{ id: TreeMode; label: string; compact: string; hint: string }> = [
   { id: "components", label: "Components", compact: "All", hint: "Full ownership tree" },
   { id: "changed", label: "Changed", compact: "Δ", hint: "Rendered with observable output change" },
-  { id: "waste", label: "Potential Waste", compact: "Waste", hint: "Rendered with no observable change" },
+  {
+    id: "waste",
+    label: "Potential Waste",
+    compact: "Waste",
+    hint: "Rendered with no observable change",
+  },
 ];
 
 export function Tree({
@@ -73,7 +78,6 @@ export function Tree({
     () => buildData(store, causality),
     // Recompute when the store ingests (version); verdicts are memoized per
     // last render inside verdictOf, so steady components stay cheap.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     [store, causality, version],
   );
 
@@ -231,7 +235,9 @@ export function Tree({
                 : "No components yet."}
           </span>
           <span className="rl-empty-hint">
-            {mode === "components" ? "Interact with the page to capture a tree." : "Try another mode or clear the filter."}
+            {mode === "components"
+              ? "Interact with the page to capture a tree."
+              : "Try another mode or clear the filter."}
           </span>
         </div>
       ) : (
@@ -327,10 +333,7 @@ function TreeRow({
       onMouseEnter={() => isComponent && onHover?.(node.id)}
     >
       {/* Indent lives in the left cluster so flame + metrics stay column-aligned. */}
-      <div
-        className="rl-tree-main"
-        style={{ paddingLeft: 6 + Math.min(depth, 14) * 8 }}
-      >
+      <div className="rl-tree-main" style={{ paddingLeft: 6 + Math.min(depth, 14) * 8 }}>
         <span
           className={`rl-caret${expandable ? "" : " hidden"}`}
           onClick={(e) => {

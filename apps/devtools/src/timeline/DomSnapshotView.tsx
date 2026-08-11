@@ -15,10 +15,16 @@ export function DomSnapshotView({ dom, atOffsetMs }: { dom: DOMSnapshot; atOffse
   const spend = () => budget-- > 0;
   return (
     <div className="rl-tl-domsnap">
-      <button className="rl-tl-domsnap-head" onClick={() => setOpen((v) => !v)} aria-expanded={open}>
+      <button
+        className="rl-tl-domsnap-head"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+      >
         <span className="rl-tl-domsnap-caret">{open ? "▾" : "▸"}</span>
         Page snapshot · {timeAxis(atOffsetMs)}
-        <span className="rl-tl-domsnap-hint">imported session — structural DOM at the playhead</span>
+        <span className="rl-tl-domsnap-hint">
+          imported session — structural DOM at the playhead
+        </span>
       </button>
       {open && (
         <div className="rl-tl-domsnap-tree">

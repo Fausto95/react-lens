@@ -27,10 +27,18 @@ function localStore(): StorageLike | null {
 /** Prefer chrome.storage.session in the extension; fall back to localStorage. */
 function chromeSession(): StorageLike | null {
   try {
-    const chromeApi = (globalThis as { chrome?: { storage?: { session?: {
-      get: (keys: string | string[]) => Promise<Record<string, unknown>>;
-      set: (items: Record<string, unknown>) => Promise<void>;
-    } } } }).chrome;
+    const chromeApi = (
+      globalThis as {
+        chrome?: {
+          storage?: {
+            session?: {
+              get: (keys: string | string[]) => Promise<Record<string, unknown>>;
+              set: (items: Record<string, unknown>) => Promise<void>;
+            };
+          };
+        };
+      }
+    ).chrome;
     const session = chromeApi?.storage?.session;
     if (!session) return null;
     return {

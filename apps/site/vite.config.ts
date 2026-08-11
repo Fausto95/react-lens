@@ -1,4 +1,4 @@
-import { defineConfig } from "vite";
+import { defineConfig, lazyPlugins } from "vite-plus";
 import react from "@vitejs/plugin-react";
 
 export default defineConfig({
@@ -12,7 +12,7 @@ export default defineConfig({
       },
     ],
   },
-  plugins: [
+  plugins: lazyPlugins(() => [
     react({
       // React Compiler on for the SITE's own source only (DESIGN §1.4), matching
       // the playground: the marketing sections then show ◆ compiled in the panel
@@ -27,6 +27,6 @@ export default defineConfig({
         ],
       },
     }),
-  ],
+  ]),
   server: { port: 5179, host: true },
 });

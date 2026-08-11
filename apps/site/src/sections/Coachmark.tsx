@@ -11,7 +11,9 @@ export function Coachmark() {
         This site is inspecting itself — the panel on the right is <strong>React Lens</strong>,
         running on this page. Open the tree and select any section.
       </span>
-      <button className="x" aria-label="Dismiss" onClick={() => setOpen(false)}>×</button>
+      <button className="x" aria-label="Dismiss" onClick={() => setOpen(false)}>
+        ×
+      </button>
     </div>
   );
 }

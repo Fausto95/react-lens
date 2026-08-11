@@ -19,12 +19,14 @@ function TraceSpecimen() {
 export function TraceSection() {
   return (
     <section id="trace">
-      <div className="sec-kicker"><span className="dot" /> TRACE · what happened</div>
+      <div className="sec-kicker">
+        <span className="dot" /> TRACE · what happened
+      </div>
       <h2>Every render, on a timeline.</h2>
       <p className="sec-lead">
-        A normalized event log of commits and interactions — grouped into the things you
-        actually did. Click the button, then find <code>TraceSpecimen</code> in the panel:
-        its render shows up on the timeline with real self-time.
+        A normalized event log of commits and interactions — grouped into the things you actually
+        did. Click the button, then find <code>TraceSpecimen</code> in the panel: its render shows
+        up on the timeline with real self-time.
       </p>
       <div className="card">
         <TraceSpecimen />

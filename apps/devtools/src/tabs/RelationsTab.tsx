@@ -28,11 +28,36 @@ export function RelationsTab({ ctx }: { ctx: InspectorContext }) {
 
   return (
     <div className="rl-rel">
-      <RelationGroup title="Parent" keys={parents} graph={graph} onSelectComponent={onSelectComponent} />
-      <RelationGroup title="Children" keys={children} graph={graph} onSelectComponent={onSelectComponent} />
-      <RelationGroup title="Rendered because of" keys={causedBy} graph={graph} onSelectComponent={onSelectComponent} />
-      <RelationGroup title="Triggers renders of" keys={causes} graph={graph} onSelectComponent={onSelectComponent} />
-      <RelationGroup title="Reads context" keys={readsContext} graph={graph} onSelectComponent={onSelectComponent} />
+      <RelationGroup
+        title="Parent"
+        keys={parents}
+        graph={graph}
+        onSelectComponent={onSelectComponent}
+      />
+      <RelationGroup
+        title="Children"
+        keys={children}
+        graph={graph}
+        onSelectComponent={onSelectComponent}
+      />
+      <RelationGroup
+        title="Rendered because of"
+        keys={causedBy}
+        graph={graph}
+        onSelectComponent={onSelectComponent}
+      />
+      <RelationGroup
+        title="Triggers renders of"
+        keys={causes}
+        graph={graph}
+        onSelectComponent={onSelectComponent}
+      />
+      <RelationGroup
+        title="Reads context"
+        keys={readsContext}
+        graph={graph}
+        onSelectComponent={onSelectComponent}
+      />
     </div>
   );
 }
@@ -82,7 +107,11 @@ function buildGraphFromStore(store: InspectorContext["store"]): Graph {
   const components = store
     .allInstances()
     .filter((i) => store.renderCount(i.id) > 0)
-    .map((i) => ({ id: i.id, name: i.name, ...(i.parentId !== undefined ? { parentId: i.parentId } : {}) }));
+    .map((i) => ({
+      id: i.id,
+      name: i.name,
+      ...(i.parentId !== undefined ? { parentId: i.parentId } : {}),
+    }));
 
   const renders = components.map((c) => {
     const last = store.rendersOf(c.id).at(-1);

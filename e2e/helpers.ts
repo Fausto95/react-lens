@@ -74,9 +74,7 @@ export async function jumpTo(page: Page, query: string, expectName?: string): Pr
   await expect(input).toBeFocused();
   await input.fill(query);
   await page.keyboard.press("Enter");
-  await expect(page.locator(".rl-insp-head h2")).toHaveText(
-    new RegExp(`^${expectName ?? query}`),
-  );
+  await expect(page.locator(".rl-insp-head h2")).toHaveText(new RegExp(`^${expectName ?? query}`));
 }
 
 /** PropsShowcase page line that mirrors the live prop values. */

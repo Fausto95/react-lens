@@ -26,8 +26,7 @@ export function EffectsTab({ ctx }: { ctx: InspectorContext }) {
   const totalRunMs = runs.reduce((s, e) => s + e.duration, 0);
   const renders = ctx.store.rendersOf(ctx.componentId);
   const recentRenders = renders.slice(-12);
-  const runsEveryCommit =
-    recentRenders.length >= 4 && runs.length >= recentRenders.length - 1;
+  const runsEveryCommit = recentRenders.length >= 4 && runs.length >= recentRenders.length - 1;
   const maxDur = Math.max(1, ...runs.map((e) => e.duration), ...cleanups.map((e) => e.duration));
 
   return (

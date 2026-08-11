@@ -1,13 +1,7 @@
 import { test, expect } from "@playwright/test";
 import path from "node:path";
 import fs from "node:fs";
-import {
-  boot,
-  bumpCounter,
-  counterLine,
-  ensureTravelOn,
-  FIXTURES_DIR,
-} from "./helpers.js";
+import { boot, bumpCounter, counterLine, ensureTravelOn, FIXTURES_DIR } from "./helpers.js";
 
 /**
  * Session export → import round-trip: the import gate (542bd08) pauses
@@ -16,9 +10,7 @@ import {
  * recording resumes. A committed protocol-v1 fixture pins the file format.
  */
 
-test("export → import round-trip enters and leaves the offline session view", async ({
-  page,
-}) => {
+test("export → import round-trip enters and leaves the offline session view", async ({ page }) => {
   await boot(page);
   await bumpCounter(page, 2);
 

@@ -12,7 +12,9 @@ test("editing a prop in the inspector re-renders the page", async ({ page }) => 
   await selectInTree(page, "PropsShowcase");
   await openSection(page, "Props");
 
-  const textRow = page.locator(".rl-val-row").filter({ has: page.locator(".rl-val-key", { hasText: /^text$/ }) });
+  const textRow = page
+    .locator(".rl-val-row")
+    .filter({ has: page.locator(".rl-val-key", { hasText: /^text$/ }) });
   const input = textRow.locator(".rl-edit-input.rl-t-string");
   await expect(input).toHaveValue("hello world");
   await input.fill("lens e2e");
@@ -27,7 +29,11 @@ test("editing useState in the inspector rewinds the page counter", async ({ page
 
   await openSection(page, "State");
   // First state hook is the count useState (reducer follows with a read-only badge).
-  const stateInput = page.locator(".rl-val-row").filter({ hasText: /state #/ }).first().locator(".rl-edit-input");
+  const stateInput = page
+    .locator(".rl-val-row")
+    .filter({ hasText: /state #/ })
+    .first()
+    .locator(".rl-edit-input");
   await expect(stateInput).toBeVisible();
   await stateInput.fill("7");
   await stateInput.press("Enter");
@@ -43,10 +49,7 @@ test("reducer state shows a read-only badge and is not editable", async ({ page 
   const reducerRow = page.locator(".rl-val-row").filter({ hasText: /reducer #/ });
   await expect(reducerRow.locator(".rl-badge.dim", { hasText: "read-only" })).toBeVisible();
   await expect(reducerRow.locator(".rl-edit-input")).toHaveCount(0);
-  await expect(reducerRow.locator(".rl-badge.dim")).toHaveAttribute(
-    "title",
-    /bypass the reducer/i,
-  );
+  await expect(reducerRow.locator(".rl-badge.dim")).toHaveAttribute("title", /bypass the reducer/i);
 });
 
 async function bumpAndSelect(page: import("@playwright/test").Page): Promise<void> {

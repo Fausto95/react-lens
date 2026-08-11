@@ -45,11 +45,7 @@ export function mergeActive(spans: readonly TimeSpan[]): Array<[number, number]>
   return merged;
 }
 
-export function countIdleGutters(
-  active: Array<[number, number]>,
-  t0: number,
-  t1: number,
-): number {
+export function countIdleGutters(active: Array<[number, number]>, t0: number, t1: number): number {
   let n = 0;
   let cursor = t0;
   for (const [s, e] of active) {
@@ -190,14 +186,7 @@ export function fitPlan(
   const rangeStart = clamp(range.start - pad, bounds.t0, bounds.t1);
   const rangeEnd = clamp(Math.max(range.end, range.start) + pad, bounds.t0, bounds.t1);
   const targetW = Math.max(80, portW * 0.85);
-  const scale = scaleForProjectedWidth(
-    active,
-    bounds.t0,
-    bounds.t1,
-    rangeStart,
-    rangeEnd,
-    targetW,
-  );
+  const scale = scaleForProjectedWidth(active, bounds.t0, bounds.t1, rangeStart, rangeEnd, targetW);
   const built = buildScale(active, bounds.t0, bounds.t1, scale);
   const x0 = projectX(built.segs, rangeStart);
   const x1 = projectX(built.segs, rangeEnd);

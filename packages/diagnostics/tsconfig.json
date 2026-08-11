@@ -6,7 +6,5 @@
     "composite": false,
     "noEmit": true
   },
-  "include": [
-    "src"
-  ]
+  "include": ["src"]
 }

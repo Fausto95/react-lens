@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, afterEach } from "vitest";
+import { describe, it, expect, vi, afterEach } from "vite-plus/test";
 import { createAgentSession } from "./session.js";
 import { budgetToolResult } from "./budget.js";
 import { defaultSettingsFor } from "./providers.js";
@@ -76,7 +76,11 @@ describe("budgetToolResult", () => {
 describe("agent session", () => {
   it("keeps conversation state across sends and prepends evidence once", async () => {
     const fetchMock = scriptProvider([textTurn("Answer one."), textTurn("Answer two.")]);
-    const session = createAgentSession({ settings, handlers: stubHandlers(), evidence: emptyEvidence });
+    const session = createAgentSession({
+      settings,
+      handlers: stubHandlers(),
+      evidence: emptyEvidence,
+    });
 
     const a1 = await session.send("Why slow?");
     expect(a1.text).toBe("Answer one.");
@@ -86,7 +90,9 @@ describe("agent session", () => {
     expect(session.messages.map((m) => m.role)).toEqual(["user", "assistant", "user", "assistant"]);
 
     // The second request carries the whole prior conversation.
-    const secondBody = JSON.parse((fetchMock.mock.calls[1] as [string, RequestInit])[1].body as string);
+    const secondBody = JSON.parse(
+      (fetchMock.mock.calls[1] as [string, RequestInit])[1].body as string,
+    );
     const contents = secondBody.messages
       .filter((m: { role: string }) => m.role !== "system") // the prompt itself names the block
       .map((m: { content: unknown }) => String(m.content));
@@ -119,7 +125,9 @@ describe("agent session", () => {
     expect(types.at(-1)).toBe("done");
 
     // The tool message the MODEL receives is budgeted, with a note.
-    const secondBody = JSON.parse((fetchMock.mock.calls[1] as [string, RequestInit])[1].body as string);
+    const secondBody = JSON.parse(
+      (fetchMock.mock.calls[1] as [string, RequestInit])[1].body as string,
+    );
     const toolMsg = secondBody.messages.find((m: { role: string }) => m.role === "tool");
     expect(toolMsg.content.length).toBeLessThan(8_000);
     expect(toolMsg.content).toMatch(/truncated/);

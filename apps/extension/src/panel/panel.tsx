@@ -40,7 +40,8 @@ function ExtensionPanel() {
           const pending = pendingSource.current.get(msg.requestId);
           if (!pending) return;
           pendingSource.current.delete(msg.requestId);
-          if (msg.body != null && (!msg.error || msg.error === "truncated")) pending.resolve(msg.body);
+          if (msg.body != null && (!msg.error || msg.error === "truncated"))
+            pending.resolve(msg.body);
           else pending.reject(new Error(msg.error ?? "source fetch failed"));
         }
         if (msg.kind === "edit-result") {

@@ -66,13 +66,18 @@ export function SourceTab({ inst }: { inst: ComponentInstance; ctx: InspectorCon
             resolving…
           </span>
         ) : (
-          <span className={`rl-badge ${kind === "compiled" ? "dim" : "healthy"}`} style={{ marginLeft: 8 }}>
+          <span
+            className={`rl-badge ${kind === "compiled" ? "dim" : "healthy"}`}
+            style={{ marginLeft: 8 }}
+          >
             {kind}
           </span>
         )}
       </div>
       {kind !== "compiled" && (
-        <div className="rl-source-sub">compiled: {shortSource(compiled.file)}:{compiled.line}</div>
+        <div className="rl-source-sub">
+          compiled: {shortSource(compiled.file)}:{compiled.line}
+        </div>
       )}
       <div className="rl-actions">
         <button

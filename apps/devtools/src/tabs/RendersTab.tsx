@@ -10,13 +10,7 @@ import { diff, type DiffResult } from "@reactlens/diff-engine";
  * expands inline with what actually changed vs the previous one (props /
  * state / context diffs from the captured snapshots).
  */
-export function RendersTab({
-  ctx,
-  renders,
-}: {
-  ctx: InspectorContext;
-  renders: RenderEvent[];
-}) {
+export function RendersTab({ ctx, renders }: { ctx: InspectorContext; renders: RenderEvent[] }) {
   const { store, activeRenderId, onSelectRender } = ctx;
   if (renders.length === 0) return <EmptyTab>No renders recorded.</EmptyTab>;
 

@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect } from "vite-plus/test";
 import { parseQuery } from "./query.js";
 import type { ComponentDatum } from "./types.js";
 import type { ComponentId } from "@reactlens/protocol";

@@ -1,4 +1,12 @@
-import { Fragment, useMemo, useRef, useState, useEffect, useLayoutEffect, useCallback } from "react";
+import {
+  Fragment,
+  useMemo,
+  useRef,
+  useState,
+  useEffect,
+  useLayoutEffect,
+  useCallback,
+} from "react";
 import {
   anomalyStats,
   type AnomalyStats,
@@ -476,7 +484,6 @@ export function Timeline({
     [zoomTo, scale, fit],
   );
 
-
   // Keyboard: T, L, F, [ ], Space, arrows — matching lives in timeline/keymap
   // so bindings stay layout-independent (AZERTY etc.).
   useEffect(() => {
@@ -520,7 +527,17 @@ export function Timeline({
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [bounds.t1, onCursor, stepInteraction, stepCommit, togglePlay, selected, fitSelection, fitSession, zoomButtons]);
+  }, [
+    bounds.t1,
+    onCursor,
+    stepInteraction,
+    stepCommit,
+    togglePlay,
+    selected,
+    fitSelection,
+    fitSession,
+    zoomButtons,
+  ]);
 
   const xOfClient = (clientX: number): number => {
     const inner = innerRef.current;
@@ -630,9 +647,7 @@ export function Timeline({
   const cursorX = xOf(cursorT);
   const ticks = useMemo(() => buildTicks(model.segs, bounds.t0), [model.segs, bounds.t0]);
   const abComparison = useMemo(
-    () =>
-      ab.a !== undefined && ab.b !== undefined ? compareApplySets(store, ab.a, ab.b) : null,
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    () => (ab.a !== undefined && ab.b !== undefined ? compareApplySets(store, ab.a, ab.b) : null),
     [store, ab.a, ab.b, version],
   );
 
@@ -928,9 +943,13 @@ export function Timeline({
                 {/* Commits / heat track */}
                 <div className="rl-tl-track rl-tl-track-react">
                   {commits.map((c) => {
-                    const h = 6 + heatScale(c.totalSelfTime, anomaly.max) * (paneH >= 200 ? 28 : 18);
+                    const h =
+                      6 + heatScale(c.totalSelfTime, anomaly.max) * (paneH >= 200 ? 28 : 18);
                     const bad = anomaly.isAnomaly(c);
-                    const barW = Math.max(3, Math.min(10, 2 + heatScale(c.totalSelfTime, anomaly.max) * 8));
+                    const barW = Math.max(
+                      3,
+                      Math.min(10, 2 + heatScale(c.totalSelfTime, anomaly.max) * 8),
+                    );
                     return (
                       <button
                         key={c.commitId}
@@ -1660,7 +1679,14 @@ function PhaseWaterfall({
                     title={`Over the frame budget (${ms(bar.self)}) — investigate and fix with AI`}
                     onClick={(e) => {
                       e.stopPropagation();
-                      onAskAI(renderFixPrompt(bar.name, bar.id as number, bar.renderId as number, bar.self));
+                      onAskAI(
+                        renderFixPrompt(
+                          bar.name,
+                          bar.id as number,
+                          bar.renderId as number,
+                          bar.self,
+                        ),
+                      );
                     }}
                   >
                     <IconSparkle size={10} />
@@ -1679,7 +1705,9 @@ function PhaseWaterfall({
                   aria-hidden
                 >
                   {bar.name}
-                  {bar.labelRoom >= 110 && <span className="rl-wf-bar-out-ms"> · {ms(bar.self)}</span>}
+                  {bar.labelRoom >= 110 && (
+                    <span className="rl-wf-bar-out-ms"> · {ms(bar.self)}</span>
+                  )}
                 </span>
               )}
             </Fragment>

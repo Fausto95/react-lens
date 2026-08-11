@@ -1,4 +1,4 @@
-import { defineConfig } from "vite";
+import { defineConfig } from "vite-plus";
 
 /**
  * Builds the MAIN-world bridge as a single self-contained IIFE (`dist/injected.js`).

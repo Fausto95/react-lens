@@ -3,7 +3,10 @@ import { Section } from "./ui.js";
 /** A component nested many levels deep — tests tree depth + focus. */
 export function DeepTree() {
   return (
-    <Section title="Deep Tree" hint="A component nested 14 levels deep — test tree depth and focus.">
+    <Section
+      title="Deep Tree"
+      hint="A component nested 14 levels deep — test tree depth and focus."
+    >
       <Nested depth={14} />
     </Section>
   );

@@ -1,29 +1,21 @@
 {
   "name": "@reactlens/graph",
   "version": "0.0.0",
-  "type": "module",
-  "exports": {
-    ".": "./src/index.ts"
-  },
-  "dependencies": {
-    "@reactlens/protocol": "workspace:*"
-  },
-  "scripts": {
-    "typecheck": "tsc --noEmit",
-    "build": "tsup src/index.ts --format esm --dts --sourcemap --clean --tsconfig tsconfig.build.json"
-  },
   "license": "MIT",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/Fausto95/react-lens.git",
     "directory": "packages/graph"
   },
-  "sideEffects": false,
   "files": [
     "dist"
   ],
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": "./src/index.ts"
+  },
   "publishConfig": {
-    "access": "public",
     "main": "./dist/index.js",
     "types": "./dist/index.d.ts",
     "exports": {
@@ -31,7 +23,15 @@
         "types": "./dist/index.d.ts",
         "default": "./dist/index.js"
       }
-    }
+    },
+    "access": "public"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "build": "tsup src/index.ts --format esm --dts --sourcemap --clean --tsconfig tsconfig.build.json"
+  },
+  "dependencies": {
+    "@reactlens/protocol": "workspace:*"
   },
   "devDependencies": {
     "tsup": "^8.5.1"

@@ -11,13 +11,7 @@ const WAVE_MAX_GROUPS = 300;
 const WAVE_MAX_NODES = 400;
 const WAVE_MAX_MS = 1600;
 
-function EmbeddedPanel({
-  runtime,
-  host,
-}: {
-  runtime: LensRuntime;
-  host: HTMLElement;
-}) {
+function EmbeddedPanel({ runtime, host }: { runtime: LensRuntime; host: HTMLElement }) {
   const [recording, setRecording] = useState(true);
   const [overlayOn, setOverlayOn] = useState(false);
   const [inspecting, setInspecting] = useState(false);
@@ -52,9 +46,7 @@ function EmbeddedPanel({
   const replayWave = (ids: ComponentId[]) => {
     cancelWave();
     const capped = ids.slice(0, WAVE_MAX_GROUPS);
-    const groups = capped
-      .map((id) => runtime.domNodesOf(id))
-      .filter((nodes) => nodes.length > 0);
+    const groups = capped.map((id) => runtime.domNodesOf(id)).filter((nodes) => nodes.length > 0);
     if (groups.length === 0) return;
     const step = Math.min(140, WAVE_MAX_MS / Math.max(1, groups.length));
     const acc: Node[] = [];
@@ -72,7 +64,7 @@ function EmbeddedPanel({
     });
     waveTimers.current.push(setTimeout(cancelWave, groups.length * step + 800));
   };
-  useEffect(() => () => cancelWave(), []); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => () => cancelWave(), []);
 
   const edit = useMemo(
     () =>

@@ -7,10 +7,7 @@ import { definitionSpan } from "./static.js";
  * regex path when the parser is available; findings are scoped to a component
  * definition when `opts.name` is set.
  */
-export function analyzeSourceAst(
-  source: string,
-  opts: AnalyzeSourceOptions = {},
-): StaticFinding[] {
+export function analyzeSourceAst(source: string, opts: AnalyzeSourceOptions = {}): StaticFinding[] {
   const result = parseSync("component.tsx", source, { sourceType: "module", lang: "tsx" });
   const program = result.program as unknown as AstNode | undefined;
   if (!program) return [];
@@ -29,14 +26,20 @@ export function analyzeSourceAst(
       if (expr && (expr.type === "ObjectExpression" || expr.type === "ArrayExpression")) {
         const line = lineOf(typeof node.start === "number" ? node.start : 0);
         if (!inSpan(line)) return;
-        findings.push(stamp({
-          ruleId: "inline-context-value",
-          severity: "warn",
-          title: "Context value is a fresh object each render",
-          detail: "A Provider `value` is an inline object/array literal, so its identity changes every render — notifying all consumers.",
-          line,
-          fix: "Hoist the value or derive it once; with the React Compiler on, ensure it isn't recreated on every render.",
-        }, opts.file));
+        findings.push(
+          stamp(
+            {
+              ruleId: "inline-context-value",
+              severity: "warn",
+              title: "Context value is a fresh object each render",
+              detail:
+                "A Provider `value` is an inline object/array literal, so its identity changes every render — notifying all consumers.",
+              line,
+              fix: "Hoist the value or derive it once; with the React Compiler on, ensure it isn't recreated on every render.",
+            },
+            opts.file,
+          ),
+        );
       }
     }
 
@@ -45,14 +48,20 @@ export function analyzeSourceAst(
       if (fn && isEffectDerivesState(fn)) {
         const line = lineOf(typeof node.start === "number" ? node.start : 0);
         if (!inSpan(line)) return;
-        findings.push(stamp({
-          ruleId: "effect-derives-state",
-          severity: "warn",
-          title: "Effect derives state",
-          detail: "An effect's first action is a state setter, which schedules another render for a value that could be computed during render.",
-          line,
-          fix: "Compute the value inline (or with useMemo) instead of syncing it in an effect.",
-        }, opts.file));
+        findings.push(
+          stamp(
+            {
+              ruleId: "effect-derives-state",
+              severity: "warn",
+              title: "Effect derives state",
+              detail:
+                "An effect's first action is a state setter, which schedules another render for a value that could be computed during render.",
+              line,
+              fix: "Compute the value inline (or with useMemo) instead of syncing it in an effect.",
+            },
+            opts.file,
+          ),
+        );
       }
     }
   });
@@ -135,7 +144,7 @@ function isEffectDerivesState(fn: AstNode): boolean {
   const stmts = Array.isArray(body)
     ? body
     : (body as AstNode).type === "BlockStatement"
-      ? ((body as AstNode).body as AstNode[] | undefined) ?? []
+      ? (((body as AstNode).body as AstNode[] | undefined) ?? [])
       : [];
   const first = stmts[0];
   if (!first) return false;

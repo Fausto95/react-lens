@@ -63,9 +63,7 @@ export function createSerializer(): Serializer {
     switch (typeof value) {
       case "string": {
         const v =
-          value.length > opts.maxStringLength
-            ? value.slice(0, opts.maxStringLength) + "…"
-            : value;
+          value.length > opts.maxStringLength ? value.slice(0, opts.maxStringLength) + "…" : value;
         return { k: "primitive", type: "string", value: v };
       }
       case "number":
@@ -236,10 +234,7 @@ function isDomNode(obj: object): boolean {
 }
 
 function isReactElement(obj: object): boolean {
-  return (
-    "$$typeof" in obj &&
-    typeof (obj as { $$typeof: unknown }).$$typeof === "symbol"
-  );
+  return "$$typeof" in obj && typeof (obj as { $$typeof: unknown }).$$typeof === "symbol";
 }
 
 function reactElementTypeName(obj: object): string | undefined {

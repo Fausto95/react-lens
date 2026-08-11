@@ -344,7 +344,10 @@ export function createInstrumentation(deps: {
     // is exactly the case manual memoization used to target — surface it as
     // evidence rather than recommending useMemo (DESIGN §1.4).
     if (!instance.compiler.compiled && detail.reason !== "mount") {
-      reasons.push({ type: "compiler-bailout", reason: instance.compiler.bailoutReason ?? "not compiled by React Compiler" });
+      reasons.push({
+        type: "compiler-bailout",
+        reason: instance.compiler.bailoutReason ?? "not compiled by React Compiler",
+      });
     }
     return reasons;
   }
@@ -375,7 +378,9 @@ export function createInstrumentation(deps: {
       timestamp: now(),
       interactionId: id,
       kind: kind === "keydown" ? "keypress" : kind,
-      ...(target ? { target: { selector: describe(ev.target as Node), componentId: target.id } } : {}),
+      ...(target
+        ? { target: { selector: describe(ev.target as Node), componentId: target.id } }
+        : {}),
     };
     pendingEvents.push(interaction);
     scheduleFlush();
@@ -452,7 +457,8 @@ function describe(node: Node): string {
   if (node.nodeType !== Node.ELEMENT_NODE) return node.nodeName.toLowerCase();
   const el = node as Element;
   const id = el.id ? `#${el.id}` : "";
-  const cls = typeof el.className === "string" && el.className ? `.${el.className.split(/\s+/)[0]}` : "";
+  const cls =
+    typeof el.className === "string" && el.className ? `.${el.className.split(/\s+/)[0]}` : "";
   return `${el.nodeName.toLowerCase()}${id}${cls}`;
 }
 

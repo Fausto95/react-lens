@@ -12,13 +12,16 @@ export function Hero() {
         Know <span className="accent">why</span> every render happened.
       </h1>
       <p className="hero-sub">
-        Dev-time React observability — from interaction to cause to fix, in one panel.
-        This site is inspecting itself: everything on the right is this page’s real
-        component tree.
+        Dev-time React observability — from interaction to cause to fix, in one panel. This site is
+        inspecting itself: everything on the right is this page’s real component tree.
       </p>
       <div className="cta-row">
-        <a className="btn primary" href="#features">Features</a>
-        <a className="btn" href={REPO} target="_blank" rel="noreferrer">GitHub ↗</a>
+        <a className="btn primary" href="#features">
+          Features
+        </a>
+        <a className="btn" href={REPO} target="_blank" rel="noreferrer">
+          GitHub ↗
+        </a>
       </div>
     </section>
   );

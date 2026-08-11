@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect } from "vite-plus/test";
 import { buildTree } from "./build.js";
 import { flatten } from "./flatten.js";
 import type { ComponentDatum, GroupNode, ComponentNode } from "./types.js";
@@ -11,7 +11,7 @@ function datum(
   over: Partial<ComponentDatum> = {},
 ): ComponentDatum {
   return {
-    id: (++seq) as ComponentId,
+    id: ++seq as ComponentId,
     name,
     parentId: parentId as ComponentId | undefined,
     renders: 1,
@@ -78,7 +78,9 @@ describe("buildTree — projection filter", () => {
     const appNode = roots[0] as ComponentNode;
     expect(appNode.children).toHaveLength(1);
     expect((appNode.children[0] as ComponentNode).datum.name).toBe("ProductGrid");
-    expect(appNode.children.find((c) => (c as ComponentNode).datum?.name === "Footer")).toBeUndefined();
+    expect(
+      appNode.children.find((c) => (c as ComponentNode).datum?.name === "Footer"),
+    ).toBeUndefined();
   });
 });
 

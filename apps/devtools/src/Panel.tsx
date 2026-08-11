@@ -222,9 +222,8 @@ export function Panel({
 
   // Time sync: when scrubbed into the past, dim tree components that weren't in
   // the commit at the cursor (reuses the Freeze-Frame styling).
-  const frozenSet = cursor.mode === "historical"
-    ? new Set(store.commitAt(cursor.t)?.componentIds ?? [])
-    : null;
+  const frozenSet =
+    cursor.mode === "historical" ? new Set(store.commitAt(cursor.t)?.componentIds ?? []) : null;
 
   // Doctor: components with at least one diagnostic (for tree badges + count).
   // The pass walks every component and runs causality per render, so it runs in
@@ -286,7 +285,12 @@ export function Panel({
   const fallback = !doctorClient && stats.components <= 2000 ? diagnoseAll(store, causality) : null;
   const affected = workerDoctor?.affected ?? fallback?.affected ?? new Set<ComponentId>();
   const issueCount = workerDoctor?.count ?? fallback?.diagnostics.length ?? 0;
-  const suspended = new Set(store.allInstances().filter((i) => i.suspended).map((i) => i.id));
+  const suspended = new Set(
+    store
+      .allInstances()
+      .filter((i) => i.suspended)
+      .map((i) => i.id),
+  );
 
   // ⌘K / Ctrl+K opens the command palette; ⌘\ toggles page inspect.
   // Plain keys (R, ?) match the hints the palette advertises.
@@ -296,7 +300,11 @@ export function Panel({
         e.preventDefault();
         setPaletteOpen((v) => !v);
       }
-      if ((e.metaKey || e.ctrlKey) && (e.key === "\\" || e.code === "Backslash") && onToggleInspect) {
+      if (
+        (e.metaKey || e.ctrlKey) &&
+        (e.key === "\\" || e.code === "Backslash") &&
+        onToggleInspect
+      ) {
         e.preventDefault();
         onToggleInspect();
       }
@@ -536,7 +544,11 @@ export function Panel({
         }}
       />
 
-      <div className="rl-body" ref={bodyRef} style={{ gridTemplateColumns: `${splitPct}% 6px 1fr` }}>
+      <div
+        className="rl-body"
+        ref={bodyRef}
+        style={{ gridTemplateColumns: `${splitPct}% 6px 1fr` }}
+      >
         <div className="rl-pane rl-pane-tree">
           <div className="rl-pane-title">Tree</div>
           <Tree
@@ -623,9 +635,10 @@ export function Panel({
           onClick={() => {
             const worst = store
               .commits()
-              .reduce<
-                ReturnType<typeof store.commits>[number] | null
-              >((acc, c) => (acc === null || c.totalSelfTime > acc.totalSelfTime ? c : acc), null);
+              .reduce<ReturnType<typeof store.commits>[number] | null>(
+                (acc, c) => (acc === null || c.totalSelfTime > acc.totalSelfTime ? c : acc),
+                null,
+              );
             if (worst) setCursor({ t: worst.timestamp, mode: "historical" });
           }}
         >

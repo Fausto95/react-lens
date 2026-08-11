@@ -167,9 +167,7 @@ export function greedyPack<T extends { t0: number; t1: number }>(
   items: T[],
   tolerance = 0.5,
 ): Array<T & { track: number }> {
-  const sorted = [...items].sort(
-    (a, b) => a.t0 - b.t0 || b.t1 - b.t0 - (a.t1 - a.t0),
-  );
+  const sorted = [...items].sort((a, b) => a.t0 - b.t0 || b.t1 - b.t0 - (a.t1 - a.t0));
   const trackEnds: number[] = [];
   return sorted.map((item) => {
     let track = trackEnds.findIndex((end) => end <= item.t0 + tolerance);

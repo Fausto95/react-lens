@@ -157,7 +157,8 @@ export class TraceStore {
     const evicted = this.events.push(event);
     if (evicted) this.forgetEvent(evicted);
     if (event.type === "render") {
-      const buf = this.rendersByComponent.get(event.componentId) ??
+      const buf =
+        this.rendersByComponent.get(event.componentId) ??
         this.createRenderBuffer(event.componentId);
       buf.push(event);
       this.rendersById.set(event.renderId, event);

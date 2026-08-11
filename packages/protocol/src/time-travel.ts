@@ -17,11 +17,7 @@ export interface TimeTravelEntry {
  * - "shape-mismatch": the hook list changed since capture (e.g. hot reload).
  * - "write-failed": the renderer refused the override write.
  */
-export type TimeTravelFailureReason =
-  | "no-history"
-  | "no-fiber"
-  | "shape-mismatch"
-  | "write-failed";
+export type TimeTravelFailureReason = "no-history" | "no-fiber" | "shape-mismatch" | "write-failed";
 
 export interface TimeTravelFailure {
   componentId: ComponentId;

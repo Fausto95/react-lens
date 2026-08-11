@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect } from "vite-plus/test";
 import { ms, timeAxis } from "./format.js";
 
 describe("timeAxis — clock-style labels for timeline positions", () => {

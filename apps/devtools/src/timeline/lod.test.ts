@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect } from "vite-plus/test";
 import { aggregateBars, visibleChunkRange, type ClusterBar } from "./lod.js";
 import type { PackedBar } from "./pack.js";
 import type { ComponentId, RenderId } from "@reactlens/protocol";

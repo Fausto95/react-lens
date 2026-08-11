@@ -4,13 +4,7 @@
  */
 import { useState, type ReactNode } from "react";
 
-export type BadgeTone =
-  | "render"
-  | "warn"
-  | "suspicious"
-  | "healthy"
-  | "severe"
-  | "dim";
+export type BadgeTone = "render" | "warn" | "suspicious" | "healthy" | "severe" | "dim";
 
 export function Badge({ tone = "dim", children }: { tone?: BadgeTone; children: ReactNode }) {
   return <span className={`rl-badge ${tone}`}>{children}</span>;

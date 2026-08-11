@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect } from "vite-plus/test";
 import { TraceStore } from "./trace-store.js";
 import { applySetAt, compareApplySets, createApplySetCursor, diffApplySet } from "./time-travel.js";
 import type {
@@ -14,15 +14,15 @@ import type {
 let eventSeq = 0;
 function renderEvent(over: Partial<RenderEvent> = {}): RenderEvent {
   return {
-    id: (++eventSeq) as EventId,
+    id: ++eventSeq as EventId,
     type: "render",
     timestamp: eventSeq,
-    renderId: (eventSeq) as RenderId,
-    commitId: (1) as CommitId,
-    componentId: (1) as ComponentId,
+    renderId: eventSeq as RenderId,
+    commitId: 1 as CommitId,
+    componentId: 1 as ComponentId,
     selfDuration: 1,
     totalDuration: 1,
-    reasons: [{ type: "parent", componentId: (2) as ComponentId }],
+    reasons: [{ type: "parent", componentId: 2 as ComponentId }],
     compiler: { compiled: true, memoized: true },
     ...over,
   };
@@ -158,7 +158,7 @@ describe("createApplySetCursor", () => {
         events.push(
           renderEvent({
             componentId: comp as ComponentId,
-            renderId: (renderSeq++) as RenderId,
+            renderId: renderSeq++ as RenderId,
             commitId: commit as CommitId,
             timestamp: t,
           }),
@@ -214,9 +214,24 @@ describe("createApplySetCursor — commits whose renders span time", () => {
       batch({
         instances: [instance(1, "A"), instance(2, "B")],
         events: [
-          renderEvent({ componentId: cid(1), renderId: rid(10), commitId: 1 as CommitId, timestamp: 100 }),
-          renderEvent({ componentId: cid(2), renderId: rid(11), commitId: 1 as CommitId, timestamp: 150 }),
-          renderEvent({ componentId: cid(1), renderId: rid(12), commitId: 1 as CommitId, timestamp: 200 }),
+          renderEvent({
+            componentId: cid(1),
+            renderId: rid(10),
+            commitId: 1 as CommitId,
+            timestamp: 100,
+          }),
+          renderEvent({
+            componentId: cid(2),
+            renderId: rid(11),
+            commitId: 1 as CommitId,
+            timestamp: 150,
+          }),
+          renderEvent({
+            componentId: cid(1),
+            renderId: rid(12),
+            commitId: 1 as CommitId,
+            timestamp: 200,
+          }),
         ],
       }),
     );

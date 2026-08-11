@@ -3,6 +3,10 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
+  "scripts": {
+    "build": "vp build && vp build --config vite.injected.config.ts",
+    "typecheck": "tsc --noEmit"
+  },
   "dependencies": {
     "@reactlens/causality": "workspace:*",
     "@reactlens/devtools": "workspace:*",
@@ -15,13 +19,10 @@
     "react-dom": "^19"
   },
   "devDependencies": {
-    "@crxjs/vite-plugin": "2.0.0-beta.33",
+    "@crxjs/vite-plugin": "^2.7.1",
     "@types/chrome": "^0.0.287",
-    "@vitejs/plugin-react": "^4.3.4",
-    "vite": "^6.0.7"
-  },
-  "scripts": {
-    "build": "vite build && vite build --config vite.injected.config.ts",
-    "typecheck": "tsc --noEmit"
+    "@vitejs/plugin-react": "^5.2.0",
+    "vite": "catalog:",
+    "vite-plus": "catalog:"
   }
 }

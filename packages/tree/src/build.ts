@@ -1,5 +1,11 @@
 import type { ComponentId } from "@reactlens/protocol";
-import type { ComponentDatum, SemanticNode, ComponentNode, GroupNode, BuildOptions } from "./types.js";
+import type {
+  ComponentDatum,
+  SemanticNode,
+  ComponentNode,
+  GroupNode,
+  BuildOptions,
+} from "./types.js";
 
 const DEFAULT_GROUP_THRESHOLD = 3;
 
@@ -26,7 +32,10 @@ export function buildTree(data: ComponentDatum[], opts: BuildOptions = {}): Sema
 
   const keep = opts.include ? computeKeepSet(data, byId, opts.include) : null;
 
-  const buildChildren = (parentKey: ComponentId | "root", parentNodeKey: string): SemanticNode[] => {
+  const buildChildren = (
+    parentKey: ComponentId | "root",
+    parentNodeKey: string,
+  ): SemanticNode[] => {
     const ids = (childIds.get(parentKey) ?? []).filter((id) => !keep || keep.has(id));
     const componentNodes: ComponentNode[] = ids.map((id) => {
       const datum = byId.get(id)!;

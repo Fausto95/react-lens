@@ -80,7 +80,10 @@ export function buildInteractions(
 
   for (const r of renders) {
     // 1. Explicitly attributed to an interaction.
-    const tagged = r.interactionId != null ? byInteractionId.get(r.interactionId as unknown as number) : undefined;
+    const tagged =
+      r.interactionId != null
+        ? byInteractionId.get(r.interactionId as unknown as number)
+        : undefined;
     if (tagged) {
       pushRender(tagged, r);
       continue;

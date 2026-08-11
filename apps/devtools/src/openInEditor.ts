@@ -47,9 +47,7 @@ export function setPreferredEditor(editor: EditorId): void {
   }
 }
 
-export type EditorOpenPlan =
-  | { kind: "dev-server"; url: string }
-  | { kind: "scheme"; url: string };
+export type EditorOpenPlan = { kind: "dev-server"; url: string } | { kind: "scheme"; url: string };
 
 /** Roots that mark a path as a real filesystem location, not server-relative. */
 const OS_ABSOLUTE = /^(\/(Users|home|var|opt|srv|mnt|tmp|private|Volumes)\/|\/?[A-Za-z]:[\\/])/;

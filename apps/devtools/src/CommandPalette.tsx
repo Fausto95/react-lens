@@ -93,7 +93,9 @@ export function CommandPalette({
     return out;
   }, [q, commands, store]);
 
-  const selectable = flat.filter((i): i is Exclude<Item, { kind: "header" }> => i.kind !== "header");
+  const selectable = flat.filter(
+    (i): i is Exclude<Item, { kind: "header" }> => i.kind !== "header",
+  );
   const clampedActive = Math.min(active, Math.max(0, selectable.length - 1));
   const activeKey = selectable[clampedActive]?.key;
 
@@ -101,9 +103,7 @@ export function CommandPalette({
   const listRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (!activeKey) return;
-    listRef.current
-      ?.querySelector(".rl-cmdk-item.active")
-      ?.scrollIntoView({ block: "nearest" });
+    listRef.current?.querySelector(".rl-cmdk-item.active")?.scrollIntoView({ block: "nearest" });
   }, [activeKey]);
 
   const choose = (item: Item | undefined) => {

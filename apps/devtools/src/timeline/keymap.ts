@@ -34,8 +34,18 @@ interface Binding {
 }
 
 const BINDINGS: Binding[] = [
-  { keys: ["["], codes: ["BracketLeft"], allowAlt: true, action: { kind: "step-interaction", dir: -1 } },
-  { keys: ["]"], codes: ["BracketRight"], allowAlt: true, action: { kind: "step-interaction", dir: 1 } },
+  {
+    keys: ["["],
+    codes: ["BracketLeft"],
+    allowAlt: true,
+    action: { kind: "step-interaction", dir: -1 },
+  },
+  {
+    keys: ["]"],
+    codes: ["BracketRight"],
+    allowAlt: true,
+    action: { kind: "step-interaction", dir: 1 },
+  },
   { keys: ["t", "T"], action: { kind: "toggle-collapse" } },
   { keys: ["Escape"], action: { kind: "escape-band" } },
   { keys: ["l", "L"], action: { kind: "go-live" } },

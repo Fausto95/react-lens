@@ -28,7 +28,11 @@ export type ProviderTranscript =
   | { kind: "openai"; messages: OpenAiMessage[] }
   | { kind: "anthropic"; system: string; messages: AnthropicMessage[] };
 
-export function startTranscript(system: string, question: string, settings: AgentSettings): ProviderTranscript {
+export function startTranscript(
+  system: string,
+  question: string,
+  settings: AgentSettings,
+): ProviderTranscript {
   if (usesAnthropicApi(settings.provider)) {
     return {
       kind: "anthropic",
@@ -304,7 +308,9 @@ async function openAiStream(
   if (!isEventStream(res)) {
     // Gateway ignored stream:true — parse the buffered completion instead.
     const data = (await res.json()) as {
-      choices?: Array<{ message: { content?: string | null; tool_calls?: OpenAiMessage["tool_calls"] } }>;
+      choices?: Array<{
+        message: { content?: string | null; tool_calls?: OpenAiMessage["tool_calls"] };
+      }>;
     };
     const message = data.choices?.[0]?.message;
     if (!message) throw new Error("Empty model response");
@@ -328,7 +334,11 @@ async function openAiStream(
       choices?: Array<{
         delta?: {
           content?: string | null;
-          tool_calls?: Array<{ index: number; id?: string; function?: { name?: string; arguments?: string } }>;
+          tool_calls?: Array<{
+            index: number;
+            id?: string;
+            function?: { name?: string; arguments?: string };
+          }>;
         };
       }>;
     };
@@ -354,7 +364,11 @@ async function openAiStream(
 
   const rawToolCalls = [...partials.entries()]
     .sort(([a], [b]) => a - b)
-    .map(([, p]) => ({ id: p.id, type: "function" as const, function: { name: p.name, arguments: p.args } }));
+    .map(([, p]) => ({
+      id: p.id,
+      type: "function" as const,
+      function: { name: p.name, arguments: p.args },
+    }));
   return {
     text: text || null,
     toolCalls: parseOpenAiTools(rawToolCalls),
@@ -401,7 +415,10 @@ async function anthropicStream(
   }
 
   // Reassemble content blocks by index from the event stream.
-  const blocks = new Map<number, { type: "text"; text: string } | { type: "tool_use"; id: string; name: string; json: string }>();
+  const blocks = new Map<
+    number,
+    { type: "text"; text: string } | { type: "tool_use"; id: string; name: string; json: string }
+  >();
   for await (const data of sseData(res)) {
     let event: {
       type?: string;
@@ -429,7 +446,11 @@ async function anthropicStream(
         block.text += event.delta.text;
         onDelta(event.delta.text);
       }
-      if (block.type === "tool_use" && event.delta.type === "input_json_delta" && event.delta.partial_json) {
+      if (
+        block.type === "tool_use" &&
+        event.delta.type === "input_json_delta" &&
+        event.delta.partial_json
+      ) {
         block.json += event.delta.partial_json;
       }
     } else if (event.type === "message_stop") {

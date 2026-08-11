@@ -15,6 +15,7 @@ These are the forces that dictate the shape. Everything below is downstream of
 them.
 
 ### 1.1 The observer must not perturb the observed
+
 The injected runtime executes in the **page's** JS context at high event
 frequency under a strict overhead budget (idle ≈ 0, recording < 5% CPU,
 bounded memory, never active in production unless explicitly enabled). This is
@@ -23,19 +24,23 @@ only**. Everything expensive — diff, causality, ranking, layout, static
 analysis — runs off the page (in the panel's worker).
 
 ### 1.2 One-way layering
+
 `page runtime → protocol → devtools store → workers → UI`. Inner layers never
 import outer ones. `protocol` depends on nothing and is the seam.
 
 ### 1.3 Single source of truth
+
 The normalized **event log** is the only authoritative state. Render history,
-"why did this render", diffs, and the health score are all *derived* from it —
+"why did this render", diffs, and the health score are all _derived_ from it —
 never mirrored, never written by the UI.
 
 ### 1.4 React Compiler is on
-A component may re-render because the Compiler *could not* memoize it (e.g.
+
+A component may re-render because the Compiler _could not_ memoize it (e.g.
 unsupported mutation), not because of a developer mistake. Compiler status is a
 **first-class input to the causality engine**, captured per component and
 surfaced as evidence. Consequences:
+
 - We never recommend adding `useMemo`/`useCallback`/`memo`. When a render is
   "suspicious", the explanation references compiler bailout reasons, not manual
   memoization.
@@ -82,6 +87,7 @@ packages/
 ```
 
 ### The two-half split
+
 - **Page half** (`fiber`, `serializer`, `instrumentation`): runs inside the
   inspected page. Size- and speed-critical. No React. No heavy logic.
 - **Analysis half** (`trace-engine`, `diff-engine`, `causality`,
@@ -90,6 +96,7 @@ packages/
 - `protocol` bridges the halves.
 
 ### `diff-engine` is one engine
+
 Not per-domain diff implementations. It takes two `DiffTarget` snapshots and a
 **strategy table keyed by target kind** (declarative dispatch, no `switch`
 ladder). Props/state/context/hooks/DOM all reduce to one `DiffResult`. It is
@@ -111,6 +118,7 @@ devtools page → devtools panel (the app + worker + trace-engine)
 ```
 
 Decisions:
+
 - **Background worker holds no trace state.** MV3 terminates it; it is a dumb,
   reconnect-tolerant relay keyed by `tabId`. Authoritative state lives in the
   panel's `trace-engine`.
@@ -133,13 +141,21 @@ interface BaseEvent {
   timestamp: number;
   componentId?: ComponentId;
   interactionId?: InteractionId;
-  causedBy?: EventId[];   // reconstructed by `causality`, NOT captured
+  causedBy?: EventId[]; // reconstructed by `causality`, NOT captured
 }
 
 type LensEvent =
-  | InteractionEvent | RenderEvent | StateChangeEvent | PropsChangeEvent
-  | ContextChangeEvent | EffectEvent | NetworkEvent | QueryEvent
-  | LayoutEvent | PaintEvent | DiagnosticEvent;
+  | InteractionEvent
+  | RenderEvent
+  | StateChangeEvent
+  | PropsChangeEvent
+  | ContextChangeEvent
+  | EffectEvent
+  | NetworkEvent
+  | QueryEvent
+  | LayoutEvent
+  | PaintEvent
+  | DiagnosticEvent;
 ```
 
 **Capture and inference are separated.** The page runtime captures raw events;
@@ -157,13 +173,14 @@ live fiber back-references; serialized snapshots for history.
 ## 6. Diff engine v1 — Value + DOM
 
 Scope for v1 (confirmed):
+
 - **Semantic value diff**: props/state/context/hooks. Classifies each change as
   `VALUE_CHANGED | REFERENCE_ONLY_CHANGED | FUNCTION_IDENTITY_CHANGED | ADDED |
-  REMOVED | STRUCTURE_CHANGED | UNCHANGED`. This is what powers "why did this
+REMOVED | STRUCTURE_CHANGED | UNCHANGED`. This is what powers "why did this
   render" and the render diff — e.g. "onClick reference changed, everything else
   structurally equal".
 - **DOM snapshot diff**: compare DOM output between renders so we can make the
-  strong claim *"this render produced no DOM change"* — the evidence behind
+  strong claim _"this render produced no DOM change"_ — the evidence behind
   "suspicious render". Surfaces semantic node/attr/text changes, not raw HTML
   noise.
 
@@ -186,6 +203,7 @@ official React DevTools is also installed, and we control the commit-timing and
 compiler-metadata extraction we depend on.
 
 Consequences for scaffolding:
+
 - The extension must inject `fiber`'s hook at `document_start`, before page
   scripts, via a `world: "MAIN"` content script (or an injected `<script>` from
   the content script) so it wins the hook slot.
@@ -206,7 +224,7 @@ or language server.
 
 - `diagnostics` rules are **pure**: `(ast, runtimeEvidence) → Diagnostic[]`.
   They take runtime evidence as input so a finding like "inline context value"
-  can be reported *with* its measured downstream render cost — the static +
+  can be reported _with_ its measured downstream render cost — the static +
   runtime combination that is the real differentiator.
 - Rules are a declarative registry (id, matcher, evidence requirements,
   severity, explanation, suggested-alternative), not a hand-rolled chain.
@@ -218,9 +236,10 @@ or language server.
 ## 9. Panel state architecture
 
 Three separated stores, never merged:
+
 - **UI state** → Zustand. Narrow `Object.is`-stable selectors. No manual
   memoization (Compiler assumed). One render path per component.
-- **Trace store** → plain normalized log, *outside React*, updated by batched
+- **Trace store** → plain normalized log, _outside React_, updated by batched
   appends. Components subscribe to narrow slices. High-frequency events never go
   through `setState`.
 - **Derived analysis** → computed in the worker, cached by input hash.
@@ -236,7 +255,7 @@ Sequenced by provable seam; each slice is independently demoable and, where
 pure, test-first (red before green, tests in a separate commit).
 
 1. **Protocol + serializer + transport** — page→panel round-trip "ping".
-   Establishes the overhead-budget benchmark harness *before* load is added.
+   Establishes the overhead-budget benchmark harness _before_ load is added.
 2. **`fiber` (owned hook) resolution** — DOM → Fiber → Component. Deliverable:
    click element → component identity.
 3. **First vertical slice** — hover → inspector → source + render count. The
@@ -257,9 +276,9 @@ DevTools semantics), not a re-enactment. Three decisions make it sound:
 1. **Raw values never leave the page.** `SerializedValue` is lossy by design
    and has no inverse. Instead, the page-side instrumentation keeps bounded
    per-component rings (`componentId → renderId → raw state/reducer hook
-   values + class state`, `TIME_TRAVEL_RETENTION` mirrors the panel's render
+values + class state`, `TIME_TRAVEL_RETENTION` mirrors the panel's render
    ring so both sides evict together; references not clones, dev builds
-   only). The panel computes only *which* `(componentId, renderId)` pairs
+   only). The panel computes only _which_ `(componentId, renderId)` pairs
    constitute time t — `applySetAt(store, t)` over `renderAtOrBefore` — and
    sends that apply set plus the cursor time; the page looks up raw values
    and writes them back via the renderer's dev-only `overrideHookState`
@@ -271,7 +290,7 @@ DevTools semantics), not a re-enactment. Three decisions make it sound:
 
 2. **Recording pauses while traveling** (suppressed at the instrumentation
    source, not tag-and-filtered). The restore flush commits through the same
-   reconciler the bridge observes, in a microtask *after* the apply loop — a
+   reconciler the bridge observes, in a microtask _after_ the apply loop — a
    per-call flag can't mark it. A mode flag can: while active, no commit or
    effect events are emitted, so the timeline stays frozen and there is no
    feedback loop. Go-live restores per-component live baselines captured on
@@ -294,13 +313,13 @@ playground's `ExternalStoreDemo` is the reference.
 
 **Explicitly out of scope** (deliberate, not deferred):
 
-- *Generic `useSyncExternalStore` rewind* — see above; the adapter seam is
+- _Generic `useSyncExternalStore` rewind_ — see above; the adapter seam is
   the supported path.
-- *Props overrides* — props derive from parent state; rewinding the parent
+- _Props overrides_ — props derive from parent state; rewinding the parent
   already covers them, and a second writer would fight the reconciler.
-- *Mount/unmount topology patches* — components mounted after t stay mounted
+- _Mount/unmount topology patches_ — components mounted after t stay mounted
   (the tree dims them); unmounted ones cannot come back (ROADMAP: deferred).
-- *Uncontrolled inputs* — writing `.value` fights focus/selection; the
+- _Uncontrolled inputs_ — writing `.value` fights focus/selection; the
   offline commit DOM snapshots show their values instead.
 
 Known limits (documented in the toggle tooltip): only `useState`/`useReducer`/

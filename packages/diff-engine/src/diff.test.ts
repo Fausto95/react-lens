@@ -1,10 +1,14 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect } from "vite-plus/test";
 import { diff } from "./diff.js";
 import type { SerializedValue, DOMSnapshot } from "@reactlens/protocol";
 
 const prim = (value: number): SerializedValue => ({ k: "primitive", type: "number", value });
 const str = (value: string): SerializedValue => ({ k: "primitive", type: "string", value });
-const fn = (identity: string, name?: string): SerializedValue => ({ k: "function", identity, name });
+const fn = (identity: string, name?: string): SerializedValue => ({
+  k: "function",
+  identity,
+  name,
+});
 const obj = (identity: string, entries: Array<[string, SerializedValue]>): SerializedValue => ({
   k: "object",
   identity,

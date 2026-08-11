@@ -1,4 +1,4 @@
-import type { ComponentId, RenderId, SourceLocation, HookKind } from "@reactlens/protocol";
+import type { ComponentId, RenderId, SourceLocation } from "@reactlens/protocol";
 import type { ValueSummary } from "./summarize.js";
 import type { LensRef, Narrative } from "@reactlens/explain";
 import type { Diagnostic } from "@reactlens/diagnostics";
@@ -96,7 +96,7 @@ export interface QueryTraceResult {
 
 export interface HooksDiffRow {
   index: number;
-  hookKind: HookKind | string;
+  hookKind: string;
   valueChanged: boolean;
   depsChanged: boolean;
 }
@@ -258,7 +258,10 @@ export type AgentEvent =
   | { type: "error"; message: string };
 
 export interface AgentSession {
-  send(question: string, opts?: { signal?: AbortSignal; onEvent?: (e: AgentEvent) => void }): Promise<AgentAnswer>;
+  send(
+    question: string,
+    opts?: { signal?: AbortSignal; onEvent?: (e: AgentEvent) => void },
+  ): Promise<AgentAnswer>;
   readonly messages: ChatMessage[];
 }
 

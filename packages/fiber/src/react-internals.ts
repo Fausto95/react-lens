@@ -156,15 +156,35 @@ export function findCurrentFiber(fiber: Fiber): Fiber {
       let found = false;
       let child = parentA.child;
       while (child) {
-        if (child === a) { a = parentA; b = parentB; found = true; break; }
-        if (child === b) { b = parentA; a = parentB; found = true; break; }
+        if (child === a) {
+          a = parentA;
+          b = parentB;
+          found = true;
+          break;
+        }
+        if (child === b) {
+          b = parentA;
+          a = parentB;
+          found = true;
+          break;
+        }
         child = child.sibling;
       }
       if (!found) {
         child = parentB.child;
         while (child) {
-          if (child === a) { a = parentB; b = parentA; found = true; break; }
-          if (child === b) { b = parentB; a = parentA; found = true; break; }
+          if (child === a) {
+            a = parentB;
+            b = parentA;
+            found = true;
+            break;
+          }
+          if (child === b) {
+            b = parentB;
+            a = parentA;
+            found = true;
+            break;
+          }
           child = child.sibling;
         }
         if (!found) return fiber;
@@ -197,13 +217,12 @@ export function displayNameOf(fiber: Fiber): string {
     return fn.displayName || fn.name || "Anonymous";
   }
   if (type && typeof type === "object") {
-    const obj = type as { displayName?: string; render?: { name?: string }; type?: { name?: string } };
-    return (
-      obj.displayName ||
-      obj.render?.name ||
-      obj.type?.name ||
-      "Anonymous"
-    );
+    const obj = type as {
+      displayName?: string;
+      render?: { name?: string };
+      type?: { name?: string };
+    };
+    return obj.displayName || obj.render?.name || obj.type?.name || "Anonymous";
   }
   return "Unknown";
 }

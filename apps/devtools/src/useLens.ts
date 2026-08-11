@@ -14,7 +14,6 @@ export function useTraceVersion(store: TraceStore, selector: TraceSelector): num
     const dispose = store.subscribe(selector, bump);
     return dispose;
     // Re-subscribe only when the target changes.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [store, selector.kind, selectorKey]);
 
   return version;

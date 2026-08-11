@@ -41,14 +41,14 @@ test("dock and splitter widths survive a reload", async ({ page }) => {
   await page.reload();
   await expect(page.locator(".rl-root")).toBeVisible();
 
-  const reloadedWidth = await page.locator(".rl-root.rl-embedded").evaluate((el) =>
-    el.getBoundingClientRect().width,
-  );
+  const reloadedWidth = await page
+    .locator(".rl-root.rl-embedded")
+    .evaluate((el) => el.getBoundingClientRect().width);
   expect(Math.abs(reloadedWidth - afterWidth)).toBeLessThan(3);
 
-  const reloadedSplit = await page.locator(".rl-body").evaluate((el) =>
-    getComputedStyle(el).gridTemplateColumns,
-  );
+  const reloadedSplit = await page
+    .locator(".rl-body")
+    .evaluate((el) => getComputedStyle(el).gridTemplateColumns);
   // First column (tree %) should match the dragged split.
   const col = (s: string) => Number.parseFloat(s.split(" ")[0] ?? "0");
   expect(Math.abs(col(reloadedSplit) - col(afterSplit))).toBeLessThan(2);

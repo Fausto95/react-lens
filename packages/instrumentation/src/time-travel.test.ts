@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect } from "vite-plus/test";
 import { createFiberBridge } from "@reactlens/fiber";
 import { createSerializer } from "@reactlens/serializer";
 import { createInstrumentation } from "./instrumentation.js";
@@ -17,14 +17,23 @@ type Frame = EventsBatchMessage["payload"];
 const flush = () => new Promise((r) => setTimeout(r, 0));
 
 /** Renders of a named component, oldest→newest, from collected frames. */
-function rendersOf(frames: Frame[], name: string): Array<{ componentId: ComponentId; renderId: RenderId }> {
+function rendersOf(
+  frames: Frame[],
+  name: string,
+): Array<{ componentId: ComponentId; renderId: RenderId }> {
   const ids = new Set(
-    frames.flatMap((f) => f.instances).filter((i) => i.name === name).map((i) => i.id),
+    frames
+      .flatMap((f) => f.instances)
+      .filter((i) => i.name === name)
+      .map((i) => i.id),
   );
   return frames
     .flatMap((f) => f.events)
     .filter((e) => e.type === "render" && ids.has(e.componentId))
-    .map((e) => ({ componentId: e.componentId!, renderId: (e as { renderId: RenderId }).renderId }));
+    .map((e) => ({
+      componentId: e.componentId!,
+      renderId: (e as { renderId: RenderId }).renderId,
+    }));
 }
 
 // react-dom reads __REACT_DEVTOOLS_GLOBAL_HOOK__ once at module-init, so the

@@ -34,5 +34,9 @@ export function BigList() {
 }
 
 function Row({ label }: { label: string }) {
-  return <div style={{ padding: "3px 8px", fontSize: 12, borderBottom: "1px solid #f2f3f5" }}>{label}</div>;
+  return (
+    <div style={{ padding: "3px 8px", fontSize: 12, borderBottom: "1px solid #f2f3f5" }}>
+      {label}
+    </div>
+  );
 }

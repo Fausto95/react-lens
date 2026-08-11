@@ -44,7 +44,7 @@ interface EffectState {
 const REACT_MEMO_CACHE_SENTINEL = Symbol.for("react.memo_cache_sentinel");
 
 /** Class components keep state on the instance, not a hook list. */
-export function inspectClassState(fiber: Fiber): unknown | undefined {
+export function inspectClassState(fiber: Fiber): unknown {
   if (fiber.tag !== ClassComponent) return undefined;
   const instance = fiber.stateNode as { state?: unknown } | null;
   return instance?.state;

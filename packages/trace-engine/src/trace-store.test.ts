@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi } from "vite-plus/test";
 import { TraceStore } from "./trace-store.js";
 import { RingBuffer } from "./ring-buffer.js";
 import type {
@@ -16,15 +16,15 @@ import type {
 let eventSeq = 0;
 function renderEvent(over: Partial<RenderEvent> = {}): RenderEvent {
   return {
-    id: (++eventSeq) as EventId,
+    id: ++eventSeq as EventId,
     type: "render",
     timestamp: eventSeq,
-    renderId: (eventSeq) as RenderId,
-    commitId: (1) as CommitId,
-    componentId: (1) as ComponentId,
+    renderId: eventSeq as RenderId,
+    commitId: 1 as CommitId,
+    componentId: 1 as ComponentId,
     selfDuration: 1,
     totalDuration: 1,
-    reasons: [{ type: "parent", componentId: (2) as ComponentId }],
+    reasons: [{ type: "parent", componentId: 2 as ComponentId }],
     compiler: { compiled: true, memoized: true },
     ...over,
   };
@@ -187,7 +187,12 @@ describe("TraceStore — subscriptions", () => {
     store.ingest(
       batch({
         snapshots: [
-          { renderId: 99 as RenderId, componentId: 7 as ComponentId, timestamp: 1, props: { k: "undefined" } },
+          {
+            renderId: 99 as RenderId,
+            componentId: 7 as ComponentId,
+            timestamp: 1,
+            props: { k: "undefined" },
+          },
         ],
       }),
     );
@@ -204,7 +209,12 @@ describe("TraceStore — subscriptions", () => {
 
   it("clear() empties the store and notifies subscribers", () => {
     const store = new TraceStore();
-    store.ingest(batch({ events: [renderEvent({ componentId: 1 as ComponentId })], instances: [instance(1, "A")] }));
+    store.ingest(
+      batch({
+        events: [renderEvent({ componentId: 1 as ComponentId })],
+        instances: [instance(1, "A")],
+      }),
+    );
     const cb = vi.fn();
     store.subscribe({ kind: "global" }, cb);
     store.clear();
@@ -292,7 +302,10 @@ describe("TraceStore — ingest tee (Doctor worker feed)", () => {
     const source = new TraceStore();
     source.ingest(
       batch({
-        events: [renderEvent({ componentId: 1 as ComponentId }), renderEvent({ componentId: 2 as ComponentId })],
+        events: [
+          renderEvent({ componentId: 1 as ComponentId }),
+          renderEvent({ componentId: 2 as ComponentId }),
+        ],
         instances: [instance(1, "A"), instance(2, "B")],
       }),
     );

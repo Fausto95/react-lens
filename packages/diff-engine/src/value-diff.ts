@@ -58,7 +58,9 @@ export function compareValue(
     }
     case "function":
       // identities already known unequal here
-      return [{ path, kind: "FUNCTION_IDENTITY_CHANGED", before, after, confidence: FN_CONFIDENCE }];
+      return [
+        { path, kind: "FUNCTION_IDENTITY_CHANGED", before, after, confidence: FN_CONFIDENCE },
+      ];
     case "symbol":
     case "dom":
     case "react-element":
@@ -138,9 +140,7 @@ function compareEntries(
   }
 
   const structurallyChanged = childChanges.some((c) => c.kind !== "UNCHANGED");
-  const topKind: ChangeKind = structurallyChanged
-    ? "STRUCTURE_CHANGED"
-    : "REFERENCE_ONLY_CHANGED";
+  const topKind: ChangeKind = structurallyChanged ? "STRUCTURE_CHANGED" : "REFERENCE_ONLY_CHANGED";
 
   return [
     { path, kind: topKind, before: beforeVal, after: afterVal, confidence: 1 },

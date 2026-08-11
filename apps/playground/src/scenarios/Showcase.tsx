@@ -67,8 +67,12 @@ function HooksShowcase() {
       <div style={{ color: "#5f6878", fontSize: 13, margin: "6px 0" }}>
         count {count} · doubled {doubled} · items {items.length} · renders {renders.current}
       </div>
-      <button style={btn} onClick={() => setCount((c) => c + 1)}>count +1</button>{" "}
-      <button style={btn} onClick={() => dispatch({ type: "add" })}>add item</button>
+      <button style={btn} onClick={() => setCount((c) => c + 1)}>
+        count +1
+      </button>{" "}
+      <button style={btn} onClick={() => dispatch({ type: "add" })}>
+        add item
+      </button>
     </div>
   );
 }

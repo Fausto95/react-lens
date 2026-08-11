@@ -93,7 +93,10 @@ export function formatEvidencePack(pack: EvidencePack): string {
     ...pack.interactions
       .slice()
       .reverse()
-      .map((i) => `  [interaction:${i.id}] ${i.label} (${i.kind}) — ${i.durationMs}ms, ${i.renderCount} renders`),
+      .map(
+        (i) =>
+          `  [interaction:${i.id}] ${i.label} (${i.kind}) — ${i.durationMs}ms, ${i.renderCount} renders`,
+      ),
     "top components by self time:",
     ...pack.topComponents.map(
       (c) =>

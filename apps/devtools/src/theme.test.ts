@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, afterEach } from "vitest";
+import { describe, it, expect, vi, afterEach } from "vite-plus/test";
 import { resolveTheme, applyThemePref } from "./theme.js";
 import { loadPanelPrefs, savePanelPrefs } from "./panelPrefs.js";
 
@@ -49,10 +49,7 @@ describe("panel prefs — theme", () => {
   it("persists the theme pref and rejects junk", () => {
     savePanelPrefs({ theme: "light" });
     expect(loadPanelPrefs().theme).toBe("light");
-    localStorage.setItem(
-      "react-lens/panel-prefs",
-      JSON.stringify({ theme: "hotdog" }),
-    );
+    localStorage.setItem("react-lens/panel-prefs", JSON.stringify({ theme: "hotdog" }));
     expect(loadPanelPrefs().theme).toBe("dark");
   });
 });

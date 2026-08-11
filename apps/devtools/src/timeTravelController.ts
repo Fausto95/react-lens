@@ -71,7 +71,12 @@ export function createPanelTimeTravel(
     onStatus?.({ atT, applied: restoredIds.size, failedIds: new Map(failedIds) });
   }
 
-  function ingestResult(gen: number, t: number, delta: TimeTravelEntry[], result: TimeTravelResult): void {
+  function ingestResult(
+    gen: number,
+    t: number,
+    delta: TimeTravelEntry[],
+    result: TimeTravelResult,
+  ): void {
     if (gen <= lastProcessed) return; // stale — a newer apply already reported
     lastProcessed = gen;
     const failedNow = new Map(result.failures.map((f) => [f.componentId, f.reason] as const));

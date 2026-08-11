@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect } from "vite-plus/test";
 import { buildInteractions } from "./interactions.js";
 import type {
   LensEvent,
@@ -59,7 +59,12 @@ describe("buildInteractions", () => {
   it("labels an interaction from its target and attributes tagged renders", () => {
     const iid = 100 as InteractionId;
     const events: LensEvent[] = [
-      interaction({ timestamp: 10, interactionId: iid, kind: "click", target: { selector: ".card", componentId: 42 as ComponentId } }),
+      interaction({
+        timestamp: 10,
+        interactionId: iid,
+        kind: "click",
+        target: { selector: ".card", componentId: 42 as ComponentId },
+      }),
       render({ timestamp: 11, interactionId: iid, reasons: [{ type: "state", hookIndex: 0 }] }),
       render({ timestamp: 12, interactionId: iid }),
     ];

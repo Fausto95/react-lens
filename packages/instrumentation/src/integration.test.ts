@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach } from "vite-plus/test";
 import { createFiberBridge, type FiberBridge } from "@reactlens/fiber";
 import { createSerializer } from "@reactlens/serializer";
 import { createInstrumentation } from "./instrumentation.js";
@@ -125,7 +125,11 @@ describe("instrumentation + fiber against real React 19", () => {
       const ref = React.useRef(3);
       const doubled = React.useMemo(() => count * 2, [count]);
       const theme = React.useContext(Theme);
-      return React.createElement("div", { className: "widget" }, `${theme}:${count}:${doubled}:${ref.current}`);
+      return React.createElement(
+        "div",
+        { className: "widget" },
+        `${theme}:${count}:${doubled}:${ref.current}`,
+      );
     }
     function Root() {
       return React.createElement(Theme.Provider, { value: "dark" }, React.createElement(Widget));
@@ -138,9 +142,7 @@ describe("instrumentation + fiber against real React 19", () => {
     await flush();
 
     // Find the latest Widget snapshot.
-    const widgetId = frames
-      .flatMap((f) => f.instances)
-      .find((i) => i.name === "Widget")?.id;
+    const widgetId = frames.flatMap((f) => f.instances).find((i) => i.name === "Widget")?.id;
     expect(widgetId).toBeDefined();
     const snap = frames
       .flatMap((f) => f.snapshots)
@@ -227,7 +229,12 @@ describe("instrumentation + fiber against real React 19", () => {
       return React.createElement("span", { className: "b" }, "static");
     }
     function Root() {
-      return React.createElement("div", null, React.createElement(WidgetA), React.createElement(WidgetB));
+      return React.createElement(
+        "div",
+        null,
+        React.createElement(WidgetA),
+        React.createElement(WidgetB),
+      );
     }
 
     const root = createRoot(document.getElementById("root")!);

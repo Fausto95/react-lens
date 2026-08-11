@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, afterEach } from "vitest";
+import { describe, it, expect, vi, afterEach } from "vite-plus/test";
 import { startReplayTicker, FRAME_DELTA_CAP_MS } from "./replayTicker.js";
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));

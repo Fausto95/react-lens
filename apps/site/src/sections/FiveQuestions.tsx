@@ -9,11 +9,12 @@ const QUESTIONS = [
 export function FiveQuestions() {
   return (
     <section id="questions">
-      <div className="sec-kicker"><span className="dot" /> Five questions, fast</div>
+      <div className="sec-kicker">
+        <span className="dot" /> Five questions, fast
+      </div>
       <h2>Answers, not just timings.</h2>
       <p className="sec-lead">
-        The questions you actually ask while debugging — each backed by the event log,
-        not a guess.
+        The questions you actually ask while debugging — each backed by the event log, not a guess.
       </p>
       <div className="questions">
         {QUESTIONS.map((q, i) => (

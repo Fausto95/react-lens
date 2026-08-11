@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect } from "vite-plus/test";
 import { analyze, analyzeOne } from "./rules.js";
 import type { DiagnosticInput } from "./types.js";
 import type { ComponentId } from "@reactlens/protocol";

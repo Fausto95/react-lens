@@ -27,9 +27,13 @@ function Heavy({ iterations, label }: { iterations: number; label: string }) {
   let acc = 0;
   for (let i = 0; i < iterations; i++) acc += Math.sqrt(i) % 7;
   return (
-    <div style={{ padding: 12, borderRadius: 8, background: "#fff3f0", border: "1px solid #f6d0c6" }}>
+    <div
+      style={{ padding: 12, borderRadius: 8, background: "#fff3f0", border: "1px solid #f6d0c6" }}
+    >
       <strong>{label}</strong>
-      <div style={{ color: "#5f6878", fontSize: 12 }}>{iterations.toLocaleString()} ops → {acc.toFixed(1)}</div>
+      <div style={{ color: "#5f6878", fontSize: 12 }}>
+        {iterations.toLocaleString()} ops → {acc.toFixed(1)}
+      </div>
     </div>
   );
 }

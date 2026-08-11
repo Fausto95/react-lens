@@ -10,13 +10,12 @@ export class RingBuffer<T> {
 
   constructor(readonly capacity: number) {
     if (capacity <= 0) throw new Error("RingBuffer capacity must be > 0");
-    this.items = new Array<T | undefined>(capacity);
+    this.items = Array.from({ length: capacity });
   }
 
   /** Returns the overwritten oldest item when the buffer was already full. */
   push(item: T): T | undefined {
-    const evicted =
-      this.count === this.capacity ? (this.items[this.head] as T) : undefined;
+    const evicted = this.count === this.capacity ? (this.items[this.head] as T) : undefined;
     this.items[this.head] = item;
     this.head = (this.head + 1) % this.capacity;
     if (this.count < this.capacity) this.count++;

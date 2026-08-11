@@ -23,7 +23,7 @@ function createCartStore(initial: CartState) {
       state = next;
       for (const l of listeners) l();
     },
-    subscribe(l: () => void) {
+    subscribe: (l: () => void) => {
       listeners.add(l);
       return () => listeners.delete(l);
     },

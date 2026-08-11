@@ -23,18 +23,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: pnpm/action-setup@v4
-
-      - uses: actions/setup-node@v4
+      - uses: voidzero-dev/setup-vp@v1.17.0
         with:
-          node-version: 20
-          cache: pnpm
+          node-version: "20"
+          cache: true
 
-      - run: pnpm install --frozen-lockfile
+      - run: vp install
 
-      - run: pnpm test
+      - run: vp check
 
-      - run: pnpm typecheck
+      - run: vp test run
 
   e2e:
     name: E2E (Playwright)
@@ -43,22 +41,20 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: pnpm/action-setup@v4
-
-      - uses: actions/setup-node@v4
+      - uses: voidzero-dev/setup-vp@v1.17.0
         with:
-          node-version: 20
-          cache: pnpm
+          node-version: "20"
+          cache: true
 
-      - run: pnpm install --frozen-lockfile
+      - run: vp install
 
       # Chromium only — matches the default Playwright project and keeps the
       # download small. --with-deps installs the OS libraries Ubuntu needs.
       - name: Install Playwright Chromium
-        run: pnpm exec playwright install --with-deps chromium
+        run: vp exec playwright install --with-deps chromium
 
       - name: Run e2e
-        run: pnpm test:e2e
+        run: vp run test:e2e
 
       - name: Upload Playwright report
         if: failure()

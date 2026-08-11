@@ -1,9 +1,34 @@
 {
   "name": "@reactlens/agent",
   "version": "0.0.0",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Fausto95/react-lens.git",
+    "directory": "packages/agent"
+  },
+  "files": [
+    "dist"
+  ],
   "type": "module",
+  "sideEffects": false,
   "exports": {
     ".": "./src/index.ts"
+  },
+  "publishConfig": {
+    "main": "./dist/index.js",
+    "types": "./dist/index.d.ts",
+    "exports": {
+      ".": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      }
+    },
+    "access": "public"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "build": "tsup src/index.ts --format esm --dts --sourcemap --clean --tsconfig tsconfig.build.json"
   },
   "dependencies": {
     "@reactlens/causality": "workspace:*",
@@ -14,31 +39,6 @@
     "@reactlens/protocol": "workspace:*",
     "@reactlens/source-maps": "workspace:*",
     "@reactlens/trace-engine": "workspace:*"
-  },
-  "scripts": {
-    "typecheck": "tsc --noEmit",
-    "build": "tsup src/index.ts --format esm --dts --sourcemap --clean --tsconfig tsconfig.build.json"
-  },
-  "license": "MIT",
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/Fausto95/react-lens.git",
-    "directory": "packages/agent"
-  },
-  "sideEffects": false,
-  "files": [
-    "dist"
-  ],
-  "publishConfig": {
-    "access": "public",
-    "main": "./dist/index.js",
-    "types": "./dist/index.d.ts",
-    "exports": {
-      ".": {
-        "types": "./dist/index.d.ts",
-        "default": "./dist/index.js"
-      }
-    }
   },
   "devDependencies": {
     "tsup": "^8.5.1"

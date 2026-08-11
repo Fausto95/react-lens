@@ -32,10 +32,18 @@ function connect(): void {
   port = p;
   p.onMessage.addListener((msg: PortMessage) => {
     if (msg.kind === "record") {
-      const toPage: ContentToPage = { source: CONTENT_SOURCE, kind: "record", recording: msg.recording };
+      const toPage: ContentToPage = {
+        source: CONTENT_SOURCE,
+        kind: "record",
+        recording: msg.recording,
+      };
       window.postMessage(toPage, "*");
     } else if (msg.kind === "snapshot-request") {
-      const toPage: ContentToPage = { source: CONTENT_SOURCE, kind: "snapshot-request", renderId: msg.renderId };
+      const toPage: ContentToPage = {
+        source: CONTENT_SOURCE,
+        kind: "snapshot-request",
+        renderId: msg.renderId,
+      };
       window.postMessage(toPage, "*");
     } else if (msg.kind === "source-request") {
       const toPage: ContentToPage = {
@@ -46,15 +54,29 @@ function connect(): void {
       };
       window.postMessage(toPage, "*");
     } else if (msg.kind === "highlight") {
-      const toPage: ContentToPage = { source: CONTENT_SOURCE, kind: "highlight", componentId: msg.componentId };
+      const toPage: ContentToPage = {
+        source: CONTENT_SOURCE,
+        kind: "highlight",
+        componentId: msg.componentId,
+      };
       window.postMessage(toPage, "*");
     } else if (msg.kind === "replay") {
-      const toPage: ContentToPage = { source: CONTENT_SOURCE, kind: "replay", componentIds: msg.componentIds };
+      const toPage: ContentToPage = {
+        source: CONTENT_SOURCE,
+        kind: "replay",
+        componentIds: msg.componentIds,
+      };
       window.postMessage(toPage, "*");
     } else if (msg.kind === "inspect-start") {
-      window.postMessage({ source: CONTENT_SOURCE, kind: "inspect-start" } satisfies ContentToPage, "*");
+      window.postMessage(
+        { source: CONTENT_SOURCE, kind: "inspect-start" } satisfies ContentToPage,
+        "*",
+      );
     } else if (msg.kind === "inspect-stop") {
-      window.postMessage({ source: CONTENT_SOURCE, kind: "inspect-stop" } satisfies ContentToPage, "*");
+      window.postMessage(
+        { source: CONTENT_SOURCE, kind: "inspect-stop" } satisfies ContentToPage,
+        "*",
+      );
     } else if (msg.kind === "edit-setProp") {
       window.postMessage(
         {
@@ -104,7 +126,11 @@ function connect(): void {
       );
     } else if (msg.kind === "time-travel-live") {
       window.postMessage(
-        { source: CONTENT_SOURCE, kind: "time-travel-live", requestId: msg.requestId } satisfies ContentToPage,
+        {
+          source: CONTENT_SOURCE,
+          kind: "time-travel-live",
+          requestId: msg.requestId,
+        } satisfies ContentToPage,
         "*",
       );
     } else if (msg.kind === "panel-ready") {
@@ -118,7 +144,11 @@ function connect(): void {
     // The panel may have closed mid-scrub — never leave the app stuck in the
     // past with recording suppressed.
     window.postMessage(
-      { source: CONTENT_SOURCE, kind: "time-travel-live", requestId: "auto-disconnect" } satisfies ContentToPage,
+      {
+        source: CONTENT_SOURCE,
+        kind: "time-travel-live",
+        requestId: "auto-disconnect",
+      } satisfies ContentToPage,
       "*",
     );
     scheduleReconnect();

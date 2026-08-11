@@ -1,38 +1,21 @@
 {
   "name": "@reactlens/ui",
   "version": "0.0.0",
-  "type": "module",
-  "exports": {
-    ".": "./src/index.tsx"
-  },
-  "dependencies": {
-    "@reactlens/protocol": "workspace:*",
-    "@reactlens/diff-engine": "workspace:*"
-  },
-  "peerDependencies": {
-    "react": "^19"
-  },
-  "devDependencies": {
-    "@types/react": "^19",
-    "react": "^19",
-    "tsup": "^8.5.1"
-  },
-  "scripts": {
-    "typecheck": "tsc --noEmit",
-    "build": "tsup src/index.tsx --format esm --dts --sourcemap --clean --tsconfig tsconfig.build.json"
-  },
   "license": "MIT",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/Fausto95/react-lens.git",
     "directory": "packages/ui"
   },
-  "sideEffects": false,
   "files": [
     "dist"
   ],
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": "./src/index.tsx"
+  },
   "publishConfig": {
-    "access": "public",
     "main": "./dist/index.js",
     "types": "./dist/index.d.ts",
     "exports": {
@@ -40,6 +23,23 @@
         "types": "./dist/index.d.ts",
         "default": "./dist/index.js"
       }
-    }
+    },
+    "access": "public"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "build": "tsup src/index.tsx --format esm --dts --sourcemap --clean --tsconfig tsconfig.build.json"
+  },
+  "dependencies": {
+    "@reactlens/diff-engine": "workspace:*",
+    "@reactlens/protocol": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/react": "^19",
+    "react": "^19",
+    "tsup": "^8.5.1"
+  },
+  "peerDependencies": {
+    "react": "^19"
   }
 }

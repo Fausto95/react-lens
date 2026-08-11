@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, afterEach } from "vitest";
+import { describe, it, expect, vi, afterEach } from "vite-plus/test";
 import {
   startTranscript,
   appendAssistant,
@@ -47,9 +47,7 @@ afterEach(() => {
 
 describe("request wire formats", () => {
   it("openai: posts chat/completions with bearer auth and tool schema", async () => {
-    const fetchMock = mockFetchOnce(
-      jsonResponse({ choices: [{ message: { content: "hi" } }] }),
-    );
+    const fetchMock = mockFetchOnce(jsonResponse({ choices: [{ message: { content: "hi" } }] }));
     const t = startTranscript("SYS", "Q", openai);
     await providerComplete(openai, t);
     const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
@@ -90,8 +88,10 @@ describe("request wire formats", () => {
   it("test connection sends the browser-access header too", async () => {
     const fetchMock = mockFetchOnce(jsonResponse({ data: [] }));
     await testProviderConnection(anthropic);
-    const headers = (fetchMock.mock.calls[0] as [string, RequestInit])[1]
-      .headers as Record<string, string>;
+    const headers = (fetchMock.mock.calls[0] as [string, RequestInit])[1].headers as Record<
+      string,
+      string
+    >;
     expect(headers["anthropic-dangerous-direct-browser-access"]).toBe("true");
   });
 });
@@ -105,7 +105,11 @@ describe("tool call parsing", () => {
             message: {
               content: null,
               tool_calls: [
-                { id: "a", type: "function", function: { name: "why", arguments: '{"renderId":4}' } },
+                {
+                  id: "a",
+                  type: "function",
+                  function: { name: "why", arguments: '{"renderId":4}' },
+                },
                 { id: "b", type: "function", function: { name: "why", arguments: "{broken" } },
                 { id: "c", type: "function", function: { name: "made_up_tool", arguments: "{}" } },
               ],
@@ -158,19 +162,21 @@ describe("transcript round-trips", () => {
     appendToolResults(ta, [{ id: "x", name: "why", content: "{}" }]);
     const last = ta.kind === "anthropic" ? ta.messages.at(-1) : undefined;
     expect(last?.role).toBe("user");
-    expect((last?.content as Array<{ type: string }>)[0]?.type).toBe("tool_result");
+    const blocks = last && Array.isArray(last.content) ? last.content : [];
+    expect(blocks[0]?.type).toBe("tool_result");
   });
 });
 
 describe("streaming", () => {
   it("openai: emits text deltas and accumulates streamed tool call arguments", async () => {
-    const chunk = (delta: unknown) =>
-      `data: ${JSON.stringify({ choices: [{ delta }] })}\n\n`;
+    const chunk = (delta: unknown) => `data: ${JSON.stringify({ choices: [{ delta }] })}\n\n`;
     mockFetchOnce(
       sseResponse([
         chunk({ content: "Hel" }),
         chunk({ content: "lo" }),
-        chunk({ tool_calls: [{ index: 0, id: "t1", function: { name: "why", arguments: '{"ren' } }] }),
+        chunk({
+          tool_calls: [{ index: 0, id: "t1", function: { name: "why", arguments: '{"ren' } }],
+        }),
         chunk({ tool_calls: [{ index: 0, function: { arguments: 'derId":4}' } }] }),
         "data: [DONE]\n\n",
       ]),
@@ -198,9 +204,18 @@ describe("streaming", () => {
         ev("content_block_delta", { index: 0, delta: { type: "text_delta", text: "Hi " } }),
         ev("content_block_delta", { index: 0, delta: { type: "text_delta", text: "there" } }),
         ev("content_block_stop", { index: 0 }),
-        ev("content_block_start", { index: 1, content_block: { type: "tool_use", id: "t9", name: "why" } }),
-        ev("content_block_delta", { index: 1, delta: { type: "input_json_delta", partial_json: '{"render' } }),
-        ev("content_block_delta", { index: 1, delta: { type: "input_json_delta", partial_json: 'Id":7}' } }),
+        ev("content_block_start", {
+          index: 1,
+          content_block: { type: "tool_use", id: "t9", name: "why" },
+        }),
+        ev("content_block_delta", {
+          index: 1,
+          delta: { type: "input_json_delta", partial_json: '{"render' },
+        }),
+        ev("content_block_delta", {
+          index: 1,
+          delta: { type: "input_json_delta", partial_json: 'Id":7}' },
+        }),
         ev("content_block_stop", { index: 1 }),
         ev("message_stop", {}),
       ]),
@@ -218,7 +233,11 @@ describe("streaming", () => {
 
   it("falls back to buffered parsing when the response is not SSE", async () => {
     mockFetchOnce(jsonResponse({ choices: [{ message: { content: "plain" } }] }));
-    const turn = await providerCompleteStreaming(openai, startTranscript("S", "Q", openai), () => {});
+    const turn = await providerCompleteStreaming(
+      openai,
+      startTranscript("S", "Q", openai),
+      () => {},
+    );
     expect(turn.text).toBe("plain");
   });
 });

@@ -50,7 +50,9 @@ function AsyncContent({ nonce }: { nonce: number }) {
   const resource = getResource(nonce);
   if (resource.status === "pending") throw resource.promise;
   return (
-    <div style={{ padding: 12, borderRadius: 8, background: "#eefaf0", border: "1px solid #cdeccf" }}>
+    <div
+      style={{ padding: 12, borderRadius: 8, background: "#eefaf0", border: "1px solid #cdeccf" }}
+    >
       Resolved content (load #{nonce})
     </div>
   );

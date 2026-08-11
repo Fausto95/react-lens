@@ -19,14 +19,14 @@ Zero dependencies. Every other package imports from here; it imports from none.
 // Branded so a ComponentId can never be passed where an EventId is expected.
 type Brand<T, B> = T & { readonly __brand: B };
 
-type RootId        = Brand<number, "RootId">;
-type ComponentId   = Brand<number, "ComponentId">;    // one per fiber instance
-type ComponentType = Brand<number, "ComponentType">;  // shared across instances
-type RenderId      = Brand<number, "RenderId">;
-type CommitId      = Brand<number, "CommitId">;
-type EventId       = Brand<number, "EventId">;
+type RootId = Brand<number, "RootId">;
+type ComponentId = Brand<number, "ComponentId">; // one per fiber instance
+type ComponentType = Brand<number, "ComponentType">; // shared across instances
+type RenderId = Brand<number, "RenderId">;
+type CommitId = Brand<number, "CommitId">;
+type EventId = Brand<number, "EventId">;
 type InteractionId = Brand<number, "InteractionId">;
-type EffectId      = Brand<number, "EffectId">;
+type EffectId = Brand<number, "EffectId">;
 
 // Human-readable strings are produced only at the UI boundary.
 ```
@@ -36,19 +36,20 @@ type EffectId      = Brand<number, "EffectId">;
 ```ts
 type SerializedValue =
   | { k: "primitive"; type: "string" | "number" | "boolean"; value: string | number | boolean }
-  | { k: "null" } | { k: "undefined" }
+  | { k: "null" }
+  | { k: "undefined" }
   | { k: "bigint"; value: string }
   | { k: "symbol"; description?: string; identity: string }
-  | { k: "function"; identity: string; name?: string }        // identity enables diffing
+  | { k: "function"; identity: string; name?: string } // identity enables diffing
   | { k: "date"; iso: string }
   | { k: "regexp"; source: string; flags: string }
-  | { k: "array"; identity: string; length: number; items?: SerializedValue[] }  // items omitted if over budget
+  | { k: "array"; identity: string; length: number; items?: SerializedValue[] } // items omitted if over budget
   | { k: "object"; identity: string; ctor?: string; entries?: [string, SerializedValue][] }
   | { k: "map"; identity: string; size: number; entries?: [SerializedValue, SerializedValue][] }
   | { k: "set"; identity: string; size: number; values?: SerializedValue[] }
-  | { k: "dom"; identity: string; nodeName: string }          // never the live node
+  | { k: "dom"; identity: string; nodeName: string } // never the live node
   | { k: "react-element"; identity: string; typeName?: string }
-  | { k: "ref"; identity: string }                            // back-ref for cycles
+  | { k: "ref"; identity: string } // back-ref for cycles
   | { k: "unserializable"; reason: string };
 ```
 
@@ -61,10 +62,10 @@ this is the entire basis of reference-vs-value diffing.
 ```ts
 interface BaseEvent {
   id: EventId;
-  timestamp: number;                 // performance.now() on the page clock
+  timestamp: number; // performance.now() on the page clock
   componentId?: ComponentId;
   interactionId?: InteractionId;
-  causedBy?: EventId[];              // filled by `causality`, absent at capture
+  causedBy?: EventId[]; // filled by `causality`, absent at capture
 }
 
 interface RenderEvent extends BaseEvent {
@@ -74,13 +75,13 @@ interface RenderEvent extends BaseEvent {
   componentId: ComponentId;
   selfDuration: number;
   totalDuration: number;
-  reasons: RenderReason[];          // captured cheaply; enriched later
-  compiler: CompilerStatus;         // §DESIGN 1.4 — first-class
+  reasons: RenderReason[]; // captured cheaply; enriched later
+  compiler: CompilerStatus; // §DESIGN 1.4 — first-class
 }
 
 type RenderReason =
   | { type: "mount" }
-  | { type: "props"; changed: string[] }        // key names only at capture
+  | { type: "props"; changed: string[] } // key names only at capture
   | { type: "state"; hookIndex: number }
   | { type: "context"; contextType: ComponentType }
   | { type: "parent"; componentId: ComponentId }
@@ -91,7 +92,7 @@ type RenderReason =
 interface CompilerStatus {
   compiled: boolean;
   memoized: boolean;
-  bailoutReason?: string;           // e.g. "unsupported mutation"
+  bailoutReason?: string; // e.g. "unsupported mutation"
 }
 
 interface InteractionEvent extends BaseEvent {
@@ -112,8 +113,7 @@ interface StateChangeEvent extends BaseEvent {
 // PropsChangeEvent, ContextChangeEvent, EffectEvent, NetworkEvent, QueryEvent,
 // LayoutEvent, PaintEvent, DiagnosticEvent follow the same shape.
 
-type LensEvent =
-  | RenderEvent | InteractionEvent | StateChangeEvent /* | ... */;
+type LensEvent = RenderEvent | InteractionEvent | StateChangeEvent /* | ... */;
 ```
 
 ### Messages — versioned envelope
@@ -121,14 +121,14 @@ type LensEvent =
 ```ts
 interface LensMessage<T = unknown> {
   protocolVersion: 1;
-  type: string;                     // discriminant, e.g. "events/batch"
+  type: string; // discriminant, e.g. "events/batch"
   payload: T;
 }
 
 // Concrete channels:
-type EventsBatch   = LensMessage<{ events: LensEvent[]; snapshots: RenderSnapshot[] }>;
-type SnapshotReq   = LensMessage<{ componentId: ComponentId; renderId: RenderId }>;
-type Hello         = LensMessage<{ runtimeVersion: string; reactVersion: string; tabId: number }>;
+type EventsBatch = LensMessage<{ events: LensEvent[]; snapshots: RenderSnapshot[] }>;
+type SnapshotReq = LensMessage<{ componentId: ComponentId; renderId: RenderId }>;
+type Hello = LensMessage<{ runtimeVersion: string; reactVersion: string; tabId: number }>;
 ```
 
 ### Snapshots
@@ -142,7 +142,7 @@ interface RenderSnapshot {
   state?: SerializedValue;
   context?: SerializedValue;
   hooks?: SerializedValue;
-  dom?: DOMSnapshot;                // §DESIGN 6 — captured in v1
+  dom?: DOMSnapshot; // §DESIGN 6 — captured in v1
 }
 
 interface DOMSnapshot {
@@ -161,8 +161,15 @@ interface DOMNodeSnapshot {
 ```ts
 // The panel never sends values — only which render's captured raw state the
 // page should restore (DESIGN §10.5).
-interface TimeTravelEntry { componentId: ComponentId; renderId: RenderId; }
-interface TimeTravelResult { applied: number; failed: number; supported: boolean; }
+interface TimeTravelEntry {
+  componentId: ComponentId;
+  renderId: RenderId;
+}
+interface TimeTravelResult {
+  applied: number;
+  failed: number;
+  supported: boolean;
+}
 ```
 
 ---
@@ -174,9 +181,9 @@ identity table). Runs on the page.
 
 ```ts
 interface SerializeOptions {
-  maxDepth: number;                 // default 4
-  maxItems: number;                 // per array/object, default 50
-  maxStringLength: number;          // default 1_000
+  maxDepth: number; // default 4
+  maxItems: number; // per array/object, default 50
+  maxStringLength: number; // default 1_000
 }
 
 interface Serializer {
@@ -184,7 +191,7 @@ interface Serializer {
   // Stable identity for a reference within this session. Same ref → same id.
   // Uses a WeakMap; never retains a strong ref to app objects.
   identityOf(value: object | Function): string;
-  reset(): void;                    // clears identity table on session end
+  reset(): void; // clears identity table on session end
 }
 
 function createSerializer(): Serializer;
@@ -212,13 +219,17 @@ interface ComponentInstance {
   compiler: CompilerStatus;
 }
 
-interface SourceLocation { file: string; line: number; column: number; }
+interface SourceLocation {
+  file: string;
+  line: number;
+  column: number;
+}
 
 interface CommitInfo {
   commitId: CommitId;
   rootId: RootId;
   timestamp: number;
-  rendered: ComponentId[];          // fibers that committed this pass
+  rendered: ComponentId[]; // fibers that committed this pass
 }
 
 interface FiberBridge {
@@ -241,7 +252,12 @@ interface FiberBridge {
   // Live edit / time travel (dev-build renderer only; see DESIGN §10.5).
   canEditValues(): boolean;
   setProp(id: ComponentId, path: Array<string | number>, value: unknown): boolean;
-  setHookState(id: ComponentId, hookIndex: number, path: Array<string | number>, value: unknown): boolean;
+  setHookState(
+    id: ComponentId,
+    hookIndex: number,
+    path: Array<string | number>,
+    value: unknown,
+  ): boolean;
   setClassState(id: ComponentId, state: unknown): boolean;
   hasFiber(id: ComponentId): boolean;
   captureLiveState(id: ComponentId): LiveState | undefined; // raw refs, baseline + shape guard
@@ -269,22 +285,22 @@ interface Instrumentation {
   stop(): void;
   isRecording(): boolean;
   snapshot(renderId: RenderId): RenderSnapshot | undefined; // on-demand (large apps)
-  timeTravel: TimeTravelController;  // page-side raw-state history (DESIGN §10.5)
+  timeTravel: TimeTravelController; // page-side raw-state history (DESIGN §10.5)
 }
 
 interface TimeTravelController {
-  supported(): boolean;              // renderer exposes the override API
-  isActive(): boolean;               // events suppressed while true
+  supported(): boolean; // renderer exposes the override API
+  isActive(): boolean; // events suppressed while true
   apply(entries: TimeTravelEntry[]): TimeTravelResult;
-  goLive(): TimeTravelResult;        // restore baselines, resume recording
+  goLive(): TimeTravelResult; // restore baselines, resume recording
 }
 
 interface CaptureConfig {
-  captureDOM: boolean;              // v1: true
+  captureDOM: boolean; // v1: true
   ringBuffer: { maxEvents: number; maxRendersPerComponent: number };
   serialize: Partial<SerializeOptions>;
-  captureStateHistory?: boolean;    // raw time-travel history (default true)
-  onFrame: (frame: EventsBatch) => void;   // wired to postMessage transport
+  captureStateHistory?: boolean; // raw time-travel history (default true)
+  onFrame: (frame: EventsBatch) => void; // wired to postMessage transport
 }
 
 function createInstrumentation(deps: {
@@ -309,7 +325,7 @@ interface TraceStore {
 
   // Queries — the TRACE primitive.
   eventsByInteraction(id: InteractionId): LensEvent[];
-  rendersOf(id: ComponentId): RenderEvent[];      // capped history
+  rendersOf(id: ComponentId): RenderEvent[]; // capped history
   snapshot(renderId: RenderId): RenderSnapshot | undefined;
   instance(id: ComponentId): ComponentInstance | undefined;
 
@@ -328,12 +344,20 @@ interface TraceStore {
 // which (component, render) pairs constitute the page state at time t,
 // and the delta against what was last applied.
 function applySetAt(store: TraceStore, t: number): Map<ComponentId, RenderId>;
-function diffApplySet(prev: ReadonlyMap<ComponentId, RenderId>, next: ReadonlyMap<ComponentId, RenderId>): TimeTravelEntry[];
+function diffApplySet(
+  prev: ReadonlyMap<ComponentId, RenderId>,
+  next: ReadonlyMap<ComponentId, RenderId>,
+): TimeTravelEntry[];
 
 // Commit-cost outliers (≥5× median with an 8ms floor, at/above p95).
 // Shared by the Timeline's ⚠ markers and the agent's evidence pack.
 function anomalyStats(commits: CommitSummary[]): AnomalyStats;
-interface AnomalyStats { median: number; p95: number; max: number; isAnomaly(c: CommitSummary): boolean }
+interface AnomalyStats {
+  median: number;
+  p95: number;
+  max: number;
+  isAnomaly(c: CommitSummary): boolean;
+}
 
 type TraceSelector =
   | { kind: "component"; id: ComponentId }
@@ -350,18 +374,18 @@ type TraceSelector =
 
 ```ts
 type DiffTarget =
-  | { kind: "value";   before: SerializedValue; after: SerializedValue }
-  | { kind: "props";   before: SerializedValue; after: SerializedValue }
-  | { kind: "state";   before: SerializedValue; after: SerializedValue }
+  | { kind: "value"; before: SerializedValue; after: SerializedValue }
+  | { kind: "props"; before: SerializedValue; after: SerializedValue }
+  | { kind: "state"; before: SerializedValue; after: SerializedValue }
   | { kind: "context"; before: SerializedValue; after: SerializedValue }
-  | { kind: "hooks";   before: SerializedValue; after: SerializedValue }
-  | { kind: "dom";     before: DOMSnapshot;     after: DOMSnapshot };
-  // open union: css | visual | tree | performance slot in later, untouched core
+  | { kind: "hooks"; before: SerializedValue; after: SerializedValue }
+  | { kind: "dom"; before: DOMSnapshot; after: DOMSnapshot };
+// open union: css | visual | tree | performance slot in later, untouched core
 
 type ChangeKind =
   | "UNCHANGED"
   | "VALUE_CHANGED"
-  | "REFERENCE_ONLY_CHANGED"        // identity differs, structure equal
+  | "REFERENCE_ONLY_CHANGED" // identity differs, structure equal
   | "FUNCTION_IDENTITY_CHANGED"
   | "STRUCTURE_CHANGED"
   | "ADDED"
@@ -372,15 +396,15 @@ interface DiffChange {
   kind: ChangeKind;
   before?: SerializedValue;
   after?: SerializedValue;
-  confidence: number;               // 0..1; e.g. function behavior unknown
+  confidence: number; // 0..1; e.g. function behavior unknown
 }
 
 interface DiffResult {
   target: DiffTarget["kind"];
-  changes: DiffChange[];            // UNCHANGED entries omitted unless requested
+  changes: DiffChange[]; // UNCHANGED entries omitted unless requested
   summary: {
     changed: number;
-    referenceOnly: number;          // key signal for "suspicious render"
+    referenceOnly: number; // key signal for "suspicious render"
     observableOutputChanged: boolean; // DOM target only
   };
 }
@@ -404,15 +428,15 @@ interface TraceEdge {
   from: EventId;
   to: EventId;
   type: "triggered" | "scheduled" | "rendered" | "committed" | "requested" | "resolved";
-  confidence: number;               // solid ≈ 1, inferred < 1
+  confidence: number; // solid ≈ 1, inferred < 1
 }
 
 interface WhyResult {
   render: RenderEvent;
   // Progressive disclosure, ranked; earliest actionable cause first.
   causes: Array<{
-    level: 1 | 2 | 3;               // parent → what changed → originating call site
-    explanation: string;            // plain English (DESIGN §Explanation style)
+    level: 1 | 2 | 3; // parent → what changed → originating call site
+    explanation: string; // plain English (DESIGN §Explanation style)
     confidence: number;
     diff?: DiffResult;
     sourceLocation?: SourceLocation;
@@ -467,7 +491,12 @@ function analyzeSourceSmart(source: string, opts, regexFallback): Promise<Static
 function mergeStaticAndRuntime(
   staticFindings: StaticFinding[],
   runtime: Diagnostic[],
-  evidence: { componentId: ComponentId; selfTime: number; renders: number; suspiciousRenders?: number },
+  evidence: {
+    componentId: ComponentId;
+    selfTime: number;
+    renders: number;
+    suspiciousRenders?: number;
+  },
 ): Diagnostic[];
 ```
 
@@ -530,28 +559,36 @@ Closed tool loop over OpenAI-compatible / Anthropic chat APIs (BYOK), streamed
 the trace, and proposes concrete fixes from the user's actual source.
 
 ```ts
-interface AgentSettings { provider: "openai"|"anthropic"|"zml"; baseUrl: string; apiKey: string; model: string }
+interface AgentSettings {
+  provider: "openai" | "anthropic" | "zml";
+  baseUrl: string;
+  apiKey: string;
+  model: string;
+}
 
 function createToolHandlers(deps: {
   store: TraceStore;
   causality: Causality;
   diagnose: (id: ComponentId) => Diagnostic[];
   sourceResolver: SourceResolver;
-}): ToolHandlers;                            // typed results per tool (ToolResultMap)
+}): ToolHandlers; // typed results per tool (ToolResultMap)
 
 // Multi-turn conversation; the session owns the provider transcript.
 function createAgentSession(opts: {
   settings: AgentSettings;
   handlers: ToolHandlers;
-  evidence?: EvidencePack;                   // ~1-2KB session digest in the first turn
+  evidence?: EvidencePack; // ~1-2KB session digest in the first turn
 }): AgentSession;
 interface AgentSession {
-  send(question: string, opts?: { signal?: AbortSignal; onEvent?: (e: AgentEvent) => void }): Promise<AgentAnswer>;
+  send(
+    question: string,
+    opts?: { signal?: AbortSignal; onEvent?: (e: AgentEvent) => void },
+  ): Promise<AgentAnswer>;
   readonly messages: ChatMessage[];
 }
 type AgentEvent = model_start | text_delta | tool_start | tool_result | done | error;
 
-function buildEvidencePack(store: TraceStore): EvidencePack;  // stats, interactions,
+function buildEvidencePack(store: TraceStore): EvidencePack; // stats, interactions,
 // top components, commit anomalies (trace-engine anomalyStats), compiler coverage
 
 // Tools (11): explain_interaction | query_trace | why | find_component |

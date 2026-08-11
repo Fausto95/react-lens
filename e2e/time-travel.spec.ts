@@ -35,10 +35,9 @@ test("replay walks the app through history and returns live", async ({ page }) =
 
   // The page must pass through the intermediate states, not sit on the end.
   await expect
-    .poll(
-      () => page.evaluate(() => (window as unknown as { __seen: string[] }).__seen),
-      { timeout: 15_000 },
-    )
+    .poll(() => page.evaluate(() => (window as unknown as { __seen: string[] }).__seen), {
+      timeout: 15_000,
+    })
     .toEqual(["count 3", "count 0", "count 1", "count 2", "count 3"]);
 
   await expect(page.locator(".rl-tl-live-label")).toHaveText("LIVE");

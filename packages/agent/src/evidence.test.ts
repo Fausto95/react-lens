@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect } from "vite-plus/test";
 import { TraceStore } from "@reactlens/trace-engine";
 import { createCausality } from "@reactlens/causality";
 import { createSourceResolver } from "@reactlens/source-maps";

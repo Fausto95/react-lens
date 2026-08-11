@@ -75,7 +75,10 @@ export function importSession(store: TraceStore, session: LensSessionFile): void
   store.ingest(session.payload);
 }
 
-export async function importSessionFromFile(store: TraceStore, file: File): Promise<LensSessionFile> {
+export async function importSessionFromFile(
+  store: TraceStore,
+  file: File,
+): Promise<LensSessionFile> {
   const text = await file.text();
   const session = parseSessionFile(text);
   importSession(store, session);
@@ -109,9 +112,7 @@ interface StoredSession extends SessionListEntry {
 }
 
 function toEntry(id: string, session: LensSessionFile, byteSize: number): SessionListEntry {
-  const title =
-    session.meta?.title ??
-    `Session ${new Date(session.exportedAt).toLocaleString()}`;
+  const title = session.meta?.title ?? `Session ${new Date(session.exportedAt).toLocaleString()}`;
   return {
     id,
     title,

@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect } from "vite-plus/test";
 import { TOOL_DEFINITIONS, SYSTEM_PROMPT } from "./tools.js";
 import { createToolHandlers } from "./handlers.js";
 import { TraceStore } from "@reactlens/trace-engine";

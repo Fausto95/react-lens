@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect } from "vite-plus/test";
 import { mergeStaticAndRuntime } from "./fuse.js";
 import type { Diagnostic } from "./types.js";
 import type { StaticFinding } from "./static.js";

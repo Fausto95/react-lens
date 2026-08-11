@@ -114,9 +114,7 @@ function buildCitations(
   waste: NarrativeWasteRow[],
   doctor: Diagnostic[],
 ): LensRef[] {
-  const refs: LensRef[] = [
-    { kind: "interaction", id: interaction.id, label: interaction.label },
-  ];
+  const refs: LensRef[] = [{ kind: "interaction", id: interaction.id, label: interaction.label }];
   for (const row of topCost.slice(0, 5)) {
     refs.push({
       kind: "component",
@@ -163,9 +161,7 @@ function pickNextClick(
       kind: "doctor",
       id: doctor[0].ruleId,
       componentId: doctor[0].componentId,
-      reason: fix
-        ? `Next: ${fix}`
-        : `Inspect Doctor finding: ${doctor[0].title}`,
+      reason: fix ? `Next: ${fix}` : `Inspect Doctor finding: ${doctor[0].title}`,
     };
   }
   if (waste[0]) {
@@ -206,9 +202,13 @@ function pickNextClick(
 /** Pull a prop/context name out of a causality explanation when present. */
 function actionableCauseHint(explanation: string | undefined): string | null {
   if (!explanation) return null;
-  const prop = explanation.match(/\bprops?\.([A-Za-z_$][\w$]*)/i)?.[1]
-    ?? explanation.match(/\bchanged prop[s]?:\s*([A-Za-z_$][\w$,\s]*)/i)?.[1]?.split(",")[0]?.trim()
-    ?? explanation.match(/\b(on[A-Z]\w*)\b/)?.[1];
+  const prop =
+    explanation.match(/\bprops?\.([A-Za-z_$][\w$]*)/i)?.[1] ??
+    explanation
+      .match(/\bchanged prop[s]?:\s*([A-Za-z_$][\w$,\s]*)/i)?.[1]
+      ?.split(",")[0]
+      ?.trim() ??
+    explanation.match(/\b(on[A-Z]\w*)\b/)?.[1];
   if (prop) return `prop \`${prop}\``;
   if (/context/i.test(explanation)) {
     const ctx = explanation.match(/context\s+[«"`]?([^»"`\s]+)/i)?.[1];
@@ -230,12 +230,10 @@ function writeCopy(
 ): { headline: string; summary: string } {
   const top = topCost[0];
   const sampled = Math.min(WHY_CAP, interaction.metrics.renderCount);
-  const wasteShare =
-    sampled > 0 ? Math.round((waste.length / sampled) * 100) : 0;
+  const wasteShare = sampled > 0 ? Math.round((waste.length / sampled) * 100) : 0;
   const wasteSelf = waste.reduce((s, w) => s + w.self, 0);
   const costSelf = topCost.reduce((s, r) => s + r.self, 0);
-  const wasteCostShare =
-    costSelf > 0 ? Math.round((wasteSelf / costSelf) * 100) : 0;
+  const wasteCostShare = costSelf > 0 ? Math.round((wasteSelf / costSelf) * 100) : 0;
 
   const mountOnly =
     !!costliest &&
@@ -268,7 +266,9 @@ function writeCopy(
   } else if (mountOnly && top) {
     parts.push(`Expected: ${top.name} mounted — first-paint cost, not a re-render bug.`);
   } else if (top) {
-    parts.push(`Top cost: ${top.name} at ${fmt(top.self)} self` + (top.wasted ? " (no DOM change)." : "."));
+    parts.push(
+      `Top cost: ${top.name} at ${fmt(top.self)} self` + (top.wasted ? " (no DOM change)." : "."),
+    );
   }
 
   if (chain[0]) {

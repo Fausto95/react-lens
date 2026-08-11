@@ -106,7 +106,9 @@ export function createToolHandlers(deps: {
       const before = store.snapshot(beforeRenderId as RenderId);
       const after = store.snapshot(afterRenderId as RenderId);
       if (!before || !after) {
-        return { error: "missing snapshot — snapshots are retained per render; pick recent renderIds" };
+        return {
+          error: "missing snapshot — snapshots are retained per render; pick recent renderIds",
+        };
       }
       // Hooks are HookSnapshot[] rows, not a SerializedValue tree — the value
       // differ would walk them as opaque objects. Compare per hook index.
@@ -244,7 +246,12 @@ export function createToolHandlers(deps: {
       let latest: {
         renderId: RenderId;
         props: ReturnType<typeof summarizeValue> | null;
-        hooks: Array<{ index: number; kind: string; value: ReturnType<typeof summarizeValue> | null; hasDeps: boolean }>;
+        hooks: Array<{
+          index: number;
+          kind: string;
+          value: ReturnType<typeof summarizeValue> | null;
+          hasDeps: boolean;
+        }>;
         contexts: Array<{ name?: string; value: ReturnType<typeof summarizeValue> | null }>;
       } | null = null;
       for (let i = retained.length - 1; i >= 0 && !latest; i--) {
@@ -318,7 +325,13 @@ export function createToolHandlers(deps: {
       };
       const loc = instance.source;
       if (!loc) {
-        return { ...base, file: null, snippet: null, truncated: false, reason: "no source location recorded for this component" };
+        return {
+          ...base,
+          file: null,
+          snippet: null,
+          truncated: false,
+          reason: "no source location recorded for this component",
+        };
       }
       const original = await sourceResolver.resolve(loc);
       let content = await sourceResolver.sourceContent(loc.file, original?.file ?? undefined);
@@ -336,7 +349,12 @@ export function createToolHandlers(deps: {
         // React records the JSX *creation* site, so `loc` usually points at the
         // parent module. Chase the import that names this component to the
         // module that actually defines it.
-        const imported = await chaseImport(sourceResolver, loc.file, content.content, instance.name);
+        const imported = await chaseImport(
+          sourceResolver,
+          loc.file,
+          content.content,
+          instance.name,
+        );
         if (imported) {
           content = imported.content;
           span = imported.span;
@@ -442,7 +460,10 @@ export function createToolHandlers(deps: {
         componentName: instance.name,
         parents,
         children,
-        citations: [componentRef(id), ...parents.slice(0, 2).map((p) => componentRef(p.componentId))],
+        citations: [
+          componentRef(id),
+          ...parents.slice(0, 2).map((p) => componentRef(p.componentId)),
+        ],
       };
     },
   };
@@ -459,7 +480,10 @@ async function chaseImport(
   compiledFile: string,
   creationSource: string,
   name: string,
-): Promise<{ content: { path: string; content: string }; span: { startLine: number; endLine: number } } | null> {
+): Promise<{
+  content: { path: string; content: string };
+  span: { startLine: number; endLine: number };
+} | null> {
   const importRe = new RegExp(
     `import\\s+(?:[^;'"]*[\\s{,])?${escapeRe(name)}[\\s,}][^;'"]*from\\s+["']([^"']+)["']`,
   );
@@ -468,7 +492,9 @@ async function chaseImport(
   if (!specifier || !specifier.startsWith(".")) return null;
 
   const bare = specifier.replace(/\.(js|jsx|ts|tsx)$/, "");
-  const candidates = [".tsx", ".ts", ".jsx", ".js", "/index.tsx", "/index.ts"].map((ext) => bare + ext);
+  const candidates = [".tsx", ".ts", ".jsx", ".js", "/index.tsx", "/index.ts"].map(
+    (ext) => bare + ext,
+  );
   if (/\.(js|jsx|ts|tsx)$/.test(specifier)) candidates.unshift(specifier);
   for (const candidate of candidates) {
     let url: string;
@@ -523,7 +549,9 @@ function summarizeCause(c: {
     confidence: c.confidence,
     ...(c.diff ? { diffSummary: c.diff.summary } : {}),
     ...(changes.length > 0
-      ? { topChanges: changes.slice(0, 5).map((ch) => ({ path: ch.path.join("."), kind: ch.kind })) }
+      ? {
+          topChanges: changes.slice(0, 5).map((ch) => ({ path: ch.path.join("."), kind: ch.kind })),
+        }
       : {}),
     ...(c.sourceLocation ? { source: c.sourceLocation } : {}),
   };

@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect } from "vite-plus/test";
 import { parseMarkdown, parseFenceInfo, splitInline } from "./markdown.js";
 
 describe("parseMarkdown blocks", () => {
@@ -19,7 +19,12 @@ describe("parseMarkdown blocks", () => {
     );
     expect(blocks.map((b) => b.kind)).toEqual(["heading", "para", "list", "code", "para"]);
     const code = blocks.find((b) => b.kind === "code");
-    expect(code).toMatchObject({ lang: "tsx", file: "src/ProductList.tsx", line: 61, code: "const a = 1;" });
+    expect(code).toMatchObject({
+      lang: "tsx",
+      file: "src/ProductList.tsx",
+      line: 61,
+      code: "const a = 1;",
+    });
     const list = blocks.find((b) => b.kind === "list");
     expect(list).toMatchObject({ items: ["first", "second"] });
   });
@@ -32,7 +37,11 @@ describe("parseMarkdown blocks", () => {
 
 describe("parseFenceInfo", () => {
   it("extracts lang, file and line from the info string", () => {
-    expect(parseFenceInfo("tsx src/App.tsx:42")).toEqual({ lang: "tsx", file: "src/App.tsx", line: 42 });
+    expect(parseFenceInfo("tsx src/App.tsx:42")).toEqual({
+      lang: "tsx",
+      file: "src/App.tsx",
+      line: 42,
+    });
     expect(parseFenceInfo("ts")).toEqual({ lang: "ts" });
     expect(parseFenceInfo("")).toEqual({});
     // file without a line is still a file
@@ -42,7 +51,9 @@ describe("parseFenceInfo", () => {
 
 describe("splitInline — citation tokens, code spans, bold", () => {
   it("turns Lens ID tokens into citation segments", () => {
-    const segs = splitInline("Costly [component:12] via [render:412] in [interaction:i3], see [doctor:render-fanout@12].");
+    const segs = splitInline(
+      "Costly [component:12] via [render:412] in [interaction:i3], see [doctor:render-fanout@12].",
+    );
     const cites = segs.filter((s) => s.kind === "citation");
     expect(cites).toEqual([
       { kind: "citation", ref: { kind: "component", id: 12 }, raw: "[component:12]" },

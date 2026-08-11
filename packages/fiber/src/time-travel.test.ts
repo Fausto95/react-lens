@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect } from "vite-plus/test";
 import { createFiberBridge } from "./bridge.js";
 import { captureStateHooks, inspectHooks } from "./inspect.js";
 import type { Fiber } from "./react-internals.js";
@@ -37,10 +37,10 @@ function fakeFiber(hooks: Array<{ memoizedState: unknown; queue: unknown }>): Fi
 describe("captureStateHooks", () => {
   it("captures raw values of state/reducer hooks only, at raw list indices", () => {
     const fiber = fakeFiber([
-      { memoizedState: { current: "a ref" }, queue: null },              // 0: useRef
-      { memoizedState: 42, queue: {} },                                   // 1: useState
+      { memoizedState: { current: "a ref" }, queue: null }, // 0: useRef
+      { memoizedState: 42, queue: {} }, // 1: useState
       { memoizedState: { create: () => {}, deps: [], tag: 0b1000 }, queue: null }, // 2: effect
-      { memoizedState: { items: [1, 2] }, queue: {} },                    // 3: useReducer
+      { memoizedState: { items: [1, 2] }, queue: {} }, // 3: useReducer
     ]);
     const captured = captureStateHooks(fiber);
     expect(captured).toEqual([
@@ -56,7 +56,7 @@ describe("captureStateHooks", () => {
     const sentinel = Symbol.for("react.memo_cache_sentinel");
     const fiber = fakeFiber([
       { memoizedState: [sentinel, 1, 2], queue: null }, // 0: compiler memo cache (skipped by inspectHooks)
-      { memoizedState: "hello", queue: {} },            // 1: useState
+      { memoizedState: "hello", queue: {} }, // 1: useState
     ]);
     const captured = captureStateHooks(fiber);
     expect(captured).toEqual([{ index: 1, value: "hello" }]);

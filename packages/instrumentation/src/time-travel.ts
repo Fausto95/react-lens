@@ -74,8 +74,7 @@ export function createTimeTravel(deps: {
   snapshotsPerStore?: number;
 }): TimeTravelController {
   const { fiber } = deps;
-  const rendersPerComponent =
-    deps.rendersPerComponent ?? TIME_TRAVEL_RETENTION.rendersPerComponent;
+  const rendersPerComponent = deps.rendersPerComponent ?? TIME_TRAVEL_RETENTION.rendersPerComponent;
   const maxComponents = deps.maxComponents ?? TIME_TRAVEL_RETENTION.maxComponents;
   const snapshotsPerStore = deps.snapshotsPerStore ?? DEFAULT_SNAPSHOTS_PER_STORE;
 
@@ -107,9 +106,7 @@ export function createTimeTravel(deps: {
     if (!supported()) return;
     const classState = inspectClassState(target);
     const state: CapturedState =
-      classState !== undefined
-        ? { hooks: [], classState }
-        : { hooks: captureStateHooks(target) };
+      classState !== undefined ? { hooks: [], classState } : { hooks: captureStateHooks(target) };
     // Stateless components would produce no-op entries; keep them out of the
     // rings so frequent stateless renders can't evict restorable history.
     if (state.hooks.length === 0 && classState === undefined) {
@@ -278,7 +275,8 @@ export function createTimeTravel(deps: {
   }
 
   function shapeMatches(captured: CapturedState, live: LiveState): boolean {
-    if (captured.classState !== undefined) return live.classState !== undefined || live.hooks.length === 0;
+    if (captured.classState !== undefined)
+      return live.classState !== undefined || live.hooks.length === 0;
     if (captured.hooks.length !== live.hooks.length) return false;
     return captured.hooks.every((h, i) => live.hooks[i]?.index === h.index);
   }

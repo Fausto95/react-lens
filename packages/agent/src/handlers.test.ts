@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect } from "vite-plus/test";
 import { TraceStore } from "@reactlens/trace-engine";
 import { createCausality } from "@reactlens/causality";
 import { createSourceResolver } from "@reactlens/source-maps";
@@ -41,7 +41,11 @@ function renderEvent(over: Partial<RenderEvent> = {}): RenderEvent {
   };
 }
 
-function instance(id: number, name: string, over: Partial<ComponentInstance> = {}): ComponentInstance {
+function instance(
+  id: number,
+  name: string,
+  over: Partial<ComponentInstance> = {},
+): ComponentInstance {
   return {
     id: cid(id),
     type: id as never,
@@ -91,9 +95,9 @@ describe("diff_snapshots kind:hooks", () => {
             { index: 2, kind: "ref", value: str("stable") },
           ]),
           snapshotWithHooks(2, [
-            { index: 0, kind: "state", value: num(2) },              // value changed
+            { index: 0, kind: "state", value: num(2) }, // value changed
             { index: 1, kind: "memo", value: str("a"), deps: [num(2)] }, // deps changed
-            { index: 2, kind: "ref", value: str("stable") },         // unchanged
+            { index: 2, kind: "ref", value: str("stable") }, // unchanged
           ]),
         ],
       }),
@@ -105,7 +109,12 @@ describe("diff_snapshots kind:hooks", () => {
       afterRenderId: 2,
     })) as {
       kind: string;
-      hooks: Array<{ index: number; hookKind: string; valueChanged: boolean; depsChanged: boolean }>;
+      hooks: Array<{
+        index: number;
+        hookKind: string;
+        valueChanged: boolean;
+        depsChanged: boolean;
+      }>;
       changeCount: number;
     };
     expect(out.kind).toBe("hooks");
@@ -351,7 +360,13 @@ describe("effects_summary", () => {
           renderEvent({ renderId: rid(2), componentId: cid(1) }),
           renderEvent({ renderId: rid(3), componentId: cid(1) }),
           renderEvent({ renderId: rid(4), componentId: cid(1) }),
-          ...( [effect(1, "run", 4), effect(2, "run", 6), effect(3, "cleanup", 1), effect(4, "run", 2), effect(5, "run", 8)] as never[]),
+          ...([
+            effect(1, "run", 4),
+            effect(2, "run", 6),
+            effect(3, "cleanup", 1),
+            effect(4, "run", 2),
+            effect(5, "run", 8),
+          ] as never[]),
         ],
       }),
     );

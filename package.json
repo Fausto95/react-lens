@@ -4,16 +4,14 @@
   "private": true,
   "description": "Know why every render happened. Dev-time React observability — from interaction to cause to fix.",
   "type": "module",
-  "packageManager": "pnpm@9.1.2",
-  "engines": {
-    "node": ">=20"
-  },
   "scripts": {
     "build": "pnpm -r --filter \"./packages/**\" build",
     "typecheck": "pnpm -r typecheck",
-    "test": "vitest run",
-    "test:watch": "vitest",
-    "lint": "pnpm typecheck",
+    "check": "vp check",
+    "fmt": "vp fmt",
+    "test": "vp test run",
+    "test:watch": "vp test",
+    "lint": "vp check",
     "dev:playground": "pnpm --filter @reactlens/playground dev",
     "dev:devtools": "pnpm --filter @reactlens/devtools dev",
     "dev:site": "pnpm --filter @reactlens/site dev",
@@ -24,19 +22,38 @@
     "changeset": "changeset",
     "release": "pnpm build && changeset publish"
   },
+  "dependencies": {
+    "@jridgewell/trace-mapping": "^0.3.31"
+  },
   "devDependencies": {
     "@changesets/cli": "^2.31.1",
     "@playwright/test": "1.60.0",
     "@types/react": "^19",
     "@types/react-dom": "^19",
-    "happy-dom": "^15.11.7",
+    "happy-dom": "^20.11.2",
     "react": "^19",
     "react-dom": "^19",
     "tsup": "^8.5.1",
     "typescript": "^5.6.3",
-    "vitest": "^2.1.8"
+    "vite": "catalog:",
+    "vite-plus": "catalog:"
   },
-  "dependencies": {
-    "@jridgewell/trace-mapping": "^0.3.31"
+  "engines": {
+    "node": ">=20"
+  },
+  "packageManager": "pnpm@9.15.9",
+  "pnpm": {
+    "overrides": {
+      "vite": "npm:@voidzero-dev/vite-plus-core@0.2.8",
+      "vitest": "4.1.10"
+    },
+    "peerDependencyRules": {
+      "allowAny": [
+        "vite"
+      ],
+      "allowedVersions": {
+        "vite": "*"
+      }
+    }
   }
 }

@@ -16,7 +16,12 @@ export type SerializedValue =
   | { k: "regexp"; source: string; flags: string }
   | { k: "array"; identity: string; length: number; items?: SerializedValue[] }
   | { k: "object"; identity: string; ctor?: string; entries?: Array<[string, SerializedValue]> }
-  | { k: "map"; identity: string; size: number; entries?: Array<[SerializedValue, SerializedValue]> }
+  | {
+      k: "map";
+      identity: string;
+      size: number;
+      entries?: Array<[SerializedValue, SerializedValue]>;
+    }
   | { k: "set"; identity: string; size: number; values?: SerializedValue[] }
   | { k: "dom"; identity: string; nodeName: string }
   | { k: "react-element"; identity: string; typeName?: string }

@@ -49,7 +49,11 @@ export function summarizeValue(v: SerializedValue, depth: number = MAX_DEPTH): V
     case "bigint":
       return { type: "bigint", preview: v.value };
     case "symbol":
-      return { type: "symbol", ...(v.description ? { preview: v.description } : {}), identity: v.identity };
+      return {
+        type: "symbol",
+        ...(v.description ? { preview: v.description } : {}),
+        identity: v.identity,
+      };
     case "function":
       return { type: "function", preview: `ƒ ${v.name ?? "anonymous"}`, identity: v.identity };
     case "date":

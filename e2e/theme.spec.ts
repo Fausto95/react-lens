@@ -8,9 +8,7 @@ test("light mode applies from the settings menu and survives a reload", async ({
   await page.getByRole("radio", { name: "Light" }).click();
 
   await expect(page.locator("html")).toHaveAttribute("data-rl-theme", "light");
-  const bg = await page
-    .locator(".rl-root")
-    .evaluate((el) => getComputedStyle(el).backgroundColor);
+  const bg = await page.locator(".rl-root").evaluate((el) => getComputedStyle(el).backgroundColor);
   expect(bg).toBe("rgb(255, 255, 255)");
 
   await page.reload();

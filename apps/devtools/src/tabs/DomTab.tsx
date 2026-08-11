@@ -55,9 +55,7 @@ function DomNode({ node, depth }: { node: DOMNodeSnapshot; depth: number }) {
         <Attrs attrs={attrs} />
         <span className="rl-dom-punct">&gt;</span>
         {inlineText && <span className="rl-dom-textinline">{inlineText}</span>}
-        <span className="rl-dom-punct">
-          &lt;/{tag}&gt;
-        </span>
+        <span className="rl-dom-punct">&lt;/{tag}&gt;</span>
       </div>
     );
   }
@@ -94,7 +92,8 @@ function Attrs({ attrs }: { attrs: Array<[string, string]> }) {
   return (
     <>
       {attrs.map(([name, value]) => {
-        const clipped = value.length > MAX_ATTR_VALUE ? value.slice(0, MAX_ATTR_VALUE) + "…" : value;
+        const clipped =
+          value.length > MAX_ATTR_VALUE ? value.slice(0, MAX_ATTR_VALUE) + "…" : value;
         return (
           <span key={name} className="rl-dom-attr">
             {" "}

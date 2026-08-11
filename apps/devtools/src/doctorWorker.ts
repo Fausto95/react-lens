@@ -38,10 +38,7 @@ type DoctorResultMessage = {
 
 const store = new TraceStore();
 const causality = createCausality(store);
-const sources = new Map<
-  ComponentId,
-  { name: string; sourceText: string; file?: string }
->();
+const sources = new Map<ComponentId, { name: string; sourceText: string; file?: string }>();
 let timer: ReturnType<typeof setTimeout> | undefined;
 
 const ctx = self as unknown as {

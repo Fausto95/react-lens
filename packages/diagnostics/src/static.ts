@@ -41,27 +41,39 @@ export function analyzeSource(source: string, opts: AnalyzeSourceOptions = {}): 
     // Inline context value: a Provider given a fresh object/array literal each
     // render → its identity churns, re-rendering every consumer.
     if (/\.Provider\b[^>]*\bvalue=\{\{/.test(text) || /\.Provider\b[^>]*\bvalue=\{\[/.test(text)) {
-      findings.push(stamp({
-        ruleId: "inline-context-value",
-        severity: "warn",
-        title: "Context value is a fresh object each render",
-        detail: "A Provider `value` is an inline object/array literal, so its identity changes every render — notifying all consumers.",
-        line,
-        fix: "Hoist the value or derive it once; with the React Compiler on, ensure it isn't recreated on every render.",
-      }, opts.file));
+      findings.push(
+        stamp(
+          {
+            ruleId: "inline-context-value",
+            severity: "warn",
+            title: "Context value is a fresh object each render",
+            detail:
+              "A Provider `value` is an inline object/array literal, so its identity changes every render — notifying all consumers.",
+            line,
+            fix: "Hoist the value or derive it once; with the React Compiler on, ensure it isn't recreated on every render.",
+          },
+          opts.file,
+        ),
+      );
     }
 
     // Effect that only derives state: useEffect whose body immediately calls a
     // setter → an extra render cycle for something computable inline.
     if (/useEffect\(\s*\(\)\s*=>\s*\{?\s*set[A-Z]\w*\(/.test(text)) {
-      findings.push(stamp({
-        ruleId: "effect-derives-state",
-        severity: "warn",
-        title: "Effect derives state",
-        detail: "An effect's first action is a state setter, which schedules another render for a value that could be computed during render.",
-        line,
-        fix: "Compute the value inline (or with useMemo) instead of syncing it in an effect.",
-      }, opts.file));
+      findings.push(
+        stamp(
+          {
+            ruleId: "effect-derives-state",
+            severity: "warn",
+            title: "Effect derives state",
+            detail:
+              "An effect's first action is a state setter, which schedules another render for a value that could be computed during render.",
+            line,
+            fix: "Compute the value inline (or with useMemo) instead of syncing it in an effect.",
+          },
+          opts.file,
+        ),
+      );
     }
   });
 
@@ -127,7 +139,9 @@ export function definitionSpan(
 }
 
 function isTopLevelDecl(text: string): boolean {
-  return /^\s*(?:export\s+)?(?:default\s+)?(?:async\s+)?(?:function|class|const|let|var)\b/.test(text);
+  return /^\s*(?:export\s+)?(?:default\s+)?(?:async\s+)?(?:function|class|const|let|var)\b/.test(
+    text,
+  );
 }
 
 function escape(s: string): string {

@@ -117,9 +117,9 @@ with multiple **projections** rather than a raw fiber tree.
   analysis uses the regex path via `analyzeSourceSmart`. Node/tests still use real OXC.
 - ✅ **Doctor worker** — the all-components Doctor pass (`diagnoseAll`, causality
   per render) now runs in a Web Worker mirroring the store via `TraceStore.onIngest`
-  + `export()`; the panel consumes `{count, affected}` async and the old
-  800-component guard is gone. Falls back to a synchronous pass if the worker
-  can't spawn. Selected component source is uploaded for static fusion.
+  - `export()`; the panel consumes `{count, affected}` async and the old
+    800-component guard is gone. Falls back to a synchronous pass if the worker
+    can't spawn. Selected component source is uploaded for static fusion.
 - ✅ **Source fetch via page** — extension `source-request` / `source` hop so the
   panel resolver reads modules same-origin to the inspected app.
 - **Tree worker** — virtualization mounts few rows, but grouping/projection/query

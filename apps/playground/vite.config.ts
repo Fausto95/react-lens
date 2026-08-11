@@ -1,4 +1,4 @@
-import { defineConfig } from "vite";
+import { defineConfig, lazyPlugins } from "vite-plus";
 import react from "@vitejs/plugin-react";
 
 export default defineConfig({
@@ -12,7 +12,7 @@ export default defineConfig({
       },
     ],
   },
-  plugins: [
+  plugins: lazyPlugins(() => [
     react({
       // React Compiler on for the playground's OWN source only (DESIGN §1.4).
       // Excluding the devtools workspace package matches how the panel runs in
@@ -27,6 +27,6 @@ export default defineConfig({
         ],
       },
     }),
-  ],
+  ]),
   server: { port: 5178, host: true },
 });

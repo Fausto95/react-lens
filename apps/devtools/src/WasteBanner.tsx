@@ -34,7 +34,9 @@ export function WasteBanner({
 
   useEffect(() => {
     const interactions = store.interactions();
-    const latest = [...interactions].reverse().find((i) => i.kind !== "load" && i.kind !== "system");
+    const latest = [...interactions]
+      .reverse()
+      .find((i) => i.kind !== "load" && i.kind !== "system");
     if (!latest) return;
     if (processedEnd.current.get(latest.id) === latest.end) return;
 

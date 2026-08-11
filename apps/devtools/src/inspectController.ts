@@ -243,9 +243,7 @@ export function createInspectController(opts: {
     onPick({
       componentId: inst.id,
       name: inst.name,
-      ...(inst.source
-        ? { sourceFile: inst.source.file, sourceLine: inst.source.line }
-        : {}),
+      ...(inst.source ? { sourceFile: inst.source.file, sourceLine: inst.source.line } : {}),
     });
     highlighter.show(runtime.domNodesOf(inst.id));
   }

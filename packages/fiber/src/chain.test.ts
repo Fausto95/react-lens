@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect } from "vite-plus/test";
 import { createFiberBridge } from "./index.js";
 
 // Marks this as a valid React test environment for act().

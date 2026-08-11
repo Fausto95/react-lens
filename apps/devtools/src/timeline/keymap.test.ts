@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect } from "vite-plus/test";
 import { timelineKeyAction } from "./keymap.js";
 
 type KeyEvent = Parameters<typeof timelineKeyAction>[0];
@@ -45,7 +45,9 @@ describe("timelineKeyAction — layout-independent bindings", () => {
     expect(timelineKeyAction(ev({ key: "t", code: "KeyT" }))).toEqual({ kind: "toggle-collapse" });
     expect(timelineKeyAction(ev({ key: "L", code: "KeyL" }))).toEqual({ kind: "go-live" });
     expect(timelineKeyAction(ev({ key: "f", code: "KeyF" }))).toEqual({ kind: "fit" });
-    expect(timelineKeyAction(ev({ key: "Escape", code: "Escape" }))).toEqual({ kind: "escape-band" });
+    expect(timelineKeyAction(ev({ key: "Escape", code: "Escape" }))).toEqual({
+      kind: "escape-band",
+    });
     expect(timelineKeyAction(ev({ key: " ", code: "Space" }))).toEqual({ kind: "toggle-play" });
     expect(timelineKeyAction(ev({ key: "ArrowLeft", code: "ArrowLeft" }))).toEqual({
       kind: "step-commit",

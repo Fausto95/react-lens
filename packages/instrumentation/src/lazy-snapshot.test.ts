@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect } from "vite-plus/test";
 import { createFiberBridge } from "@reactlens/fiber";
 import { createSerializer } from "@reactlens/serializer";
 import { createInstrumentation } from "./instrumentation.js";
@@ -53,7 +53,11 @@ describe("two-tier capture: lightweight stream + on-demand snapshots", () => {
     const badgeEvent = frames
       .flatMap((f) => f.events)
       .filter((e): e is RenderEvent => e.type === "render")
-      .find((e) => names.size > 0 && frames.flatMap((f) => f.instances).find((i) => i.id === e.componentId)?.name === "Badge");
+      .find(
+        (e) =>
+          names.size > 0 &&
+          frames.flatMap((f) => f.instances).find((i) => i.id === e.componentId)?.name === "Badge",
+      );
     expect(badgeEvent).toBeDefined();
 
     const snap = inst.snapshot(badgeEvent!.renderId);

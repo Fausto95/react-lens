@@ -132,9 +132,7 @@ export function createInspectController(opts: {
     const pick: InspectPick = {
       componentId: inst.id,
       name: inst.name,
-      ...(inst.source
-        ? { sourceFile: inst.source.file, sourceLine: inst.source.line }
-        : {}),
+      ...(inst.source ? { sourceFile: inst.source.file, sourceLine: inst.source.line } : {}),
     };
     onPick(pick);
     highlighter.show(fiber.domNodesOf(inst.id));
@@ -309,11 +307,7 @@ export function createInspectController(opts: {
 }
 
 /** Try overrideProps for children / common string props matching prior text. */
-export function tryReactTextOverride(
-  fiber: FiberBridge,
-  id: ComponentId,
-  text: string,
-): boolean {
+export function tryReactTextOverride(fiber: FiberBridge, id: ComponentId, text: string): boolean {
   if (!fiber.canEditValues()) return false;
   // Prefer children — most text hosts.
   if (fiber.setProp(id, ["children"], text)) return true;

@@ -6,9 +6,7 @@ import { boot, cartLine, ensureTravelOn } from "./helpers.js";
  * adapter: mutate the cart, scrub back, assert the UI rewinds; go-live restores.
  */
 
-test("external store cart rewinds with the playhead and restores on go-live", async ({
-  page,
-}) => {
+test("external store cart rewinds with the playhead and restores on go-live", async ({ page }) => {
   await boot(page);
   await ensureTravelOn(page);
 

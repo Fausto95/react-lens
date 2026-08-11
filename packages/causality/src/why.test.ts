@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect } from "vite-plus/test";
 import { TraceStore } from "@reactlens/trace-engine";
 import { createCausality } from "./why.js";
 import type {
@@ -18,7 +18,7 @@ const CID = 1 as ComponentId;
 
 function render(renderId: number, reasons: RenderReason[]): RenderEvent {
   return {
-    id: (++seq) as EventId,
+    id: ++seq as EventId,
     type: "render",
     timestamp: renderId,
     renderId: renderId as RenderId,
@@ -91,8 +91,14 @@ describe("causality — why did this render?", () => {
 
   it("flags a function-identity-only prop change with no observable output", () => {
     const store = new TraceStore();
-    const before = obj("p1", [["onClick", fn("fn_1", "onClick")], ["title", { k: "primitive", type: "string", value: "M" }]]);
-    const after = obj("p2", [["onClick", fn("fn_2", "onClick")], ["title", { k: "primitive", type: "string", value: "M" }]]);
+    const before = obj("p1", [
+      ["onClick", fn("fn_1", "onClick")],
+      ["title", { k: "primitive", type: "string", value: "M" }],
+    ]);
+    const after = obj("p2", [
+      ["onClick", fn("fn_2", "onClick")],
+      ["title", { k: "primitive", type: "string", value: "M" }],
+    ]);
     store.ingest({
       events: [
         render(1, [{ type: "mount" }]),
@@ -119,10 +125,7 @@ describe("causality — why did this render?", () => {
   it("treats a state change with DOM change as expected", () => {
     const store = new TraceStore();
     store.ingest({
-      events: [
-        render(1, [{ type: "mount" }]),
-        render(2, [{ type: "state", hookIndex: 0 }]),
-      ],
+      events: [render(1, [{ type: "mount" }]), render(2, [{ type: "state", hookIndex: 0 }])],
       snapshots: [
         snap(1, { dom: domNode({ text: "Add" }) }),
         snap(2, { dom: domNode({ text: "Remove" }) }),

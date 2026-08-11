@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect } from "vite-plus/test";
 import { analyzeSource, definitionLine, definitionSpan } from "./static.js";
 
 describe("analyzeSource — static rules", () => {

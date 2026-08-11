@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, vi, afterEach } from "vite-plus/test";
 import { openInEditor, preferredEditor, editorOpenPlan } from "./openInEditor.js";
 
 function iframes(): HTMLIFrameElement[] {

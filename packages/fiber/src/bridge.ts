@@ -208,9 +208,7 @@ export function createFiberBridge(target: typeof globalThis = globalThis): Fiber
     const fiber = fiberById.get(id);
     if (!fiber || fiber.tag !== ClassComponent) return false;
     const current = currentOf(fiber);
-    const instance = current.stateNode as
-      | { state?: unknown; forceUpdate?: () => void }
-      | null;
+    const instance = current.stateNode as { state?: unknown; forceUpdate?: () => void } | null;
     if (!instance || typeof instance.forceUpdate !== "function") return false;
     try {
       // Replacing instance.state alone is not enough: forceUpdate re-derives
@@ -306,7 +304,8 @@ export function createFiberBridge(target: typeof globalThis = globalThis): Fiber
   }
 
   function idOf(fiber: Fiber): ComponentId {
-    const known = idByFiber.get(fiber) ?? (fiber.alternate ? idByFiber.get(fiber.alternate) : undefined);
+    const known =
+      idByFiber.get(fiber) ?? (fiber.alternate ? idByFiber.get(fiber.alternate) : undefined);
     if (known !== undefined) {
       // Ensure both halves of the pair map to the id.
       idByFiber.set(fiber, known);
@@ -446,7 +445,8 @@ export function createFiberBridge(target: typeof globalThis = globalThis): Fiber
   }
 
   function handleUnmount(fiber: Fiber): void {
-    const id = idByFiber.get(fiber) ?? (fiber.alternate ? idByFiber.get(fiber.alternate) : undefined);
+    const id =
+      idByFiber.get(fiber) ?? (fiber.alternate ? idByFiber.get(fiber.alternate) : undefined);
     if (id === undefined) return;
     instanceById.delete(id);
     fiberById.delete(id);
@@ -467,9 +467,13 @@ export function createFiberBridge(target: typeof globalThis = globalThis): Fiber
     if (!fiber) return [];
     const nodes: Node[] = [];
     const collect = (stopAtHost: boolean) => {
-      traverse(fiber, (f) => {
-        if (f.tag === HostComponent && f.stateNode instanceof Node) nodes.push(f.stateNode);
-      }, stopAtHost);
+      traverse(
+        fiber,
+        (f) => {
+          if (f.tag === HostComponent && f.stateNode instanceof Node) nodes.push(f.stateNode);
+        },
+        stopAtHost,
+      );
     };
     collect(true);
     if (nodes.length === 0) collect(false);
@@ -635,9 +639,7 @@ function nearestComponentAncestor(fiber: Fiber | null): Fiber | null {
  * that boundary is currently showing its fallback (React stores a non-null
  * memoizedState on a suspended Suspense fiber).
  */
-function suspenseOf(
-  fiber: Fiber,
-): { under: boolean; suspended: boolean; boundary: Fiber | null } {
+function suspenseOf(fiber: Fiber): { under: boolean; suspended: boolean; boundary: Fiber | null } {
   let node: Fiber | null = fiber.return;
   let guard = 0;
   while (node && guard++ < 1000) {
@@ -664,9 +666,7 @@ const CLIENT_REF = Symbol.for("react.client.reference");
 const SERVER_REF = Symbol.for("react.server.reference");
 const LAZY = Symbol.for("react.lazy");
 
-function flightRole(
-  t: unknown,
-): "client-reference" | "server-reference" | "lazy-payload" | null {
+function flightRole(t: unknown): "client-reference" | "server-reference" | "lazy-payload" | null {
   if (!t || (typeof t !== "object" && typeof t !== "function")) return null;
   const o = t as Record<string | symbol, unknown>;
   const typeOf = o["$$typeof"];

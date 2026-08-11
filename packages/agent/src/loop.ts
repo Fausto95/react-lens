@@ -112,7 +112,10 @@ function parseToolArgs(
     const raw = call.arguments[field];
     // Models often stringify numbers — coerce rather than reject.
     const value =
-      rule.type === "number" && typeof raw === "string" && raw.trim() !== "" && Number.isFinite(Number(raw))
+      rule.type === "number" &&
+      typeof raw === "string" &&
+      raw.trim() !== "" &&
+      Number.isFinite(Number(raw))
         ? Number(raw)
         : raw;
     if (value === undefined || value === null) {
@@ -125,7 +128,10 @@ function parseToolArgs(
       return { ok: false, error: `${call.name}: argument "${field}" must be a ${rule.type}` };
     }
     if (rule.enum && !rule.enum.includes(value as string)) {
-      return { ok: false, error: `${call.name}: "${field}" must be one of ${rule.enum.join(", ")}` };
+      return {
+        ok: false,
+        error: `${call.name}: "${field}" must be one of ${rule.enum.join(", ")}`,
+      };
     }
     out[field] = value;
   }

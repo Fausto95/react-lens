@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect } from "vite-plus/test";
 import { TraceStore } from "@reactlens/trace-engine";
 import { createCausality } from "@reactlens/causality";
 import type {
@@ -27,7 +27,7 @@ function render(
   over: Partial<RenderEvent> = {},
 ): RenderEvent {
   return {
-    id: (++seq) as EventId,
+    id: ++seq as EventId,
     type: "render",
     timestamp: renderId,
     renderId: renderId as RenderId,
@@ -77,9 +77,7 @@ function snap(renderId: number, over: Partial<RenderSnapshot>): RenderSnapshot {
 }
 
 function interactionOf(store: TraceStore, label = "Click"): Interaction {
-  const renders = store
-    .export()
-    .events.filter((e): e is RenderEvent => e.type === "render");
+  const renders = store.export().events.filter((e): e is RenderEvent => e.type === "render");
   return {
     id: "1",
     label,
@@ -175,9 +173,7 @@ describe("explainInteraction", () => {
   it("falls back to costliest component when no waste or doctor", () => {
     const store = new TraceStore();
     store.ingest({
-      events: [
-        render(1, [{ type: "mount" }], { selfDuration: 2, componentId: CID }),
-      ],
+      events: [render(1, [{ type: "mount" }], { selfDuration: 2, componentId: CID })],
       snapshots: [snap(1, { dom: domNode({ text: "hi" }) })],
       instances: [instance(1, "App")],
     });

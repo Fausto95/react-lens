@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect } from "vite-plus/test";
 import { buildGraph } from "./build.js";
 import { focus, neighbors } from "./focus.js";
 import { componentKey, contextKey } from "./types.js";
@@ -39,7 +39,10 @@ describe("buildGraph", () => {
     const g = buildGraph({
       components: [{ id: cid(2), name: "Card" }],
       renders: [
-        { componentId: cid(2), reasons: [{ type: "context", contextType: ctid(9), label: "CartContext" }] },
+        {
+          componentId: cid(2),
+          reasons: [{ type: "context", contextType: ctid(9), label: "CartContext" }],
+        },
       ],
     });
     expect(g.nodes.get(contextKey(ctid(9)))?.label).toBe("CartContext");

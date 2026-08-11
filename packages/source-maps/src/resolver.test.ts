@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect } from "vite-plus/test";
 import { createSourceResolver } from "./resolver.js";
 import type { SourceLocation } from "@reactlens/protocol";
 
@@ -7,12 +7,21 @@ function inlineModule(map: object): string {
   return `compiled(0);\n//# sourceMappingURL=data:application/json;base64,${b64}`;
 }
 
-const loc = (file: string, line: number, column: number): SourceLocation => ({ file, line, column });
+const loc = (file: string, line: number, column: number): SourceLocation => ({
+  file,
+  line,
+  column,
+});
 
 describe("source resolver", () => {
   it("maps a compiled position to the original source via an inline map", async () => {
     // "AAAA" maps generated line 1, col 0 → source[0], orig line 1, col 0.
-    const code = inlineModule({ version: 3, sources: ["src/App.tsx"], names: [], mappings: "AAAA" });
+    const code = inlineModule({
+      version: 3,
+      sources: ["src/App.tsx"],
+      names: [],
+      mappings: "AAAA",
+    });
     const resolver = createSourceResolver(async () => code);
     const out = await resolver.resolve(loc("/src/App.tsx", 1, 0));
     expect(out).toEqual({ file: "src/App.tsx", line: 1, column: 0 });

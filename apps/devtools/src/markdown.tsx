@@ -66,7 +66,11 @@ export function parseMarkdown(text: string): Block[] {
     }
     const para: string[] = [line];
     i++;
-    while (i < lines.length && lines[i]!.trim() !== "" && !/^(#{1,4}\s|```|\s*[-*]\s)/.test(lines[i]!)) {
+    while (
+      i < lines.length &&
+      lines[i]!.trim() !== "" &&
+      !/^(#{1,4}\s|```|\s*[-*]\s)/.test(lines[i]!)
+    ) {
       para.push(lines[i]!);
       i++;
     }
@@ -241,7 +245,9 @@ function CodeBlock({ block }: { block: Extract<Block, { kind: "code" }> }) {
     <div className="rl-md-code">
       <div className="rl-md-code-bar">
         <span className="rl-md-code-loc">
-          {block.file ? `${block.file}${block.line ? `:${block.line}` : ""}` : block.lang ?? "code"}
+          {block.file
+            ? `${block.file}${block.line ? `:${block.line}` : ""}`
+            : (block.lang ?? "code")}
         </span>
         <span className="rl-spacer" />
         <button type="button" className="rl-narrative-link" onClick={copy}>

@@ -68,8 +68,7 @@ async function fetchSourceForPanel(requestId: string, url: string): Promise<void
     const res = await fetch(absolute);
     if (!res.ok) throw new Error(`fetch ${absolute}: ${res.status}`);
     const text = await res.text();
-    const body =
-      text.length > SOURCE_MAX_BYTES ? text.slice(0, SOURCE_MAX_BYTES) : text;
+    const body = text.length > SOURCE_MAX_BYTES ? text.slice(0, SOURCE_MAX_BYTES) : text;
     window.postMessage(
       {
         source: PAGE_SOURCE,

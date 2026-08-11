@@ -136,7 +136,9 @@ export function AgentPane({
               setPending((p) => (p ? { ...p, text: p.text + e.text } : p));
             } else if (e.type === "tool_start") {
               setPending((p) =>
-                p ? { ...p, text: "", activity: [...p.activity, { name: e.name, summary: "" }] } : p,
+                p
+                  ? { ...p, text: "", activity: [...p.activity, { name: e.name, summary: "" }] }
+                  : p,
               );
             } else if (e.type === "tool_result") {
               setPending((p) => {
@@ -221,10 +223,20 @@ export function AgentPane({
             Clear
           </button>
         )}
-        <button type="button" className="rl-icon-btn" onClick={onOpenSettings} title="Provider settings (BYOK)">
+        <button
+          type="button"
+          className="rl-icon-btn"
+          onClick={onOpenSettings}
+          title="Provider settings (BYOK)"
+        >
           ⚙
         </button>
-        <button type="button" className="rl-icon-btn" onClick={onClose} aria-label="Close assistant">
+        <button
+          type="button"
+          className="rl-icon-btn"
+          onClick={onClose}
+          aria-label="Close assistant"
+        >
           ×
         </button>
       </div>
@@ -234,7 +246,12 @@ export function AgentPane({
           <div className="rl-agent-empty">
             <p>Ask about this recording — answers cite real renders, components and timings.</p>
             {SUGGESTIONS.map((s) => (
-              <button key={s} type="button" className="rl-btn rl-agent-suggest" onClick={() => void ask(s)}>
+              <button
+                key={s}
+                type="button"
+                className="rl-btn rl-agent-suggest"
+                onClick={() => void ask(s)}
+              >
                 {s}
               </button>
             ))}
@@ -246,7 +263,13 @@ export function AgentPane({
               {m.content}
             </div>
           ) : (
-            <AssistantTurn key={i} content={m.content} steps={m.steps} citations={m.citations} onCitation={onCitation} />
+            <AssistantTurn
+              key={i}
+              content={m.content}
+              steps={m.steps}
+              citations={m.citations}
+              onCitation={onCitation}
+            />
           ),
         )}
         {pending && (
@@ -288,7 +311,12 @@ export function AgentPane({
             Stop
           </button>
         ) : (
-          <button type="button" className="rl-btn primary" disabled={!input.trim()} onClick={() => void ask(input)}>
+          <button
+            type="button"
+            className="rl-btn primary"
+            disabled={!input.trim()}
+            onClick={() => void ask(input)}
+          >
             Ask
           </button>
         )}
@@ -332,7 +360,12 @@ function AssistantTurn({
       {citations.length > 0 && (
         <div className="rl-narrative-cites" aria-label="Citations">
           {citations.map((ref, i) => (
-            <button key={i} type="button" className="rl-narrative-chip" onClick={() => onCitation(ref)}>
+            <button
+              key={i}
+              type="button"
+              className="rl-narrative-chip"
+              onClick={() => onCitation(ref)}
+            >
               {ref.kind === "render" ? `r${ref.id}` : ref.label}
             </button>
           ))}

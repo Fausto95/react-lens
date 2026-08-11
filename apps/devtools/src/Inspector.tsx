@@ -88,9 +88,11 @@ export function Inspector({
 
   const historical = cursor?.mode === "historical";
   const historicalRenderId = historical
-    ? store.renderAtOrBefore(componentId, cursor.t)?.renderId ?? null
+    ? (store.renderAtOrBefore(componentId, cursor.t)?.renderId ?? null)
     : null;
-  const activeRenderId = historical ? historicalRenderId : selectedRender ?? latest?.renderId ?? null;
+  const activeRenderId = historical
+    ? historicalRenderId
+    : (selectedRender ?? latest?.renderId ?? null);
 
   const hasSnapshot = activeRenderId !== null && store.snapshot(activeRenderId) !== undefined;
   useEffect(() => {
@@ -117,8 +119,7 @@ export function Inspector({
     ...(onSelectComponent ? { onSelectComponent } : {}),
   };
 
-  const abDiff =
-    ab?.a != null && ab?.b != null ? compareAB(store, componentId, ab.a, ab.b) : null;
+  const abDiff = ab?.a != null && ab?.b != null ? compareAB(store, componentId, ab.a, ab.b) : null;
 
   const hooks = snapshot?.hooks ?? [];
   const propCount = snapshot?.props.k === "object" ? (snapshot.props.entries?.length ?? 0) : 0;
@@ -127,7 +128,8 @@ export function Inspector({
   const contextCount = snapshot?.contexts?.length ?? 0;
   const renderCount = store.renderCount(componentId);
   const selfTotal = store.selfTimeTotal(componentId);
-  const activeSelf = activeRenderId != null ? store.getRender(activeRenderId)?.selfDuration : undefined;
+  const activeSelf =
+    activeRenderId != null ? store.getRender(activeRenderId)?.selfDuration : undefined;
 
   return (
     <div className="rl-inspector">
@@ -305,7 +307,9 @@ function ABCompare({ diff: d }: { diff: ABDiff }) {
   );
 }
 
-function rscTitle(inst: { rsc?: { role: string; moduleId?: string; exportName?: string } }): string {
+function rscTitle(inst: {
+  rsc?: { role: string; moduleId?: string; exportName?: string };
+}): string {
   const r = inst.rsc;
   if (!r) return "RSC / Flight boundary";
   const parts = [r.role];

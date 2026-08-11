@@ -32,9 +32,7 @@ export function ABDiffPanel({
     .map((c) => ({
       ...c,
       name: store.instance(c.componentId)?.name ?? `#${c.componentId}`,
-      renders: store
-        .rendersOf(c.componentId)
-        .filter((r) => r.timestamp > t0 && r.timestamp <= t1),
+      renders: store.rendersOf(c.componentId).filter((r) => r.timestamp > t0 && r.timestamp <= t1),
     }))
     .sort((x, y) => y.renders.length - x.renders.length);
   const shown = rows.slice(0, ROW_CAP);
@@ -47,7 +45,12 @@ export function ABDiffPanel({
           {comparison.unchangedCount} unchanged
         </span>
         <span className="rl-spacer" />
-        <button className="rl-icon-btn" onClick={onClose} title="Close A/B diff" aria-label="Close A/B diff">
+        <button
+          className="rl-icon-btn"
+          onClick={onClose}
+          title="Close A/B diff"
+          aria-label="Close A/B diff"
+        >
           <IconClose size={12} />
         </button>
       </div>
