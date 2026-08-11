@@ -6,6 +6,8 @@ import { defineConfig } from "@playwright/test";
  * live React app. A dedicated port keeps runs isolated from dev servers.
  */
 const PORT = 5199;
+/** Minified production build, served from dist — the prod-source specs. */
+const PROD_PORT = 5198;
 
 export default defineConfig({
   testDir: "e2e",
@@ -23,10 +25,23 @@ export default defineConfig({
     viewport: { width: 1500, height: 950 },
     trace: "retain-on-failure",
   },
-  webServer: {
-    command: `pnpm --filter @reactlens/playground exec vite --port ${PORT} --strictPort`,
-    url: `http://localhost:${PORT}`,
-    reuseExistingServer: !process.env.CI,
-    stdout: "ignore",
-  },
+  webServer: [
+    {
+      command: `pnpm --filter @reactlens/playground exec vp dev --port ${PORT} --strictPort`,
+      url: `http://localhost:${PORT}`,
+      reuseExistingServer: !process.env.CI,
+      stdout: "ignore",
+    },
+    {
+      // A genuine production bundle: minified names, no dev-only fiber fields,
+      // sourcemaps deployed so the panel can symbolicate what it locates.
+      command:
+        `pnpm --filter @reactlens/playground build --sourcemap && ` +
+        `pnpm --filter @reactlens/playground exec vp preview --port ${PROD_PORT} --strictPort`,
+      url: `http://localhost:${PROD_PORT}`,
+      reuseExistingServer: !process.env.CI,
+      stdout: "ignore",
+      timeout: 120_000,
+    },
+  ],
 });
