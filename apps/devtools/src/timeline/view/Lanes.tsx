@@ -4,6 +4,7 @@ import { laneVisibility, type LaneControls, type LaneKey } from "../../laneFilte
 import { clipCauseColor, type Clip, type DensityBucket } from "../model/lanes.js";
 import type { LaneRow } from "../model/rows.js";
 import { inChunkRange, type ChunkRange } from "../model/culling.js";
+import { placeClips } from "../model/place.js";
 import { CLIP_LABEL_MIN_PX, MIN_CLIP_PX } from "./metrics.js";
 
 /** Concept chip text: a short cause tag, with duration when there's room. */
@@ -52,6 +53,7 @@ export function Lanes({
   onToggleExpand,
   onSelectLane,
   onSelectClip,
+  onExpandCluster,
   onHighlight,
 }: {
   rows: readonly LaneRow[];
@@ -64,6 +66,8 @@ export function Lanes({
   onToggleExpand: (key: LaneKey) => void;
   onSelectLane: (key: LaneKey) => void;
   onSelectClip: (clip: Clip) => void;
+  /** Picking a cluster zooms to its span — the only way to see inside it. */
+  onExpandCluster: (clips: readonly Clip[]) => void;
   onHighlight?: (id: ComponentId | null) => void;
 }) {
   return (
@@ -111,12 +115,42 @@ export function Lanes({
                 />
               )}
 
-              {row.clips.map((clip) => {
-                const left = xOf(clip.t0);
-                const width = Math.max(MIN_CLIP_PX, xOf(clip.t1) - left);
-                // Off-screen clips skip the DOM entirely; the window only
+              {placeClips(row.clips, xOf).map((placed) => {
+                // Off-screen boxes skip the DOM entirely; the window only
                 // changes when a chunk boundary is crossed.
-                if (!inChunkRange(cull, left, width)) return null;
+                if (!inChunkRange(cull, placed.left, placed.width)) return null;
+                const { left, width } = placed;
+
+                if (placed.kind === "cluster") {
+                  // Renders too close together to separate at this scale. It
+                  // says how many it stands for and zooms to them when picked
+                  // — the only way to see them individually is more room.
+                  const wasted = placed.clips.filter((c) => c.wasted).length;
+                  const first = placed.clips[0]!;
+                  return (
+                    <button
+                      key={`cluster-${first.renderId}`}
+                      type="button"
+                      className={`clip cluster c-${clipCauseColor(first.cause)}`}
+                      style={{ left, width }}
+                      title={`${placed.clips.length} renders of ${first.name} in ${(
+                        placed.clips.at(-1)!.t1 - first.t0
+                      ).toFixed(1)} ms${
+                        wasted > 0 ? ` · ${wasted} with no observable change` : ""
+                      } — click to zoom in`}
+                      onPointerDown={(e) => e.stopPropagation()}
+                      onPointerEnter={() => onHighlight?.(first.componentId)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onExpandCluster(placed.clips);
+                      }}
+                    >
+                      <span className="ccount">{placed.clips.length}</span>
+                    </button>
+                  );
+                }
+
+                const clip = placed.clip;
                 return (
                   <button
                     key={clip.renderId}
@@ -125,7 +159,7 @@ export function Lanes({
                       clip.wasted ? " wasted" : ""
                     }${selectedRender === clip.renderId ? " sel" : ""}${
                       fixApplied && clip.wasted ? " fadeout" : ""
-                    }`}
+                    }${width < CLIP_LABEL_MIN_PX ? " bare" : ""}`}
                     data-clip={clip.renderId}
                     style={{ left, width }}
                     title={`${clip.name} · ${clip.cause} · ${clip.self.toFixed(1)} ms${

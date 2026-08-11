@@ -370,6 +370,14 @@ export function Timeline({
                 onHighlight?.(clip.componentId);
                 onCursor({ t: clip.t0, mode: "historical" });
               }}
+              onExpandCluster={(clips) => {
+                // Zoom to the cluster's span with a little air either side, so
+                // its renders separate instead of landing on the same pixel.
+                const t0 = clips[0]!.t0;
+                const t1 = clips.at(-1)!.t1;
+                const pad = Math.max((t1 - t0) * 0.25, 0.5);
+                dispatch({ type: "fitRange", span: { start: t0 - pad, end: t1 + pad } });
+              }}
               {...(onHighlight ? { onHighlight } : {})}
             />
 

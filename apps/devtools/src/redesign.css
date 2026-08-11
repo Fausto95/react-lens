@@ -1619,3 +1619,51 @@
   gap: 2px;
   margin-right: -6px;
 }
+
+/* ── Clustered renders ──────────────────────────────────────────────────────
+   Renders too close together to draw separately at the current scale. Before
+   this they were drawn anyway — each widened to the 4px legibility floor and
+   overlapping its neighbours into an unreadable smear.
+
+   A cluster must not be mistakable for one long render, so it carries a
+   striped fill (the "there is structure in here" cue the density bands
+   already use) and its count. */
+.rl-redesign .clip.cluster {
+  padding: 0;
+  justify-content: center;
+  background-image: repeating-linear-gradient(
+    -45deg,
+    rgba(255, 255, 255, 0.16) 0 2px,
+    transparent 2px 4px
+  );
+  border-style: solid;
+  border-color: rgba(255, 255, 255, 0.28);
+}
+.rl-redesign .clip.cluster:hover {
+  border-color: rgba(255, 255, 255, 0.5);
+}
+.rl-redesign .clip.cluster .ccount {
+  font-family: var(--mono);
+  font-size: 8.5px;
+  font-weight: 600;
+  line-height: 1;
+  color: rgba(255, 255, 255, 0.96);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.85);
+  pointer-events: none;
+}
+/* Below roughly two digits there is no room for the count; the stripes alone
+   still say "more than one render". */
+.rl-redesign .clip.cluster {
+  min-width: 4px;
+}
+
+/* A clip narrower than its label threshold drops the padding.
+
+   `.clip` is a flex box with `padding: 0 5px` and 1px borders, and under
+   `box-sizing: border-box` a box cannot render narrower than its own padding
+   — so `width: 4px` drew as 12px. The layout floor (MIN_CLIP_PX) and the CSS
+   disagreed by 8px, which is exactly the gap that let neighbouring clips
+   overlap after clustering had supposedly separated them. */
+.rl-redesign .clip.bare {
+  padding: 0;
+}
