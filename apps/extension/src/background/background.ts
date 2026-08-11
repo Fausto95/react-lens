@@ -1,4 +1,5 @@
 import { PAGE_PORT_NAME, PANEL_PORT_PREFIX, type PortMessage } from "../transport.js";
+import { registerWithRetry } from "./register.js";
 
 /**
  * Inject the MAIN-world scripts natively via chrome.scripting rather than as
@@ -37,19 +38,34 @@ const MAIN_SCRIPTS: chrome.scripting.RegisteredContentScript[] = [
 // concurrent double-registration that multiple event listeners would cause.
 async function registerMainScripts(): Promise<void> {
   const ids = MAIN_SCRIPTS.map((s) => s.id);
-  try {
-    await chrome.scripting.unregisterContentScripts({ ids });
-  } catch {
-    // Nothing registered yet — expected on first run.
-  }
-  try {
+  const result = await registerWithRetry(async () => {
+    try {
+      await chrome.scripting.unregisterContentScripts({ ids });
+    } catch {
+      // Nothing registered yet — expected on first run.
+    }
     await chrome.scripting.registerContentScripts(MAIN_SCRIPTS);
-  } catch (err) {
-    console.error("[react-lens] failed to register MAIN-world scripts", err);
-  }
+  });
+
+  if (result.ok) return;
+
+  // Out of retries. Say what this means rather than printing a bare rejection:
+  // without these scripts the hook never installs, so the panel will sit empty
+  // and the cause is nowhere near the symptom.
+  console.error(
+    "[react-lens] could not register the MAIN-world scripts, so React Lens will not " +
+      "attach to pages. Reload the extension from chrome://extensions to retry.",
+    result.error,
+  );
 }
 
 void registerMainScripts();
+
+// The worker is terminated at will and these registrations are what make the
+// extension work at all, so re-assert them at every lifecycle point Chrome
+// offers rather than only on a cold start that may have raced its own startup.
+chrome.runtime.onInstalled.addListener(() => void registerMainScripts());
+chrome.runtime.onStartup.addListener(() => void registerMainScripts());
 
 /**
  * Stateless relay (MV3 terminates it at will). Pairs a page port with the panel

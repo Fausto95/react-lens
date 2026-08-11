@@ -4343,3 +4343,46 @@
   letter-spacing: 0;
   color: var(--rl-text-faint);
 }
+
+/* Panel-level recovery notice: the extension context died, so nothing in the
+   panel can update. Deliberately plain — it must render without any of the
+   panel's own state. */
+.rl-lost {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  height: 100vh;
+  padding: 24px;
+  text-align: center;
+  font-family: var(--rl-font, system-ui, sans-serif);
+  color: var(--rl-text, #e8e8eb);
+  background: var(--rl-bg, #0a0a0b);
+}
+.rl-lost h1 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+}
+.rl-lost p {
+  margin: 0;
+  max-width: 42ch;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--rl-text-dim, #9a9aa3);
+}
+.rl-lost button {
+  margin-top: 4px;
+  padding: 6px 14px;
+  border: 1px solid var(--rl-border, rgba(255, 255, 255, 0.14));
+  border-radius: 6px;
+  background: var(--rl-surface, #17171a);
+  color: inherit;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.rl-lost button:hover {
+  border-color: var(--rl-accent, #6e9bff);
+}

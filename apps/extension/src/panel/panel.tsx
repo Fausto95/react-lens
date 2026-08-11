@@ -15,6 +15,7 @@ import {
   configureSourceRevealer,
 } from "@reactlens/devtools/panel";
 import type { EditApi, TimeTravelApi } from "@reactlens/devtools/panel";
+import { isContextInvalidated, reconnectDelay } from "./connection.js";
 import { PANEL_PORT_PREFIX, type EditPrimitive, type PortMessage } from "../transport.js";
 
 /**
@@ -27,6 +28,8 @@ function ExtensionPanel() {
   const [recording, setRecording] = useState(true);
   const [inspecting, setInspecting] = useState(false);
   const [pickedId, setPickedId] = useState<ComponentId | null>(null);
+  /** The extension was reloaded under us; only reopening DevTools recovers. */
+  const [connectionLost, setConnectionLost] = useState(false);
   const portRef = useRef<chrome.runtime.Port | null>(null);
   const pendingSource = useRef(
     new Map<string, { resolve: (body: string) => void; reject: (err: Error) => void }>(),
@@ -41,9 +44,24 @@ function ExtensionPanel() {
     let disposed = false;
     const tabId = chrome.devtools.inspectedWindow.tabId;
 
+    let attempt = 0;
     const connect = () => {
       if (disposed) return;
-      const port = chrome.runtime.connect({ name: `${PANEL_PORT_PREFIX}${tabId}` });
+      let port: chrome.runtime.Port;
+      try {
+        port = chrome.runtime.connect({ name: `${PANEL_PORT_PREFIX}${tabId}` });
+      } catch (err) {
+        // A reloaded or updated extension invalidates this panel's context for
+        // good. Retrying only produces the same uncaught error forever, so say
+        // what actually fixes it instead.
+        if (isContextInvalidated(err)) {
+          setConnectionLost(true);
+          return;
+        }
+        setTimeout(connect, reconnectDelay(attempt++));
+        return;
+      }
+      attempt = 0;
       portRef.current = port;
       port.onMessage.addListener((msg: PortMessage) => {
         if (msg.kind === "frame" || msg.kind === "snapshot") store.ingest(msg.frame);
@@ -92,7 +110,13 @@ function ExtensionPanel() {
       });
       port.onDisconnect.addListener(() => {
         portRef.current = null;
-        if (!disposed) setTimeout(connect, 500);
+        // `lastError` must be read here or Chrome logs it as unchecked.
+        const err = chrome.runtime.lastError;
+        if (err && isContextInvalidated(err)) {
+          setConnectionLost(true);
+          return;
+        }
+        if (!disposed) setTimeout(connect, reconnectDelay(attempt++));
       });
     };
     connect();
@@ -313,6 +337,24 @@ function ExtensionPanel() {
       return next;
     });
   }, []);
+
+  if (connectionLost) {
+    // Nothing here is recoverable in place: this panel's extension context is
+    // gone, so the store will never receive another frame. Say what happened
+    // and what fixes it, rather than showing a panel frozen on stale data.
+    return (
+      <div className="rl-lost">
+        <h1>React Lens disconnected</h1>
+        <p>
+          The extension was reloaded or updated, which invalidates this panel. Close and reopen
+          DevTools to reconnect.
+        </p>
+        <button type="button" onClick={() => location.reload()}>
+          Reload panel
+        </button>
+      </div>
+    );
+  }
 
   return (
     <Panel
