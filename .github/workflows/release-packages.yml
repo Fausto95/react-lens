@@ -1,0 +1,51 @@
+name: Release packages
+
+# Changesets-driven npm releases.
+#
+# On every push to main with pending changesets, the action opens (or
+# updates) a "Version Packages" PR that applies the version bumps and
+# changelogs. Merging that PR re-runs this workflow, which then builds
+# and publishes the bumped packages to npm.
+#
+# Requires the NPM_TOKEN secret (npm automation token with publish
+# rights on the @react-lens scope). Without it the publish step fails
+# only when a release is actually attempted.
+
+on:
+  push:
+    branches: [main]
+
+concurrency: release-packages-${{ github.ref }}
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4 # version comes from packageManager in package.json
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - run: pnpm test
+
+      - run: pnpm typecheck
+
+      - name: Create release PR or publish
+        uses: changesets/action@v1
+        with:
+          publish: pnpm release
+          title: "chore: version packages"
+          commit: "chore: version packages"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}

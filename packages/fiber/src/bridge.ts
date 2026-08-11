@@ -52,6 +52,8 @@ export interface FiberBridge {
   install(): void;
   /** Exclude a React root's container from capture (e.g. the panel's own UI). */
   ignoreContainer(node: Node): void;
+  /** Whether a DOM node lives inside an ignored container (panel chrome). */
+  isIgnoredNode(node: Node): boolean;
   /** Whether the renderer exposes the dev-only live-edit API. */
   canEditValues(): boolean;
   /** Override a prop at `path` on a component and schedule a re-render. */
@@ -515,6 +517,7 @@ export function createFiberBridge(target: typeof globalThis = globalThis): Fiber
   return {
     install,
     ignoreContainer: (node: Node) => ignoredContainers.add(node),
+    isIgnoredNode: isWithinIgnored,
     canEditValues,
     setProp,
     setHookState,

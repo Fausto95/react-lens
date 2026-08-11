@@ -362,6 +362,10 @@ export function createInstrumentation(deps: {
 
   function onUserEvent(kind: (typeof INTERACTION_EVENTS)[number], ev: Event): void {
     if (!recording || !config) return;
+    // Panel chrome is not the inspected app: clicks inside ignored containers
+    // must not become interactions (they pollute the timeline AND their
+    // ingest re-renders the panel mid-gesture, killing its own clicks).
+    if (ev.target instanceof Node && fiber.isIgnoredNode(ev.target)) return;
     const id = nextInteractionId();
     currentInteraction = { id, until: now() + config.interactionWindowMs };
     const target = ev.target instanceof Node ? fiber.resolveComponent(ev.target) : null;
