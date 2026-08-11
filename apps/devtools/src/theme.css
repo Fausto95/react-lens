@@ -4,6 +4,7 @@
    --rl-*-rgb channels (rgba(var(--rl-x-rgb), a)). Light mode overrides the
    tokens under [data-rl-theme="light"] — never add raw hex/rgba below. */
 :root {
+  color-scheme: dark;
   --rl-bg: #0b0d10;
   --rl-bg-raised: #12151a;
   --rl-bg-hover: #171b22;
@@ -72,6 +73,7 @@
 /* Light mode — same hues one step darker for contrast on paper; neutral
    surfaces flip, "ink" overlays flip to black. Applied via theme.ts. */
 [data-rl-theme="light"] {
+  color-scheme: light;
   --rl-bg: #ffffff;
   --rl-bg-raised: #f7f8fa;
   --rl-bg-hover: #f0f2f5;

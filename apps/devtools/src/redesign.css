@@ -11,24 +11,26 @@
 
    Loaded after theme.css so it wins. */
 
+/* Surfaces/text derive from theme.css --rl-* so [data-rl-theme="light"]
+   flips the redesign shell without a second palette. */
 .rl-redesign {
-  --bg: #0a0a0b;
-  --panel: #0f0f11;
-  --panel-2: #121214;
-  --line: rgba(255, 255, 255, 0.07);
-  --line-strong: rgba(255, 255, 255, 0.12);
-  --text: #e8e8eb;
-  --text-2: #9a9aa3;
-  --text-3: #5c5c66;
-  --accent: #6e9bff;
-  --props: #4c8dff;
-  --state: #3ecf8e;
-  --ctx: #a78bfa;
-  --cascade: #4a4a54;
-  --warn: #f5a623;
-  --bad: #ff6b6b;
-  --mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, monospace;
-  --sans: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", sans-serif;
+  --bg: var(--rl-bg);
+  --panel: var(--rl-bg-raised);
+  --panel-2: var(--rl-bg-hover);
+  --line: rgba(var(--rl-ink-rgb), 0.07);
+  --line-strong: rgba(var(--rl-ink-rgb), 0.12);
+  --text: var(--rl-text);
+  --text-2: var(--rl-text-dim);
+  --text-3: var(--rl-text-faint);
+  --accent: var(--rl-interaction);
+  --props: var(--rl-interaction);
+  --state: var(--rl-healthy);
+  --ctx: var(--rl-render);
+  --cascade: var(--rl-text-faint);
+  --warn: var(--rl-warn);
+  --bad: var(--rl-severe);
+  --mono: var(--rl-mono);
+  --sans: var(--rl-font);
   --r: 6px;
 }
 /* The concept's reset was `* { margin: 0; padding: 0 }`. Scoped to the panel
@@ -68,7 +70,7 @@
   border: 1px solid var(--line-strong);
   border-radius: 12px;
   overflow: hidden;
-  box-shadow: 0 40px 120px rgba(0, 0, 0, 0.6);
+  box-shadow: 0 40px 120px rgba(var(--rl-shadow-rgb), 0.6);
   user-select: none;
 }
 .rl-redesign .toolbar {
@@ -268,7 +270,7 @@
   position: relative;
 }
 .rl-redesign .node:hover {
-  background: rgba(255, 255, 255, 0.03);
+  background: rgba(var(--rl-ink-rgb), 0.03);
 }
 .rl-redesign .node.sel {
   background: rgba(110, 155, 255, 0.1);
@@ -336,7 +338,7 @@
   width: 34px;
   height: 3px;
   border-radius: 2px;
-  background: rgba(255, 255, 255, 0.07);
+  background: rgba(var(--rl-ink-rgb), 0.07);
   overflow: hidden;
 }
 .rl-redesign .hbar i {
@@ -381,7 +383,7 @@
   cursor: pointer;
 }
 .rl-redesign .ra:hover {
-  background: rgba(255, 255, 255, 0.07);
+  background: rgba(var(--rl-ink-rgb), 0.07);
   color: var(--text-2);
 }
 .rl-redesign .ra.on {
@@ -491,7 +493,7 @@
 }
 .rl-redesign .lane.sub {
   height: 26px;
-  background: rgba(255, 255, 255, 0.012);
+  background: rgba(var(--rl-ink-rgb), 0.012);
 }
 .rl-redesign .lane.dim {
   opacity: 0.28;
@@ -544,11 +546,11 @@
   display: flex;
   align-items: center;
   padding: 0 5px;
-  color: rgba(255, 255, 255, 0.92);
+  color: rgba(var(--rl-ink-rgb), 0.92);
   white-space: nowrap;
   overflow: hidden;
   cursor: pointer;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(var(--rl-ink-rgb), 0.08);
   transition: filter 0.12s ease-out;
 }
 .rl-redesign .lane.sub .clip {
@@ -632,11 +634,11 @@
     -45deg,
     transparent,
     transparent 3px,
-    rgba(255, 255, 255, 0.03) 3px,
-    rgba(255, 255, 255, 0.03) 6px
+    rgba(var(--rl-ink-rgb), 0.03) 3px,
+    rgba(var(--rl-ink-rgb), 0.03) 6px
   );
-  border-left: 1px solid rgba(255, 255, 255, 0.04);
-  border-right: 1px solid rgba(255, 255, 255, 0.04);
+  border-left: 1px solid rgba(var(--rl-ink-rgb), 0.04);
+  border-right: 1px solid rgba(var(--rl-ink-rgb), 0.04);
   pointer-events: none;
   z-index: 1;
 }
@@ -752,7 +754,7 @@
   width: 90px;
   height: 3px;
   border-radius: 2px;
-  background: rgba(255, 255, 255, 0.1);
+  background: rgba(var(--rl-ink-rgb), 0.1);
   outline: none;
 }
 .rl-redesign input[type="range"]::-webkit-slider-thumb {
@@ -908,7 +910,7 @@
   border-radius: 4px;
   overflow: hidden;
   margin: 4px 0 8px;
-  background: rgba(255, 255, 255, 0.04);
+  background: rgba(var(--rl-ink-rgb), 0.04);
 }
 .rl-redesign .phases i {
   display: block;
@@ -1633,22 +1635,22 @@
   justify-content: center;
   background-image: repeating-linear-gradient(
     -45deg,
-    rgba(255, 255, 255, 0.16) 0 2px,
+    rgba(var(--rl-ink-rgb), 0.16) 0 2px,
     transparent 2px 4px
   );
   border-style: solid;
-  border-color: rgba(255, 255, 255, 0.28);
+  border-color: rgba(var(--rl-ink-rgb), 0.28);
 }
 .rl-redesign .clip.cluster:hover {
-  border-color: rgba(255, 255, 255, 0.5);
+  border-color: rgba(var(--rl-ink-rgb), 0.5);
 }
 .rl-redesign .clip.cluster .ccount {
   font-family: var(--mono);
   font-size: 8.5px;
   font-weight: 600;
   line-height: 1;
-  color: rgba(255, 255, 255, 0.96);
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.85);
+  color: rgba(var(--rl-ink-rgb), 0.96);
+  text-shadow: 0 1px 2px rgba(var(--rl-shadow-rgb), 0.85);
   pointer-events: none;
 }
 /* Below roughly two digits there is no room for the count; the stripes alone
