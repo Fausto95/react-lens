@@ -1,6 +1,7 @@
 import { useMemo, useState, useEffect, useRef } from "react";
 import type { TraceStore } from "@react-lens/trace-engine";
 import type { ComponentId } from "@react-lens/protocol";
+import { fuzzyScore } from "./fuzzy.js";
 
 export interface Command {
   id: string;
@@ -44,10 +45,12 @@ export function CommandPalette({
   useEffect(() => inputRef.current?.focus(), []);
 
   const flat = useMemo(() => {
-    const lower = q.toLowerCase();
+    // Fuzzy match + rank: best scores first within each group.
     const cmds = commands
-      .filter((c) => c.label.toLowerCase().includes(lower))
-      .map((c) => ({
+      .map((c) => ({ c, score: fuzzyScore(q, c.label) }))
+      .filter((x): x is { c: Command; score: number } => x.score !== null)
+      .sort((a, b) => b.score - a.score)
+      .map(({ c }) => ({
         kind: "command" as const,
         key: `cmd:${c.id}`,
         label: c.label,
@@ -57,9 +60,12 @@ export function CommandPalette({
       }));
     const comps = store
       .allInstances()
-      .filter((i) => store.renderCount(i.id) > 0 && i.name.toLowerCase().includes(lower))
+      .filter((i) => store.renderCount(i.id) > 0)
+      .map((i) => ({ i, score: fuzzyScore(q, i.name) }))
+      .filter((x): x is { i: (typeof x)["i"]; score: number } => x.score !== null)
+      .sort((a, b) => b.score - a.score)
       .slice(0, 40)
-      .map((i) => ({
+      .map(({ i }) => ({
         kind: "component" as const,
         key: `c:${i.id}`,
         label: i.name,
@@ -90,6 +96,15 @@ export function CommandPalette({
   const selectable = flat.filter((i): i is Exclude<Item, { kind: "header" }> => i.kind !== "header");
   const clampedActive = Math.min(active, Math.max(0, selectable.length - 1));
   const activeKey = selectable[clampedActive]?.key;
+
+  // Keep the keyboard-active row in view while arrowing through the list.
+  const listRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!activeKey) return;
+    listRef.current
+      ?.querySelector(".rl-cmdk-item.active")
+      ?.scrollIntoView({ block: "nearest" });
+  }, [activeKey]);
 
   const choose = (item: Item | undefined) => {
     if (!item || item.kind === "header") return;
@@ -127,7 +142,7 @@ export function CommandPalette({
             }
           }}
         />
-        <div className="rl-cmdk-list">
+        <div className="rl-cmdk-list" ref={listRef}>
           {selectable.length === 0 ? (
             <div className="rl-empty rl-empty-compact">No matches.</div>
           ) : (

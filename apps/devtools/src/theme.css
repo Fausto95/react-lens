@@ -306,15 +306,27 @@
 }
 .rl-mode-compact { display: none; }
 
-.rl-tree-search {
+.rl-tree-search-wrap {
+  position: relative; display: flex;
   margin: var(--rl-s2) var(--rl-s3) var(--rl-s3);
+}
+.rl-tree-search {
+  flex: 1; min-width: 0;
   background: var(--rl-bg); color: var(--rl-text);
   border: 1px solid transparent; border-radius: 6px;
-  font: inherit; font-size: 12px; padding: 5px 8px;
+  font: inherit; font-size: 12px; padding: 5px 26px 5px 8px;
 }
 .rl-tree-search:hover { border-color: var(--rl-border); }
 .rl-tree-search:focus { outline: none; border-color: var(--rl-render); background: var(--rl-bg-raised); }
+.rl-tree-search.invalid,
+.rl-tree-search.invalid:focus { border-color: rgba(var(--rl-severe-rgb), 0.65); }
 .rl-tree-search::placeholder { color: var(--rl-text-faint); }
+.rl-tree-search-count {
+  position: absolute; right: 7px; top: 50%; transform: translateY(-50%);
+  font-size: 10px; font-variant-numeric: tabular-nums;
+  color: var(--rl-text-faint); pointer-events: none;
+}
+.rl-tree-search-count.invalid { color: var(--rl-severe); font-weight: 600; }
 
 .rl-tree-rows { display: flex; flex-direction: column; }
 

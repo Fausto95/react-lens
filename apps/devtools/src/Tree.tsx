@@ -77,12 +77,18 @@ export function Tree({
     [store, causality, version],
   );
 
+  const parsed = useMemo(() => parseQuery(query), [query]);
   const roots = useMemo(() => {
     const modeInclude = includeFor(mode);
-    const queryPred = parseQuery(query);
-    const include = (d: ComponentDatum) => (modeInclude ? modeInclude(d) : true) && queryPred(d);
+    const include = (d: ComponentDatum) =>
+      (modeInclude ? modeInclude(d) : true) && parsed.predicate(d);
     return buildTree(data, { include });
-  }, [data, mode, query]);
+  }, [data, mode, parsed]);
+  /** Match count for the filter affordance (query only, mode-independent). */
+  const matchCount = useMemo(
+    () => (query.trim() ? data.filter(parsed.predicate).length : null),
+    [data, parsed, query],
+  );
 
   const allKeys = useMemo(() => collectKeys(roots), [roots]);
   const expanded = useMemo(() => {
@@ -152,13 +158,21 @@ export function Tree({
           ))}
         </div>
       </div>
-      <input
-        className="rl-tree-search"
-        placeholder="Filter by name…"
-        value={query}
-        spellCheck={false}
-        onChange={(e) => setQuery(e.target.value)}
-      />
+      <div className="rl-tree-search-wrap">
+        <input
+          className={`rl-tree-search${parsed.errors.length > 0 ? " invalid" : ""}`}
+          placeholder="Filter by name, /regex/, renders:>5…"
+          value={query}
+          spellCheck={false}
+          aria-invalid={parsed.errors.length > 0}
+          {...(parsed.errors.length > 0 ? { title: parsed.errors.join(" · ") } : {})}
+          onChange={(e) => setQuery(e.target.value)}
+        />
+        {matchCount !== null && parsed.errors.length === 0 && (
+          <span className="rl-tree-search-count">{matchCount}</span>
+        )}
+        {parsed.errors.length > 0 && <span className="rl-tree-search-count invalid">!</span>}
+      </div>
 
       {rows.length === 0 ? (
         <div className="rl-empty rl-empty-action">
