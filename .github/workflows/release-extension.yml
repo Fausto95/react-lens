@@ -1,0 +1,84 @@
+name: Release extension
+
+# Packages the Chrome extension into a store-ready ZIP.
+#
+# - On a `v*` tag: builds, zips, and attaches the ZIP to a GitHub Release.
+# - On manual dispatch: builds and uploads the ZIP as a workflow artifact.
+# - Chrome Web Store upload runs only when the four CWS_* secrets are set,
+#   so the workflow works before the first (manual) store submission.
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4 # version comes from packageManager in package.json
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - run: pnpm test
+
+      - run: pnpm typecheck
+
+      - name: Set manifest version from tag
+        if: startsWith(github.ref, 'refs/tags/')
+        run: |
+          V="${GITHUB_REF_NAME#v}"
+          node -e "
+            const fs = require('fs');
+            const path = 'apps/extension/src/manifest.json';
+            const m = JSON.parse(fs.readFileSync(path, 'utf8'));
+            m.version = '$V';
+            fs.writeFileSync(path, JSON.stringify(m, null, 2) + '\n');
+          "
+
+      - run: pnpm build:extension
+
+      - name: Zip dist
+        id: zip
+        run: |
+          VERSION=$(node -p "require('./apps/extension/dist/manifest.json').version")
+          ZIP="react-lens-extension-${VERSION}.zip"
+          (cd apps/extension/dist && zip -r "../../../${ZIP}" .)
+          echo "zip=${ZIP}" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: extension
+          path: ${{ steps.zip.outputs.zip }}
+          if-no-files-found: error
+
+      - name: Attach to GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ steps.zip.outputs.zip }}
+          generate_release_notes: true
+
+      - name: Upload to Chrome Web Store
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          EXTENSION_ID: ${{ secrets.CWS_EXTENSION_ID }}
+          CLIENT_ID: ${{ secrets.CWS_CLIENT_ID }}
+          CLIENT_SECRET: ${{ secrets.CWS_CLIENT_SECRET }}
+          REFRESH_TOKEN: ${{ secrets.CWS_REFRESH_TOKEN }}
+        run: |
+          if [ -z "$EXTENSION_ID" ]; then
+            echo "CWS_* secrets not configured — skipping Web Store upload."
+            exit 0
+          fi
+          npx chrome-webstore-upload-cli@3 upload --source "${{ steps.zip.outputs.zip }}"

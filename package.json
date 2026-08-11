@@ -18,6 +18,7 @@
     "dev:devtools": "pnpm --filter @react-lens/devtools dev",
     "dev:site": "pnpm --filter @react-lens/site dev",
     "build:extension": "pnpm --filter @react-lens/extension build",
+    "package:extension": "pnpm build:extension && cd apps/extension/dist && zip -r ../react-lens-extension.zip .",
     "build:site": "pnpm --filter @react-lens/site build",
     "test:e2e": "playwright test"
   },
