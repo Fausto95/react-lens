@@ -24,6 +24,12 @@
       "runtimeExecutable": "pnpm",
       "runtimeArgs": ["--filter", "@reactlens/site", "dev"],
       "port": 5179
+    },
+    {
+      "name": "site-alt",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["--filter", "@reactlens/site", "dev", "--port", "5183", "--strictPort"],
+      "port": 5183
     }
   ]
 }
