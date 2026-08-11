@@ -23,6 +23,6 @@
     "declaration": true,
     "declarationMap": true,
     "sourceMap": true,
-    "composite": true
+    "composite": false
   }
 }

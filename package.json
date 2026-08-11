@@ -13,7 +13,7 @@
     "typecheck": "pnpm -r typecheck",
     "test": "vitest run",
     "test:watch": "vitest",
-    "lint": "tsc -b --noEmit || true",
+    "lint": "pnpm typecheck",
     "dev:playground": "pnpm --filter @reactlens/playground dev",
     "dev:devtools": "pnpm --filter @reactlens/devtools dev",
     "dev:site": "pnpm --filter @reactlens/site dev",

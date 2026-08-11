@@ -1,18 +1,3 @@
 {
-  "files": [],
-  "references": [
-    { "path": "./packages/protocol" },
-    { "path": "./packages/serializer" },
-    { "path": "./packages/diff-engine" },
-    { "path": "./packages/trace-engine" },
-    { "path": "./packages/causality" },
-    { "path": "./packages/fiber" },
-    { "path": "./packages/instrumentation" },
-    { "path": "./packages/tree" },
-    { "path": "./packages/graph" },
-    { "path": "./packages/source-maps" },
-    { "path": "./packages/diagnostics" },
-    { "path": "./packages/explain" },
-    { "path": "./packages/agent" }
-  ]
+  "files": []
 }

@@ -2,12 +2,11 @@
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
     "rootDir": "src",
-    "outDir": "dist"
+    "outDir": "dist",
+    "composite": false,
+    "noEmit": true
   },
-  "include": ["src"],
-  "references": [
-    { "path": "../protocol" },
-    { "path": "../fiber" },
-    { "path": "../serializer" }
+  "include": [
+    "src"
   ]
 }
