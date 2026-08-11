@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { TraceStore } from "./trace-store.js";
-import { applySetAt, diffApplySet } from "./time-travel.js";
+import { applySetAt, createApplySetCursor, diffApplySet } from "./time-travel.js";
 import type {
   RenderEvent,
   ComponentId,
@@ -137,5 +137,69 @@ describe("diffApplySet", () => {
   it("emits everything against an empty prev", () => {
     const next = new Map([[cid(1), rid(10)]]);
     expect(diffApplySet(new Map(), next)).toEqual([{ componentId: cid(1), renderId: rid(10) }]);
+  });
+});
+
+describe("createApplySetCursor", () => {
+  /** Deterministic pseudo-random session: many components, interleaved commits. */
+  function scriptedStore(): { store: TraceStore; times: number[] } {
+    const store = new TraceStore();
+    const instances = [1, 2, 3, 4, 5].map((n) => instance(n, `C${n}`));
+    const events: RenderEvent[] = [];
+    let seed = 7;
+    const rand = () => (seed = (seed * 1103515245 + 12345) % 2147483648) / 2147483648;
+    let t = 0;
+    let renderSeq = 5000;
+    for (let commit = 1; commit <= 40; commit++) {
+      t += 10 + Math.floor(rand() * 50);
+      const count = 1 + Math.floor(rand() * 3);
+      for (let k = 0; k < count; k++) {
+        const comp = 1 + Math.floor(rand() * 5);
+        events.push(
+          renderEvent({
+            componentId: comp as ComponentId,
+            renderId: (renderSeq++) as RenderId,
+            commitId: commit as CommitId,
+            timestamp: t,
+          }),
+        );
+      }
+    }
+    store.ingest(batch({ instances, events }));
+    const times = [...new Set(events.map((e) => e.timestamp))].sort((a, b) => a - b);
+    return { store, times };
+  }
+
+  it("any walk of moveTo(t) equals a fresh applySetAt(t)", () => {
+    const { store, times } = scriptedStore();
+    const cursor = createApplySetCursor(store);
+    // Probe boundaries, midpoints, and jumps in both directions.
+    const probes: number[] = [];
+    for (let i = 0; i < times.length; i += 3) probes.push(times[i]!, times[i]! + 0.5);
+    probes.push(0, times.at(-1)! + 100);
+    probes.push(...[...probes].reverse());
+    for (const t of probes) {
+      expect(cursor.moveTo(t)).toEqual(applySetAt(store, t));
+    }
+  });
+
+  it("reset() recovers after new ingestion", () => {
+    const { store } = scriptedStore();
+    const cursor = createApplySetCursor(store);
+    cursor.moveTo(500);
+    store.ingest(
+      batch({
+        events: [
+          renderEvent({
+            componentId: cid(1),
+            renderId: rid(9999),
+            commitId: 999 as CommitId,
+            timestamp: 5000,
+          }),
+        ],
+      }),
+    );
+    cursor.reset();
+    expect(cursor.moveTo(6000)).toEqual(applySetAt(store, 6000));
   });
 });

@@ -303,3 +303,89 @@ describe("TraceStore — ingest tee (Doctor worker feed)", () => {
     expect(mirror.instance(2 as ComponentId)?.name).toBe("B");
   });
 });
+
+describe("historical queries — binary-search equivalence", () => {
+  const cid = (n: number) => n as ComponentId;
+  const rid = (n: number) => n as RenderId;
+
+  /** Linear-scan oracle for renderAtOrBefore. */
+  function oracleRenderAt(store: TraceStore, id: ComponentId, t: number) {
+    let best;
+    for (const r of store.rendersOf(id)) if (r.timestamp <= t) best = r;
+    return best;
+  }
+
+  it("renderAtOrBefore matches a linear scan at every boundary", () => {
+    const store = new TraceStore();
+    const times = [100, 100, 150, 200, 200, 200, 350];
+    store.ingest(
+      batch({
+        instances: [instance(1, "A")],
+        events: times.map((t, i) =>
+          renderEvent({ componentId: cid(1), renderId: rid(1000 + i), timestamp: t }),
+        ),
+      }),
+    );
+    const probes = [0, 99, 100, 100.5, 149, 150, 199, 200, 201, 349, 350, 999];
+    for (const t of probes) {
+      expect(store.renderAtOrBefore(cid(1), t)?.renderId).toBe(
+        oracleRenderAt(store, cid(1), t)?.renderId,
+      );
+    }
+  });
+
+  it("renderAtOrBefore is exact after the ring wraps", () => {
+    const store = new TraceStore({ maxRendersPerComponent: 3 });
+    store.ingest(
+      batch({
+        instances: [instance(1, "A")],
+        events: [100, 200, 300, 400, 500].map((t, i) =>
+          renderEvent({ componentId: cid(1), renderId: rid(2000 + i), timestamp: t }),
+        ),
+      }),
+    );
+    expect(store.renderAtOrBefore(cid(1), 250)).toBeUndefined(); // 100/200 evicted
+    expect(store.renderAtOrBefore(cid(1), 450)?.timestamp).toBe(400);
+    expect(store.renderAtOrBefore(cid(1), 500)?.timestamp).toBe(500);
+  });
+
+  it("commitAt matches a linear scan and commit() is a lookup", () => {
+    const store = new TraceStore();
+    store.ingest(
+      batch({
+        instances: [instance(1, "A")],
+        events: [
+          renderEvent({ componentId: cid(1), commitId: 1 as CommitId, timestamp: 100 }),
+          renderEvent({ componentId: cid(1), commitId: 2 as CommitId, timestamp: 200 }),
+          renderEvent({ componentId: cid(1), commitId: 3 as CommitId, timestamp: 300 }),
+        ],
+      }),
+    );
+    expect(store.commitAt(50)).toBeUndefined();
+    expect(store.commitAt(100)?.commitId).toBe(1);
+    expect(store.commitAt(250)?.commitId).toBe(2);
+    expect(store.commitAt(9999)?.commitId).toBe(3);
+    expect(store.commit(2 as CommitId)?.componentIds).toEqual([cid(1)]);
+    expect(store.commit(99 as CommitId)).toBeUndefined();
+  });
+
+  it("commits() is identity-stable between ingests and refreshes after one", () => {
+    const store = new TraceStore();
+    store.ingest(
+      batch({
+        instances: [instance(1, "A")],
+        events: [renderEvent({ componentId: cid(1), commitId: 1 as CommitId, timestamp: 100 })],
+      }),
+    );
+    const first = store.commits();
+    expect(store.commits()).toBe(first);
+    store.ingest(
+      batch({
+        events: [renderEvent({ componentId: cid(1), commitId: 2 as CommitId, timestamp: 200 })],
+      }),
+    );
+    const second = store.commits();
+    expect(second).not.toBe(first);
+    expect(second).toHaveLength(2);
+  });
+});
