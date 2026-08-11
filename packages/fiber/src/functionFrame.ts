@@ -29,11 +29,19 @@ export interface FrameCaptureOptions {
   construct?: boolean;
 }
 
+/** Anything React may treat as a component: call or construct shapes. */
+type ComponentLike = (...args: never[]) => unknown;
+
 export interface FrameLocation {
   file: string;
   line: number;
   column: number;
 }
+
+/** `Error.prepareStackTrace` is a V8 extension, absent from the DOM lib types. */
+const ErrorWithPrepare = Error as ErrorConstructor & {
+  prepareStackTrace?: ((err: Error, frames: unknown[]) => unknown) | undefined;
+};
 
 let reentry = false;
 const frameCache = new WeakMap<object, string | null>();
@@ -55,8 +63,8 @@ export function describeFunctionFrame(
   const cached = frameCache.get(fn);
   if (cached !== undefined && epochByFn.get(fn) === cacheEpoch) return cached;
 
-  const previousPrepareStackTrace = Error.prepareStackTrace;
-  Error.prepareStackTrace = undefined;
+  const previousPrepareStackTrace = ErrorWithPrepare.prepareStackTrace;
+  ErrorWithPrepare.prepareStackTrace = undefined;
   reentry = true;
   // Capture BEFORE nulling so a hook-shaped dispatcher can be put back exactly.
   const hadH = currentDispatcherRef != null && "H" in currentDispatcherRef;
@@ -69,14 +77,14 @@ export function describeFunctionFrame(
   const restoreLogs = disableLogs();
 
   try {
-    const [sampleStack, controlStack] = captureStacks(fn, construct);
+    const [sampleStack, controlStack] = captureStacks(fn as ComponentLike, construct);
     const frame = sampleStack && controlStack ? diffFrames(sampleStack, controlStack, fn) : null;
     frameCache.set(fn, frame);
     epochByFn.set(fn, cacheEpoch);
     return frame;
   } finally {
     reentry = false;
-    Error.prepareStackTrace = previousPrepareStackTrace;
+    ErrorWithPrepare.prepareStackTrace = previousPrepareStackTrace;
     restoreLogs();
     if (currentDispatcherRef) {
       if (hadH) currentDispatcherRef.H = previousH;
@@ -91,7 +99,7 @@ export function describeFunctionFrame(
  * `DetermineComponentFrameRoot` so the two traces share an identifiable root
  * frame even under different VMs' truncation rules.
  */
-function captureStacks(fn: () => unknown, construct: boolean): [string | null, string | null] {
+function captureStacks(fn: ComponentLike, construct: boolean): [string | null, string | null] {
   const RunInRootFrame = {
     DetermineComponentFrameRoot(): [string | null, string | null] {
       let control: unknown;
@@ -151,7 +159,7 @@ function captureStacks(fn: () => unknown, construct: boolean): [string | null, s
           // Props that throw on ANY read: with the dispatcher already nulled,
           // this makes hook-callers AND prop-readers abort inside their own
           // frame. (DevTools passes no props and misses the latter.)
-          const maybePromise = fn(throwingProps()) as
+          const maybePromise = (fn as (props: object) => unknown)(throwingProps()) as
             | { catch?: (cb: () => void) => void }
             | undefined;
           // Async components reject once the sandbox tears down; swallow it so

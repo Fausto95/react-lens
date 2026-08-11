@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach } from "vite-plus/test";
 import { createFiberBridge, type FiberBridge } from "./bridge.js";
+import type { ComponentId } from "@reactlens/protocol";
 
 /**
  * `locateComponent` against real React: the path a production build depends
@@ -25,7 +26,7 @@ beforeEach(() => {
 describe("bridge.locateComponent", () => {
   it("locates a hook-using component in this test file", async () => {
     const { React, createRoot, act, bridge } = await react();
-    const seen: number[] = [];
+    const seen: ComponentId[] = [];
     bridge.onCommit((commit) => seen.push(...commit.rendered));
 
     function Counter() {
@@ -47,7 +48,7 @@ describe("bridge.locateComponent", () => {
 
   it("locating does not disturb the live app or the dispatcher", async () => {
     const { React, createRoot, act, bridge } = await react();
-    const seen: number[] = [];
+    const seen: ComponentId[] = [];
     bridge.onCommit((commit) => seen.push(...commit.rendered));
 
     let renders = 0;
@@ -83,7 +84,7 @@ describe("bridge.locateComponent", () => {
 
   it("locates the inner function of a memo(forwardRef) component", async () => {
     const { React, createRoot, act, bridge } = await react();
-    const seen: number[] = [];
+    const seen: ComponentId[] = [];
     bridge.onCommit((commit) => seen.push(...commit.rendered));
 
     const Fancy = React.memo(
@@ -105,6 +106,6 @@ describe("bridge.locateComponent", () => {
 
   it("returns undefined for an unknown component id", async () => {
     const { bridge } = await react();
-    expect(bridge.locateComponent(999999 as never)).toBeUndefined();
+    expect(bridge.locateComponent(999999 as unknown as ComponentId)).toBeUndefined();
   });
 });

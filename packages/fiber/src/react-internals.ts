@@ -57,6 +57,12 @@ export interface ReactRenderer {
   version?: string;
   bundleType?: number;
   rendererPackageName?: string;
+  /**
+   * React's shared internals, where the active hook dispatcher lives (`.H` on
+   * React 19, `.current` before it). Present on PRODUCTION builds too — the
+   * hook-throw sandbox that locates component definitions depends on it.
+   */
+  currentDispatcherRef?: { H?: unknown; current?: unknown };
   /** Dev-only live-edit API (present on react-dom development builds). */
   overrideProps?: (fiber: Fiber, path: Array<string | number>, value: unknown) => void;
   overrideHookState?: (

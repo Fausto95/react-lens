@@ -12,3 +12,6 @@ export { inspectHooks, inspectContexts, inspectClassState, captureStateHooks } f
 export type { RawHook, RawContext, CapturedHookState } from "./inspect.js";
 export type { Fiber } from "./react-internals.js";
 export type { TimedEffect } from "./effect-timing.js";
+export { unwrapComponentFunction, locateComponentType } from "./componentSource.js";
+export { describeFunctionFrame, parseFrameLocation, clearFrameCache } from "./functionFrame.js";
+export type { DispatcherRef, FrameLocation } from "./functionFrame.js";

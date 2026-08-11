@@ -28,6 +28,7 @@ import {
 } from "./react-internals.js";
 import { wrapEffectsForTiming, type TimedEffect } from "./effect-timing.js";
 import { captureStateHooks, inspectClassState, type CapturedHookState } from "./inspect.js";
+import { locateComponentType } from "./componentSource.js";
 
 export type Dispose = () => void;
 
@@ -73,6 +74,13 @@ export interface FiberBridge {
   setClassState(id: ComponentId, state: unknown): boolean;
   /** Whether the component still has a live fiber (i.e. is mounted). */
   hasFiber(id: ComponentId): boolean;
+  /**
+   * Compiled definition site of a component, derived by shallow-invoking it in
+   * a throwing sandbox (see componentSource.ts). Works on production builds,
+   * where React exposes no `_debugSource`/`_debugStack`. On demand only — never
+   * during capture.
+   */
+  locateComponent(id: ComponentId): SourceLocation | undefined;
   /**
    * Raw state of the live (committed) fiber: state/reducer hook values by raw
    * index, or the class instance's state. Used as the go-live baseline and as
@@ -230,6 +238,20 @@ export function createFiberBridge(target: typeof globalThis = globalThis): Fiber
 
   function hasFiber(id: ComponentId): boolean {
     return fiberById.has(id);
+  }
+
+  function locateComponent(id: ComponentId): SourceLocation | undefined {
+    const fiber = fiberById.get(id);
+    if (!fiber) return undefined;
+    const current = currentOf(fiber);
+    // `elementType` keeps the memo/forwardRef wrapper React resolved away in
+    // `type`, and it is what the unwrapper walks.
+    const type = current.elementType ?? current.type;
+    const dispatcherRef = getRenderer()?.currentDispatcherRef;
+    return locateComponentType(type, {
+      construct: current.tag === ClassComponent,
+      ...(dispatcherRef ? { currentDispatcherRef: dispatcherRef } : {}),
+    });
   }
 
   function captureLiveState(id: ComponentId): LiveState | undefined {
@@ -527,6 +549,7 @@ export function createFiberBridge(target: typeof globalThis = globalThis): Fiber
     setHookState,
     setClassState,
     hasFiber,
+    locateComponent,
     captureLiveState,
     resolveComponent,
     domNodesOf,

@@ -81,12 +81,13 @@ describe("describeFunctionFrame", () => {
   it("restores the dispatcher and Error.prepareStackTrace afterwards", () => {
     const ref = { H: { useState: () => {} } as unknown };
     const before = ref.H;
-    const prepare = Error.prepareStackTrace;
+    const err = Error as ErrorConstructor & { prepareStackTrace?: unknown };
+    const prepare = err.prepareStackTrace;
     describeFunctionFrame(function Probe() {
       return null;
     }, { currentDispatcherRef: ref });
     expect(ref.H).toBe(before);
-    expect(Error.prepareStackTrace).toBe(prepare);
+    expect(err.prepareStackTrace).toBe(prepare);
   });
 
   it("nulls the dispatcher DURING capture so hooks throw instead of mutating state", () => {
@@ -127,15 +128,14 @@ describe("describeFunctionFrame", () => {
     expect(inner).toBeNull();
   });
 
-  it("swallows a rejected promise from an async component", async () => {
-    const onUnhandled = vi.fn();
-    process.on("unhandledRejection", onUnhandled);
-    describeFunctionFrame(async function AsyncCard() {
-      throw new Error("async boom");
+  it("attaches a catch handler to a promise-returning component", () => {
+    // Async components reject after the sandbox tears down; without a handler
+    // that surfaces as an unhandled rejection in the inspected page.
+    const onCatch = vi.fn();
+    describeFunctionFrame(function AsyncCard() {
+      return { catch: onCatch };
     }, {});
-    await new Promise((r) => setTimeout(r, 20));
-    process.off("unhandledRejection", onUnhandled);
-    expect(onUnhandled).not.toHaveBeenCalled();
+    expect(onCatch).toHaveBeenCalledOnce();
   });
 });
 
