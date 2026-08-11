@@ -14,6 +14,7 @@ import {
   type ToolName,
 } from "@react-lens/agent";
 import type { LensRef } from "@react-lens/explain";
+import { IconCopy } from "@react-lens/icons";
 import { diagnoseOne } from "./doctor.js";
 import { getSourceResolver } from "./sourceResolver.js";
 import { loadAgentSettings } from "./settings.js";
@@ -210,7 +211,10 @@ export function AgentPane({
     <aside className="rl-agent" aria-label="AI assistant">
       <div className="rl-agent-head">
         <strong>Assistant</strong>
-        <span className="rl-agent-sub">grounded in this session's trace</span>
+        <span className="rl-agent-sub">
+          grounded in this session's trace
+          {settings?.model ? ` · ${settings.model}` : ""}
+        </span>
         <span className="rl-spacer" />
         {messages.length > 0 && (
           <button type="button" className="rl-narrative-link" onClick={resetConversation}>
@@ -307,8 +311,22 @@ function AssistantTurn({
   const activity = steps
     .filter((s) => s.role === "tool")
     .map((s) => ({ name: (s.name ?? "tool") as ToolName, summary: s.content }));
+  const [copied, setCopied] = useState(false);
   return (
     <div className="rl-agent-turn assistant">
+      <button
+        type="button"
+        className="rl-agent-copy"
+        title="Copy answer as Markdown"
+        aria-label="Copy answer"
+        onClick={() => {
+          void navigator.clipboard?.writeText(content);
+          setCopied(true);
+          setTimeout(() => setCopied(false), 1200);
+        }}
+      >
+        {copied ? "✓" : <IconCopy size={11} />}
+      </button>
       <ActivityChips activity={activity} />
       <Markdown text={content} onCitation={onCitation as never} />
       {citations.length > 0 && (
