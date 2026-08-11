@@ -69,3 +69,38 @@ describe("source resolver", () => {
     expect(src?.path).toBe("src/App.tsx");
   });
 });
+
+describe("source resolver — original names", () => {
+  it("returns the original identifier when the mapping carries a name", async () => {
+    // Minified builds rename components (ProductCard → Qj); the map's `names`
+    // array is the only way back to what the developer wrote.
+    // "AAAAA" = generated col 0 → source 0, line 1, col 0, name 0.
+    const code = inlineModule({
+      version: 3,
+      sources: ["src/ProductCard.tsx"],
+      names: ["ProductCard"],
+      mappings: "AAAAA",
+    });
+    const resolver = createSourceResolver(async () => code);
+    const out = await resolver.resolve(loc("/assets/index-abc.js", 1, 0));
+    expect(out).toEqual({
+      file: "src/ProductCard.tsx",
+      line: 1,
+      column: 0,
+      name: "ProductCard",
+    });
+  });
+
+  it("omits name when the mapping has none", async () => {
+    const code = inlineModule({
+      version: 3,
+      sources: ["src/App.tsx"],
+      names: [],
+      mappings: "AAAA",
+    });
+    const resolver = createSourceResolver(async () => code);
+    const out = await resolver.resolve(loc("/assets/index-abc.js", 1, 0));
+    expect(out).not.toBeNull();
+    expect("name" in out!).toBe(false);
+  });
+});
