@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState, type CSSProperties } from "react";
-import { useVirtualizer } from "@tanstack/react-virtual";
 
 import type { ComponentId } from "@reactlens/protocol";
 import type { SemanticNode, VisibleRow } from "@reactlens/tree";
 import { laneVisibility, typeLaneKey, type LaneControls, type LaneKey } from "../laneFilter.js";
+import { rowWindow } from "../rowWindow.js";
 
 /**
  * The concept's `.tree` column: indented `.node` rows carrying a diagnostic
@@ -33,14 +33,8 @@ const BASE_PL = 10;
 const MAX_INDENT_DEPTH = 8;
 
 /*
- * Note: the React Compiler skips this file, by its own choice — `useVirtualizer`
- * returns functions it will not memoize across ("Use of incompatible library"),
- * so it declines the whole component rather than risk stale UI.
- *
- * That is the right trade here. Virtualization already removes the cost the
- * Compiler would have been fighting: this component used to mount every row of
- * the tree, thousands in a real app, and now mounts about thirty. Compiling
- * thirty rows saves far less than not rendering the other few thousand.
+ * Rows are windowed (see rowWindow.ts): this component used to mount every row
+ * of the tree, thousands in a real app, all re-rendered on each trace ingest.
  */
 
 /** Fixed row height (`.node` in redesign.css) — the virtualizer's estimate. */
@@ -161,11 +155,24 @@ export function TreeView({
     setScrollMargin(list.offsetTop - scroller.offsetTop);
   }, [watchlist.length]);
 
-  const virtualizer = useVirtualizer({
+  // Scroll position is state, updated from the scroller's own event — render
+  // reads state, never a ref, which is what keeps this component compilable.
+  const [scrollTop, setScrollTop] = useState(0);
+  const [viewport, setViewport] = useState(600);
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const measure = () => setViewport(el.clientHeight);
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+  const win = rowWindow({
     count: rows.length,
-    getScrollElement: () => scrollRef.current,
-    estimateSize: () => ROW_H,
-    overscan: 10,
+    rowHeight: ROW_H,
+    scrollTop,
+    viewport,
     scrollMargin,
   });
 
@@ -173,9 +180,17 @@ export function TreeView({
     if (flashId === null && selected === null) return;
     const id = flashId ?? selected;
     const index = rows.findIndex(({ row }) => row.node.kind === "component" && row.node.id === id);
-    // The row may not be mounted, so ask the virtualizer rather than the DOM.
-    if (index >= 0) virtualizer.scrollToIndex(index, { align: "auto" });
-  }, [flashId, selected, rows, virtualizer]);
+    // The row may not be mounted, so compute where it is rather than ask the
+    // DOM for an element that may not exist.
+    const el = scrollRef.current;
+    if (index < 0 || !el) return;
+    const rowTop = scrollMargin + index * ROW_H;
+    const rowBottom = rowTop + ROW_H;
+    if (rowTop < el.scrollTop) el.scrollTop = rowTop;
+    else if (rowBottom > el.scrollTop + el.clientHeight) {
+      el.scrollTop = rowBottom - el.clientHeight;
+    }
+  }, [flashId, selected, rows, scrollMargin]);
 
   /**
    * A row's own numbers.
@@ -234,6 +249,7 @@ export function TreeView({
       aria-label="Component tree"
       tabIndex={0}
       onKeyDown={onKeyDown}
+      onScroll={(e) => setScrollTop((e.target as HTMLDivElement).scrollTop)}
       onMouseLeave={() => onHover?.(null)}
     >
       {watchlist.length > 0 && <div className="sect">Watchlist</div>}
@@ -266,9 +282,9 @@ export function TreeView({
         );
       })}
       {watchlist.length > 0 && <div className="sect">App</div>}
-      <div ref={listRef} style={{ height: virtualizer.getTotalSize(), position: "relative" }}>
-        {virtualizer.getVirtualItems().map((virtual) => {
-          const { row, pl } = rows[virtual.index]!;
+      <div ref={listRef} style={{ height: win.totalHeight, position: "relative" }}>
+        {rows.slice(win.start, win.end).map(({ row, pl }, i) => {
+          const rowTop = (win.start + i) * ROW_H;
           const { node, expandable, expanded } = row;
           const isComponent = node.kind === "component";
           const name = isComponent ? node.datum.name : node.name;
@@ -309,7 +325,7 @@ export function TreeView({
                   top: 0,
                   left: 0,
                   width: "100%",
-                  transform: `translateY(${virtual.start - virtualizer.options.scrollMargin}px)`,
+                  transform: `translateY(${rowTop}px)`,
                 } as CSSProperties
               }
               onClick={() => {
