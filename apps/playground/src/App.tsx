@@ -23,9 +23,10 @@ export function App() {
       <header style={{ marginBottom: 20 }}>
         <h1 style={{ fontSize: 22, marginBottom: 6 }}>React Lens Playground</h1>
         <p style={{ color: "#5f6878", margin: 0, maxWidth: 540, lineHeight: 1.45 }}>
-          Click <b>Add to cart</b>. On the timeline you should see{" "}
-          <b>setCart → ctx → casc / props → wasted</b>. Select a clip for Cause → Change → Cost →
-          Fix. Space loops that interaction.
+          Click <b>Add</b> on any row. The timeline paints the cascade it caused:{" "}
+          <b>setCart → Catalog → ProductRow → PriceTag</b>. Select a clip in the middle of that
+          chain and the arrows point both ways — back to what caused it, forward to what it caused.{" "}
+          <b>Refresh prices</b> re-renders everything and changes nothing: the hatched clips.
         </p>
       </header>
 
