@@ -7,6 +7,13 @@ interface Feature {
 
 const FEATURES: Feature[] = [
   {
+    tag: "AI Agent",
+    tone: "green",
+    title: "BYOK agent, grounded in the trace",
+    body:
+      "⌘I opens an in-panel assistant (OpenAI / Anthropic / Z.AI — your key stays in the browser) that answers through 12 typed tools over the live TraceStore. component_runtime hands it a component's timings, render reasons, wasted renders, compiler status and latest prop/hook values in one call; fixes are proposed against your real source via source maps. Every claim cites Lens IDs — clickable chips that jump to the exact render, component, or interaction.",
+  },
+  {
     tag: "Doctor",
     tone: "",
     title: "OXC AST Doctor, definition-aware",
