@@ -13,6 +13,7 @@ import {
   type TimeTravelApi,
 } from "./timeTravelController.js";
 import { loadPanelPrefs, savePanelPrefs } from "./panelPrefs.js";
+import { useLatest } from "./useLatest.js";
 import {
   EMPTY_LANE_FILTER,
   deserializeLaneFilter,
@@ -160,6 +161,20 @@ export function Panel({
     Array<{ id: string; title: string; eventCount: number }>
   >([]);
   const importRef = useRef<HTMLInputElement>(null);
+  /**
+   * Opening the file picker is a request, not a DOM poke.
+   *
+   * Reaching into the input's ref is legal in a handler but not in render,
+   * and the command palette's list is *built* during render — so any closure
+   * there that touches the ref reads as a render-time access, which makes the
+   * whole component uncompilable. Bumping a counter keeps render pure and
+   * moves the ref access into the effect, where it belongs.
+   */
+  const [importRequests, setImportRequests] = useState(0);
+  const openImport = useCallback(() => setImportRequests((n) => n + 1), []);
+  useEffect(() => {
+    if (importRequests > 0) importRef.current?.click();
+  }, [importRequests]);
   // Global time cursor + A/B marks (redesign §6, §28) — the temporal spine
   // shared by the Timeline, Tree, and Inspector.
   const [cursor, setCursor] = useState<TimeCursor>({ t: 0, mode: "live" });
@@ -230,7 +245,9 @@ export function Panel({
   }, [timeTravel]);
   const travelCtl = useMemo(
     () => (timeTravel ? createPanelTimeTravel(store, timeTravel, setRestoreStatus) : null),
-    [store, timeTravel],
+    // `setRestoreStatus` is a stable setter, but listing it lets the Compiler
+    // verify this memo instead of giving up on the whole component.
+    [store, timeTravel, setRestoreStatus],
   );
   useEffect(() => () => travelCtl?.dispose(), [travelCtl]);
   // Imported sessions never drive the live page: their renderIds belong to a
@@ -432,7 +449,7 @@ export function Panel({
     label: "Import session",
     hint: "↑",
     group: "Session",
-    run: () => importRef.current?.click(),
+    run: openImport,
   });
   for (const entry of recentSessions) {
     commands.push({
@@ -544,7 +561,7 @@ export function Panel({
             </button>
             <button
               className="rl-icon-btn"
-              onClick={() => importRef.current?.click()}
+              onClick={openImport}
               title="Import session"
               aria-label="Import session"
             >
@@ -711,8 +728,7 @@ function useDockResize(embedded?: boolean): {
   onDockResize: (e: React.PointerEvent<HTMLDivElement>) => void;
 } {
   const [dockWidth, setDockWidth] = useState<number | null>(() => loadPanelPrefs().dockWidth);
-  const latest = useRef(dockWidth);
-  latest.current = dockWidth;
+  const latest = useLatest(dockWidth);
 
   const onDockResize = (e: React.PointerEvent<HTMLDivElement>) => {
     if (!embedded) return;

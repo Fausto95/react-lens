@@ -9,6 +9,7 @@ import { advanceReplay, stepStop } from "../model/schedule.js";
 import { timelineKeyAction } from "../keymap.js";
 import { clipAtTime } from "../model/lanes.js";
 import { startReplayTicker } from "../replayTicker.js";
+import { useLatest } from "../../useLatest.js";
 import type { Timeline as TimelineModel } from "../useTimeline.js";
 import { LONG_TASK_MS } from "../useTimeline.js";
 import { Ruler, rulerMarkers } from "./Ruler.js";
@@ -146,8 +147,7 @@ export function Timeline({
    * ref so the listener is installed once rather than re-bound on every store
    * ingest — the same dependency that used to tear down the replay ticker.
    */
-  const keyHandlerRef = useRef<(e: KeyboardEvent) => void>(() => {});
-  keyHandlerRef.current = (e: KeyboardEvent) => {
+  const keyHandlerRef = useLatest((e: KeyboardEvent) => {
     const action = timelineKeyAction(e);
     if (!action) return;
     // Never steal a key from a field the user is typing into.
@@ -178,7 +178,7 @@ export function Timeline({
         // `step-interaction` belongs to the interaction track, not yet re-homed.
         break;
     }
-  };
+  });
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => keyHandlerRef.current(e);
     window.addEventListener("keydown", onKey);
@@ -186,15 +186,11 @@ export function Timeline({
   }, []);
 
   // ── Replay ────────────────────────────────────────────────────────────────
-  const onCursorRef = useRef(onCursor);
-  onCursorRef.current = onCursor;
-  const scheduleRef = useRef(model.schedule);
-  scheduleRef.current = model.schedule;
-  const sweepRef = useRef(model.sweep);
-  sweepRef.current = model.sweep;
-  /** Read once when ▶ is pressed, so the ticker keeps a constant speed. */
-  const fractionRef = useRef(model.replayFraction);
-  fractionRef.current = model.replayFraction;
+  const onCursorRef = useLatest(onCursor);
+  const scheduleRef = useLatest(model.schedule);
+  const sweepRef = useLatest(model.sweep);
+  /** Read when ▶ is pressed, so the ticker keeps a constant speed. */
+  const fractionRef = useLatest(model.replayFraction);
   useEffect(() => {
     if (!state.playing) return;
     // How many stops the page has already been shown — the one piece of state
