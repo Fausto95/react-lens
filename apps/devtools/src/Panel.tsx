@@ -3,6 +3,7 @@ import type { TraceStore } from "@react-lens/trace-engine";
 import type { Causality } from "@react-lens/causality";
 import type { ComponentId, RenderId } from "@react-lens/protocol";
 import { useTraceVersion } from "./useLens.js";
+import { timeAxis } from "@react-lens/ui";
 import { Inspector, type EditApi } from "./Inspector.js";
 import { Tree } from "./Tree.js";
 import { Timeline } from "./Timeline.js";
@@ -100,7 +101,7 @@ export function Panel({
   useTraceVersion(store, { kind: "global" });
   const [selected, setSelected] = useState<ComponentId | null>(null);
   const [paletteOpen, setPaletteOpen] = useState(false);
-  const [treeModeHint, setTreeModeHint] = useState<"waste" | null>(null);
+  const [treeModeHint, setTreeModeHint] = useState<"components" | "waste" | null>(null);
   const [sessionLabel, setSessionLabel] = useState<string | null>(null);
   const [recentSessions, setRecentSessions] = useState<
     Array<{ id: string; title: string; eventCount: number }>
@@ -142,6 +143,11 @@ export function Panel({
   const { width, onResizeStart } = useDockResize(embedded);
   const { splitPct, bodyRef, onSplitStart } = usePaneSplit();
   const stats = store.stats();
+  /** Session length so far — first to last captured commit. */
+  const sessionSpanMs = (() => {
+    const commits = store.commits();
+    return commits.length > 0 ? commits.at(-1)!.endTimestamp - commits[0]!.timestamp : 0;
+  })();
 
   // Fast themed tooltips for every `title` in the panel (see tooltip.ts).
   const rootRef = useRef<HTMLDivElement>(null);
@@ -603,15 +609,35 @@ export function Panel({
       />
 
       <div className="rl-statusbar">
-        <span className="rl-status-metric" title="Events">
+        <span
+          className="rl-status-metric"
+          title="Events captured this session (renders, commits, interactions, effects)"
+        >
           <span className="rl-status-k">ev</span> {stats.events}
         </span>
-        <span className="rl-status-metric" title="Renders">
+        <button
+          type="button"
+          className="rl-status-metric rl-status-action"
+          title="Renders recorded — click to jump to the heaviest commit"
+          onClick={() => {
+            const worst = store
+              .commits()
+              .reduce<
+                ReturnType<typeof store.commits>[number] | null
+              >((acc, c) => (acc === null || c.totalSelfTime > acc.totalSelfTime ? c : acc), null);
+            if (worst) setCursor({ t: worst.timestamp, mode: "historical" });
+          }}
+        >
           <span className="rl-status-k">rnd</span> {stats.renders}
-        </span>
-        <span className="rl-status-metric" title="Components">
+        </button>
+        <button
+          type="button"
+          className="rl-status-metric rl-status-action"
+          title="Components seen — click to browse the tree"
+          onClick={() => setTreeModeHint("components")}
+        >
           <span className="rl-status-k">cmp</span> {stats.components}
-        </span>
+        </button>
         {suspended.size > 0 && (
           <span className="rl-status-metric warn" title="Suspended">
             <span className="rl-status-k">sus</span> {suspended.size}
@@ -623,10 +649,13 @@ export function Panel({
           </span>
         )}
         <span className="rl-spacer" />
-        <details className="rl-status-about">
-          <summary>{embedded ? "embedded" : "devtools"}</summary>
-          <div className="rl-status-about-pop">protocol v1</div>
-        </details>
+        <span
+          className={`rl-status-metric rl-status-rec${recording ? " on" : ""}`}
+          title={recording ? "Recording (R to pause)" : "Recording paused (R to resume)"}
+        >
+          <span className="rl-status-rec-dot" />
+          {recording ? `rec · ${timeAxis(Math.max(0, sessionSpanMs))}` : "paused"}
+        </span>
       </div>
 
       {paletteOpen && (
