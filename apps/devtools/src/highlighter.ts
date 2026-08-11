@@ -51,10 +51,12 @@ export function createHighlighter(): Highlighter {
       top: `${r.top}px`,
       width: `${r.width}px`,
       height: `${r.height}px`,
-      background: "rgba(167,139,250,0.28)",
-      outline: "2px solid rgba(167,139,250,0.95)",
+      // Quiet enough to read the UI underneath: the highlight points at a
+      // component, it shouldn't repaint it. Themed via --rl-highlight-*, with
+      // the values inlined as fallbacks for pages the panel CSS never reaches.
+      background: "var(--rl-highlight-fill, rgba(167,139,250,0.05))",
+      outline: "1px solid var(--rl-highlight-edge, rgba(167,139,250,0.32))",
       borderRadius: "2px",
-      boxShadow: "0 0 0 1px rgba(167,139,250,0.35)",
     } satisfies Partial<CSSStyleDeclaration>);
     return b;
   }

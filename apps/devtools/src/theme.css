@@ -45,6 +45,10 @@
   --rl-code-number: #ff9e64;
   --rl-code-boolean: #7dcfff;
 
+  /* Component highlight drawn over the inspected page (outside .rl-root). */
+  --rl-highlight-fill: rgba(167, 139, 250, 0.05);
+  --rl-highlight-edge: rgba(167, 139, 250, 0.32);
+
   /* Page-level inspect chrome (tooltip/badge live outside .rl-root). */
   --rl-inspect-tip-bg: rgba(18, 21, 26, 0.94);
   --rl-inspect-tip-text: #e6e9ef;
@@ -105,6 +109,9 @@
   --rl-code-string: #3f7d1e;
   --rl-code-number: #c25f1e;
   --rl-code-boolean: #0a6fa8;
+
+  --rl-highlight-fill: rgba(124, 92, 240, 0.06);
+  --rl-highlight-edge: rgba(124, 92, 240, 0.38);
 
   --rl-inspect-tip-bg: rgba(255, 255, 255, 0.97);
   --rl-inspect-tip-text: #171b22;
@@ -3728,4 +3735,13 @@
 }
 .rl-tl-zoom-level:hover {
   color: var(--rl-text-dim);
+}
+
+/* Production build: replay can't drive the page. Stated inline, not hidden. */
+.rl-tl-prod-chip {
+  font-size: 9px; text-transform: uppercase; letter-spacing: 0.06em;
+  padding: 1px 5px; border-radius: 4px; cursor: help; white-space: nowrap;
+  color: var(--rl-text-faint);
+  background: var(--rl-bg-hover);
+  border: 1px solid var(--rl-border);
 }

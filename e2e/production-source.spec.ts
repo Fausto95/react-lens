@@ -73,10 +73,14 @@ test.describe("production build", () => {
     await expect(page.locator(".rl-source-loc")).toContainText("App.tsx");
   });
 
-  test("time travel and live edit stay disabled without dev APIs", async ({ page }) => {
+  test("time travel is disabled AND explains itself", async ({ page }) => {
     // Production react-dom exposes no overrideProps/overrideHookState, so the
-    // panel must not pretend otherwise.
+    // panel must not pretend otherwise — and a disabled button alone doesn't
+    // answer "why didn't the page change when I hit play?".
     const travel = page.getByRole("button", { name: "Apply state to the page while scrubbing" });
     await expect(travel).toBeDisabled();
+    const chip = page.locator(".rl-tl-prod-chip");
+    await expect(chip).toBeVisible();
+    await expect(chip).toHaveAttribute("title", /production react build/i);
   });
 });
