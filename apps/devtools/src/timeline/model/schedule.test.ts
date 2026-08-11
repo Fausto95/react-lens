@@ -6,6 +6,7 @@ import {
   replaySchedule,
   replaySpan,
   linearSweep,
+  stepStop,
   type ReplayStop,
 } from "./schedule.js";
 
@@ -183,5 +184,67 @@ describe("linearSweep", () => {
     };
     expect(frac(wallClock)).toBeGreaterThan(0.9);
     expect(frac(screen)).toBeLessThan(0.1);
+  });
+});
+
+describe("replaySpan from a playhead", () => {
+  it("starts where the playhead was left, not at the beginning", () => {
+    // ▶ is labelled "play from playhead" and never was: every replay restarted
+    // from the region's start, so parking the ruler mid-session did nothing.
+    expect(replaySpan(null, BOUNDS, 180)).toEqual({ lo: 180, hi: 400 });
+  });
+
+  it("restarts from the top once the playhead has reached the end", () => {
+    // Otherwise ▶ at the end of a session would play a zero-length replay,
+    // which reads as the button being broken.
+    expect(replaySpan(null, BOUNDS, 400)).toEqual({ lo: 0, hi: 400 });
+    expect(replaySpan(null, BOUNDS, 399.9)).toEqual({ lo: 0, hi: 400 });
+  });
+
+  it("ignores a playhead outside the region", () => {
+    const region = { start: 100, end: 300 };
+    expect(replaySpan(region, BOUNDS, 20)).toEqual({ lo: 100, hi: 300 });
+    expect(replaySpan(region, BOUNDS, 900)).toEqual({ lo: 100, hi: 300 });
+  });
+
+  it("clips the schedule to what is left to play", () => {
+    const stops = replaySchedule(COMMITS, null, BOUNDS, 180);
+    expect(stops.filter((s) => s.commitId !== null).map((s) => s.commitId)).toEqual([3, 4]);
+  });
+});
+
+describe("stepStop", () => {
+  const stops = replaySchedule(COMMITS, null, BOUNDS);
+  const span = replaySpan(null, BOUNDS);
+  // Stops land after each commit: 5, 105, 205, 305, then live at 400.
+
+  it("steps forward to the next commit", () => {
+    expect(stepStop(stops, span, 0, 1)).toBe(5);
+    expect(stepStop(stops, span, 5, 1)).toBe(105);
+    expect(stepStop(stops, span, 150, 1)).toBe(205);
+  });
+
+  it("steps back to the previous commit", () => {
+    expect(stepStop(stops, span, 400, -1)).toBe(305);
+    expect(stepStop(stops, span, 205, -1)).toBe(105);
+    expect(stepStop(stops, span, 150, -1)).toBe(105);
+  });
+
+  it("rewinds to the very start rather than sticking on the first commit", () => {
+    // ⏮ from the first commit has nowhere to step, but "back to the top" is
+    // what the control is for.
+    expect(stepStop(stops, span, 5, -1)).toBe(BOUNDS.t0);
+    expect(stepStop(stops, span, 0, -1)).toBe(BOUNDS.t0);
+  });
+
+  it("stops at the end going forward", () => {
+    expect(stepStop(stops, span, 400, 1)).toBe(400);
+    expect(stepStop(stops, span, 305, 1)).toBe(400);
+  });
+
+  it("has somewhere to go even with no commits at all", () => {
+    const only = replaySchedule([], null, BOUNDS);
+    expect(stepStop(only, span, 200, 1)).toBe(400);
+    expect(stepStop(only, span, 200, -1)).toBe(0);
   });
 });

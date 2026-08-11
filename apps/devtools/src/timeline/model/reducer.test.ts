@@ -169,9 +169,17 @@ describe("selection and lanes", () => {
 
 describe("transport", () => {
   it("play and pause flip the flag", () => {
-    const playing = timelineReducer(start(), { type: "play" }, CTX);
+    const playing = timelineReducer(start(), { type: "play", from: null }, CTX);
     expect(playing.playing).toBe(true);
     expect(timelineReducer(playing, { type: "pause" }, CTX).playing).toBe(false);
+  });
+
+  it("remembers where the replay was started from, and forgets it on pause", () => {
+    // The replay span is derived from this, so a stale value would make the
+    // next ▶ resume from the previous run's position.
+    const playing = timelineReducer(start(), { type: "play", from: 420 }, CTX);
+    expect(playing.playFrom).toBe(420);
+    expect(timelineReducer(playing, { type: "pause" }, CTX).playFrom).toBe(null);
   });
 });
 
