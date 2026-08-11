@@ -744,13 +744,17 @@
   align-items: flex-start !important; padding-top: 10px !important;
   border-bottom: none;
 }
+/* Lane label heights must match .rl-tl-track-wf — otherwise the gutter drifts. */
 .rl-tl-compact .rl-tl-label-wf { height: 140px !important; }
-.rl-tl-expanded .rl-tl-label-wf { height: 200px !important; }
+.rl-tl-expanded .rl-tl-label-wf { height: 250px !important; }
 
+/* Scroll viewport = ruler(18) + int(30) + commits(36) + comps lane.
+   The comps track used to be taller than this box, so overflow-y:hidden
+   clipped the +N-more chip and made vertical lane scroll feel broken. */
 .rl-tl-scroll { position: relative; flex: 1 1 auto; min-width: 0; overflow-x: auto; overflow-y: hidden; }
 .rl-tl-collapsed .rl-tl-scroll { display: none; }
 .rl-tl-compact .rl-tl-scroll { height: 224px; }
-.rl-tl-expanded .rl-tl-scroll { height: 284px; }
+.rl-tl-expanded .rl-tl-scroll { height: 334px; }
 .rl-tl-scroll::-webkit-scrollbar { height: 8px; }
 .rl-tl-scroll::-webkit-scrollbar-thumb { background: var(--rl-border-strong); border-radius: 4px; }
 
@@ -777,8 +781,9 @@
   flex: 1 1 auto; min-height: 0; overflow: hidden;
   display: flex; flex-direction: column; border-bottom: none;
 }
-.rl-tl-compact .rl-tl-track-wf { height: 160px; flex: 0 0 160px; }
-.rl-tl-expanded .rl-tl-track-wf { height: 260px; flex: 0 0 260px; }
+/* Collapsed canvas = padY(8) + rows*28 + scrollbar pad(18); keep lane ≥ that. */
+.rl-tl-compact .rl-tl-track-wf { height: 140px; flex: 0 0 140px; }
+.rl-tl-expanded .rl-tl-track-wf { height: 250px; flex: 0 0 250px; }
 
 .rl-tl-int {
   position: absolute; top: 4px; height: 22px; min-width: 3px;
@@ -1292,6 +1297,7 @@
 
 .rl-wf-packed {
   position: relative;
+  flex: 1 1 auto;
   width: 100%;
   height: 100%;
   min-height: 0;
@@ -1300,6 +1306,8 @@
   overflow: hidden auto;
   /* Edge overscroll must not chain into the page/outer scroller. */
   overscroll-behavior: contain;
+  /* Parent .rl-tl-inner is pan-x; reclaim vertical gestures for this lane. */
+  touch-action: pan-y;
 }
 .rl-wf-canvas { position: relative; width: 100%; }
 .rl-wf-phase {

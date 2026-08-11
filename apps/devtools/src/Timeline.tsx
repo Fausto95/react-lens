@@ -453,6 +453,9 @@ export function Timeline({
     if ((e.target as HTMLElement).closest(".rl-tl-playhead")) return;
     if ((e.target as HTMLElement).closest(".rl-tl-bar-hit")) return;
     if ((e.target as HTMLElement).closest(".rl-tl-int")) return;
+    // Component lane owns its hits (+N more, bars, phase select) — scrubbing
+    // here stole the gesture and fought the click handlers.
+    if ((e.target as HTMLElement).closest(".rl-wf-packed")) return;
     if (e.altKey) return onSetAB({ ...ab, a: snapT(tOfClient(e.clientX)) });
     if (e.shiftKey) return onSetAB({ ...ab, b: snapT(tOfClient(e.clientX)) });
     scrubbing.current = true;
@@ -1244,6 +1247,7 @@ function PhaseWaterfall({
                 top: PHASE_PAD_Y + contentRows(phase.id) * TRACK_H,
                 height: BAR_H,
               }}
+              onPointerDown={(e) => e.stopPropagation()}
               onClick={(e) => {
                 e.stopPropagation();
                 togglePhaseDepth(phase.id);
@@ -1282,6 +1286,7 @@ function PhaseWaterfall({
                   ["--rl-wf-tick" as string]: `rgba(${rgb},${0.32 + bar.heat * 0.28})`,
                 }}
                 title={`${bar.name} · ${ms(bar.self)} · ${bar.reason}${bar.wasted ? " · no visible change" : ""} · ${bar.phaseLabel}`}
+                onPointerDown={(e) => e.stopPropagation()}
                 onPointerEnter={() => onHighlight?.(bar.id)}
                 onPointerLeave={() => onHighlight?.(selectedComponent ?? null)}
                 onClick={(e) => {
