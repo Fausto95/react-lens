@@ -3,6 +3,7 @@ import { projectT, projectX } from "./scale.js";
 import {
   contentWidth,
   clampScroll,
+  followScroll,
   maxScroll,
   resolveZoom,
   viewportScale,
@@ -102,5 +103,41 @@ describe("scroll bounds", () => {
     const scale = viewportScale(state, BOUNDS, ACTIVE);
     expect(clampScroll(-500, scale, state.width)).toBe(0);
     expect(clampScroll(1e9, scale, state.width)).toBeCloseTo(maxScroll(scale, state.width), 5);
+  });
+});
+
+describe("followScroll", () => {
+  const width = 600;
+  const max = 4000;
+
+  it("leaves the view alone while the playhead is comfortably inside it", () => {
+    expect(followScroll(300, 0, width, max)).toBe(null);
+    expect(followScroll(1200, 1000, width, max)).toBe(null);
+  });
+
+  it("scrolls ahead once the playhead nears the right edge", () => {
+    const next = followScroll(590, 0, width, max);
+    expect(next).not.toBe(null);
+    // The playhead lands with room ahead of it, not pinned to the edge — so a
+    // continuing replay does not re-scroll every single frame.
+    expect(590 - next!).toBeLessThan(width);
+    expect(590 - next!).toBeGreaterThan(0);
+  });
+
+  it("scrolls back when the playhead is behind the view", () => {
+    const next = followScroll(100, 900, width, max);
+    expect(next).not.toBe(null);
+    expect(next!).toBeLessThan(900);
+  });
+
+  it("never scrolls past the ends of the content", () => {
+    expect(followScroll(10, 500, width, max)).toBeGreaterThanOrEqual(0);
+    expect(followScroll(max + width, 0, width, max)).toBeLessThanOrEqual(max);
+  });
+
+  it("returns null rather than a no-op scroll at the very end", () => {
+    // Already scrolled as far as it goes: following further would dispatch an
+    // action every frame that changes nothing.
+    expect(followScroll(max + width, max, width, max)).toBe(null);
   });
 });

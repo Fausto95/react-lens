@@ -17,6 +17,19 @@ describe("panel prefs", () => {
     expect(loadPanelPrefs().travelOn).toBe(true);
   });
 
+  it("defaults replayFollow to off", () => {
+    // Following the playhead moves the content under the reader, so it is
+    // opt-in rather than something a first replay surprises you with.
+    expect(loadPanelPrefs().replayFollow).toBe(false);
+  });
+
+  it("round-trips replayFollow", () => {
+    savePanelPrefs({ replayFollow: true });
+    expect(loadPanelPrefs().replayFollow).toBe(true);
+    savePanelPrefs({ replayFollow: false });
+    expect(loadPanelPrefs().replayFollow).toBe(false);
+  });
+
   it("merges patches without dropping other keys", () => {
     savePanelPrefs({ travelOn: false });
     savePanelPrefs({});
