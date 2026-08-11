@@ -1,9 +1,11 @@
 import type { TraceStore, Interaction } from "@react-lens/trace-engine";
-import type { Causality } from "@react-lens/causality";
 import type { ComponentId, RenderId } from "@react-lens/protocol";
 
-export const PHASE_BAR_CAP = 64;
-export const WHY_CAP = 80;
+/**
+ * Safety valve, not routine truncation: LOD clustering keeps the DOM small,
+ * so the cap only trips on pathological single-interaction bursts.
+ */
+export const PHASE_BAR_CAP = 1000;
 /** Minimum clickable width when a render is sub-pixel on the scale. */
 export const MIN_BAR_PX = 3;
 
@@ -17,7 +19,6 @@ export interface PackedBar {
   t1: number;
   self: number;
   heat: number;
-  wasted: boolean;
   reason: string;
   track: number;
   left: number;
@@ -39,17 +40,21 @@ export interface PackedPhase {
  * Wall-clock component waterfall layout: one bar per render, placed at
  * xOf(timestamp) with width from self-duration; overlapping renders stack
  * onto tracks. Interaction phase columns come back as background boxes.
+ *
+ * Packing happens in TIME — `px` enters only as the min-width epsilon
+ * (MIN_BAR_PX/px) — so track assignment doesn't depend on the scale's
+ * idle-gutter compression and stays stable while zooming.
  */
 export function packPhaseBars(
   store: TraceStore,
-  causality: Causality,
   interactions: Interaction[],
   xOf: (t: number) => number,
+  px: number,
 ): { phases: PackedPhase[]; bars: PackedBar[]; trackCount: number } {
   const phases: PackedPhase[] = [];
   const bars: PackedBar[] = [];
   let trackCount = 1;
-  let whyChecked = 0;
+  const minWidthMs = MIN_BAR_PX / Math.max(px, 1e-6);
 
   type Agg = {
     id: ComponentId;
@@ -58,7 +63,6 @@ export function packPhaseBars(
     t0: number;
     t1: number;
     self: number;
-    wasted: boolean;
     reason: string;
     left: number;
     width: number;
@@ -77,15 +81,6 @@ export function packPhaseBars(
       const name = store.instance(r.componentId)?.name ?? `#${r.componentId}`;
       const t0 = r.timestamp;
       const t1 = r.timestamp + Math.max(r.selfDuration, 0.05);
-      let wasted = false;
-      if (whyChecked < WHY_CAP) {
-        whyChecked++;
-        try {
-          wasted = causality.why(r.renderId).verdict === "no-observable-change";
-        } catch {
-          /* ignore */
-        }
-      }
       const left = xOf(t0);
       const width = Math.max(MIN_BAR_PX, xOf(t1) - left);
       items.push({
@@ -95,7 +90,6 @@ export function packPhaseBars(
         t0,
         t1,
         self: r.selfDuration,
-        wasted,
         reason: r.reasons[0]?.type ?? "render",
         left,
         width,
@@ -117,13 +111,14 @@ export function packPhaseBars(
     if (ranked.length === 0) continue;
 
     const maxSelf = Math.max(0, ...ranked.map((a) => a.self));
-    // Pack tracks by visible pixel span so min-width bars don't overlap.
+    // Pack in time, padded so min-width boxes don't overlap on screen.
     const packedItems = greedyPack(
       ranked.map((item) => ({
         item,
-        t0: item.left,
-        t1: item.left + item.width,
+        t0: item.t0,
+        t1: Math.max(item.t1, item.t0 + minWidthMs),
       })),
+      0.5 * minWidthMs,
     );
     for (const packed of packedItems) {
       const item = packed.item;
@@ -138,7 +133,6 @@ export function packPhaseBars(
         t1: item.t1,
         self: item.self,
         heat: maxSelf <= 0 ? 1 : item.self / maxSelf,
-        wasted: item.wasted,
         reason: item.reason,
         track: packed.track,
         left: item.left,
@@ -165,16 +159,20 @@ export function packPhaseBars(
   return { phases, bars, trackCount };
 }
 
-/** Assign non-overlapping tracks (greedy). Intervals are display px here. */
+/**
+ * Assign non-overlapping tracks (greedy). Unit-agnostic — callers pass px or
+ * time intervals; `tolerance` is the near-touch slack in the same unit.
+ */
 export function greedyPack<T extends { t0: number; t1: number }>(
   items: T[],
+  tolerance = 0.5,
 ): Array<T & { track: number }> {
   const sorted = [...items].sort(
     (a, b) => a.t0 - b.t0 || b.t1 - b.t0 - (a.t1 - a.t0),
   );
   const trackEnds: number[] = [];
   return sorted.map((item) => {
-    let track = trackEnds.findIndex((end) => end <= item.t0 + 0.5);
+    let track = trackEnds.findIndex((end) => end <= item.t0 + tolerance);
     if (track < 0) {
       track = trackEnds.length;
       trackEnds.push(item.t1);

@@ -835,6 +835,12 @@
   text-overflow: ellipsis;
   font-weight: 500;
   will-change: transform;
+  /* Sticky while the bar start is scrolled off: mirrors stickyLabelShift()
+     (timeline/geometry.ts) with --rl-scroll-x written by the scroll handler —
+     no React render per scroll event. */
+  transform: translateX(
+    clamp(0px, calc(var(--rl-scroll-x, 0px) - var(--bar-left, 0px)), var(--bar-shift-max, 0px))
+  );
 }
 
 .rl-tl-bar-hit {
@@ -1420,7 +1426,31 @@
   font-weight: 500;
   color: var(--rl-text);
   will-change: transform;
+  /* Same pure-CSS sticky shift as .rl-tl-int-label. */
+  transform: translateX(
+    clamp(0px, calc(var(--rl-scroll-x, 0px) - var(--bar-left, 0px)), var(--bar-shift-max, 0px))
+  );
 }
+/* LOD cluster: a run of sub-pixel renders collapsed into one countable box. */
+.rl-wf-cluster {
+  -webkit-app-region: no-drag;
+  position: absolute;
+  z-index: 3;
+  margin: 0;
+  padding: 0 4px;
+  box-sizing: border-box;
+  border: 1px dashed var(--rl-border-strong);
+  border-radius: 6px;
+  background: var(--rl-bg-hover);
+  color: var(--rl-text-dim);
+  font-size: 9px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  overflow: hidden;
+  cursor: pointer;
+}
+.rl-wf-cluster:hover { color: var(--rl-text); border-color: var(--rl-text-faint); }
+.rl-wf-cluster.dim { opacity: 0.38; }
 .rl-wf-bar-ms {
   flex: 0 0 auto;
   font-size: 10px;

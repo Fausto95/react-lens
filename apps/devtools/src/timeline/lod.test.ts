@@ -16,7 +16,6 @@ function bar(over: Partial<PackedBar>): PackedBar {
     t1: 1,
     self: 1,
     heat: 0.5,
-    wasted: false,
     reason: "state",
     track: 0,
     left: 0,
@@ -97,7 +96,7 @@ describe("visibleChunkRange", () => {
 
   it("changes only when scrolling crosses a chunk boundary", () => {
     const a = visibleChunkRange(100, 800, 512);
-    const b = visibleChunkRange(400, 800, 512);
+    const b = visibleChunkRange(120, 800, 512); // both edges stay in-chunk
     expect(a).toEqual(b);
     const c = visibleChunkRange(700, 800, 512);
     expect(c).not.toEqual(a);

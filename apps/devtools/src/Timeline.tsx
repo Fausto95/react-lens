@@ -46,10 +46,10 @@ import {
   projectX,
   scaleForProjectedWidth,
   sessionBounds,
-  stickyLabelShift,
 } from "./timeline/geometry.js";
 import { buildTicks, compactGap } from "./timeline/ticks.js";
 import { packPhaseBars, type PackedBar } from "./timeline/pack.js";
+import { aggregateBars, visibleChunkRange, type ChunkRange } from "./timeline/lod.js";
 
 type Mode = "collapsed" | "compact" | "expanded";
 /** Open sizes always include the phase waterfall; collapsed hides the tracks. */
@@ -59,6 +59,8 @@ const NEXT_MODE: Record<Mode, Mode> = {
   expanded: "collapsed",
 };
 const SNAP_PX = 6;
+/** Wasted-render verdicts computed per repack, detail bars first. */
+const WHY_CAP = 80;
 
 /**
  * Video-editor-style time machine: interaction / commit tracks plus a
@@ -119,7 +121,10 @@ export function Timeline({
   /** Applied after the scale model commits so scrollLeft isn't clamped to the old width. */
   const pendingScrollRef = useRef<number | null>(null);
   const [playing, setPlaying] = useState(false);
-  const [scrollLeft, setScrollLeft] = useState(0);
+  // Scroll drives DOM directly (--rl-scroll-x + minimap window); the only
+  // scroll-driven React state is the coarse culling window below.
+  const [chunks, setChunks] = useState<ChunkRange>(() => visibleChunkRange(0, 760));
+  const minimapCtl = useRef<{ update(viewStart: number, viewEnd: number): void } | null>(null);
 
   const bounds = useMemo(() => sessionBounds(interactions, commits), [interactions, commits]);
   const anomaly = useMemo(() => anomalyStats(commits), [commits]);
@@ -159,27 +164,40 @@ export function Timeline({
     [tOfX, bounds.t0],
   );
 
+  /**
+   * One DOM pass per scroll/zoom: sticky labels read --rl-scroll-x from CSS
+   * (no React render), the minimap window is repositioned imperatively, and
+   * the culling window only updates state when a 512px chunk boundary crosses.
+   */
+  const syncScrollUi = useCallback(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    innerRef.current?.style.setProperty("--rl-scroll-x", `${el.scrollLeft}px`);
+    minimapCtl.current?.update(tOfX(el.scrollLeft), tOfX(el.scrollLeft + el.clientWidth));
+    const next = visibleChunkRange(el.scrollLeft, el.clientWidth || 760);
+    setChunks((prev) => (prev.c0 === next.c0 && prev.c1 === next.c1 ? prev : next));
+  }, [tOfX]);
+
   // Run after layout so the new inner width exists before we set scrollLeft.
   useLayoutEffect(() => {
     const x = pendingScrollRef.current;
-    if (x == null) return;
-    pendingScrollRef.current = null;
-    const el = scrollRef.current;
-    if (el) {
-      el.scrollLeft = x;
-      setScrollLeft(el.scrollLeft);
+    if (x != null) {
+      pendingScrollRef.current = null;
+      const el = scrollRef.current;
+      if (el) el.scrollLeft = x;
     }
-  }, [model, scale]);
+    // The time↔px mapping changed even when scrollLeft didn't — resync.
+    syncScrollUi();
+  }, [model, scale, syncScrollUi]);
 
-  // Keep sticky bar labels in sync with horizontal scroll.
+  // Keep sticky labels / minimap / culling in sync with horizontal scroll.
   useEffect(() => {
     const el = scrollRef.current;
     if (!el) return;
-    const sync = () => setScrollLeft(el.scrollLeft);
-    sync();
-    el.addEventListener("scroll", sync, { passive: true });
-    return () => el.removeEventListener("scroll", sync);
-  }, [mode, interactions.length]);
+    syncScrollUi();
+    el.addEventListener("scroll", syncScrollUi, { passive: true });
+    return () => el.removeEventListener("scroll", syncScrollUi);
+  }, [mode, interactions.length, syncScrollUi]);
 
   const snapTargets = useMemo(() => {
     const ts: number[] = [];
@@ -676,8 +694,11 @@ export function Timeline({
           commits={commits}
           anomaly={anomaly}
           bounds={bounds}
-          viewStart={tOfX(scrollLeft)}
-          viewEnd={tOfX(scrollLeft + viewW)}
+          onRegister={(ctl) => {
+            minimapCtl.current = ctl;
+            // Position the window as soon as the minimap mounts.
+            if (ctl) syncScrollUi();
+          }}
           onSeekView={(t) => {
             const el = scrollRef.current;
             if (el) el.scrollLeft = Math.max(0, xOf(clamp(t, bounds.t0, bounds.t1)) - viewW / 2);
@@ -751,6 +772,11 @@ export function Timeline({
                           width: Math.max(3, xOf(it.end) - xOf(it.start)),
                           background: `rgba(${c},0.1)`,
                           borderColor: `rgba(${c},0.28)`,
+                          ["--bar-left" as string]: `${xOf(it.start)}px`,
+                          ["--bar-shift-max" as string]: `${Math.max(
+                            0,
+                            Math.max(3, xOf(it.end) - xOf(it.start)) - 56,
+                          )}px`,
                         }}
                         title={`${it.label} · ${ms(it.metrics.totalDuration)} · ${it.metrics.renderCount} renders`}
                         onPointerDown={(e) => {
@@ -767,18 +793,8 @@ export function Timeline({
                           fitSelection(it);
                         }}
                       >
-                        <span
-                          className="rl-tl-int-label"
-                          style={{
-                            transform: `translateX(${stickyLabelShift(
-                              xOf(it.start),
-                              Math.max(3, xOf(it.end) - xOf(it.start)),
-                              scrollLeft,
-                            )}px)`,
-                          }}
-                        >
-                          {it.label}
-                        </span>
+                        {/* Sticky shift is pure CSS from --rl-scroll-x (see theme.css). */}
+                        <span className="rl-tl-int-label">{it.label}</span>
                       </button>
                     );
                   })}
@@ -833,8 +849,9 @@ export function Timeline({
                     selectedId={selectedId}
                     playheadT={cursorT}
                     maxRows={mode === "expanded" ? 8 : 4}
-                    scrollLeft={scrollLeft}
                     xOf={xOf}
+                    px={px}
+                    cull={chunks}
                     {...(restoreStatus ? { unrestorable: restoreStatus.failedIds } : {})}
                     onSelectComponent={onSelectComponent}
                     onHighlight={onHighlight}
@@ -934,21 +951,38 @@ function Minimap({
   commits,
   anomaly,
   bounds,
-  viewStart,
-  viewEnd,
+  onRegister,
   onSeekView,
 }: {
   interactions: Interaction[];
   commits: CommitSummary[];
   anomaly: AnomalyStats;
   bounds: { t0: number; t1: number };
-  viewStart: number;
-  viewEnd: number;
+  /**
+   * Hands the parent an imperative window updater: the viewport rectangle
+   * follows scroll via direct DOM writes (same pass as --rl-scroll-x), never
+   * through a React render.
+   */
+  onRegister: (ctl: { update(viewStart: number, viewEnd: number): void } | null) => void;
   onSeekView: (t: number) => void;
 }) {
   const span = Math.max(1, bounds.t1 - bounds.t0);
   const pct = (t: number) => `${clamp(((t - bounds.t0) / span) * 100, 0, 100)}%`;
   const dragging = useRef(false);
+  const windowRef = useRef<HTMLSpanElement>(null);
+
+  useEffect(() => {
+    const t0 = bounds.t0;
+    onRegister({
+      update(viewStart, viewEnd) {
+        const el = windowRef.current;
+        if (!el) return;
+        el.style.left = `${clamp(((viewStart - t0) / span) * 100, 0, 100)}%`;
+        el.style.width = `${clamp(((viewEnd - viewStart) / span) * 100, 1, 100)}%`;
+      },
+    });
+    return () => onRegister(null);
+  }, [bounds.t0, span, onRegister]);
   const seek = (e: React.PointerEvent) => {
     const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
     const frac = clamp((e.clientX - rect.left) / Math.max(1, rect.width), 0, 1);
@@ -991,13 +1025,7 @@ function Minimap({
           style={{ left: pct(c.timestamp) }}
         />
       ))}
-      <span
-        className="rl-tl-mini-window"
-        style={{
-          left: pct(viewStart),
-          width: `${clamp(((viewEnd - viewStart) / span) * 100, 1, 100)}%`,
-        }}
-      />
+      <span ref={windowRef} className="rl-tl-mini-window" />
     </div>
   );
 }
@@ -1177,8 +1205,9 @@ function PhaseWaterfall({
   selectedId,
   playheadT,
   maxRows,
-  scrollLeft,
   xOf,
+  px,
+  cull,
   unrestorable,
   onSelectComponent,
   onHighlight,
@@ -1194,8 +1223,11 @@ function PhaseWaterfall({
   playheadT: number;
   /** Rows that fit the lane viewport — the collapsed canvas never exceeds it. */
   maxRows: number;
-  scrollLeft: number;
   xOf: (t: number) => number;
+  /** Current px/ms — the packer's min-width epsilon. */
+  px: number;
+  /** Horizontal culling window (chunk-aligned) — bars outside skip the DOM. */
+  cull: ChunkRange;
   /** While traveling: components whose state could not be restored. */
   unrestorable?: ReadonlyMap<ComponentId, unknown>;
   onSelectComponent?: (id: ComponentId) => void;
@@ -1206,9 +1238,26 @@ function PhaseWaterfall({
   onSeek?: (t: number) => void;
 }) {
   const packed = useMemo(
-    () => packPhaseBars(store, causality, interactions, xOf),
-    [store, causality, interactions, xOf],
+    () => packPhaseBars(store, interactions, xOf, px),
+    [store, interactions, xOf, px],
   );
+  // LOD: runs of sub-2px neighbors merge into cluster bars instead of a cap.
+  const lod = useMemo(() => aggregateBars(packed.bars), [packed]);
+  // Wasted verdicts only for detail bars that survived LOD, capped.
+  const wastedSet = useMemo(() => {
+    const set = new Set<RenderId>();
+    let checked = 0;
+    for (const bar of lod.singles) {
+      if (checked >= WHY_CAP) break;
+      checked++;
+      try {
+        if (causality.why(bar.renderId).verdict === "no-observable-change") set.add(bar.renderId);
+      } catch {
+        /* ignore */
+      }
+    }
+    return set;
+  }, [lod, causality]);
   // Phases the user opened past the track cap (mount bursts pack ~60 deep).
   const [expandedPhases, setExpandedPhases] = useState<ReadonlySet<string>>(new Set());
 
@@ -1298,11 +1347,41 @@ function PhaseWaterfall({
           );
         })}
 
-        {packed.bars.map((bar) => {
+        {lod.clusters.map((cluster) => {
+          if (cluster.track >= contentRows(cluster.phaseId)) return null;
+          if (cluster.left + cluster.width < cull.x0 || cluster.left > cull.x1) return null;
+          const dim = selectedId != null && selectedId !== cluster.phaseId;
+          return (
+            <button
+              key={`cl-${cluster.phaseId}-${cluster.track}-${cluster.left}`}
+              type="button"
+              className={`rl-wf-cluster${dim ? " dim" : ""}`}
+              style={{
+                left: cluster.left,
+                width: Math.max(cluster.width, 14),
+                top: PHASE_PAD_Y + cluster.track * TRACK_H,
+                height: BAR_H,
+              }}
+              title={`${cluster.count} renders · ${ms(cluster.self)} total · slowest ${cluster.name} · ${cluster.phaseLabel}`}
+              onPointerDown={(e) => e.stopPropagation()}
+              onClick={(e) => {
+                e.stopPropagation();
+                onSelectInteraction?.(cluster.phaseId);
+                onSeek?.(cluster.t0);
+              }}
+            >
+              ×{cluster.count}
+            </button>
+          );
+        })}
+
+        {lod.singles.map((bar) => {
           if (!barVisible(bar)) return null;
+          if (bar.left + bar.width < cull.x0 || bar.left > cull.x1) return null;
           const underPlayhead = playheadT >= bar.t0 - 0.25 && playheadT <= bar.t1;
           const dim = selectedId != null && selectedId !== bar.phaseId;
           const noRewind = unrestorable?.has(bar.id) ?? false;
+          const wasted = wastedSet.has(bar.renderId);
           const rgb = componentRgb(bar.id);
           const fillA = 0.07 + bar.heat * 0.1;
           const borderA = 0.22 + bar.heat * 0.12;
@@ -1315,7 +1394,7 @@ function PhaseWaterfall({
             <Fragment key={`${bar.phaseId}-${bar.renderId}`}>
               <button
                 type="button"
-                className={`rl-wf-bar${narrow ? " narrow" : ""}${bar.wasted ? " wasted" : ""}${underPlayhead ? " under-playhead" : ""}${dim ? " dim" : ""}${noRewind ? " rl-wf-bar-norewind" : ""}`}
+                className={`rl-wf-bar${narrow ? " narrow" : ""}${wasted ? " wasted" : ""}${underPlayhead ? " under-playhead" : ""}${dim ? " dim" : ""}${noRewind ? " rl-wf-bar-norewind" : ""}`}
                 style={{
                   left: bar.left,
                   width: bar.width,
@@ -1324,8 +1403,10 @@ function PhaseWaterfall({
                   ["--rl-wf-fill" as string]: `rgba(${rgb},${fillA})`,
                   ["--rl-wf-border" as string]: `rgba(${rgb},${borderA})`,
                   ["--rl-wf-tick" as string]: `rgba(${rgb},${0.32 + bar.heat * 0.28})`,
+                  ["--bar-left" as string]: `${bar.left}px`,
+                  ["--bar-shift-max" as string]: `${Math.max(0, bar.width - 56)}px`,
                 }}
-                title={`${bar.name} · ${ms(bar.self)} · ${bar.reason}${bar.wasted ? " · no visible change" : ""} · ${bar.phaseLabel}`}
+                title={`${bar.name} · ${ms(bar.self)} · ${bar.reason}${wasted ? " · no visible change" : ""} · ${bar.phaseLabel}`}
                 onPointerDown={(e) => e.stopPropagation()}
                 onPointerEnter={() => onHighlight?.(bar.id)}
                 onPointerLeave={() => onHighlight?.(selectedComponent ?? null)}
@@ -1337,16 +1418,8 @@ function PhaseWaterfall({
                   onSeek?.(bar.t0);
                 }}
               >
-                {!narrow && (
-                  <span
-                    className="rl-wf-bar-label"
-                    style={{
-                      transform: `translateX(${stickyLabelShift(bar.left, bar.width, scrollLeft)}px)`,
-                    }}
-                  >
-                    {bar.name}
-                  </span>
-                )}
+                {/* Sticky shift is pure CSS from --rl-scroll-x (see theme.css). */}
+                {!narrow && <span className="rl-wf-bar-label">{bar.name}</span>}
                 {bar.width >= 64 && <span className="rl-wf-bar-ms">{ms(bar.self)}</span>}
                 {onAskAI && bar.self >= SLOW_SELF_MS && bar.width >= 34 && (
                   <span
