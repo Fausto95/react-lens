@@ -1,11 +1,16 @@
 /**
- * Open a file:line in a local editor via a custom URL scheme.
+ * Open a file:line in a local editor.
  *
- * Exactly ONE navigation per call: browsers show a single external-protocol
- * dialog at a time, so a second scheme fired while it is up cancels it — and
- * removing the carrier iframe early dismisses it too. The editor is chosen
- * from a persisted preference (localStorage "react-lens:editor"), defaulting
- * to vscode. No-op when `file` is empty or a URL.
+ * Routing (see editorOpenPlan): dev-server URLs and root/relative sourcemap
+ * paths go to Vite's /__open-in-editor middleware — only the server knows the
+ * project root on disk, a vscode://file scheme would error with "path does
+ * not exist". Real OS-absolute paths use the editor's URL scheme directly.
+ *
+ * Scheme navigations fire exactly ONCE per call: browsers show a single
+ * external-protocol dialog at a time, so a second scheme fired while it is up
+ * cancels it — and removing the carrier iframe early dismisses it too. The
+ * editor is chosen from a persisted preference (localStorage
+ * "react-lens:editor"), defaulting to vscode.
  */
 
 export type EditorId = keyof typeof EDITOR_SCHEMES;
@@ -42,39 +47,107 @@ export function setPreferredEditor(editor: EditorId): void {
   }
 }
 
+export type EditorOpenPlan =
+  | { kind: "dev-server"; url: string }
+  | { kind: "scheme"; url: string };
+
+/** Roots that mark a path as a real filesystem location, not server-relative. */
+const OS_ABSOLUTE = /^(\/(Users|home|var|opt|srv|mnt|tmp|private|Volumes)\/|\/?[A-Za-z]:[\\/])/;
+
+/** Pure routing: where should this source location open? Null = nowhere. */
+export function editorOpenPlan(
+  file: string,
+  line: number,
+  column: number,
+  pageOrigin: string,
+): EditorOpenPlan | null {
+  const trimmed = file.trim();
+  if (!trimmed || trimmed.startsWith("webpack:")) return null;
+
+  const devServer = (origin: string, path: string): EditorOpenPlan => ({
+    kind: "dev-server",
+    url: `${origin}/__open-in-editor?file=${encodeURIComponent(`${path.replace(/^\/+/, "")}:${line}:${column}`)}`,
+  });
+
+  // Dev-server URL: the serving origin can open it relative to its root.
+  if (/^https?:\/\//i.test(trimmed)) {
+    const url = new URL(trimmed);
+    return devServer(url.origin, url.pathname);
+  }
+
+  let p = trimmed.replace(/^file:\/\//, "");
+  if (/^\/[A-Za-z]:\//.test(p)) p = p.slice(1); // file:///C:/… → C:/…
+
+  // Real filesystem path → editor scheme.
+  if (OS_ABSOLUTE.test(p)) {
+    return { kind: "scheme", url: EDITOR_SCHEMES[preferredEditor()](p, line, column) };
+  }
+
+  // Root-relative or bare-relative sourcemap path: only a dev server can
+  // resolve it against the project root.
+  if (/^https?:$/.test(safeProtocol(pageOrigin))) return devServer(pageOrigin, p);
+
+  // Extension panel with no dev-server origin: a leading-slash path might
+  // still be absolute on exotic roots — try the scheme as a best effort.
+  if (p.startsWith("/")) {
+    return { kind: "scheme", url: EDITOR_SCHEMES[preferredEditor()](p, line, column) };
+  }
+  return null;
+}
+
+function safeProtocol(origin: string): string {
+  try {
+    return new URL(origin).protocol;
+  } catch {
+    return "";
+  }
+}
+
+/** A path launch-editor could NOT resolve without knowing the map's root. */
+export function isOsAbsolutePath(p: string): boolean {
+  return OS_ABSOLUTE.test(p.replace(/^file:\/\//, ""));
+}
+
+/**
+ * Open a source location that went through sourcemap resolution. Sourcemap
+ * originals are often bare filenames ("Showcase.tsx") the server can't locate;
+ * the compiled dev-server URL is the reliable file identity in dev (Vite
+ * transforms are 1:1 per module), so open THAT file at the RESOLVED position.
+ */
+export function openResolvedInEditor(
+  compiled: { file: string; line: number; column?: number },
+  resolved: { file: string; line: number; column?: number } | null,
+): boolean {
+  const at = resolved ?? compiled;
+  const file = resolved && isOsAbsolutePath(resolved.file) ? resolved.file : compiled.file;
+  return openInEditor(file, at.line, at.column ?? 1);
+}
+
 export function openInEditor(file: string, line = 1, column = 1): boolean {
-  const path = normalizeEditorPath(file);
-  if (!path) return false;
-  const url = EDITOR_SCHEMES[preferredEditor()](path, Math.max(1, line), Math.max(1, column));
+  const plan = editorOpenPlan(file, Math.max(1, line), Math.max(1, column), window.location.origin);
+  if (!plan) return false;
+  if (plan.kind === "dev-server") {
+    void fetch(plan.url).catch(() => {
+      /* middleware absent (non-Vite server) — nothing else can resolve it */
+    });
+    return true;
+  }
   // An invisible iframe so we don't navigate the DevTools panel away.
   try {
     const iframe = document.createElement("iframe");
     iframe.style.display = "none";
-    iframe.src = url;
+    iframe.src = plan.url;
     document.documentElement.appendChild(iframe);
     setTimeout(() => iframe.remove(), IFRAME_TTL_MS);
     return true;
   } catch {
     try {
-      window.open(url, "_blank");
+      window.open(plan.url, "_blank");
       return true;
     } catch {
       return false;
     }
   }
-}
-
-function normalizeEditorPath(file: string): string | null {
-  const trimmed = file.trim();
-  if (!trimmed) return null;
-  if (/^https?:\/\//i.test(trimmed) || trimmed.startsWith("webpack:")) return null;
-  // Strip webpack / vite file URL prefixes.
-  let p = trimmed.replace(/^file:\/\//, "");
-  if (p.startsWith("/") && /^\/[A-Za-z]:\//.test(p)) {
-    // file:///C:/... → C:/...
-    p = p.slice(1);
-  }
-  return p;
 }
 
 /** Absolute path suitable for editor URLs, or null. */

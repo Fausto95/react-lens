@@ -766,6 +766,15 @@ export function Timeline({
             <IconMinus size={13} />
           </button>
           <button
+            type="button"
+            className="rl-tl-zoom-level"
+            onClick={fitSession}
+            title={scale === 0 ? "Fit to width — click to reset" : "Zoom level — click to fit"}
+            aria-label="Zoom level (click to fit session)"
+          >
+            {scale === 0 ? "fit" : `${Math.round(((scale || fit) / fit) * 100)}%`}
+          </button>
+          <button
             className="rl-icon-btn"
             onClick={() => zoomButtons(1.25)}
             title="Zoom in (+) · ⌘scroll"

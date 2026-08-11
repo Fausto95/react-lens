@@ -18,7 +18,8 @@ import { SourceTab } from "./tabs/SourceTab.js";
 import { DomTab } from "./tabs/DomTab.js";
 import { RelationsTab } from "./tabs/RelationsTab.js";
 import { DoctorTab } from "./tabs/DoctorTab.js";
-import { openInEditor } from "./openInEditor.js";
+import { openResolvedInEditor } from "./openInEditor.js";
+import { getSourceResolver } from "./sourceResolver.js";
 import { diagnosticFixPrompt } from "./perfBudget.js";
 import { useDoctor } from "./useDoctor.js";
 
@@ -164,9 +165,15 @@ export function Inspector({
               type="button"
               className="rl-insp-source rl-insp-source-link"
               title="Open in editor"
-              onClick={() =>
-                openInEditor(inst.source!.file, inst.source!.line, inst.source!.column ?? 1)
-              }
+              onClick={() => {
+                // Resolve through the source map for the right line, then let
+                // the dev server (or the scheme, for absolute paths) open the
+                // full path on disk.
+                const src = inst.source!;
+                void getSourceResolver()
+                  .resolve(src)
+                  .then((loc) => openResolvedInEditor(src, loc));
+              }}
             >
               {shortSource(inst.source.file)}:{inst.source.line}
             </button>

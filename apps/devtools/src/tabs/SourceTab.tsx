@@ -5,7 +5,7 @@ import { IconCopy } from "@react-lens/icons";
 import { shortSource } from "@react-lens/ui";
 import type { InspectorContext } from "../Inspector.js";
 import { sourceResolver as resolver } from "../sourceResolver.js";
-import { openInEditor } from "../openInEditor.js";
+import { openResolvedInEditor } from "../openInEditor.js";
 import { EmptyTab } from "./shared.js";
 
 /**
@@ -77,7 +77,9 @@ export function SourceTab({ inst }: { inst: ComponentInstance; ctx: InspectorCon
       <div className="rl-actions">
         <button
           className="rl-btn"
-          onClick={() => openInEditor(shown.file, line, shown.column ?? 1)}
+          onClick={() =>
+            openResolvedInEditor(compiled, { file: shown.file, line, column: shown.column ?? 1 })
+          }
           title="Open in editor (Cursor / VS Code)"
         >
           Open in editor
