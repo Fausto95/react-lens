@@ -7,6 +7,7 @@
     "dev": "vp dev",
     "build": "vp build",
     "preview": "vp preview",
+    "og": "node scripts/og.mjs",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
