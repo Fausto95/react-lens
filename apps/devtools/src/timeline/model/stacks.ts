@@ -1,8 +1,7 @@
 /**
- * Intra-lane stacking: overlapping clips get row indices up to STACK_MAX.
+ * Intra-lane stacking: overlapping clips get distinct row indices (columns).
+ * Never collapse rows onto each other — depth grows with concurrency.
  */
-
-import { STACK_MAX } from "../view/metrics.js";
 
 export interface Stackable {
   t0: number;
@@ -12,12 +11,12 @@ export interface Stackable {
 }
 
 /**
- * Assign `row` on each clip (0-based, capped at STACK_MAX-1).
+ * Assign `row` on each clip (0-based). Time-overlapping clips always get
+ * distinct rows so stack-mode paint never overlaps.
  * Returns max depth per lane key.
  */
 export function assignStacks<T extends Stackable>(
   byLane: ReadonlyMap<string, readonly T[]>,
-  stackMax = STACK_MAX,
 ): Map<string, number> {
   const depth = new Map<string, number>();
   for (const [lane, arr] of byLane) {
@@ -32,7 +31,7 @@ export function assignStacks<T extends Stackable>(
       } else {
         ends[r] = c.t1;
       }
-      c.row = Math.min(r, stackMax - 1);
+      c.row = r;
       maxRow = Math.max(maxRow, r);
     }
     depth.set(lane, maxRow + 1);
@@ -41,7 +40,7 @@ export function assignStacks<T extends Stackable>(
 }
 
 /** Stack depth for a single lane's clips (mutates `row`). */
-export function stackLane<T extends Stackable>(clips: T[], stackMax = STACK_MAX): number {
+export function stackLane<T extends Stackable>(clips: T[]): number {
   const m = new Map([["_", clips]]);
-  return assignStacks(m, stackMax).get("_") ?? 1;
+  return assignStacks(m).get("_") ?? 1;
 }

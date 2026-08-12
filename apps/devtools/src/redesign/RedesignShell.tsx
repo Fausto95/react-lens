@@ -265,7 +265,7 @@ export function RedesignShell({
           <span className="lens" />
           React Lens
         </div>
-        <div className="rec">
+        <div className="rec" title="Recording is always on">
           {recording && <i />}
           {recording ? `Recording · ${(sessionSpanMs / 1000).toFixed(1)} s` : "Paused"}
         </div>

@@ -27,6 +27,7 @@ import {
 } from "./laneFilter.js";
 import { loadAgentSettings } from "./settings.js";
 import type { AgentSettings } from "@reactlens/agent";
+import { sessionSpanMs } from "./sessionSpan.js";
 import { AgentPane } from "./AgentPane.js";
 import { SettingsPopover } from "./SettingsPopover.js";
 import {
@@ -66,6 +67,7 @@ export interface PanelProps {
   store: TraceStore;
   causality: Causality;
   recording: boolean;
+  /** @deprecated Recording is always on; pause control has been removed. */
   onToggleRecording?: () => void;
   embedded?: boolean;
   /**
@@ -101,7 +103,6 @@ export function Panel({
   store,
   causality,
   recording,
-  onToggleRecording,
   embedded,
   onHighlight,
   overlayEnabled,
@@ -204,11 +205,8 @@ export function Panel({
   const [agentAsk] = useState<{ token: number; question: string } | null>(null);
   const { dockWidth, onDockResize } = useDockResize(embedded);
   const stats = store.stats();
-  /** Session length so far — first to last captured commit. */
-  const sessionSpanMs = (() => {
-    const commits = store.commits();
-    return commits.length > 0 ? commits.at(-1)!.endTimestamp - commits[0]!.timestamp : 0;
-  })();
+  /** Session length so far — first activity to last activity+duration. */
+  const sessionMs = sessionSpanMs(store);
 
   // Fast themed tooltips for every `title` in the panel (see tooltip.ts).
   const rootRef = useRef<HTMLDivElement>(null);
@@ -262,16 +260,12 @@ export function Panel({
       if (batch.events.length > 0) setSessionLabel(null);
     });
   }, [store, sessionLabel]);
-  /** Common post-import state: fresh cursor, no marks, recording paused. */
-  const enterSessionView = useCallback(
-    (label: string) => {
-      setSelected(null);
-      setCursor({ t: 0, mode: "live" });
-      setSessionLabel(label);
-      if (recording) onToggleRecording?.();
-    },
-    [recording, onToggleRecording],
-  );
+  /** Common post-import state: fresh cursor, no marks. Capture stays on. */
+  const enterSessionView = useCallback((label: string) => {
+    setSelected(null);
+    setCursor({ t: 0, mode: "live" });
+    setSessionLabel(label);
+  }, []);
   useEffect(() => {
     travelCtl?.onCursor(cursor, travelOn && travelSupported && !offlineSession);
   }, [travelCtl, cursor, travelOn, travelSupported, offlineSession]);
@@ -359,11 +353,10 @@ export function Panel({
       if (e.metaKey || e.ctrlKey || e.altKey) return;
       const el = document.activeElement;
       if (el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA")) return;
-      if ((e.key === "r" || e.key === "R") && onToggleRecording) onToggleRecording();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [onToggleInspect, onToggleRecording]);
+  }, [onToggleInspect]);
 
   useEffect(() => {
     if (!paletteOpen) return;
@@ -427,15 +420,6 @@ export function Panel({
       run: () => setThemePref(pref),
     });
   }
-  if (onToggleRecording) {
-    commands.push({
-      id: "toggle-recording",
-      label: recording ? "Pause recording" : "Start recording",
-      hint: "R",
-      group: "Navigate",
-      run: onToggleRecording,
-    });
-  }
   commands.push({
     id: "export-session",
     label: "Export session",
@@ -489,7 +473,7 @@ export function Panel({
         doctor={affected}
         selected={selected}
         onSelect={select}
-        sessionSpanMs={sessionSpanMs}
+        sessionSpanMs={sessionMs}
         {...(onHighlight ? { onHighlight } : {})}
         transport={
           timeTravel ? (
@@ -608,15 +592,14 @@ export function Panel({
                 reading={embedded ? "embedded" : "devtools"}
               />
             </span>
-            <button
+            <span
               className={`rl-icon-btn recording severe${recording ? " active" : ""}`}
-              onClick={onToggleRecording}
-              title={recording ? "Pause recording (R)" : "Start recording (R)"}
-              aria-label={recording ? "Pause recording (R)" : "Start recording (R)"}
+              title="Recording is always on"
+              aria-label="Recording is always on"
               aria-pressed={recording}
             >
               <span className="rl-rec-pulse" />
-            </button>
+            </span>
           </span>
         }
       />
@@ -645,10 +628,10 @@ export function Panel({
         <span className="rl-spacer" />
         <span
           className={`rl-status-metric rl-status-rec${recording ? " on" : ""}`}
-          title={recording ? "Recording (R to pause)" : "Recording paused (R to resume)"}
+          title="Recording is always on"
         >
           <span className="rl-status-rec-dot" />
-          {recording ? `rec · ${(sessionSpanMs / 1000).toFixed(1)} s` : "paused"}
+          {recording ? `rec · ${(sessionMs / 1000).toFixed(1)} s` : "paused"}
         </span>
       </div>
 

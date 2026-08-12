@@ -2,7 +2,7 @@ import { describe, expect, it } from "vite-plus/test";
 import { computeLayout, isQuietLane } from "./rows.js";
 import type { Clip, Lane } from "./lanes.js";
 import type { LaneKey } from "../../laneFilter.js";
-import { QUIET_MAX, QUIET_TOTAL_MS, RULER_H, WAVE_H } from "../view/metrics.js";
+import { QUIET_MAX, QUIET_TOTAL_MS, RULER_H, WAVE_H, LANE_PAD, ROW_H } from "../view/metrics.js";
 
 function lane(
   name: string,
@@ -89,6 +89,20 @@ describe("computeLayout", () => {
     });
     expect(closed.rows.map((r) => r.lane.name)).toEqual(["App", "Busy"]);
     expect(closed.quietLanes).toHaveLength(0);
+  });
+
+  it("grows stack lane height with uncapped depth", () => {
+    // Wide clips stay in stack mode (wave is for dense+narrow). Depth 6 must
+    // expand the lane — not clamp at STACK_MAX=4.
+    const busy = lane("Busy", 3, { total: 40, self: 40 });
+    const depth = new Map([[busy.key, 6]]);
+    const layout = computeLayout([busy], depth, {
+      shelfOpen: true,
+      pxPerMs: 2,
+      isDim: () => false,
+    });
+    expect(layout.rows[0]!.mode).toBe("stack");
+    expect(layout.rows[0]!.h).toBe(LANE_PAD + 6 * ROW_H);
   });
 
   it("switches dense lanes to wave using self width", () => {

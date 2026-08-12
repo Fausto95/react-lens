@@ -25,9 +25,6 @@ import { PANEL_PORT_PREFIX, type EditPrimitive, type PortMessage } from "../tran
 function ExtensionPanel() {
   const store = useMemo(() => new TraceStore(), []);
   const causality = useMemo(() => createCausality(store), [store]);
-  const [recording, setRecording] = useState(true);
-  const recordingRef = useRef(recording);
-  recordingRef.current = recording;
   const [inspecting, setInspecting] = useState(false);
   const [pickedId, setPickedId] = useState<ComponentId | null>(null);
   /** The extension was reloaded under us; only reopening DevTools recovers. */
@@ -65,14 +62,10 @@ function ExtensionPanel() {
       }
       attempt = 0;
       portRef.current = port;
-      // Sync panel intent after (re)connect. Capture keeps running across
-      // disconnects into the content buffer; this only matters if the user
-      // paused, or if an older background still stopped the page.
+      // Capture is always on; re-assert after (re)connect in case an older
+      // background left the page paused.
       try {
-        port.postMessage({
-          kind: "record",
-          recording: recordingRef.current,
-        } satisfies PortMessage);
+        port.postMessage({ kind: "record", recording: true } satisfies PortMessage);
       } catch {
         // onDisconnect / retry path will reconnect.
       }
@@ -373,17 +366,12 @@ function ExtensionPanel() {
     <Panel
       store={store}
       causality={causality}
-      recording={recording}
+      recording
       edit={edit}
       inspecting={inspecting}
       onToggleInspect={onToggleInspect}
       selectComponent={pickedId}
       onSelectConsumed={() => setPickedId(null)}
-      onToggleRecording={() => {
-        const next = !recording;
-        setRecording(next);
-        send({ kind: "record", recording: next });
-      }}
       onRequestSnapshot={(renderId) => send({ kind: "snapshot-request", renderId })}
       onHighlight={(componentId, opts) =>
         send({ kind: "highlight", componentId, ...(opts?.reveal ? { reveal: true } : {}) })

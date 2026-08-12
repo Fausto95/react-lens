@@ -139,6 +139,27 @@ describe("TraceStore — commits", () => {
     expect(commits[1]!.componentIds).toEqual([1]);
   });
 
+  it("widens commit endTimestamp by render duration", () => {
+    // All renders in a commit share one timestamp; without folding duration
+    // the commit (and session chrome) looked zero-width.
+    const store = new TraceStore();
+    store.ingest(
+      batch({
+        events: [
+          renderEvent({
+            timestamp: 100,
+            selfDuration: 5,
+            totalDuration: 40,
+            commitId: 1 as CommitId,
+          }),
+        ],
+      }),
+    );
+    const [commit] = store.commits();
+    expect(commit!.timestamp).toBe(100);
+    expect(commit!.endTimestamp).toBe(140);
+  });
+
   it("bounds the commit list", () => {
     const store = new TraceStore({ maxCommits: 2 });
     const events = [1, 2, 3].map((n) =>

@@ -1,10 +1,10 @@
 /**
  * Panel ↔ page pairing policy for the background relay.
  *
- * Capture lives in the page and is buffered by the content script. The panel
- * is a subscriber, not the owner of recording — opening/closing DevTools must
- * not turn capture off, or events during the disconnect gap (and forever after,
- * if reconnect never sends `record: true`) are lost.
+ * Capture lives in the page and is buffered by the content script. Recording is
+ * always on: opening/closing DevTools must never stop it, and reconnect must
+ * re-assert `record: true` in case an older build (or a stray control message)
+ * left the page paused.
  */
 
 import type { PortMessage } from "../transport.js";
@@ -12,9 +12,12 @@ import type { PortMessage } from "../transport.js";
 /** Outbound messages the background should send to the page port. */
 export type PageCommand = Extract<PortMessage, { kind: "panel-ready" } | { kind: "record" }>;
 
-/** Panel just connected — ask the content script to replay its durable buffer. */
+/** Panel just connected — ensure capture is on, then replay the durable buffer. */
 export function commandsOnPanelConnect(): readonly PageCommand[] {
-  return [{ kind: "panel-ready" }];
+  return [
+    { kind: "record", recording: true },
+    { kind: "panel-ready" },
+  ];
 }
 
 /**

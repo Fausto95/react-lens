@@ -15,13 +15,17 @@ describe("assignStacks", () => {
     expect(clips[2]!.row).toBe(0);
   });
 
-  it("caps row at STACK_MAX - 1", () => {
+  it("never reuses a row for concurrent clips — always columnar", () => {
+    // Former STACK_MAX clamp painted depth>4 on the same Y. Eight mutually
+    // overlapping clips must get rows 0..7.
     const clips: Stackable[] = Array.from({ length: 8 }, (_, i) => ({
       t0: i * 5,
       t1: i * 5 + 40,
     }));
-    stackLane(clips, 4);
-    expect(Math.max(...clips.map((c) => c.row!))).toBe(3);
+    const depth = stackLane(clips);
+    expect(depth).toBe(8);
+    expect(new Set(clips.map((c) => c.row)).size).toBe(8);
+    expect(Math.max(...clips.map((c) => c.row!))).toBe(7);
   });
 
   it("keeps non-overlapping clips on row 0", () => {

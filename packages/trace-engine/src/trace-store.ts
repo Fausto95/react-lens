@@ -231,7 +231,11 @@ export class TraceStore {
     }
     commit.components.add(event.componentId);
     commit.totalSelfTime += event.selfDuration;
-    commit.endTimestamp = Math.max(commit.endTimestamp, event.timestamp);
+    // Renders in one commit share `timestamp`; fold durations so the commit
+    // span (and session length) reflect real work, not a zero-width instant.
+    const end =
+      event.timestamp + Math.max(event.selfDuration, event.totalDuration, 0);
+    commit.endTimestamp = Math.max(commit.endTimestamp, end);
   }
 
   private createRenderBuffer(id: ComponentId): RingBuffer<RenderEvent> {

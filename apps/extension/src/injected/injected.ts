@@ -117,8 +117,9 @@ window.addEventListener("message", (event: MessageEvent) => {
   const data = event.data as ContentToPage | undefined;
   if (!data || data.source !== CONTENT_SOURCE) return;
   if (data.kind === "record") {
+    // Recording is always on. Older panels / stray control messages may still
+    // send `recording: false`; ignore stops so capture cannot be silenced.
     if (data.recording) start();
-    else instrumentation.stop();
   } else if (data.kind === "snapshot-request") {
     const snapshot = instrumentation.snapshot(data.renderId);
     if (!snapshot) return;

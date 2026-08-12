@@ -4,10 +4,10 @@ import fs from "node:fs";
 import { boot, bumpCounter, counterLine, ensureTravelOn, FIXTURES_DIR } from "./helpers.js";
 
 /**
- * Session export → import round-trip: the import gate (542bd08) pauses
- * recording, disables travel with an "imported session" tooltip, shows
- * captured-DOM playback while historical, and drops the offline view when
- * recording resumes. A committed protocol-v1 fixture pins the file format.
+ * Session export → import round-trip: importing shows the offline session view
+ * (travel disabled, captured-DOM playback) and the next live frame drops it.
+ * Capture stays on throughout — recording is never paused for import.
+ * A committed protocol-v1 fixture pins the file format.
  */
 
 test("export → import round-trip enters and leaves the offline session view", async ({ page }) => {
@@ -26,7 +26,7 @@ test("export → import round-trip enters and leaves the offline session view", 
     await page.locator('input[type="file"][accept*="json"]').setInputFiles(tmp);
 
     await expect(page.locator(".rl-session-label")).toBeVisible();
-    await expect(page.locator(".rl-status-rec")).toContainText("paused");
+    await expect(page.locator(".rl-status-rec")).toContainText("rec");
 
     const travel = page.getByRole("button", { name: "Apply state to the page while scrubbing" });
     await expect(travel).toBeDisabled();
@@ -37,9 +37,7 @@ test("export → import round-trip enters and leaves the offline session view", 
     await expect(page.locator(".rl-tl-domsnap")).toBeVisible();
     await expect(page.locator(".rl-tl-domsnap-hint")).toContainText(/imported session/i);
 
-    // Resume recording + a live interaction drops the offline session view.
-    await page.getByRole("button", { name: "Start recording (R)" }).click();
-    await expect(page.locator(".rl-status-rec")).toContainText("rec");
+    // A live interaction drops the offline session view (capture was never paused).
     await page.getByRole("button", { name: "count +1" }).click();
     await page.waitForTimeout(350);
 
@@ -60,7 +58,7 @@ test("imports a committed protocol-v1 .lens.json fixture", async ({ page }) => {
   await page.locator('input[type="file"][accept*="json"]').setInputFiles(fixture);
 
   await expect(page.locator(".rl-session-label")).toBeVisible();
-  await expect(page.locator(".rl-status-rec")).toContainText("paused");
+  await expect(page.locator(".rl-status-rec")).toContainText("rec");
   const travel = page.getByRole("button", { name: "Apply state to the page while scrubbing" });
   await expect(travel).toBeDisabled();
   await expect(travel).toHaveAttribute("title", /imported session/i);

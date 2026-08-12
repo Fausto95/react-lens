@@ -11,7 +11,6 @@ import {
   QUIET_TOTAL_MS,
   ROW_H,
   RULER_H,
-  STACK_MAX,
   WAVE_H,
 } from "../view/metrics.js";
 
@@ -74,15 +73,14 @@ export function computeLayout(
     if (quiet && !opts.shelfOpen) continue;
 
     const clips = lane.clips;
-    const depth = Math.min(laneDepth.get(lane.key) ?? 1, STACK_MAX);
+    const depth = Math.max(1, laneDepth.get(lane.key) ?? 1);
     // Wave LOD keys off exclusive width — inclusive parents look wide even when
     // the lane is a dense leaf stack that should histogram.
     const avgPx =
       clips.length > 0
         ? (clips.reduce((a, c) => a + c.self, 0) / clips.length) * opts.pxPerMs
         : 99;
-    const rawDepth = laneDepth.get(lane.key) ?? 1;
-    const mode = laneMode(rawDepth, clips.length, avgPx);
+    const mode = laneMode(depth, clips.length, avgPx);
     const h = mode === "wave" ? WAVE_H : LANE_PAD + depth * ROW_H;
     rows.push({
       lane,
