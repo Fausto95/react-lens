@@ -1,46 +1,54 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import type { ComponentId, RenderId } from "@reactlens/protocol";
+import { useCallback, useEffect, useMemo, useReducer, useRef } from "react";
+import type { ComponentId } from "@reactlens/protocol";
 import type { LaneControls } from "../../laneFilter.js";
 import type { TimeCursor } from "../../timeCursor.js";
-import { projectT, projectX, type TimeSpan } from "../model/scale.js";
-import { visibleChunkRange, sameChunkRange, type ChunkRange } from "../model/culling.js";
-import { followScroll, maxScroll, resolveZoom } from "../model/viewport.js";
-import { advanceReplay, stepStop } from "../model/schedule.js";
+import { buildAxis, clamp, compactGap, easeOut, type TimeAxis } from "../model/axis.js";
+import { loupeAt, LOUPE_H, LOUPE_HALF_MS, LOUPE_W, loupeX } from "../model/loupe.js";
+import { clampView, fitWallRange, lerpView, reanchorAfterAxisChange } from "../model/viewport.js";
 import { timelineKeyAction } from "../keymap.js";
-import { clipAtTime } from "../model/lanes.js";
-import { startReplayTicker } from "../replayTicker.js";
-import { useLatest } from "../../useLatest.js";
+import { clipAtTime, clipCauseColor, type Clip } from "../model/lanes.js";
 import type { Timeline as TimelineModel } from "../useTimeline.js";
-import { LONG_TASK_MS } from "../useTimeline.js";
-import { Ruler, rulerMarkers } from "./Ruler.js";
-import { Lanes } from "./Lanes.js";
-import { Arrows } from "./Arrows.js";
-import { Chrome } from "./Chrome.js";
+import { drawBase, drawOverlay, ensureHatchPattern, type ClipRect } from "./draw.js";
+import { WallStrip } from "./WallStrip.js";
+import { Navigator } from "./Navigator.js";
+import { Shelf } from "./Shelf.js";
 import { Footer } from "./Footer.js";
-import { NAME_W } from "./metrics.js";
+import {
+  ACCENT,
+  CAUSE_COLOR,
+  MONO,
+  NAME_W,
+  RULER_H,
+  SNAP_PX,
+  VIEW_SPAN_MIN,
+  nameWidthFor,
+} from "./metrics.js";
 
-/** One replay pass over the whole region, in ms of wall clock. */
-const REPLAY_MS = 2600;
-/** A replay started near the end still needs long enough to be watchable. */
-const MIN_REPLAY_MS = 700;
-/** Show marker labels only when the axis is roomy enough to read them. */
-const MARKER_LABEL_MIN_PX_PER_MS = 0.35;
+const HELP: Array<[string, string]> = [
+  ["drag", "scrub (snaps to clip edges)"],
+  ["⇧ drag", "set region"],
+  ["⌥ drag", "marquee zoom"],
+  ["middle-drag", "pan with momentum"],
+  ["pinch / ⌘ scroll", "zoom at cursor"],
+  ["scroll", "pan"],
+  ["double-click clip", "zoom to clip"],
+  ["double-click region", "zoom to region"],
+  ["double-click empty", "fit"],
+  ["space", "play / pause"],
+  ["J / K / L", "reverse / stop / forward (tap again = faster)"],
+  ["[ / ]", "set in / out at playhead"],
+  ["Z + click", "zoom to burst"],
+  ["F", "zoom to selection"],
+  ["0  ·  + / −", "fit · zoom"],
+  ["esc", "clear region"],
+  ["?", "toggle this panel"],
+];
 
-/**
- * The timeline: ruler, lanes and footer over one horizontally scrolling
- * canvas.
- *
- * The ruler and the lanes share a single scroller, so there is exactly one
- * scroll offset for the whole view and nothing to keep in sync. The reducer
- * owns that offset; the DOM is mirrored *from* it, and a user scroll comes
- * back in as an action.
- */
 export function Timeline({
   model,
   cursor,
   onCursor,
-  lanes,
-  fixApplied = false,
+  lanes: laneControls,
   onSelectComponent,
   onHighlight,
   transport,
@@ -52,367 +60,947 @@ export function Timeline({
   fixApplied?: boolean;
   onSelectComponent?: (id: ComponentId) => void;
   onHighlight?: (id: ComponentId | null) => void;
-  /** Panel-owned controls rendered into the footer (travel, A/B…). */
   transport?: React.ReactNode;
 }) {
-  const { state, dispatch, bounds, scale, idleSegs, rows, canvasHeight, arrows } = model;
-  const scrollerRef = useRef<HTMLDivElement>(null);
-  const canvasRef = useRef<HTMLDivElement>(null);
-  const panFrom = useRef<number | null>(null);
-  /** Suppresses the scroll event our own imperative write provokes. */
-  const echo = useRef(false);
+  const { state, dispatch, acts, gapProgRef, layout, bounds, markers, arrows, lanes, axis } =
+    model;
+  const [, force] = useReducer((x: number) => x + 1, 0);
 
-  const xOf = useMemo(() => (t: number) => projectX(scale.segs, t), [scale]);
-  const pxPerMs = resolveZoom(state.viewport, bounds, model.active);
-  /** What "fit" resolves to right now — the 100% reference for the readout. */
-  const fitPxPerMs = resolveZoom({ ...state.viewport, zoom: "fit" }, bounds, model.active);
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const baseRef = useRef<HTMLCanvasElement>(null);
+  const overRef = useRef<HTMLCanvasElement>(null);
+  const loupeCvRef = useRef<HTMLCanvasElement>(null);
+  const patternRef = useRef<CanvasPattern | null>(null);
+  /** Live axis for drawing (tracks gapProg animation frames). */
+  const axisLiveRef = useRef<TimeAxis>(axis);
+  axisLiveRef.current = buildAxis(acts, gapProgRef.current);
 
-  // ── Measurement ───────────────────────────────────────────────────────────
+  const playheadRef = useRef(model.playhead);
+  playheadRef.current = cursor.mode === "live" ? model.playhead : cursor.t;
+  const hoverRef = useRef<string | null>(null);
+  const ghostRef = useRef<number | null>(null);
+  const tipRef = useRef<{ clip: Clip; x: number; y: number } | null>(null);
+  const loupeRef = useRef<{
+    laneKey: string;
+    wallT: number;
+    x: number;
+    y: number;
+  } | null>(null);
+  const marqueeRef = useRef<{ x0: number; x1: number } | null>(null);
+  const dragRef = useRef<
+    | { type: "scrub" }
+    | { type: "pan"; lastX: number; vel: number; lastT: number }
+    | { type: "marquee" }
+    | { type: "region"; side: "start" | "end" }
+    | { type: "regionMove"; grabT: number; start: number; end: number }
+    | { type: "pinch" }
+    | null
+  >(null);
+  const pointersRef = useRef(new Map<number, { x: number; y: number }>());
+  const clipRectsRef = useRef(new Map<string, ClipRect>());
+  const snapEdgesRef = useRef<number[]>([]);
+  const zHeld = useRef(false);
+  const momentum = useRef(0);
+  const viewAnim = useRef(0);
+  const gapAnim = useRef(0);
+  const rafRef = useRef(0);
+  const sizeRef = useRef({ w: state.width, nameW: NAME_W });
+
+  const nameW = () => sizeRef.current.nameW;
+
+  const aToX = useCallback(
+    (a: number) => {
+      const v = state.view;
+      const nw = nameW();
+      return nw + ((a - v.a0) / (v.a1 - v.a0 || 1)) * (sizeRef.current.w - nw);
+    },
+    [state.view],
+  );
+  const xToA = useCallback(
+    (x: number) => {
+      const v = state.view;
+      const nw = nameW();
+      return v.a0 + ((x - nw) / (sizeRef.current.w - nw || 1)) * (v.a1 - v.a0);
+    },
+    [state.view],
+  );
+  const wToX = useCallback(
+    (t: number) => aToX(axisLiveRef.current.wallToAxis(t)),
+    [aToX],
+  );
+  const xToW = useCallback(
+    (x: number) => {
+      const ax = axisLiveRef.current;
+      return ax.axisToWall(clamp(xToA(x), 0, ax.total));
+    },
+    [xToA],
+  );
+
+  const snap = (t: number, x: number) => {
+    let best = t;
+    let dist = SNAP_PX + 1;
+    for (const e of snapEdgesRef.current) {
+      const d = Math.abs(wToX(e) - x);
+      if (d < dist) {
+        dist = d;
+        best = e;
+      }
+    }
+    return best;
+  };
+
+  const setPlayhead = (t: number, historical = true) => {
+    playheadRef.current = t;
+    onCursor(
+      historical
+        ? { mode: "historical", t }
+        : { mode: "live", t: model.bounds.t1 },
+    );
+  };
+
+  const drawLoupe = useCallback(() => {
+    const lp = loupeRef.current;
+    const cv = loupeCvRef.current;
+    if (!lp || !cv) return;
+    const ctx = cv.getContext("2d");
+    if (!ctx) return;
+    const lane = lanes.find((l) => l.key === lp.laneKey);
+    if (!lane) return;
+    const win = loupeAt(lp.laneKey, lp.wallT);
+    ctx.clearRect(0, 0, LOUPE_W, LOUPE_H);
+    for (const c of lane.clips) {
+      if (c.t1 < win.t0 || c.t0 > win.t1) continue;
+      const x0 = Math.max(loupeX(c.t0, win), 0);
+      const x1 = Math.min(loupeX(c.t1, win), LOUPE_W);
+      const y = 5 + ((c.row ?? 0) % 2) * 21;
+      const col = CAUSE_COLOR[clipCauseColor(c.cause)];
+      ctx.fillStyle = c.wasted ? "rgba(150,150,160,.28)" : col + "55";
+      ctx.beginPath();
+      ctx.roundRect?.(x0, y, Math.max(x1 - x0, 2), 16, 3);
+      ctx.fill();
+      ctx.strokeStyle = c.wasted ? "rgba(150,150,160,.5)" : col + "88";
+      if (c.wasted) ctx.setLineDash([3, 2]);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
+    ctx.strokeStyle = "rgba(110,155,255,.7)";
+    ctx.beginPath();
+    ctx.moveTo(LOUPE_W / 2 + 0.5, 0);
+    ctx.lineTo(LOUPE_W / 2 + 0.5, LOUPE_H);
+    ctx.stroke();
+  }, [lanes]);
+
+  const paint = useCallback(
+    (base: boolean) => {
+      const bc = baseRef.current;
+      const oc = overRef.current;
+      if (!bc || !oc) return;
+      const bctx = bc.getContext("2d");
+      const octx = oc.getContext("2d");
+      if (!bctx || !octx) return;
+
+      if (!patternRef.current) patternRef.current = ensureHatchPattern(bctx);
+
+      const nw = nameW();
+      const proj = {
+        aToX,
+        wToX,
+        nameW: nw,
+        stageW: sizeRef.current.w,
+        pxPerMs: model.pxPerMs,
+      };
+
+      if (base) {
+        const { clipRects, snapEdges } = drawBase({
+          ctx: bctx,
+          axis: axisLiveRef.current,
+          view: state.view,
+          layout,
+          region: state.region,
+          markers,
+          selectedRender: state.selectedRender,
+          proj,
+          pattern: patternRef.current,
+          tOrigin: bounds.t0,
+        });
+        clipRectsRef.current = clipRects;
+        snapEdgesRef.current = snapEdges;
+      }
+
+      drawOverlay({
+        ctx: octx,
+        stageW: sizeRef.current.w,
+        totalH: layout.totalH,
+        nameW: nw,
+        clipRects: clipRectsRef.current,
+        edges: arrows,
+        selectedRender: state.selectedRender,
+        marquee: marqueeRef.current,
+        hoverId: hoverRef.current,
+        ghostT: ghostRef.current,
+        playheadT: playheadRef.current,
+        wToX,
+        dragging: dragRef.current != null,
+      });
+      drawLoupe();
+      force();
+    },
+    [
+      aToX,
+      wToX,
+      state.view,
+      state.region,
+      state.selectedRender,
+      layout,
+      markers,
+      bounds.t0,
+      arrows,
+      model.pxPerMs,
+      drawLoupe,
+      acts,
+      state.expandedGaps,
+    ],
+  );
+
+  const scheduleDraw = useCallback(
+    (base: boolean) => {
+      cancelAnimationFrame(rafRef.current);
+      rafRef.current = requestAnimationFrame(() => paint(base));
+    },
+    [paint],
+  );
+
   useEffect(() => {
-    const el = scrollerRef.current;
-    if (!el || typeof ResizeObserver === "undefined") return;
-    const measure = () => dispatch({ type: "measure", width: el.clientWidth - NAME_W });
-    measure();
-    const ro = new ResizeObserver(measure);
+    const el = wrapRef.current;
+    if (!el) return;
+    const resize = () => {
+      const w = el.clientWidth;
+      sizeRef.current.w = w;
+      sizeRef.current.nameW = nameWidthFor(w);
+      dispatch({ type: "measure", width: w });
+      const h = layout.totalH;
+      const dpr = window.devicePixelRatio || 1;
+      for (const cv of [baseRef.current, overRef.current]) {
+        if (!cv) continue;
+        cv.width = w * dpr;
+        cv.height = h * dpr;
+        cv.style.width = `${w}px`;
+        cv.style.height = `${h}px`;
+        cv.getContext("2d")?.setTransform(dpr, 0, 0, dpr, 0, 0);
+      }
+      const lc = loupeCvRef.current;
+      if (lc) {
+        lc.width = LOUPE_W * dpr;
+        lc.height = LOUPE_H * dpr;
+        lc.getContext("2d")?.setTransform(dpr, 0, 0, dpr, 0, 0);
+      }
+      paint(true);
+    };
+    resize();
+    const ro = new ResizeObserver(resize);
     ro.observe(el);
     return () => ro.disconnect();
-  }, [dispatch]);
+  }, [dispatch, layout.totalH, paint]);
 
-  // ── Scroll: reducer → DOM, one way ────────────────────────────────────────
-  useLayoutEffect(() => {
-    const el = scrollerRef.current;
-    if (!el) return;
-    if (Math.abs(el.scrollLeft - state.viewport.scrollLeft) > 1) {
-      echo.current = true;
-      el.scrollLeft = state.viewport.scrollLeft;
+  useEffect(() => {
+    scheduleDraw(true);
+  }, [state.selectedRender, state.shelfOpen, state.region, layout, scheduleDraw]);
+
+  const setView = (a0: number, span: number, redraw = true) => {
+    dispatch({ type: "setView", a0, span });
+    if (redraw) scheduleDraw(true);
+  };
+
+  const animateView = (a0: number, span: number, dur = 150) => {
+    cancelAnimationFrame(viewAnim.current);
+    const from = { ...state.view };
+    const to = clampView(a0, span, axisLiveRef.current.total);
+    const start = performance.now();
+    const step = (now: number) => {
+      const t = easeOut(clamp((now - start) / dur, 0, 1));
+      const v = lerpView(from, to, t);
+      dispatch({ type: "setView", a0: v.a0, span: v.a1 - v.a0 });
+      scheduleDraw(true);
+      if (t < 1) viewAnim.current = requestAnimationFrame(step);
+    };
+    viewAnim.current = requestAnimationFrame(step);
+  };
+
+  const zoomAt = (factor: number, anchorX: number, animated = false) => {
+    const ax = axisLiveRef.current;
+    const anchor = xToA(Math.max(anchorX, nameW()));
+    const span = state.view.a1 - state.view.a0;
+    const ns = clamp(span * factor, VIEW_SPAN_MIN, ax.total);
+    const na0 = anchor - ((anchor - state.view.a0) / span) * ns;
+    if (animated) animateView(na0, ns);
+    else setView(na0, ns);
+  };
+
+  const fit = () => animateView(0, axisLiveRef.current.total, 200);
+  const doFitWall = (w0: number, w1: number, animated = true) => {
+    const v = fitWallRange(axisLiveRef.current, w0, w1);
+    if (animated) animateView(v.a0, v.a1 - v.a0, 180);
+    else setView(v.a0, v.a1 - v.a0);
+  };
+
+  const toggleGap = (id: string) => {
+    const target = state.expandedGaps.has(id) ? 0 : 1;
+    dispatch({ type: "toggleGap", id });
+    cancelAnimationFrame(gapAnim.current);
+    const from = gapProgRef.current.get(id) ?? 0;
+    const start = performance.now();
+    const dur = 240;
+    const step = (now: number) => {
+      const t = easeOut(clamp((now - start) / dur, 0, 1));
+      const prev = axisLiveRef.current;
+      const centerW = prev.axisToWall((state.view.a0 + state.view.a1) / 2);
+      const prevTotal = prev.total;
+      gapProgRef.current.set(id, from + (target - from) * t);
+      const next = buildAxis(acts, gapProgRef.current);
+      axisLiveRef.current = next;
+      const re = reanchorAfterAxisChange(state.view, prevTotal, next, centerW);
+      dispatch({ type: "setView", a0: re.a0, span: re.a1 - re.a0 });
+      scheduleDraw(true);
+      if (t < 1) gapAnim.current = requestAnimationFrame(step);
+    };
+    gapAnim.current = requestAnimationFrame(step);
+  };
+
+  const hitClip = (x: number, y: number): ClipRect | null => {
+    for (const r of clipRectsRef.current.values()) {
+      if (x >= r.x0 - 2 && x <= r.x1 + 2 && y >= r.y0 && y <= r.y1) return r;
     }
-  }, [state.viewport.scrollLeft]);
-
-  const [cull, setCull] = useState<ChunkRange>(() => visibleChunkRange(0, 800));
-  useEffect(() => {
-    const next = visibleChunkRange(state.viewport.scrollLeft, state.viewport.width);
-    setCull((prev) => (sameChunkRange(prev, next) ? prev : next));
-  }, [state.viewport.scrollLeft, state.viewport.width]);
-
-  // ── Pointer → time ────────────────────────────────────────────────────────
-  const tOfClient = (clientX: number): number => {
-    const el = scrollerRef.current;
-    if (!el) return bounds.t0;
-    const rect = el.getBoundingClientRect();
-    const x = clientX - rect.left - NAME_W + el.scrollLeft;
-    return projectT(scale.segs, Math.max(0, Math.min(scale.width, x)));
+    return null;
   };
 
-  const scrub = (clientX: number) => {
-    const t = tOfClient(clientX);
-    onCursor({ t, mode: t >= bounds.t1 - 0.5 ? "live" : "historical" });
+  const localXY = (e: { clientX: number; clientY: number }) => {
+    const r = wrapRef.current!.getBoundingClientRect();
+    return { x: e.clientX - r.left, y: e.clientY - r.top };
   };
 
-  // ── Wheel: pan, ⌘/ctrl to zoom at the pointer ─────────────────────────────
+  const onPointerDown = (e: React.PointerEvent) => {
+    pointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    cancelAnimationFrame(momentum.current);
+    if (pointersRef.current.size === 2) {
+      dragRef.current = { type: "pinch" };
+      return;
+    }
+    const { x, y } = localXY(e);
+    if (x < nameW()) return;
+
+    if (e.button === 1) {
+      dragRef.current = { type: "pan", lastX: e.clientX, vel: 0, lastT: performance.now() };
+      e.preventDefault();
+    } else if (zHeld.current) {
+      const t = xToW(x);
+      const ax = axisLiveRef.current;
+      const seg = ax.segs.find((s) => s.type === "act" && t >= s.w0 && t <= s.w1);
+      if (seg && seg.type === "act") doFitWall(seg.w0, seg.w1);
+      return;
+    } else if (e.altKey) {
+      dragRef.current = { type: "marquee" };
+      marqueeRef.current = { x0: x, x1: x };
+    } else if (e.shiftKey) {
+      const w = xToW(x);
+      dispatch({ type: "setRegion", span: { start: w, end: w } });
+      dragRef.current = { type: "region", side: "end" };
+    } else {
+      const rg = state.region;
+      if (rg) {
+        for (const side of ["start", "end"] as const) {
+          if (Math.abs(wToX(rg[side]) - x) < 6) {
+            dragRef.current = { type: "region", side };
+            e.currentTarget.setPointerCapture(e.pointerId);
+            return;
+          }
+        }
+        if (y < RULER_H && x > wToX(rg.start) && x < wToX(rg.end)) {
+          dragRef.current = {
+            type: "regionMove",
+            grabT: xToW(x),
+            start: rg.start,
+            end: rg.end,
+          };
+          e.currentTarget.setPointerCapture(e.pointerId);
+          return;
+        }
+      }
+      const hit = hitClip(x, y);
+      if (hit) {
+        dispatch({
+          type: "selectClip",
+          renderId: hit.clip.renderId,
+          laneKey: hit.clip.laneKey,
+        });
+        setPlayhead((hit.clip.t0 + hit.clip.t1) / 2);
+        onSelectComponent?.(hit.clip.componentId);
+        onHighlight?.(hit.clip.componentId);
+        scheduleDraw(true);
+        return;
+      }
+      dragRef.current = { type: "scrub" };
+      setPlayhead(snap(xToW(x), x));
+      scheduleDraw(false);
+    }
+    e.currentTarget.setPointerCapture(e.pointerId);
+  };
+
+  const onPointerMove = (e: React.PointerEvent) => {
+    const p = pointersRef.current;
+    if (p.has(e.pointerId)) {
+      const prev = [...p.entries()];
+      p.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (dragRef.current?.type === "pinch" && p.size === 2) {
+        const a0 = prev[0]?.[1];
+        const b0 = prev[1]?.[1];
+        const entries = [...p.entries()];
+        const a1 = entries[0]?.[1];
+        const b1 = entries[1]?.[1];
+        if (!a0 || !b0 || !a1 || !b1) return;
+        const d0 = Math.hypot(a0.x - b0.x, a0.y - b0.y) || 1;
+        const d1 = Math.hypot(a1.x - b1.x, a1.y - b1.y) || 1;
+        const rect = wrapRef.current!.getBoundingClientRect();
+        const mid0 = (a0.x + b0.x) / 2;
+        const mid1 = (a1.x + b1.x) / 2;
+        zoomAt(d0 / d1, mid1 - rect.left);
+        const span = state.view.a1 - state.view.a0;
+        setView(
+          state.view.a0 - ((mid1 - mid0) * span) / (sizeRef.current.w - nameW()),
+          span,
+        );
+        return;
+      }
+    }
+
+    const { x, y } = localXY(e);
+    const d = dragRef.current;
+    if (!d) {
+      const hit = hitClip(x, y);
+      const id = hit ? String(hit.clip.renderId) : null;
+      if (id !== hoverRef.current) {
+        hoverRef.current = id;
+        onHighlight?.(hit?.clip.componentId ?? null);
+      }
+      tipRef.current = hit
+        ? {
+            clip: hit.clip,
+            x: clamp(x + 14, nameW(), sizeRef.current.w - 190),
+            y: y + 16,
+          }
+        : null;
+      ghostRef.current = x > nameW() ? xToW(x) : null;
+      const row = layout.rows.find((r) => y >= r.y && y <= r.y + r.h && r.mode === "wave");
+      if (row && x > nameW() && !hit) {
+        loupeRef.current = {
+          laneKey: row.key,
+          wallT: xToW(x),
+          x: clamp(x - 145, nameW() + 4, sizeRef.current.w - 296),
+          y: row.y - 76,
+        };
+      } else loupeRef.current = null;
+      scheduleDraw(false);
+      return;
+    }
+    if (d.type === "pan") {
+      const now = performance.now();
+      const dx = e.clientX - d.lastX;
+      const span = state.view.a1 - state.view.a0;
+      const aPerPx = span / (sizeRef.current.w - nameW());
+      setView(state.view.a0 - dx * aPerPx, span);
+      d.vel = 0.8 * d.vel + 0.2 * (dx / Math.max(now - d.lastT, 1));
+      d.lastX = e.clientX;
+      d.lastT = now;
+    }
+    if (d.type === "scrub") {
+      setPlayhead(snap(xToW(x), x));
+      scheduleDraw(false);
+    }
+    if (d.type === "marquee" && marqueeRef.current) {
+      marqueeRef.current.x1 = x;
+      scheduleDraw(false);
+    }
+    if (d.type === "region") {
+      dispatch({ type: "dragRegionEdge", side: d.side, t: xToW(x) });
+      scheduleDraw(true);
+    }
+    if (d.type === "regionMove") {
+      const dt = xToW(x) - d.grabT;
+      dispatch({
+        type: "setRegion",
+        span: { start: d.start + dt, end: d.end + dt },
+      });
+      scheduleDraw(true);
+    }
+  };
+
+  const onPointerUp = (e: React.PointerEvent) => {
+    pointersRef.current.delete(e.pointerId);
+    const d = dragRef.current;
+    if (d?.type === "marquee" && marqueeRef.current) {
+      const { x0, x1 } = marqueeRef.current;
+      if (Math.abs(x1 - x0) > 8) {
+        doFitWall(xToW(Math.min(x0, x1)), xToW(Math.max(x0, x1)));
+      }
+      marqueeRef.current = null;
+      scheduleDraw(true);
+    }
+    if (d?.type === "pan" && Math.abs(d.vel) > 0.05) {
+      let vel = d.vel;
+      let last = performance.now();
+      const decay = (now: number) => {
+        const dt = now - last;
+        last = now;
+        const span = state.view.a1 - state.view.a0;
+        setView(state.view.a0 - ((vel * dt * span) / (sizeRef.current.w - nameW())), span);
+        vel *= Math.pow(0.94, dt / 16);
+        if (Math.abs(vel) > 0.01) momentum.current = requestAnimationFrame(decay);
+      };
+      momentum.current = requestAnimationFrame(decay);
+    }
+    dragRef.current = pointersRef.current.size ? dragRef.current : null;
+  };
+
+  const onDoubleClick = (e: React.MouseEvent) => {
+    const { x } = localXY(e);
+    const hit = hitClip(x, localXY(e).y);
+    if (hit) {
+      const c = hit.clip;
+      const pad = (c.t1 - c.t0) * 2;
+      doFitWall(c.t0 - pad, c.t1 + pad);
+      return;
+    }
+    const rg = state.region;
+    if (rg && x > wToX(rg.start) && x < wToX(rg.end)) {
+      doFitWall(rg.start, rg.end);
+      return;
+    }
+    fit();
+  };
+
   useEffect(() => {
-    const el = scrollerRef.current;
+    const el = wrapRef.current;
     if (!el) return;
     const onWheel = (e: WheelEvent) => {
-      if (e.ctrlKey || e.metaKey) {
-        e.preventDefault();
-        // Continuous factor: a trackpad pinch emits many tiny deltas where a
-        // fixed step feels dead, a mouse wheel emits few large ones.
-        const anchorX = e.clientX - el.getBoundingClientRect().left - NAME_W;
-        dispatch({ type: "zoomBy", factor: Math.exp(e.deltaY * 0.004), anchorX });
+      e.preventDefault();
+      const rect = el.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      if (e.ctrlKey || e.metaKey) zoomAt(Math.exp(e.deltaY * 0.004), x);
+      else {
+        const span = state.view.a1 - state.view.a0;
+        setView(state.view.a0 + ((e.deltaY + e.deltaX) * span) / 900, span);
       }
-      // Plain wheel falls through to native horizontal scrolling, which comes
-      // back as a `scrolled` action — no custom pan maths to disagree with it.
     };
     el.addEventListener("wheel", onWheel, { passive: false });
     return () => el.removeEventListener("wheel", onWheel);
-  }, [dispatch]);
-
-  // ── Transport ─────────────────────────────────────────────────────────────
-  /**
-   * ⏮ / ⏭ move to the adjacent commit rather than by a slice of time: between
-   * commits the page's state is unchanged, so a fixed step would land on the
-   * same thing twice.
-   */
-  const stepPlayhead = (dir: 1 | -1) => {
-    const t = stepStop(model.schedule, model.replayRange, model.playhead, dir);
-    onCursor({ t, mode: t >= bounds.t1 - 0.5 ? "live" : "historical" });
-  };
-
-  // ── Keyboard ──────────────────────────────────────────────────────────────
-  /**
-   * The bindings live in `keymap.ts` as data; this only routes them. Held in a
-   * ref so the listener is installed once rather than re-bound on every store
-   * ingest — the same dependency that used to tear down the replay ticker.
-   */
-  const keyHandlerRef = useLatest((e: KeyboardEvent) => {
-    const action = timelineKeyAction(e);
-    if (!action) return;
-    // Never steal a key from a field the user is typing into.
-    const el = e.target as HTMLElement | null;
-    if (el && (el.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName))) return;
-    switch (action.kind) {
-      case "toggle-play":
-        e.preventDefault();
-        dispatch(state.playing ? { type: "pause" } : { type: "play", from: model.playhead });
-        break;
-      case "step-commit":
-        e.preventDefault();
-        stepPlayhead(action.dir);
-        break;
-      case "fit":
-        dispatch({ type: "fit" });
-        break;
-      case "go-live":
-        onCursor({ t: bounds.t1, mode: "live" });
-        break;
-      case "zoom":
-        dispatch({ type: "zoomBy", factor: action.factor });
-        break;
-      case "escape-band":
-        dispatch({ type: "setRegion", span: null });
-        break;
-      default:
-        // `step-interaction` belongs to the interaction track, not yet re-homed.
-        break;
-    }
   });
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => keyHandlerRef.current(e);
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, []);
 
-  // ── Replay ────────────────────────────────────────────────────────────────
-  const onCursorRef = useLatest(onCursor);
-  const scheduleRef = useLatest(model.schedule);
-  const sweepRef = useLatest(model.sweep);
-  /** Read when ▶ is pressed, so the ticker keeps a constant speed. */
-  const fractionRef = useLatest(model.replayFraction);
+  // Transport: axis-uniform JKL / space, region loop
   useEffect(() => {
     if (!state.playing) return;
-    // How many stops the page has already been shown — the one piece of state
-    // the ticker carries, so a stop can never be replayed or skipped.
-    let visited = 0;
-    const ticker = startReplayTicker(
-      Math.max(MIN_REPLAY_MS, REPLAY_MS * fractionRef.current),
-      false,
-      (frac, done) => {
-        const stops = scheduleRef.current;
-        const step = advanceReplay(stops, sweepRef.current, frac, visited);
-        visited = step.visited;
-        // Emitted every frame so the playhead moves. Re-applying the same page
-        // state is not wasted work: the travel controller diffs against what
-        // it last applied and sends nothing when the commit has not changed.
-        onCursorRef.current({ t: step.t, mode: step.live ? "live" : "historical" });
-        if (done) {
-          const last = stops.at(-1);
-          if (last) onCursorRef.current({ t: last.t, mode: "live" });
+    let raf = 0;
+    let last: number | null = null;
+    const step = (ts: number) => {
+      if (last != null) {
+        const ax = axisLiveRef.current;
+        const rg = state.region;
+        const aw0 = rg ? ax.wallToAxis(rg.start) : 0;
+        const aw1 = rg ? ax.wallToAxis(rg.end) : ax.total;
+        let pa = ax.wallToAxis(playheadRef.current);
+        pa +=
+          Math.min(ts - last, 100) *
+          ((aw1 - aw0) / 2300) *
+          state.speed *
+          state.playDir;
+        if (pa > aw1) pa = aw0;
+        if (pa < aw0) pa = aw1;
+        setPlayhead(ax.axisToWall(pa));
+        scheduleDraw(false);
+      }
+      last = ts;
+      raf = requestAnimationFrame(step);
+    };
+    raf = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(raf);
+  }, [state.playing, state.speed, state.playDir, state.region, scheduleDraw]);
+
+  useEffect(() => {
+    const down = (e: KeyboardEvent) => {
+      if ((e.target as HTMLElement)?.tagName === "INPUT") return;
+      if (e.key.toLowerCase() === "z") zHeld.current = true;
+      const action = timelineKeyAction(e);
+      if (!action) return;
+      if (action.kind === "toggle-play" || action.kind === "play-forward" || action.kind === "play-reverse") {
+        e.preventDefault();
+      }
+      switch (action.kind) {
+        case "toggle-play":
+          if (state.playing) dispatch({ type: "pause" });
+          else dispatch({ type: "play", dir: 1, speed: 1 });
+          break;
+        case "play-forward":
+          if (state.playing && state.playDir === 1)
+            dispatch({ type: "setSpeed", speed: Math.min(state.speed * 2, 4) });
+          else dispatch({ type: "play", dir: 1, speed: 1 });
+          break;
+        case "play-reverse":
+          if (state.playing && state.playDir === -1)
+            dispatch({ type: "setSpeed", speed: Math.min(state.speed * 2, 4) });
+          else dispatch({ type: "play", dir: -1, speed: 1 });
+          break;
+        case "stop":
           dispatch({ type: "pause" });
+          dispatch({ type: "setSpeed", speed: 1 });
+          break;
+        case "set-in":
+          dispatch({
+            type: "setRegion",
+            span: {
+              start: playheadRef.current,
+              end: Math.max(
+                state.region?.end ?? playheadRef.current + 100,
+                playheadRef.current + 10,
+              ),
+            },
+          });
+          scheduleDraw(true);
+          break;
+        case "set-out":
+          dispatch({
+            type: "setRegion",
+            span: {
+              start: Math.min(
+                state.region?.start ?? playheadRef.current - 100,
+                playheadRef.current - 10,
+              ),
+              end: playheadRef.current,
+            },
+          });
+          scheduleDraw(true);
+          break;
+        case "escape-band":
+          dispatch({ type: "setRegion", span: null });
+          dispatch({ type: "setHelp", open: false });
+          scheduleDraw(true);
+          break;
+        case "fit-selection": {
+          const c = lanes.flatMap((l) => l.clips).find((x) => x.renderId === state.selectedRender);
+          if (c) {
+            const pad = (c.t1 - c.t0) * 2;
+            doFitWall(c.t0 - pad, c.t1 + pad);
+          }
+          break;
         }
-      },
-    );
-    return () => ticker.stop();
-    // Deliberately NOT keyed on the schedule or bounds: those change on every
-    // store ingest, which would tear the ticker down and restart it each frame.
-  }, [state.playing, dispatch]);
+        case "fit":
+          fit();
+          break;
+        case "zoom":
+          zoomAt(action.factor, sizeRef.current.w / 2, true);
+          break;
+        case "toggle-help":
+          dispatch({ type: "toggleHelp" });
+          break;
+        case "nudge-playhead": {
+          const v = state.view;
+          const ax = axisLiveRef.current;
+          const dA = (v.a1 - v.a0) * 0.02 * action.dir;
+          setPlayhead(
+            ax.axisToWall(clamp(ax.wallToAxis(playheadRef.current) + dA, 0, ax.total)),
+          );
+          scheduleDraw(false);
+          break;
+        }
+        case "go-live":
+          onCursor({ mode: "live", t: bounds.t1 });
+          break;
+      }
+    };
+    const up = (e: KeyboardEvent) => {
+      if (e.key.toLowerCase() === "z") zHeld.current = false;
+    };
+    window.addEventListener("keydown", down);
+    window.addEventListener("keyup", up);
+    return () => {
+      window.removeEventListener("keydown", down);
+      window.removeEventListener("keyup", up);
+    };
+  });
 
-  /**
-   * Follow the playhead while replaying. A replay whose playhead walks off the
-   * edge is not showing you anything, so this is not optional.
-   */
+  // Follow selection under playhead for inspector
   useEffect(() => {
-    if (!state.playing) return;
-    const next = followScroll(
-      NAME_W + xOf(model.playhead),
-      state.viewport.scrollLeft,
-      state.viewport.width,
-      maxScroll(scale, state.viewport.width),
-    );
-    if (next !== null) dispatch({ type: "scrolled", scrollLeft: next });
-  }, [
-    state.playing,
-    model.playhead,
-    state.viewport.scrollLeft,
-    state.viewport.width,
-    scale,
-    xOf,
-    dispatch,
-  ]);
-
-  // Reveal the lanes a selected cascade reaches, so its arrows have targets.
-  const revealKey = model.lanesToReveal.join("|");
-  useEffect(() => {
-    if (model.lanesToReveal.length > 0) {
-      dispatch({ type: "expandLanes", keys: model.lanesToReveal });
+    if (state.playing) return;
+    const clip = clipAtTime(lanes, playheadRef.current, state.selectedLane);
+    if (clip && clip.renderId !== state.selectedRender) {
+      // don't auto-steal selection while scrubbing casually — only when playing
     }
-  }, [revealKey, dispatch]);
+  }, [state.playing, lanes, state.selectedLane, state.selectedRender]);
 
-  /**
-   * Scrubbing drives the inspector: as the playhead moves, adopt the clip
-   * under it (preferring the lane already selected) so Cause → Change → Cost →
-   * Fix follows the cursor. Skipped while live, so recording doesn't thrash.
-   */
-  const lastPlayhead = useRef(model.playhead);
-  /**
-   * The clip the user picked by hand, pinned while the playhead is still
-   * inside it.
-   *
-   * Clicking a clip updates two owners — the timeline's reducer (selection)
-   * and the panel's cursor — which can commit in separate renders. When the
-   * cursor landed first, this effect ran with the *previous* selected lane, so
-   * `clipAtTime` had no lane preference and adopted whatever clip happened to
-   * sit nearest that instant. The click appeared to select a different clip.
-   */
-  const pinned = useRef<{ renderId: RenderId; t0: number; t1: number } | null>(null);
-  useEffect(() => {
-    if (lastPlayhead.current === model.playhead) return;
-    lastPlayhead.current = model.playhead;
-    if (cursor.mode === "live") return;
-    const hold = pinned.current;
-    if (hold && model.playhead >= hold.t0 - 0.5 && model.playhead <= hold.t1 + 0.5) return;
-    pinned.current = null;
-    const clip = clipAtTime(model.lanes, model.playhead, state.selectedLane);
-    if (!clip || clip.renderId === state.selectedRender) return;
-    dispatch({ type: "selectClip", renderId: clip.renderId, laneKey: clip.laneKey });
-    onSelectComponent?.(clip.componentId);
-  }, [
-    model.playhead,
-    model.lanes,
-    cursor.mode,
-    state.selectedLane,
-    state.selectedRender,
-    dispatch,
-    onSelectComponent,
-  ]);
+  const navBlips = useMemo(() => {
+    const all = lanes.flatMap((l) => l.clips);
+    return all.filter((_, i) => i % 6 === 0);
+  }, [lanes]);
 
-  const markers = useMemo(
-    () => rulerMarkers(model.interactions, model.commits, LONG_TASK_MS),
-    [model.interactions, model.commits],
-  );
+  const gapChips = axisLiveRef.current.segs
+    .filter((s): s is Extract<typeof s, { type: "gap" }> => s.type === "gap")
+    .map((s) => ({ ...s, x0: aToX(s.a0), x1: aToX(s.a1) }))
+    .filter((s) => s.x1 > nameW() + 3 && s.x0 < sizeRef.current.w);
+
+  const liveAxis = axisLiveRef.current;
+  const rg = state.region;
+  const inScope = lanes.flatMap((l) => l.clips).filter((c) => {
+    if (rg && (c.t1 < rg.start || c.t0 > rg.end)) return false;
+    return true;
+  });
+  const wastedN = inScope.filter((c) => c.wasted).length;
+  const idleTotal = liveAxis.segs
+    .filter((s) => s.type === "gap" && s.p < 0.5)
+    .reduce((a, s) => a + (s.w1 - s.w0), 0);
+  const sel =
+    state.selectedRender != null
+      ? lanes.flatMap((l) => l.clips).find((c) => c.renderId === state.selectedRender) ?? null
+      : null;
+  const phX = wToX(playheadRef.current);
+  const loupe = loupeRef.current;
+  const tip = tipRef.current;
+  const narrow = sizeRef.current.w < 720;
+  const fmt = (t: number) => Math.round(t - bounds.t0).toLocaleString("en-US");
 
   return (
-    <div className="tl">
-      <div
-        className="lanes"
-        onPointerDown={(e) => {
-          if ((e.target as HTMLElement).closest(".clip, .lname, .rhandle")) return;
-          if (e.shiftKey || e.button === 1) {
-            panFrom.current = e.clientX;
-            return;
-          }
-          scrub(e.clientX);
-        }}
-        onPointerMove={(e) => {
-          if (panFrom.current !== null) {
-            const dx = e.clientX - panFrom.current;
-            panFrom.current = e.clientX;
-            dispatch({ type: "panBy", dx: -dx });
-            return;
-          }
-          if (e.buttons === 1 && !(e.target as HTMLElement).closest(".rhandle")) scrub(e.clientX);
-        }}
-        onPointerUp={() => {
-          panFrom.current = null;
-        }}
-      >
-        <div
-          className="lanes-body lanes-scroll"
-          ref={scrollerRef}
-          onScroll={(e) => {
-            if (echo.current) {
-              echo.current = false;
-              return;
-            }
-            dispatch({ type: "scrolled", scrollLeft: (e.currentTarget as HTMLElement).scrollLeft });
-          }}
+    <div className="tl tl-canvas-root">
+      <div className="tl-toolbar">
+        <div className="tl-toolbar-brand">
+          <span className="tl-toolbar-lens" />
+          Timeline
+        </div>
+        <button
+          type="button"
+          className={`tl-btn${state.playing && state.playDir === -1 ? " on" : ""}`}
+          onClick={() => dispatch({ type: "play", dir: -1, speed: 1 })}
         >
-          <div
-            className="lanes-inner"
-            ref={canvasRef}
-            style={{ width: NAME_W + scale.width, minHeight: canvasHeight }}
-          >
-            <Ruler
-              segs={scale.segs}
-              origin={bounds.t0}
-              width={scale.width}
-              markers={markers}
-              showMarkerLabels={pxPerMs >= MARKER_LABEL_MIN_PX_PER_MS}
-              xOf={xOf}
-              onScrub={scrub}
-            />
-
-            <Lanes
-              rows={rows}
-              xOf={xOf}
-              cull={cull}
-              selectedRender={state.selectedRender}
-              selectedLane={state.selectedLane}
-              {...(lanes ? { lanes } : {})}
-              fixApplied={fixApplied}
-              onToggleExpand={(key) => dispatch({ type: "toggleLane", key })}
-              onSelectLane={(laneKey) => dispatch({ type: "selectLane", laneKey })}
-              onSelectClip={(clip) => {
-                // Pin before moving the cursor: an explicit pick outranks the
-                // playhead-follow until the playhead leaves this clip.
-                pinned.current = { renderId: clip.renderId, t0: clip.t0, t1: clip.t1 };
-                lastPlayhead.current = clip.t0;
-                dispatch({ type: "selectClip", renderId: clip.renderId, laneKey: clip.laneKey });
-                onSelectComponent?.(clip.componentId);
-                onHighlight?.(clip.componentId);
-                onCursor({ t: clip.t0, mode: "historical" });
-              }}
-              onExpandCluster={(clips) => {
-                // Zoom to the cluster's span with a little air either side, so
-                // its renders separate instead of landing on the same pixel.
-                const t0 = clips[0]!.t0;
-                const t1 = clips.at(-1)!.t1;
-                const pad = Math.max((t1 - t0) * 0.25, 0.5);
-                dispatch({ type: "fitRange", span: { start: t0 - pad, end: t1 + pad } });
-              }}
-              {...(onHighlight ? { onHighlight } : {})}
-            />
-
-            <Arrows edges={arrows} hostRef={canvasRef} />
-
-            <Chrome
-              idleSegs={idleSegs}
-              region={state.region}
-              playhead={model.playhead}
-              origin={bounds.t0}
-              looping={state.playing}
-              canvasWidth={NAME_W + scale.width}
-              viewportRight={state.viewport.scrollLeft + state.viewport.width + NAME_W}
-              xOf={xOf}
-              onRegionEdge={(side, clientX) => {
-                if (!state.region) {
-                  const t = tOfClient(clientX);
-                  dispatch({ type: "setRegion", span: { start: t, end: t } as TimeSpan });
-                  return;
-                }
-                dispatch({ type: "dragRegionEdge", side, t: tOfClient(clientX) });
-              }}
-            />
-          </div>
+          ◂◂
+        </button>
+        <button
+          type="button"
+          className={`tl-btn${state.playing ? " on" : ""}`}
+          onClick={() =>
+            state.playing
+              ? dispatch({ type: "pause" })
+              : dispatch({ type: "play", dir: 1, speed: 1 })
+          }
+        >
+          {state.playing ? "⏸" : "▶"}
+        </button>
+        <button
+          type="button"
+          className="tl-btn"
+          onClick={() =>
+            dispatch({
+              type: "setSpeed",
+              speed: state.speed >= 4 ? 0.5 : state.speed * 2,
+            })
+          }
+        >
+          {state.speed}×
+        </button>
+        <span className="tl-toolbar-sep" />
+        <button type="button" className="tl-btn" onClick={() => zoomAt(0.72, sizeRef.current.w / 2, true)}>
+          +
+        </button>
+        <button type="button" className="tl-btn" onClick={() => zoomAt(1.4, sizeRef.current.w / 2, true)}>
+          −
+        </button>
+        <button type="button" className="tl-btn" onClick={fit}>
+          Fit
+        </button>
+        <button type="button" className="tl-btn" onClick={() => dispatch({ type: "toggleHelp" })}>
+          ?
+        </button>
+        <div className="tl-toolbar-legend">
+          {(Object.keys(CAUSE_COLOR) as Array<keyof typeof CAUSE_COLOR>).map((k) => (
+            <span key={k}>
+              <i style={{ background: CAUSE_COLOR[k] }} />
+              {k}
+            </span>
+          ))}
         </div>
       </div>
 
+      <WallStrip
+        nameW={sizeRef.current.nameW}
+        axis={liveAxis}
+        view={state.view}
+        blips={navBlips}
+      />
+
+      <div
+        ref={wrapRef}
+        className="tl-stage"
+        style={{ touchAction: "none", position: "relative" }}
+        onPointerDown={onPointerDown}
+        onPointerMove={onPointerMove}
+        onPointerUp={onPointerUp}
+        onPointerCancel={onPointerUp}
+        onDoubleClick={onDoubleClick}
+        onPointerLeave={() => {
+          ghostRef.current = null;
+          tipRef.current = null;
+          loupeRef.current = null;
+          scheduleDraw(false);
+        }}
+      >
+        <canvas ref={baseRef} style={{ display: "block" }} />
+        <canvas ref={overRef} style={{ position: "absolute", inset: 0, pointerEvents: "none" }} />
+
+        {layout.rows.map((r) => (
+          <div
+            key={r.key}
+            className="tl-lname"
+            data-lane={r.key}
+            style={{
+              position: "absolute",
+              left: 0,
+              top: r.y,
+              width: sizeRef.current.nameW - 1,
+              height: r.h,
+              color: r.dim ? "#4A4A54" : "#9A9AA3",
+            }}
+            onPointerDown={(e) => e.stopPropagation()}
+          >
+            <span className="tl-lname-text">{r.lane.name}</span>
+            {r.lane.instanceCount > 1 && (
+              <span className="tl-lname-count">×{r.lane.instanceCount}</span>
+            )}
+            {r.mode === "stack" && r.depth > 1 && (
+              <span className="tl-lname-stack">▤×{r.depth}</span>
+            )}
+            {laneControls && (
+              <span className="tl-lname-acts">
+                <span
+                  className={`tl-ra${laneControls.filter.solo.has(r.key) ? " on" : ""}`}
+                  title="Solo"
+                  onClick={() => laneControls.toggleSolo(r.key)}
+                >
+                  S
+                </span>
+                <span
+                  className={`tl-ra${laneControls.filter.muted.has(r.key) ? " on" : ""}`}
+                  title="Mute"
+                  onClick={() => laneControls.toggleMute(r.key)}
+                >
+                  M
+                </span>
+              </span>
+            )}
+          </div>
+        ))}
+
+        {gapChips.map((s) => (
+          <div
+            key={s.id}
+            className="tl-gap"
+            style={{
+              left: Math.max(s.x0, nameW()) + 2,
+              top: RULER_H + 5,
+              width: Math.max(s.x1 - Math.max(s.x0, nameW()) - 4, 18),
+            }}
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={() => toggleGap(s.id)}
+          >
+            {state.expandedGaps.has(s.id)
+              ? "◂ collapse"
+              : `⋯ +${compactGap(s.w1 - s.w0)}`}
+          </div>
+        ))}
+
+        {phX > nameW() && phX < sizeRef.current.w - 74 && (
+          <div
+            className="tl-ph-chip"
+            style={{ left: phX + 8, top: RULER_H + 4, pointerEvents: "none" }}
+          >
+            t = {fmt(playheadRef.current)} ms
+            {state.playing && state.speed !== 1 ? ` · ${state.speed}×` : ""}
+          </div>
+        )}
+
+        {tip && (
+          <div className="tl-tip" style={{ left: tip.x, top: tip.y }}>
+            <div className="tl-tip-name">
+              {tip.clip.name}
+              {` #${tip.clip.componentId}`}
+            </div>
+            <div>
+              <span style={{ color: CAUSE_COLOR[clipCauseColor(tip.clip.cause)] }}>
+                {clipCauseColor(tip.clip.cause)}
+              </span>
+              {tip.clip.wasted && <span style={{ color: "#F5A623" }}> · wasted</span>}
+            </div>
+            <div className="tl-tip-meta">
+              {fmt(tip.clip.t0)}–{fmt(tip.clip.t1)} ms · {tip.clip.total.toFixed(1)} ms total
+              {tip.clip.self < tip.clip.total * 0.95
+                ? ` · ${tip.clip.self.toFixed(1)} ms self`
+                : ""}
+              · row {(tip.clip.row ?? 0) + 1}
+            </div>
+          </div>
+        )}
+
+        {loupe && (
+          <div
+            className="tl-loupe"
+            style={{
+              left: loupe.x,
+              top: Math.max(loupe.y, 2),
+              width: 292,
+            }}
+            onPointerDown={(e) => {
+              e.stopPropagation();
+              doFitWall(loupe.wallT - LOUPE_HALF_MS, loupe.wallT + LOUPE_HALF_MS);
+              loupeRef.current = null;
+            }}
+          >
+            <div className="tl-loupe-head">
+              ↳ {fmt(loupe.wallT - LOUPE_HALF_MS)}–{fmt(loupe.wallT + LOUPE_HALF_MS)} ms · click
+              to zoom
+            </div>
+            <canvas ref={loupeCvRef} style={{ display: "block", width: LOUPE_W, height: LOUPE_H }} />
+          </div>
+        )}
+
+        {state.showHelp && (
+          <div className="tl-help" onPointerDown={(e) => e.stopPropagation()}>
+            <div className="tl-help-title">SHORTCUTS</div>
+            {HELP.map(([k, d]) => (
+              <div key={k} className="tl-help-row">
+                <span style={{ color: ACCENT, fontFamily: MONO }}>{k}</span>
+                <span>{d}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <Shelf
+        quietLanes={layout.quietLanes}
+        open={state.shelfOpen}
+        narrow={narrow}
+        onToggle={() => dispatch({ type: "toggleShelf" })}
+      />
+
+      <Navigator
+        nameW={sizeRef.current.nameW}
+        axis={liveAxis}
+        view={state.view}
+        blips={navBlips}
+        onView={(a0, span, animate) => (animate ? animateView(a0, span) : setView(a0, span))}
+      />
+
       <Footer
-        playing={state.playing}
-        stats={model.stats}
-        pxPerMs={pxPerMs}
-        fitPxPerMs={fitPxPerMs}
-        isFit={state.viewport.zoom === "fit"}
-        {...(transport ? { extra: transport } : {})}
-        onPlayToggle={() =>
-          dispatch(state.playing ? { type: "pause" } : { type: "play", from: model.playhead })
-        }
-        onStep={stepPlayhead}
-        onZoomTo={(px) => dispatch({ type: "zoomTo", pxPerMs: px })}
-        onFit={() => dispatch({ type: "fit" })}
+        selection={sel}
+        inScope={inScope.length}
+        wastedN={wastedN}
+        idleCollapsedMs={idleTotal}
+        regionActive={rg != null}
+        {...(transport ? { transport } : {})}
       />
     </div>
   );
 }
-
-export { NAME_W };
-export type { TimeCursor };

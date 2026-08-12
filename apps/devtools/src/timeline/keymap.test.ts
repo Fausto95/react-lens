@@ -7,33 +7,20 @@ function ev(partial: Partial<KeyEvent>): KeyEvent {
   return { key: "", code: "", metaKey: false, ctrlKey: false, altKey: false, ...partial };
 }
 
-describe("timelineKeyAction — layout-independent bindings", () => {
-  it("steps interactions from the PHYSICAL bracket keys on any layout", () => {
-    // AZERTY: the keys at the US [ ] positions type ^ and $ — the binding
-    // must match on code, not on the typed character.
+describe("timelineKeyAction", () => {
+  it("sets in/out from bracket keys (layout-independent)", () => {
     expect(timelineKeyAction(ev({ key: "^", code: "BracketLeft" }))).toEqual({
-      kind: "step-interaction",
-      dir: -1,
+      kind: "set-in",
     });
     expect(timelineKeyAction(ev({ key: "$", code: "BracketRight" }))).toEqual({
-      kind: "step-interaction",
-      dir: 1,
+      kind: "set-out",
     });
   });
 
-  it("steps interactions when [ ] are typed with Alt (AZERTY: Option+5 / Option+))", () => {
+  it("allows Alt when typing [ ] on AZERTY", () => {
     expect(timelineKeyAction(ev({ key: "[", code: "Digit5", altKey: true }))).toEqual({
-      kind: "step-interaction",
-      dir: -1,
+      kind: "set-in",
     });
-    expect(timelineKeyAction(ev({ key: "]", code: "Minus", altKey: true }))).toEqual({
-      kind: "step-interaction",
-      dir: 1,
-    });
-  });
-
-  it("still blocks Alt for character bindings (Alt+T types † — not a toggle)", () => {
-    expect(timelineKeyAction(ev({ key: "†", code: "KeyT", altKey: true }))).toBeNull();
   });
 
   it("never fires with meta or ctrl held", () => {
@@ -41,50 +28,34 @@ describe("timelineKeyAction — layout-independent bindings", () => {
     expect(timelineKeyAction(ev({ key: "l", code: "KeyL", ctrlKey: true }))).toBeNull();
   });
 
-  it("no longer binds T — the timeline is a column, not a collapsible dock", () => {
-    expect(timelineKeyAction(ev({ key: "t", code: "KeyT" }))).toBeNull();
-  });
-
-  it("keeps the character-based bindings", () => {
-    expect(timelineKeyAction(ev({ key: "L", code: "KeyL" }))).toEqual({ kind: "go-live" });
-    expect(timelineKeyAction(ev({ key: "f", code: "KeyF" }))).toEqual({ kind: "fit" });
+  it("binds transport and view keys", () => {
+    expect(timelineKeyAction(ev({ key: " ", code: "Space" }))).toEqual({ kind: "toggle-play" });
+    expect(timelineKeyAction(ev({ key: "j", code: "KeyJ" }))).toEqual({ kind: "play-reverse" });
+    expect(timelineKeyAction(ev({ key: "k", code: "KeyK" }))).toEqual({ kind: "stop" });
+    expect(timelineKeyAction(ev({ key: "l", code: "KeyL" }))).toEqual({ kind: "play-forward" });
+    expect(timelineKeyAction(ev({ key: "0", code: "Digit0" }))).toEqual({ kind: "fit" });
+    expect(timelineKeyAction(ev({ key: "f", code: "KeyF" }))).toEqual({ kind: "fit-selection" });
+    expect(timelineKeyAction(ev({ key: "?", code: "Slash" }))).toEqual({ kind: "toggle-help" });
     expect(timelineKeyAction(ev({ key: "Escape", code: "Escape" }))).toEqual({
       kind: "escape-band",
     });
-    expect(timelineKeyAction(ev({ key: " ", code: "Space" }))).toEqual({ kind: "toggle-play" });
-    expect(timelineKeyAction(ev({ key: "ArrowLeft", code: "ArrowLeft" }))).toEqual({
-      kind: "step-commit",
-      dir: -1,
-    });
-    expect(timelineKeyAction(ev({ key: "ArrowRight", code: "ArrowRight" }))).toEqual({
-      kind: "step-commit",
-      dir: 1,
-    });
   });
 
-  it("zooms from the typed character so AZERTY's + - keep working", () => {
-    // French layouts type + and - from different physical keys than US; the
-    // characters are what the user reads on the keycap.
+  it("zooms from typed + / -", () => {
     expect(timelineKeyAction(ev({ key: "+", code: "Equal" }))).toEqual({
       kind: "zoom",
-      factor: 1.25,
-    });
-    expect(timelineKeyAction(ev({ key: "=", code: "Equal" }))).toEqual({
-      kind: "zoom",
-      factor: 1.25,
+      factor: 0.72,
     });
     expect(timelineKeyAction(ev({ key: "-", code: "Digit6" }))).toEqual({
       kind: "zoom",
-      factor: 0.8,
-    });
-    expect(timelineKeyAction(ev({ key: "_", code: "Digit8" }))).toEqual({
-      kind: "zoom",
-      factor: 0.8,
+      factor: 1.4,
     });
   });
 
-  it("returns null for unbound keys", () => {
-    expect(timelineKeyAction(ev({ key: "x", code: "KeyX" }))).toBeNull();
-    expect(timelineKeyAction(ev({ key: "/", code: "Slash" }))).toBeNull();
+  it("nudges the playhead with arrows", () => {
+    expect(timelineKeyAction(ev({ key: "ArrowLeft", code: "ArrowLeft" }))).toEqual({
+      kind: "nudge-playhead",
+      dir: -1,
+    });
   });
 });

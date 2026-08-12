@@ -1,96 +1,102 @@
-import type { ComponentId } from "@reactlens/protocol";
-import type { LaneKey } from "../../laneFilter.js";
-import type { Clip, DensityBucket, Lane } from "./lanes.js";
-
 /**
- * Lanes flattened into the rows the canvas draws, in order.
- *
- * One row per component type, plus a row per instance when a repeated type is
- * expanded. This is the single place row order and heights are decided, so the
- * name gutter and the track can never disagree about which row is which.
+ * Vertical layout: stack / wave rows, with quiet lanes tucked into the shelf.
  */
 
-export const LANE_H = 34;
-export const SUB_H = 26;
+import type { LaneKey } from "../../laneFilter.js";
+import type { Clip, Lane } from "./lanes.js";
+import { laneMode, type LaneMode } from "./wave.js";
+import {
+  LANE_PAD,
+  QUIET_MAX,
+  QUIET_TOTAL_MS,
+  ROW_H,
+  RULER_H,
+  STACK_MAX,
+  WAVE_H,
+} from "../view/metrics.js";
 
-export interface LaneRow {
-  kind: "lane" | "sub";
-  key: LaneKey;
+export interface LayoutRow {
   lane: Lane;
-  label: string;
-  /** `×200` for a repeated type; null otherwise. */
-  suffix: string | null;
-  /** Present on instance rows. */
-  componentId?: ComponentId;
-  /** Clips to draw. Empty on a collapsed group, which shows density instead. */
+  key: LaneKey;
+  y: number;
+  h: number;
+  mode: LaneMode;
+  depth: number;
   clips: readonly Clip[];
-  /** Occupancy buckets; only a collapsed group has them. */
-  density: readonly DensityBucket[];
-  expandable: boolean;
-  expanded: boolean;
-  height: number;
-  /** Distance from the top of the canvas, in px. */
-  top: number;
+  quiet: boolean;
+  dim: boolean;
 }
 
-export function laneRows(lanes: readonly Lane[], expanded: ReadonlySet<LaneKey>): LaneRow[] {
-  const rows: LaneRow[] = [];
-  let top = 0;
-  const push = (row: Omit<LaneRow, "top">) => {
-    rows.push({ ...row, top });
-    top += row.height;
-  };
+export interface LaneLayout {
+  rows: LayoutRow[];
+  totalH: number;
+  quietLanes: Lane[];
+}
+
+/**
+ * Quiet = sparse *and* little inclusive work. Clip-count alone would shelf
+ * App after a single cascade root render once bars use totalDuration.
+ */
+export function isQuietLane(
+  lane: Lane,
+  quietMax = QUIET_MAX,
+  quietTotalMs = QUIET_TOTAL_MS,
+): boolean {
+  if (lane.clips.length === 0) return true;
+  if (lane.clips.length > quietMax) return false;
+  const inclusive = lane.clips.reduce((a, c) => a + c.total, 0);
+  return inclusive < quietTotalMs;
+}
+
+/**
+ * Build visible rows. Quiet lanes are omitted unless `shelfOpen`.
+ * `pxPerMs` is axis-view px per axis unit (≈ active ms when gaps collapsed).
+ */
+export function computeLayout(
+  lanes: readonly Lane[],
+  laneDepth: ReadonlyMap<string, number>,
+  opts: {
+    shelfOpen: boolean;
+    pxPerMs: number;
+    isDim: (key: LaneKey) => boolean;
+    quietMax?: number;
+    quietTotalMs?: number;
+  },
+): LaneLayout {
+  const quietMax = opts.quietMax ?? QUIET_MAX;
+  const quietTotalMs = opts.quietTotalMs ?? QUIET_TOTAL_MS;
+  const quietLanes = lanes.filter((l) => isQuietLane(l, quietMax, quietTotalMs));
+  const rows: LayoutRow[] = [];
+  let y = RULER_H;
 
   for (const lane of lanes) {
-    // A single-instance type has no instance/type distinction to expand into,
-    // so it never offers a chevron — type and instance are one concept.
-    const expandable = lane.subs.length > 0;
-    const open = expandable && expanded.has(lane.key);
-    push({
-      kind: "lane",
-      key: lane.key,
+    const quiet = isQuietLane(lane, quietMax, quietTotalMs);
+    if (quiet && !opts.shelfOpen) continue;
+
+    const clips = lane.clips;
+    const depth = Math.min(laneDepth.get(lane.key) ?? 1, STACK_MAX);
+    // Wave LOD keys off exclusive width — inclusive parents look wide even when
+    // the lane is a dense leaf stack that should histogram.
+    const avgPx =
+      clips.length > 0
+        ? (clips.reduce((a, c) => a + c.self, 0) / clips.length) * opts.pxPerMs
+        : 99;
+    const rawDepth = laneDepth.get(lane.key) ?? 1;
+    const mode = laneMode(rawDepth, clips.length, avgPx);
+    const h = mode === "wave" ? WAVE_H : LANE_PAD + depth * ROW_H;
+    rows.push({
       lane,
-      label: lane.name,
-      suffix: lane.instanceCount > 1 ? `×${lane.instanceCount}` : null,
-      // A repeated type draws a density band; 200 unreadable slivers is noise.
-      clips: expandable ? [] : lane.clips,
-      density: expandable ? lane.density : [],
-      expandable,
-      expanded: open,
-      height: LANE_H,
+      key: lane.key,
+      y,
+      h,
+      mode,
+      depth,
+      clips,
+      quiet,
+      dim: opts.isDim(lane.key),
     });
-    if (!open) continue;
-    for (const sub of lane.subs) {
-      push({
-        kind: "sub",
-        key: sub.key,
-        lane,
-        label: sub.label,
-        suffix: null,
-        componentId: sub.componentId,
-        clips: sub.clips,
-        density: [],
-        expandable: false,
-        expanded: false,
-        height: SUB_H,
-      });
-    }
+    y += h;
   }
-  return rows;
-}
 
-/** Total canvas height for the given rows. */
-export function rowsHeight(rows: readonly LaneRow[]): number {
-  const last = rows.at(-1);
-  return last ? last.top + last.height : 0;
-}
-
-/** Lane keys whose instances include any of `ids` — used to reveal a cascade. */
-export function lanesContaining(lanes: readonly Lane[], ids: ReadonlySet<ComponentId>): LaneKey[] {
-  const out: LaneKey[] = [];
-  for (const lane of lanes) {
-    if (lane.subs.length === 0) continue;
-    if (lane.subs.some((sub) => ids.has(sub.componentId))) out.push(lane.key);
-  }
-  return out;
+  return { rows, totalH: Math.max(y, RULER_H + 40), quietLanes };
 }

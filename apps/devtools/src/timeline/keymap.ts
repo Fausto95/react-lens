@@ -1,18 +1,21 @@
 /**
- * Timeline keyboard bindings as data: each binding declares how it matches —
- * by typed character (what the keycap says: letters, + and -) or by physical
- * key code (position-critical pairs like [ ] that many layouts, e.g. AZERTY,
- * can only type through Alt). Pure: event fields in, action out.
+ * Timeline keyboard bindings as data.
  */
 
 export type TimelineKeyAction =
   | { kind: "escape-band" }
-  | { kind: "go-live" }
   | { kind: "fit" }
-  | { kind: "step-interaction"; dir: -1 | 1 }
+  | { kind: "fit-selection" }
   | { kind: "zoom"; factor: number }
   | { kind: "toggle-play" }
-  | { kind: "step-commit"; dir: -1 | 1 };
+  | { kind: "play-forward" }
+  | { kind: "play-reverse" }
+  | { kind: "stop" }
+  | { kind: "set-in" }
+  | { kind: "set-out" }
+  | { kind: "nudge-playhead"; dir: -1 | 1 }
+  | { kind: "toggle-help" }
+  | { kind: "go-live" };
 
 export type TimelineKeyEvent = Pick<
   KeyboardEvent,
@@ -20,14 +23,8 @@ export type TimelineKeyEvent = Pick<
 >;
 
 interface Binding {
-  /** Typed characters that trigger the action. */
   keys?: string[];
-  /** Physical key codes that trigger the action (layout-independent). */
   codes?: string[];
-  /**
-   * Alt-tolerant: on AZERTY/Mac layouts the character itself is typed WITH
-   * Alt (e.g. "[" is Option+5), so Alt must not veto these bindings.
-   */
   allowAlt?: boolean;
   action: TimelineKeyAction;
 }
@@ -37,22 +34,26 @@ const BINDINGS: Binding[] = [
     keys: ["["],
     codes: ["BracketLeft"],
     allowAlt: true,
-    action: { kind: "step-interaction", dir: -1 },
+    action: { kind: "set-in" },
   },
   {
     keys: ["]"],
     codes: ["BracketRight"],
     allowAlt: true,
-    action: { kind: "step-interaction", dir: 1 },
+    action: { kind: "set-out" },
   },
   { keys: ["Escape"], action: { kind: "escape-band" } },
-  { keys: ["l", "L"], action: { kind: "go-live" } },
-  { keys: ["f", "F"], action: { kind: "fit" } },
-  { keys: ["+", "="], action: { kind: "zoom", factor: 1.25 } },
-  { keys: ["-", "_"], action: { kind: "zoom", factor: 0.8 } },
+  { keys: ["0"], action: { kind: "fit" } },
+  { keys: ["f", "F"], action: { kind: "fit-selection" } },
+  { keys: ["+", "="], action: { kind: "zoom", factor: 0.72 } },
+  { keys: ["-", "_"], action: { kind: "zoom", factor: 1.4 } },
   { keys: [" "], codes: ["Space"], action: { kind: "toggle-play" } },
-  { keys: ["ArrowLeft"], action: { kind: "step-commit", dir: -1 } },
-  { keys: ["ArrowRight"], action: { kind: "step-commit", dir: 1 } },
+  { keys: ["j", "J"], action: { kind: "play-reverse" } },
+  { keys: ["k", "K"], action: { kind: "stop" } },
+  { keys: ["l", "L"], action: { kind: "play-forward" } },
+  { keys: ["?"], action: { kind: "toggle-help" } },
+  { keys: ["ArrowLeft"], action: { kind: "nudge-playhead", dir: -1 } },
+  { keys: ["ArrowRight"], action: { kind: "nudge-playhead", dir: 1 } },
 ];
 
 export function timelineKeyAction(e: TimelineKeyEvent): TimelineKeyAction | null {

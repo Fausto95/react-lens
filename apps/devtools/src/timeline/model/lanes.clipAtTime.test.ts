@@ -8,8 +8,10 @@ function clip(partial: Partial<Clip> & Pick<Clip, "renderId" | "t0" | "t1">): Cl
     laneKey: "t:Foo" as LaneKey,
     name: "Foo",
     self: 1,
+    total: partial.t1 - partial.t0,
     cause: "props",
     wasted: false,
+    row: 0,
     ...partial,
   };
 }
@@ -20,12 +22,10 @@ function lane(key: string, clips: Clip[]): Lane {
     name: key.slice(2),
     instanceCount: 1,
     clips,
-    subs: [],
     renders: clips.length,
     wasted: clips.filter((c) => c.wasted).length,
     selfTotal: clips.reduce((n, c) => n + c.self, 0),
     firstT: clips[0]?.t0 ?? 0,
-    density: [],
   };
 }
 

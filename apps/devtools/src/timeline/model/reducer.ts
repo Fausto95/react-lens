@@ -1,88 +1,81 @@
+/**
+ * Timeline UI state transitions — view window, selection, region, transport,
+ * shelf, gap expand targets, help.
+ */
+
 import type { RenderId } from "@reactlens/protocol";
 import type { LaneKey } from "../../laneFilter.js";
+import { clamp, type TimeAxis, type TimeSpan } from "./axis.js";
 import {
-  SCALE_MAX,
-  SCALE_MIN,
-  clamp,
-  fitPlan,
-  projectT,
-  projectX,
-  type TimeSpan,
-} from "./scale.js";
-import {
-  clampScroll,
-  resolveZoom,
-  viewportScale,
-  type ActiveSpans,
+  clampView,
+  fitView,
+  fitWallRange,
+  zoomView,
   type Bounds,
-  type Viewport,
+  type ViewWindow,
 } from "./viewport.js";
-
-/**
- * Every timeline interaction, as a pure state transition.
- *
- * Zoom anchoring, clamping, region normalisation and fit-to-range are the
- * parts that were previously only reachable by clicking in a browser — and
- * they are exactly the parts that kept regressing. Here they are ordinary
- * functions with unit tests that run in milliseconds.
- */
+import { VIEW_SPAN_MIN } from "../view/metrics.js";
 
 export interface TimelineState {
-  viewport: Viewport;
+  /** Axis view window. */
+  view: ViewWindow;
+  /** Measured stage width (full, including name gutter). */
+  width: number;
   selectedRender: RenderId | null;
   selectedLane: LaneKey | null;
-  expandedLanes: ReadonlySet<LaneKey>;
-  /** In/out points that scope the footer stats and bound replay. */
+  /** In/out points that scope stats and bound transport. */
   region: TimeSpan | null;
   playing: boolean;
-  /**
-   * Where the current replay began — the playhead at the moment ▶ was pressed.
-   * Null between replays, when the span's own start is the beginning.
-   */
-  playFrom: number | null;
+  playDir: 1 | -1;
+  speed: number;
+  /** Gap ids the user wants expanded (progress animates toward 1). */
+  expandedGaps: ReadonlySet<string>;
+  shelfOpen: boolean;
+  showHelp: boolean;
 }
 
-/**
- * Session facts the reducer needs to compute geometry. Passed in rather than
- * stored, because they are owned by the trace store and change as it ingests —
- * duplicating them into reducer state would create a second source of truth.
- */
 export interface TimelineContext {
   bounds: Bounds;
-  active: ActiveSpans;
+  /** Live axis for clamping view ops. */
+  axis: TimeAxis;
 }
 
 export type TimelineAction =
   | { type: "measure"; width: number }
-  | { type: "zoomBy"; factor: number; anchorX?: number }
-  | { type: "zoomTo"; pxPerMs: number; anchorX?: number }
+  | { type: "setView"; a0: number; span: number }
+  | { type: "zoomBy"; factor: number; anchorA: number }
   | { type: "fit" }
-  | { type: "fitRange"; span: TimeSpan }
-  | { type: "scrolled"; scrollLeft: number }
-  | { type: "panBy"; dx: number }
+  | { type: "fitWall"; w0: number; w1: number }
+  | { type: "panBy"; dA: number }
   | { type: "selectClip"; renderId: RenderId; laneKey: LaneKey }
   | { type: "selectLane"; laneKey: LaneKey | null }
-  | { type: "toggleLane"; key: LaneKey }
-  | { type: "expandLanes"; keys: readonly LaneKey[] }
   | { type: "setRegion"; span: TimeSpan | null }
   | { type: "dragRegionEdge"; side: "start" | "end"; t: number }
-  | { type: "play"; from: number | null }
-  | { type: "pause" };
+  | { type: "play"; dir?: 1 | -1; speed?: number }
+  | { type: "pause" }
+  | { type: "setSpeed"; speed: number }
+  | { type: "toggleGap"; id: string }
+  | { type: "toggleShelf" }
+  | { type: "toggleHelp" }
+  | { type: "setHelp"; open: boolean };
 
 export function initialTimelineState(over: Partial<TimelineState> = {}): TimelineState {
   return {
-    viewport: { zoom: "fit", scrollLeft: 0, width: 800 },
+    view: { a0: 0, a1: 1000 },
+    width: 900,
     selectedRender: null,
     selectedLane: null,
-    expandedLanes: new Set(),
     region: null,
     playing: false,
-    playFrom: null,
+    playDir: 1,
+    speed: 1,
+    expandedGaps: new Set(),
+    shelfOpen: false,
+    showHelp: false,
     ...over,
   };
 }
 
-/** Order a span low→high so a backwards drag is still a valid region. */
 function normalise(span: TimeSpan): TimeSpan {
   return span.start <= span.end ? span : { start: span.end, end: span.start };
 }
@@ -92,79 +85,32 @@ export function timelineReducer(
   action: TimelineAction,
   ctx: TimelineContext,
 ): TimelineState {
-  const scaleNow = () => viewportScale(state.viewport, ctx.bounds, ctx.active);
+  const total = Math.max(VIEW_SPAN_MIN, ctx.axis.total);
 
   switch (action.type) {
     case "measure": {
-      // A hidden or unmounted panel measures 0; adopting it would collapse the
-      // scale and strand the user when the panel comes back.
-      if (action.width <= 0 || action.width === state.viewport.width) return state;
-      const viewport = { ...state.viewport, width: action.width };
-      const scale = viewportScale(viewport, ctx.bounds, ctx.active);
-      return {
-        ...state,
-        viewport: {
-          ...viewport,
-          scrollLeft: clampScroll(viewport.scrollLeft, scale, action.width),
-        },
-      };
+      if (action.width <= 0 || action.width === state.width) return state;
+      return { ...state, width: action.width };
     }
 
-    case "zoomTo":
-    case "zoomBy": {
-      const width = state.viewport.width;
-      const anchorX = action.anchorX ?? width / 2;
-      const before = scaleNow();
-      // The time under the anchor must not move. Capture it first, then solve
-      // the scroll offset that puts it back under the same pixel.
-      const anchorT = projectT(before.segs, state.viewport.scrollLeft + anchorX);
-      const current = resolveZoom(state.viewport, ctx.bounds, ctx.active);
-      const zoom = clamp(
-        action.type === "zoomTo" ? action.pxPerMs : current * action.factor,
-        SCALE_MIN,
-        SCALE_MAX,
-      );
-      const viewport: Viewport = { ...state.viewport, zoom };
-      const after = viewportScale(viewport, ctx.bounds, ctx.active);
-      const scrollLeft = clampScroll(projectX(after.segs, anchorT) - anchorX, after, width);
-      return { ...state, viewport: { ...viewport, scrollLeft } };
-    }
+    case "setView":
+      return { ...state, view: clampView(action.a0, action.span, total) };
+
+    case "zoomBy":
+      return {
+        ...state,
+        view: zoomView(state.view, action.factor, action.anchorA, total),
+      };
 
     case "fit":
-      return { ...state, viewport: { ...state.viewport, zoom: "fit", scrollLeft: 0 } };
+      return { ...state, view: fitView(total) };
 
-    case "fitRange": {
-      const plan = fitPlan(
-        ctx.active as Array<[number, number]>,
-        ctx.bounds,
-        normalise(action.span),
-        state.viewport.width,
-      );
-      const viewport: Viewport = { ...state.viewport, zoom: plan.scale };
-      const scale = viewportScale(viewport, ctx.bounds, ctx.active);
-      return {
-        ...state,
-        viewport: {
-          ...viewport,
-          scrollLeft: clampScroll(plan.scrollLeft, scale, state.viewport.width),
-        },
-      };
-    }
-
-    case "scrolled": {
-      const scrollLeft = clampScroll(action.scrollLeft, scaleNow(), state.viewport.width);
-      if (scrollLeft === state.viewport.scrollLeft) return state;
-      return { ...state, viewport: { ...state.viewport, scrollLeft } };
-    }
+    case "fitWall":
+      return { ...state, view: fitWallRange(ctx.axis, action.w0, action.w1) };
 
     case "panBy": {
-      const scrollLeft = clampScroll(
-        state.viewport.scrollLeft + action.dx,
-        scaleNow(),
-        state.viewport.width,
-      );
-      if (scrollLeft === state.viewport.scrollLeft) return state;
-      return { ...state, viewport: { ...state.viewport, scrollLeft } };
+      const span = state.view.a1 - state.view.a0;
+      return { ...state, view: clampView(state.view.a0 + action.dA, span, total) };
     }
 
     case "selectClip":
@@ -172,21 +118,6 @@ export function timelineReducer(
 
     case "selectLane":
       return { ...state, selectedLane: action.laneKey };
-
-    case "toggleLane": {
-      const next = new Set(state.expandedLanes);
-      if (!next.delete(action.key)) next.add(action.key);
-      return { ...state, expandedLanes: next };
-    }
-
-    case "expandLanes": {
-      // Identity-stable when nothing changes, so an effect that expands the
-      // lanes a cascade touches cannot re-trigger itself forever.
-      if (action.keys.every((k) => state.expandedLanes.has(k))) return state;
-      const next = new Set(state.expandedLanes);
-      for (const key of action.keys) next.add(key);
-      return { ...state, expandedLanes: next };
-    }
 
     case "setRegion":
       return { ...state, region: action.span ? normalise(action.span) : null };
@@ -197,9 +128,32 @@ export function timelineReducer(
     }
 
     case "play":
-      return state.playing ? state : { ...state, playing: true, playFrom: action.from };
+      return {
+        ...state,
+        playing: true,
+        playDir: action.dir ?? state.playDir,
+        speed: action.speed ?? state.speed,
+      };
 
     case "pause":
-      return state.playing ? { ...state, playing: false, playFrom: null } : state;
+      return state.playing ? { ...state, playing: false } : state;
+
+    case "setSpeed":
+      return { ...state, speed: clamp(action.speed, 0.25, 8) };
+
+    case "toggleGap": {
+      const next = new Set(state.expandedGaps);
+      if (!next.delete(action.id)) next.add(action.id);
+      return { ...state, expandedGaps: next };
+    }
+
+    case "toggleShelf":
+      return { ...state, shelfOpen: !state.shelfOpen };
+
+    case "toggleHelp":
+      return { ...state, showHelp: !state.showHelp };
+
+    case "setHelp":
+      return state.showHelp === action.open ? state : { ...state, showHelp: action.open };
   }
 }

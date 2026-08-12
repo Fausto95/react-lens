@@ -270,7 +270,7 @@ export function RedesignShell({
           {recording ? `Recording · ${(sessionSpanMs / 1000).toFixed(1)} s` : "Paused"}
         </div>
         <span className="hint">
-          drag ruler to scrub · click clips · S/M in tree · space to replay
+          drag to scrub · ⇧ region · ⌥ marquee · J/K/L transport · ? shortcuts
         </span>
         <div className="legend">
           {(["props", "state", "ctx", "cascade"] as const).map((key) => (
