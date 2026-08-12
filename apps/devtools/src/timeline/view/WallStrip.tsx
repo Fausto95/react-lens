@@ -1,7 +1,8 @@
 import type { TimeAxis } from "../model/axis.js";
 import type { ViewWindow } from "../model/viewport.js";
 import { clipCauseColor, type Clip } from "../model/lanes.js";
-import { CAUSE_COLOR, MONO, WALL_H } from "./metrics.js";
+import { MONO, WALL_H } from "./metrics.js";
+import { causeCssVar } from "./timelineTheme.js";
 
 /**
  * Top overview strip in compressed axis space (same projection as the stage),
@@ -47,7 +48,7 @@ export function WallStrip({
           style={{
             left: `${left}%`,
             width: `${width}%`,
-            background: "rgba(110,155,255,.13)",
+            background: "color-mix(in srgb, var(--accent) 13%, transparent)",
           }}
         />
         {blips.map((c) => (
@@ -56,7 +57,7 @@ export function WallStrip({
             className="tl-wall-blip"
             style={{
               left: `${pct(axis.wallToAxis(c.t0))}%`,
-              background: c.wasted ? "#F5A623" : CAUSE_COLOR[clipCauseColor(c.cause)],
+              background: c.wasted ? "var(--warn)" : causeCssVar(clipCauseColor(c.cause)),
             }}
           />
         ))}

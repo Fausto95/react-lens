@@ -12,14 +12,12 @@ import type { TimeSpan } from "../model/axis.js";
 import type { ViewWindow } from "../model/viewport.js";
 import { waveBins } from "../model/wave.js";
 import {
-  ACCENT,
-  CAUSE_COLOR,
   LANE_PAD,
   MIN_CLIP_PX,
-  MONO,
   ROW_H,
   RULER_H,
 } from "./metrics.js";
+import { causeColor, hexAlpha, type TimelineTheme } from "./timelineTheme.js";
 
 export interface ClipRect {
   x0: number;
@@ -49,6 +47,7 @@ export interface DrawBaseArgs {
   pattern: CanvasPattern | null;
   /** Session-relative origin for labels (bounds.t0). */
   tOrigin: number;
+  theme: TimelineTheme;
 }
 
 const fmt = (t: number) => Math.round(t).toLocaleString("en-US");
@@ -71,13 +70,14 @@ export function drawBase(args: DrawBaseArgs): {
   clipRects: Map<string, ClipRect>;
   snapEdges: number[];
 } {
-  const { ctx, axis, layout, region, markers, selectedRender, proj, tOrigin } = args;
+  const { ctx, axis, layout, region, markers, selectedRender, proj, tOrigin, theme } = args;
   const { nameW: NW, stageW: W, wToX, aToX, pxPerMs } = proj;
   const H = layout.totalH;
   const pattern = args.pattern;
+  const MONO = theme.mono;
 
   ctx.clearRect(0, 0, W, H);
-  ctx.fillStyle = "#0A0A0B";
+  ctx.fillStyle = theme.bg;
   ctx.fillRect(0, 0, W, H);
   ctx.textBaseline = "alphabetic";
 
@@ -103,26 +103,26 @@ export function drawBase(args: DrawBaseArgs): {
     const x0 = aToX(s.a0);
     const x1 = aToX(s.a1);
     if (x1 < NW || x0 > W) continue;
-    ctx.fillStyle = "rgba(255,255,255,.016)";
+    ctx.fillStyle = hexAlpha(theme.lineStrong, 0.14);
     ctx.fillRect(x0, RULER_H, x1 - x0, H - RULER_H);
-    vline(x0, RULER_H, H, "rgba(255,255,255,.09)", [2, 4]);
-    vline(x1, RULER_H, H, "rgba(255,255,255,.09)", [2, 4]);
+    vline(x0, RULER_H, H, hexAlpha(theme.lineStrong, 0.65), [2, 4]);
+    vline(x1, RULER_H, H, hexAlpha(theme.lineStrong, 0.65), [2, 4]);
   }
 
   if (region) {
     const x0 = wToX(region.start);
     const x1 = wToX(region.end);
-    ctx.fillStyle = "rgba(110,155,255,.05)";
+    ctx.fillStyle = hexAlpha(theme.accent, 0.05);
     ctx.fillRect(x0, 0, x1 - x0, H);
-    vline(x0, 0, H, "rgba(110,155,255,.4)");
-    vline(x1, 0, H, "rgba(110,155,255,.4)");
-    ctx.fillStyle = "rgba(110,155,255,.65)";
+    vline(x0, 0, H, hexAlpha(theme.accent, 0.4));
+    vline(x1, 0, H, hexAlpha(theme.accent, 0.4));
+    ctx.fillStyle = hexAlpha(theme.accent, 0.65);
     ctx.font = `8.5px ${MONO}`;
     ctx.fillText("I", x0 + 3, 9);
     ctx.fillText("O", x1 - 9, 9);
   }
 
-  hline(RULER_H - 1, "rgba(255,255,255,.09)");
+  hline(RULER_H - 1, hexAlpha(theme.lineStrong, 0.75));
 
   for (const s of axis.segs) {
     if (s.type !== "act") continue;
@@ -136,10 +136,10 @@ export function drawBase(args: DrawBaseArgs): {
         x,
         RULER_H - (major ? 8 : 4),
         RULER_H,
-        major ? "rgba(255,255,255,.14)" : "rgba(255,255,255,.06)",
+        major ? hexAlpha(theme.lineStrong, 0.9) : hexAlpha(theme.line, 0.85),
       );
       if (major) {
-        ctx.fillStyle = "#5C5C66";
+        ctx.fillStyle = theme.text3;
         ctx.font = `9.5px ${MONO}`;
         ctx.fillText(fmt(t - tOrigin), x + 4, RULER_H - 11);
       }
@@ -149,7 +149,7 @@ export function drawBase(args: DrawBaseArgs): {
   for (const m of markers) {
     const x = wToX(m.t);
     if (x < NW || x > W) continue;
-    ctx.fillStyle = m.warn ? "#F5A623" : "#8A8A93";
+    ctx.fillStyle = m.warn ? theme.warn : theme.text2;
     ctx.beginPath();
     ctx.moveTo(x, 5);
     ctx.lineTo(x + 4, 9);
@@ -158,7 +158,7 @@ export function drawBase(args: DrawBaseArgs): {
     ctx.closePath();
     ctx.fill();
     if (pxPerMs > 0.3) {
-      ctx.fillStyle = m.warn ? "#F5A623" : "#63636D";
+      ctx.fillStyle = m.warn ? theme.warn : theme.text3;
       ctx.font = `9px ${MONO}`;
       ctx.fillText(m.label, x + 8, 12);
     }
@@ -168,7 +168,7 @@ export function drawBase(args: DrawBaseArgs): {
   const snapEdges: number[] = [];
 
   for (const row of layout.rows) {
-    hline(row.y + row.h - 1, "rgba(255,255,255,.055)");
+    hline(row.y + row.h - 1, hexAlpha(theme.line, 0.55));
     if (row.mode === "wave") {
       const { bins, max } = waveBins(row.clips, wToX, NW, W, 3);
       const mid = row.y + row.h / 2;
@@ -178,7 +178,8 @@ export function drawBase(args: DrawBaseArgs): {
         if (!bin.count) continue;
         const hh = 2 + (bin.count / max) * (row.h - 16);
         const ratio = bin.wasted / bin.count;
-        ctx.fillStyle = ratio > 0.3 ? "rgba(255,107,107,.55)" : "rgba(76,141,255,.5)";
+        ctx.fillStyle =
+          ratio > 0.3 ? hexAlpha(theme.bad, 0.55) : hexAlpha(theme.props, 0.5);
         const x = NW + b * 3;
         roundRect(ctx, x, mid - hh / 2, 2.3, hh, 1.2);
         ctx.fill();
@@ -194,7 +195,7 @@ export function drawBase(args: DrawBaseArgs): {
       const w = Math.max(x1 - x0, MIN_CLIP_PX);
       const clipH = ROW_H - 6;
       const cy = row.y + LANE_PAD / 2 + (c.row ?? 0) * ROW_H + 1.5;
-      const col = CAUSE_COLOR[clipCauseColor(c.cause)];
+      const col = causeColor(theme, clipCauseColor(c.cause));
       ctx.globalAlpha = row.dim ? 0.25 : 1;
 
       if (c.wasted && pattern) {
@@ -230,9 +231,9 @@ export function drawBase(args: DrawBaseArgs): {
       }
 
       if (selectedRender === c.renderId) {
-        ctx.strokeStyle = ACCENT;
+        ctx.strokeStyle = theme.accent;
         ctx.lineWidth = 1.5;
-        ctx.shadowColor = "rgba(110,155,255,.5)";
+        ctx.shadowColor = hexAlpha(theme.accent, 0.5);
         ctx.shadowBlur = 6;
         roundRect(ctx, x0 - 1.5, cy - 1.5, w + 3, clipH + 3, 5);
         ctx.stroke();
@@ -255,9 +256,9 @@ export function drawBase(args: DrawBaseArgs): {
     }
   }
 
-  ctx.fillStyle = "#0A0A0B";
+  ctx.fillStyle = theme.bg;
   ctx.fillRect(0, 0, NW, H);
-  vline(NW - 1, 0, H, "rgba(255,255,255,.09)");
+  vline(NW - 1, 0, H, hexAlpha(theme.lineStrong, 0.75));
 
   return { clipRects, snapEdges };
 }
@@ -276,6 +277,7 @@ export interface DrawOverlayArgs {
   playheadT: number;
   wToX: (t: number) => number;
   dragging: boolean;
+  theme: TimelineTheme;
 }
 
 export function drawOverlay(args: DrawOverlayArgs): void {
@@ -293,6 +295,7 @@ export function drawOverlay(args: DrawOverlayArgs): void {
     playheadT,
     wToX,
     dragging,
+    theme,
   } = args;
 
   ctx.clearRect(0, 0, W, H);
@@ -309,14 +312,14 @@ export function drawOverlay(args: DrawOverlayArgs): void {
     const y1 = (ra.y0 + ra.y1) / 2;
     const x2 = rb.x0 + 2;
     const y2 = (rb.y0 + rb.y1) / 2;
-    ctx.strokeStyle = "rgba(167,139,250,.85)";
+    ctx.strokeStyle = hexAlpha(theme.context, 0.85);
     ctx.lineWidth = 1.2;
     ctx.beginPath();
     ctx.moveTo(x1, y1);
     ctx.bezierCurveTo(x1 + 34, y1, x2 - 34, y2, x2, y2);
     ctx.stroke();
     ctx.lineWidth = 1;
-    ctx.fillStyle = "rgba(167,139,250,.9)";
+    ctx.fillStyle = hexAlpha(theme.context, 0.9);
     ctx.beginPath();
     ctx.moveTo(x2, y2);
     ctx.lineTo(x2 - 6, y2 - 3.5);
@@ -328,9 +331,9 @@ export function drawOverlay(args: DrawOverlayArgs): void {
   if (marquee) {
     const x0 = Math.min(marquee.x0, marquee.x1);
     const x1 = Math.max(marquee.x0, marquee.x1);
-    ctx.fillStyle = "rgba(110,155,255,.09)";
+    ctx.fillStyle = hexAlpha(theme.accent, 0.09);
     ctx.fillRect(x0, RULER_H, x1 - x0, H - RULER_H);
-    ctx.strokeStyle = "rgba(110,155,255,.6)";
+    ctx.strokeStyle = hexAlpha(theme.accent, 0.6);
     ctx.setLineDash([4, 3]);
     ctx.strokeRect(x0 + 0.5, RULER_H + 0.5, x1 - x0 - 1, H - RULER_H - 1);
     ctx.setLineDash([]);
@@ -346,7 +349,7 @@ export function drawOverlay(args: DrawOverlayArgs): void {
   if (ghostT != null && !dragging) {
     const gx = wToX(ghostT);
     if (gx > NW) {
-      ctx.strokeStyle = "rgba(110,155,255,.22)";
+      ctx.strokeStyle = hexAlpha(theme.accent, 0.22);
       ctx.beginPath();
       ctx.moveTo(Math.round(gx) + 0.5, 0);
       ctx.lineTo(Math.round(gx) + 0.5, H);
@@ -356,9 +359,9 @@ export function drawOverlay(args: DrawOverlayArgs): void {
 
   const x = wToX(playheadT);
   if (x >= NW && x <= W) {
-    ctx.strokeStyle = ACCENT;
+    ctx.strokeStyle = theme.accent;
     ctx.lineWidth = 1.5;
-    ctx.shadowColor = "rgba(110,155,255,.55)";
+    ctx.shadowColor = hexAlpha(theme.accent, 0.55);
     ctx.shadowBlur = 8;
     ctx.beginPath();
     ctx.moveTo(x, 0);
@@ -366,7 +369,7 @@ export function drawOverlay(args: DrawOverlayArgs): void {
     ctx.stroke();
     ctx.shadowBlur = 0;
     ctx.lineWidth = 1;
-    ctx.fillStyle = ACCENT;
+    ctx.fillStyle = theme.accent;
     ctx.beginPath();
     ctx.moveTo(x - 5.5, 0);
     ctx.lineTo(x + 5.5, 0);

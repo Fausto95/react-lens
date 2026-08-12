@@ -42,6 +42,11 @@ describe("isQuietLane", () => {
     expect(isQuietLane(lane("Busy", QUIET_MAX + 1))).toBe(false);
   });
 
+  it("quiets context fanout leaves with many tiny renders", () => {
+    // Consumer ×4 — clip count exceeds QUIET_MAX but total work is negligible.
+    expect(isQuietLane(lane("Consumer", 4, { heavy: true, total: 0.05, self: 0 }))).toBe(true);
+  });
+
   it("keeps sparse cascade roots that have real inclusive work", () => {
     // App rendered once but totalDuration covers the cascade — not quiet.
     expect(isQuietLane(lane("App", 1, { total: 40, self: 0.2 }))).toBe(false);
@@ -105,16 +110,67 @@ describe("computeLayout", () => {
     expect(layout.rows[0]!.h).toBe(LANE_PAD + 6 * ROW_H);
   });
 
-  it("switches dense lanes to wave using self width", () => {
+  it("switches dense lanes to wave when zoomed out", () => {
     const heavy = lane("List", 80, { heavy: true });
     const depth = new Map([[heavy.key, 5]]);
     const layout = computeLayout([heavy], depth, {
       shelfOpen: true,
-      pxPerMs: 1,
+      pxPerMs: 1, // narrow marks → wave
       isDim: () => false,
     });
     expect(layout.rows[0]!.mode).toBe("wave");
     expect(layout.rows[0]!.h).toBe(WAVE_H);
     expect(layout.totalH).toBeGreaterThan(RULER_H);
+  });
+
+  it("leaves wave for stack once zoom makes clips readable", () => {
+    const busy = lane("Product", 12, { heavy: true, total: 0.05, self: 0 });
+    const depth = new Map([[busy.key, 12]]);
+    // WAVE_LOD_MS * 80 = 16 ≥ WAVE_AVG_PX at max zoom.
+    const layout = computeLayout([busy], depth, {
+      shelfOpen: true,
+      pxPerMs: 80,
+      isDim: () => false,
+    });
+    expect(layout.rows[0]!.mode).toBe("stack");
+  });
+
+  it("stays on wave at moderate zoom where marks are still narrow", () => {
+    const busy = lane("Consumer", 12, { heavy: true, total: 0.05, self: 0 });
+    const depth = new Map([[busy.key, 12]]);
+    // WAVE_LOD_MS * 40 = 8 < WAVE_AVG_PX → still histogram.
+    const layout = computeLayout([busy], depth, {
+      shelfOpen: true,
+      pxPerMs: 40,
+      isDim: () => false,
+    });
+    expect(layout.rows[0]!.mode).toBe("wave");
+  });
+
+  it("flips wide heavy lanes to clips before narrow ones when zooming in", () => {
+    const narrow = lane("Consumer", 12, { heavy: true, total: 0.05, self: 0 });
+    const wide = lane("List", 80, { heavy: true, total: 2, self: 0.2 });
+    const depth = new Map([
+      [narrow.key, 12],
+      [wide.key, 5],
+    ]);
+    const layout = computeLayout([narrow, wide], depth, {
+      shelfOpen: true,
+      pxPerMs: 10,
+      isDim: () => false,
+    });
+    expect(layout.rows.find((r) => r.lane.name === "List")!.mode).toBe("stack");
+    expect(layout.rows.find((r) => r.lane.name === "Consumer")!.mode).toBe("wave");
+  });
+
+  it("histograms ×12 lanes while still zoomed out", () => {
+    const busy = lane("Product", 12, { heavy: true, total: 0.05, self: 0 });
+    const depth = new Map([[busy.key, 12]]);
+    const layout = computeLayout([busy], depth, {
+      shelfOpen: true,
+      pxPerMs: 1,
+      isDim: () => false,
+    });
+    expect(layout.rows[0]!.mode).toBe("wave");
   });
 });

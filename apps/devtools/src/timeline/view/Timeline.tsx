@@ -15,9 +15,6 @@ import { Navigator } from "./Navigator.js";
 import { Shelf } from "./Shelf.js";
 import { Footer } from "./Footer.js";
 import {
-  ACCENT,
-  CAUSE_COLOR,
-  MONO,
   NAME_W,
   RULER_H,
   SNAP_PX,
@@ -25,6 +22,15 @@ import {
   VIEW_SPAN_MIN,
   nameWidthFor,
 } from "./metrics.js";
+import { causeColor, readTimelineTheme } from "./timelineTheme.js";
+
+const CAUSE_KEYS = ["state", "props", "context", "cascade"] as const;
+const CAUSE_VAR: Record<(typeof CAUSE_KEYS)[number], string> = {
+  state: "var(--state)",
+  props: "var(--props)",
+  context: "var(--ctx)",
+  cascade: "var(--cascade)",
+};
 
 const HELP: Array<[string, string]> = [
   ["drag", "scrub (snaps to clip edges)"],
@@ -32,7 +38,7 @@ const HELP: Array<[string, string]> = [
   ["⌥ drag", "marquee zoom"],
   ["middle-drag", "pan with momentum"],
   ["pinch / ⌘ scroll", "zoom at cursor"],
-  ["scroll", "pan"],
+  ["scroll", "pan time · scroll lanes vertically when tall"],
   ["double-click clip", "zoom to clip"],
   ["double-click region", "zoom to region"],
   ["double-click empty", "fit"],
@@ -107,6 +113,9 @@ export function Timeline({
   const gapAnim = useRef(0);
   const rafRef = useRef(0);
   const sizeRef = useRef({ w: state.width, nameW: NAME_W });
+  const layoutHRef = useRef(layout.totalH);
+  layoutHRef.current = layout.totalH;
+  const themeRef = useRef(readTimelineTheme(wrapRef.current?.closest(".rl-redesign") ?? null));
 
   const nameW = () => sizeRef.current.nameW;
 
@@ -180,6 +189,7 @@ export function Timeline({
     if (!ctx) return;
     const lane = lanes.find((l) => l.key === lp.laneKey);
     if (!lane) return;
+    const theme = themeRef.current;
     const win = loupeAt(lp.laneKey, lp.wallT);
     ctx.clearRect(0, 0, LOUPE_W, LOUPE_H);
     for (const c of lane.clips) {
@@ -187,7 +197,7 @@ export function Timeline({
       const x0 = Math.max(loupeX(c.t0, win), 0);
       const x1 = Math.min(loupeX(c.t1, win), LOUPE_W);
       const y = 5 + ((c.row ?? 0) % 2) * 21;
-      const col = CAUSE_COLOR[clipCauseColor(c.cause)];
+      const col = causeColor(theme, clipCauseColor(c.cause));
       ctx.fillStyle = c.wasted ? "rgba(150,150,160,.28)" : col + "55";
       ctx.beginPath();
       ctx.roundRect?.(x0, y, Math.max(x1 - x0, 2), 16, 3);
@@ -197,7 +207,7 @@ export function Timeline({
       ctx.stroke();
       ctx.setLineDash([]);
     }
-    ctx.strokeStyle = "rgba(110,155,255,.7)";
+    ctx.strokeStyle = theme.accent + "b3";
     ctx.beginPath();
     ctx.moveTo(LOUPE_W / 2 + 0.5, 0);
     ctx.lineTo(LOUPE_W / 2 + 0.5, LOUPE_H);
@@ -214,6 +224,9 @@ export function Timeline({
       if (!bctx || !octx) return;
 
       if (!patternRef.current) patternRef.current = ensureHatchPattern(bctx);
+
+      themeRef.current = readTimelineTheme(wrapRef.current?.closest(".rl-redesign") ?? null);
+      const theme = themeRef.current;
 
       const nw = nameW();
       const proj = {
@@ -236,6 +249,7 @@ export function Timeline({
           proj,
           pattern: patternRef.current,
           tOrigin: bounds.t0,
+          theme,
         });
         clipRectsRef.current = clipRects;
         snapEdgesRef.current = snapEdges;
@@ -255,6 +269,7 @@ export function Timeline({
         playheadT: playheadRef.current,
         wToX,
         dragging: dragRef.current != null,
+        theme,
       });
       drawLoupe();
       force();
@@ -319,6 +334,13 @@ export function Timeline({
   useEffect(() => {
     scheduleDraw(true);
   }, [state.selectedRender, state.shelfOpen, state.region, layout, scheduleDraw]);
+
+  useEffect(() => {
+    const root = document.documentElement;
+    const obs = new MutationObserver(() => scheduleDraw(true));
+    obs.observe(root, { attributes: true, attributeFilter: ["data-rl-theme"] });
+    return () => obs.disconnect();
+  }, [scheduleDraw]);
 
   const setView = (a0: number, span: number, redraw = true) => {
     dispatch({ type: "setView", a0, span });
@@ -388,8 +410,14 @@ export function Timeline({
   };
 
   const localXY = (e: { clientX: number; clientY: number }) => {
-    const r = wrapRef.current!.getBoundingClientRect();
-    return { x: e.clientX - r.left, y: e.clientY - r.top };
+    const el = wrapRef.current!;
+    const r = el.getBoundingClientRect();
+    const viewY = e.clientY - r.top;
+    return {
+      x: e.clientX - r.left,
+      y: viewY + el.scrollTop,
+      viewY,
+    };
   };
 
   const onPointerDown = (e: React.PointerEvent) => {
@@ -486,7 +514,7 @@ export function Timeline({
       }
     }
 
-    const { x, y } = localXY(e);
+    const { x, y, viewY } = localXY(e);
     const d = dragRef.current;
     if (!d) {
       const hit = hitClip(x, y);
@@ -495,11 +523,12 @@ export function Timeline({
         hoverRef.current = id;
         onHighlight?.(hit?.clip.componentId ?? null);
       }
+      const scrollTop = wrapRef.current?.scrollTop ?? 0;
       tipRef.current = hit
         ? {
             clip: hit.clip,
             x: clamp(x + 14, nameW(), sizeRef.current.w - 190),
-            y: y + 16,
+            y: viewY + 16,
           }
         : null;
       ghostRef.current = x > nameW() ? xToW(x) : null;
@@ -509,7 +538,7 @@ export function Timeline({
           laneKey: row.key,
           wallT: xToW(x),
           x: clamp(x - 145, nameW() + 4, sizeRef.current.w - 296),
-          y: row.y - 76,
+          y: row.y - scrollTop - 76,
         };
       } else loupeRef.current = null;
       scheduleDraw(false);
@@ -598,11 +627,20 @@ export function Timeline({
       e.preventDefault();
       const rect = el.getBoundingClientRect();
       const x = e.clientX - rect.left;
-      if (e.ctrlKey || e.metaKey) zoomAt(Math.exp(e.deltaY * 0.004), x);
-      else {
-        const span = state.view.a1 - state.view.a0;
-        setView(state.view.a0 + ((e.deltaY + e.deltaX) * span) / 900, span);
+      if (e.ctrlKey || e.metaKey) {
+        zoomAt(Math.exp(e.deltaY * 0.004), x);
+        return;
       }
+      const overflowY = layoutHRef.current > el.clientHeight + 1;
+      if (overflowY && Math.abs(e.deltaY) > Math.abs(e.deltaX)) {
+        el.scrollTop = Math.max(
+          0,
+          Math.min(el.scrollTop + e.deltaY, layoutHRef.current - el.clientHeight),
+        );
+        return;
+      }
+      const span = state.view.a1 - state.view.a0;
+      setView(state.view.a0 + ((e.deltaY + e.deltaX) * span) / 900, span);
     };
     el.addEventListener("wheel", onWheel, { passive: false });
     return () => el.removeEventListener("wheel", onWheel);
@@ -839,9 +877,9 @@ export function Timeline({
           ?
         </button>
         <div className="tl-toolbar-legend">
-          {(Object.keys(CAUSE_COLOR) as Array<keyof typeof CAUSE_COLOR>).map((k) => (
+          {CAUSE_KEYS.map((k) => (
             <span key={k}>
-              <i style={{ background: CAUSE_COLOR[k] }} />
+              <i style={{ background: CAUSE_VAR[k] }} />
               {k}
             </span>
           ))}
@@ -885,7 +923,7 @@ export function Timeline({
               top: r.y,
               width: sizeRef.current.nameW - 1,
               height: r.h,
-              color: r.dim ? "#4A4A54" : "#9A9AA3",
+              color: r.dim ? "var(--text-3)" : "var(--text-2)",
             }}
             onPointerDown={(e) => e.stopPropagation()}
           >
@@ -952,10 +990,10 @@ export function Timeline({
               {` #${tip.clip.componentId}`}
             </div>
             <div>
-              <span style={{ color: CAUSE_COLOR[clipCauseColor(tip.clip.cause)] }}>
+              <span style={{ color: CAUSE_VAR[clipCauseColor(tip.clip.cause)] }}>
                 {clipCauseColor(tip.clip.cause)}
               </span>
-              {tip.clip.wasted && <span style={{ color: "#F5A623" }}> · wasted</span>}
+              {tip.clip.wasted && <span style={{ color: "var(--warn)" }}> · wasted</span>}
             </div>
             <div className="tl-tip-meta">
               {fmt(tip.clip.t0)}–{fmt(tip.clip.t1)} ms · {tip.clip.total.toFixed(1)} ms total
@@ -994,7 +1032,7 @@ export function Timeline({
             <div className="tl-help-title">SHORTCUTS</div>
             {HELP.map(([k, d]) => (
               <div key={k} className="tl-help-row">
-                <span style={{ color: ACCENT, fontFamily: MONO }}>{k}</span>
+                <span style={{ color: "var(--accent)", fontFamily: "var(--mono)" }}>{k}</span>
                 <span>{d}</span>
               </div>
             ))}

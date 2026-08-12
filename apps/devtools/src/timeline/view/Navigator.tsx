@@ -2,7 +2,8 @@ import { useRef } from "react";
 import type { TimeAxis } from "../model/axis.js";
 import type { ViewWindow } from "../model/viewport.js";
 import { clipCauseColor, type Clip } from "../model/lanes.js";
-import { CAUSE_COLOR, NAV_H } from "./metrics.js";
+import { NAV_H } from "./metrics.js";
+import { causeCssVar } from "./timelineTheme.js";
 
 /**
  * Session minimap in **compressed axis** space — idle gaps stay gutters, so
@@ -99,7 +100,7 @@ export function Navigator({
             style={{
               left: `${pct(axis.wallToAxis(c.t0))}%`,
               top: 10 + ((c.row ?? 0) % 2) * 5,
-              background: c.wasted ? "#F5A623" : CAUSE_COLOR[clipCauseColor(c.cause)],
+              background: c.wasted ? "var(--warn)" : causeCssVar(clipCauseColor(c.cause)),
             }}
           />
         ))}

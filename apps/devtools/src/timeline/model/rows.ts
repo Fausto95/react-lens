@@ -4,7 +4,7 @@
 
 import type { LaneKey } from "../../laneFilter.js";
 import type { Clip, Lane } from "./lanes.js";
-import { laneMode, type LaneMode } from "./wave.js";
+import { avgClipWidthPx, laneMode, type LaneMode } from "./wave.js";
 import {
   LANE_PAD,
   QUIET_MAX,
@@ -33,16 +33,15 @@ export interface LaneLayout {
 }
 
 /**
- * Quiet = sparse *and* little inclusive work. Clip-count alone would shelf
- * App after a single cascade root render once bars use totalDuration.
+ * Quiet = negligible inclusive work on the lane. Clip count alone must not
+ * keep fanout leaves (Consumer ×4) on stage when each render is sub-ms.
  */
 export function isQuietLane(
   lane: Lane,
-  quietMax = QUIET_MAX,
+  _quietMax = QUIET_MAX,
   quietTotalMs = QUIET_TOTAL_MS,
 ): boolean {
   if (lane.clips.length === 0) return true;
-  if (lane.clips.length > quietMax) return false;
   const inclusive = lane.clips.reduce((a, c) => a + c.total, 0);
   return inclusive < quietTotalMs;
 }
@@ -74,12 +73,9 @@ export function computeLayout(
 
     const clips = lane.clips;
     const depth = Math.max(1, laneDepth.get(lane.key) ?? 1);
-    // Wave LOD keys off exclusive width — inclusive parents look wide even when
-    // the lane is a dense leaf stack that should histogram.
-    const avgPx =
-      clips.length > 0
-        ? (clips.reduce((a, c) => a + c.self, 0) / clips.length) * opts.pxPerMs
-        : 99;
+    // Painted inclusive width × pxPerMs — grows with zoom so heavy lanes
+    // progressively leave wave and show stacked clips.
+    const avgPx = avgClipWidthPx(clips, opts.pxPerMs);
     const mode = laneMode(depth, clips.length, avgPx);
     const h = mode === "wave" ? WAVE_H : LANE_PAD + depth * ROW_H;
     rows.push({
