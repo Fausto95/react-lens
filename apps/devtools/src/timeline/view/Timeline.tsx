@@ -5,6 +5,7 @@ import type { TimeCursor } from "../../timeCursor.js";
 import { buildAxis, clamp, compactGap, easeOut, type TimeAxis } from "../model/axis.js";
 import { loupeAt, LOUPE_H, LOUPE_HALF_MS, LOUPE_W, loupeX } from "../model/loupe.js";
 import { clampView, fitWallRange, lerpView, reanchorAfterAxisChange } from "../model/viewport.js";
+import { advancePlayhead, playStartAxis } from "../model/transport.js";
 import { timelineKeyAction } from "../keymap.js";
 import { clipAtTime, clipCauseColor, type Clip } from "../model/lanes.js";
 import type { Timeline as TimelineModel } from "../useTimeline.js";
@@ -27,7 +28,7 @@ import {
 
 const HELP: Array<[string, string]> = [
   ["drag", "scrub (snaps to clip edges)"],
-  ["⇧ drag", "set region"],
+  ["⇧ drag", "set A/B loop region"],
   ["⌥ drag", "marquee zoom"],
   ["middle-drag", "pan with momentum"],
   ["pinch / ⌘ scroll", "zoom at cursor"],
@@ -35,13 +36,13 @@ const HELP: Array<[string, string]> = [
   ["double-click clip", "zoom to clip"],
   ["double-click region", "zoom to region"],
   ["double-click empty", "fit"],
-  ["space", "play / pause"],
+  ["space", "play / pause (loops only with A/B)"],
   ["J / K / L", "reverse / stop / forward (tap again = faster)"],
-  ["[ / ]", "set in / out at playhead"],
+  ["[ / ]", "set A / B at playhead"],
   ["Z + click", "zoom to burst"],
   ["F", "zoom to selection"],
   ["0  ·  + / −", "fit · zoom"],
-  ["esc", "clear region"],
+  ["esc", "clear A/B region"],
   ["?", "toggle this panel"],
 ];
 
@@ -157,6 +158,18 @@ export function Timeline({
         ? { mode: "historical", t }
         : { mode: "live", t: model.bounds.t1 },
     );
+  };
+
+  /** Start transport from the cursor, or from the range start if already at the end. */
+  const startPlay = (dir: 1 | -1, speed = 1) => {
+    const ax = axisLiveRef.current;
+    const rg = state.region;
+    const a0 = rg ? ax.wallToAxis(rg.start) : 0;
+    const a1 = rg ? ax.wallToAxis(rg.end) : ax.total;
+    const a = ax.wallToAxis(playheadRef.current);
+    const startA = playStartAxis({ a, a0, a1, dir });
+    if (Math.abs(startA - a) > 1e-6) setPlayhead(ax.axisToWall(startA));
+    dispatch({ type: "play", dir, speed });
   };
 
   const drawLoupe = useCallback(() => {
@@ -595,7 +608,7 @@ export function Timeline({
     return () => el.removeEventListener("wheel", onWheel);
   });
 
-  // Transport: axis-uniform JKL / space, region loop
+  // Transport: axis-uniform JKL / space. Loops only when an A/B region is set.
   useEffect(() => {
     if (!state.playing) return;
     let raf = 0;
@@ -604,18 +617,22 @@ export function Timeline({
       if (last != null) {
         const ax = axisLiveRef.current;
         const rg = state.region;
+        const loop = rg != null;
         const aw0 = rg ? ax.wallToAxis(rg.start) : 0;
         const aw1 = rg ? ax.wallToAxis(rg.end) : ax.total;
-        let pa = ax.wallToAxis(playheadRef.current);
-        pa +=
+        const pa = ax.wallToAxis(playheadRef.current);
+        const deltaA =
           Math.min(ts - last, 100) *
           ((aw1 - aw0) / 2300) *
           state.speed *
           state.playDir;
-        if (pa > aw1) pa = aw0;
-        if (pa < aw0) pa = aw1;
-        setPlayhead(ax.axisToWall(pa));
+        const next = advancePlayhead({ a: pa, deltaA, a0: aw0, a1: aw1, loop });
+        setPlayhead(ax.axisToWall(next.a));
         scheduleDraw(false);
+        if (next.kind === "stop") {
+          dispatch({ type: "pause" });
+          return;
+        }
       }
       last = ts;
       raf = requestAnimationFrame(step);
@@ -636,17 +653,17 @@ export function Timeline({
       switch (action.kind) {
         case "toggle-play":
           if (state.playing) dispatch({ type: "pause" });
-          else dispatch({ type: "play", dir: 1, speed: 1 });
+          else startPlay(1, 1);
           break;
         case "play-forward":
           if (state.playing && state.playDir === 1)
             dispatch({ type: "setSpeed", speed: Math.min(state.speed * 2, 4) });
-          else dispatch({ type: "play", dir: 1, speed: 1 });
+          else startPlay(1, 1);
           break;
         case "play-reverse":
           if (state.playing && state.playDir === -1)
             dispatch({ type: "setSpeed", speed: Math.min(state.speed * 2, 4) });
-          else dispatch({ type: "play", dir: -1, speed: 1 });
+          else startPlay(-1, 1);
           break;
         case "stop":
           dispatch({ type: "pause" });
@@ -775,18 +792,14 @@ export function Timeline({
         <button
           type="button"
           className={`tl-btn${state.playing && state.playDir === -1 ? " on" : ""}`}
-          onClick={() => dispatch({ type: "play", dir: -1, speed: 1 })}
+          onClick={() => startPlay(-1, 1)}
         >
           ◂◂
         </button>
         <button
           type="button"
           className={`tl-btn${state.playing ? " on" : ""}`}
-          onClick={() =>
-            state.playing
-              ? dispatch({ type: "pause" })
-              : dispatch({ type: "play", dir: 1, speed: 1 })
-          }
+          onClick={() => (state.playing ? dispatch({ type: "pause" }) : startPlay(1, 1))}
         >
           {state.playing ? "⏸" : "▶"}
         </button>
