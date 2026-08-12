@@ -14,18 +14,21 @@ export type TimelineKeyAction =
   | { kind: "set-in" }
   | { kind: "set-out" }
   | { kind: "nudge-playhead"; dir: -1 | 1 }
+  | { kind: "step-commit"; dir: -1 | 1 }
   | { kind: "toggle-help" }
   | { kind: "go-live" };
 
 export type TimelineKeyEvent = Pick<
   KeyboardEvent,
-  "key" | "code" | "metaKey" | "ctrlKey" | "altKey"
+  "key" | "code" | "metaKey" | "ctrlKey" | "altKey" | "shiftKey"
 >;
 
 interface Binding {
   keys?: string[];
   codes?: string[];
   allowAlt?: boolean;
+  /** When set, Shift must match this value (default: ignore Shift). */
+  shift?: boolean;
   action: TimelineKeyAction;
 }
 
@@ -52,8 +55,25 @@ const BINDINGS: Binding[] = [
   { keys: ["k", "K"], action: { kind: "stop" } },
   { keys: ["l", "L"], action: { kind: "play-forward" } },
   { keys: ["?"], action: { kind: "toggle-help" } },
-  { keys: ["ArrowLeft"], action: { kind: "nudge-playhead", dir: -1 } },
-  { keys: ["ArrowRight"], action: { kind: "nudge-playhead", dir: 1 } },
+  {
+    keys: ["ArrowLeft"],
+    codes: ["ArrowLeft"],
+    shift: true,
+    action: { kind: "step-commit", dir: -1 },
+  },
+  {
+    keys: ["ArrowRight"],
+    codes: ["ArrowRight"],
+    shift: true,
+    action: { kind: "step-commit", dir: 1 },
+  },
+  { keys: ["ArrowLeft"], codes: ["ArrowLeft"], shift: false, action: { kind: "nudge-playhead", dir: -1 } },
+  {
+    keys: ["ArrowRight"],
+    codes: ["ArrowRight"],
+    shift: false,
+    action: { kind: "nudge-playhead", dir: 1 },
+  },
   { keys: ["End"], codes: ["End"], action: { kind: "go-live" } },
   { keys: ["."], codes: ["Period"], action: { kind: "go-live" } },
 ];
@@ -62,6 +82,7 @@ export function timelineKeyAction(e: TimelineKeyEvent): TimelineKeyAction | null
   if (e.metaKey || e.ctrlKey) return null;
   for (const b of BINDINGS) {
     if (e.altKey && !b.allowAlt) continue;
+    if (b.shift !== undefined && e.shiftKey !== b.shift) continue;
     if (b.keys?.includes(e.key) || b.codes?.includes(e.code)) return b.action;
   }
   return null;

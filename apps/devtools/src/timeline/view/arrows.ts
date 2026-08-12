@@ -164,7 +164,7 @@ export interface DrawCausalArrowArgs {
   fanSpread?: number;
   lineWidth?: number;
   headSize?: number;
-  /** 1-based ordinal when several arrows leave the same clip; omit if alone. */
+  /** 1-based ordinal for causal sequence (always drawn, including lone arrows). */
   orderLabel?: number;
 }
 
@@ -173,6 +173,8 @@ export interface ArrowEndpoint {
   x1: number;
   y0: number;
   y1: number;
+  /** Clip start — used to order the global causal sequence. */
+  t0?: number;
   wave?: boolean;
   laneKey?: string;
 }
@@ -180,10 +182,15 @@ export interface ArrowEndpoint {
 export interface PlannedArrow {
   from: ArrowEndpoint;
   to: ArrowEndpoint;
-  /** Fan slot among stack siblings (1-based). */
+  /** Fan slot among arrows leaving this source (1-based) — geometry only. */
   slot: number;
   slotCount: number;
-  /** Collapsed wave-group size; when set, draw one arrow with this count badge. */
+  /**
+   * Global 1-based sequence across every visible arrow, ordered by when the
+   * effect landed. Distinct from `slot` (per-source fan layout).
+   */
+  order: number;
+  /** Collapsed wave-group size. */
   waveCount?: number;
   causeKey: ClipCauseColor;
 }
@@ -191,6 +198,9 @@ export interface PlannedArrow {
 /**
  * Build drawable arrows: stack fan-outs stay 1:1 with order slots; edges into the
  * same wave lane collapse to one arrow aimed at the wave group.
+ *
+ * `slot`/`slotCount` spread ports on a shared source. `order` numbers the full
+ * visible chain so state→props→context reads 1, 2 — not 1, 1.
  */
 export function planCausalArrows(
   edges: ReadonlyArray<{ from: string; to: string; causeKey: ClipCauseColor }>,
@@ -219,7 +229,14 @@ export function planCausalArrows(
     }
   }
 
-  const out: PlannedArrow[] = [];
+  const drafts: Array<{
+    fromId: string;
+    from: ArrowEndpoint;
+    to: ArrowEndpoint;
+    causeKey: ClipCauseColor;
+    waveCount?: number;
+    sortT: number;
+  }> = [];
 
   for (const group of waveGroups.values()) {
     const first = group[0]!;
@@ -227,43 +244,58 @@ export function planCausalArrows(
       group.reduce((s, g) => s + (g.to.x0 + g.to.x1) / 2, 0) / group.length;
     const y0 = Math.min(...group.map((g) => g.to.y0));
     const y1 = Math.max(...group.map((g) => g.to.y1));
-    out.push({
+    const sortT = Math.min(...group.map((g) => g.to.t0 ?? Number.POSITIVE_INFINITY));
+    drafts.push({
+      fromId: first.fromId,
       from: first.from,
       to: {
         x0: midX - 4,
         x1: midX + 4,
         y0,
         y1,
+        t0: Number.isFinite(sortT) ? sortT : first.to.t0,
         wave: true,
         laneKey: first.to.laneKey,
       },
-      slot: 1,
-      slotCount: 1,
-      waveCount: group.length,
       causeKey: first.causeKey,
+      waveCount: group.length,
+      sortT: Number.isFinite(sortT) ? sortT : 0,
     });
   }
 
-  const outTotal = new Map<string, number>();
-  const outIndex = new Map<(typeof stackEdges)[number], number>();
   for (const e of stackEdges) {
-    const n = (outTotal.get(e.fromId) ?? 0) + 1;
-    outTotal.set(e.fromId, n);
-    outIndex.set(e, n);
-  }
-  for (const e of stackEdges) {
-    const slot = outIndex.get(e) ?? 1;
-    const slotCount = outTotal.get(e.fromId) ?? 1;
-    out.push({
+    drafts.push({
+      fromId: e.fromId,
       from: e.from,
       to: e.to,
-      slot,
-      slotCount,
       causeKey: e.causeKey,
+      sortT: e.to.t0 ?? e.from.t0 ?? 0,
     });
   }
 
-  return out;
+  // Fan geometry: per-source slots.
+  const outTotal = new Map<string, number>();
+  const outIndex = new Map<(typeof drafts)[number], number>();
+  for (const d of drafts) {
+    const n = (outTotal.get(d.fromId) ?? 0) + 1;
+    outTotal.set(d.fromId, n);
+    outIndex.set(d, n);
+  }
+
+  // Global sequence: when each effect landed.
+  const byTime = [...drafts].sort((a, b) => a.sortT - b.sortT || a.fromId.localeCompare(b.fromId));
+  const orderOf = new Map<(typeof drafts)[number], number>();
+  byTime.forEach((d, i) => orderOf.set(d, i + 1));
+
+  return drafts.map((d) => ({
+    from: d.from,
+    to: d.to,
+    slot: outIndex.get(d) ?? 1,
+    slotCount: outTotal.get(d.fromId) ?? 1,
+    order: orderOf.get(d) ?? 1,
+    ...(d.waveCount != null ? { waveCount: d.waveCount } : {}),
+    causeKey: d.causeKey,
+  }));
 }
 
 /**

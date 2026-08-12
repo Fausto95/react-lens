@@ -113,6 +113,64 @@ describe("planCausalArrows", () => {
     expect(planned.map((p) => p.slot).sort()).toEqual([1, 2]);
     expect(planned.every((p) => p.slotCount === 2)).toBe(true);
   });
+
+  it("orders a lone arrow as slot 1", () => {
+    const ports = new Map([
+      ["src", { x0: 100, x1: 180, y0: 40, y1: 56, t0: 10 }],
+      ["a", { x0: 110, x1: 150, y0: 70, y1: 86, t0: 20 }],
+    ]);
+    const planned = planCausalArrows(
+      [{ from: "src", to: "a", causeKey: "state" }],
+      ports,
+    );
+    expect(planned).toEqual([
+      expect.objectContaining({ slot: 1, slotCount: 1, order: 1 }),
+    ]);
+  });
+
+  it("numbers a chain globally by effect time, not per source", () => {
+    // state → props → context: each source has one outgoing edge, so per-source
+    // slots are both 1 — global order must still read 1, 2.
+    const ports = new Map([
+      ["state", { x0: 100, x1: 220, y0: 40, y1: 56, t0: 0 }],
+      ["props", { x0: 110, x1: 180, y0: 100, y1: 116, t0: 30 }],
+      ["context", { x0: 100, x1: 160, y0: 20, y1: 36, t0: 50 }],
+    ]);
+    const planned = planCausalArrows(
+      [
+        { from: "state", to: "props", causeKey: "props" },
+        { from: "props", to: "context", causeKey: "context" },
+      ],
+      ports,
+    );
+    expect(planned).toHaveLength(2);
+    expect(planned.find((p) => p.to.t0 === 30)?.order).toBe(1);
+    expect(planned.find((p) => p.to.t0 === 50)?.order).toBe(2);
+    expect(planned.every((p) => p.slot === 1 && p.slotCount === 1)).toBe(true);
+  });
+
+  it("shares fan slots across wave groups and stack children", () => {
+    const ports = new Map([
+      ["src", { x0: 100, x1: 180, y0: 40, y1: 56, t0: 0 }],
+      ["leafA", { x0: 110, x1: 116, y0: 120, y1: 136, wave: true, laneKey: "t:Leaf", t0: 40 }],
+      ["leafB", { x0: 130, x1: 136, y0: 120, y1: 136, wave: true, laneKey: "t:Leaf", t0: 42 }],
+      ["child", { x0: 110, x1: 150, y0: 70, y1: 86, t0: 20 }],
+    ]);
+    const planned = planCausalArrows(
+      [
+        { from: "src", to: "leafA", causeKey: "props" },
+        { from: "src", to: "leafB", causeKey: "props" },
+        { from: "src", to: "child", causeKey: "state" },
+      ],
+      ports,
+    );
+    expect(planned).toHaveLength(2);
+    expect(planned.map((p) => p.slot).sort()).toEqual([1, 2]);
+    expect(planned.every((p) => p.slotCount === 2)).toBe(true);
+    expect(planned.find((p) => p.waveCount != null)?.waveCount).toBe(2);
+    expect(planned.find((p) => p.to.t0 === 20)?.order).toBe(1);
+    expect(planned.find((p) => p.waveCount != null)?.order).toBe(2);
+  });
 });
 
 describe("arrowhead alignment", () => {

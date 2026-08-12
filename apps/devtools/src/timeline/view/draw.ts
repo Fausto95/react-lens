@@ -359,6 +359,7 @@ export function drawOverlay(args: DrawOverlayArgs): void {
         x1: r.x1,
         y0: r.y0,
         y1: r.y1,
+        t0: r.clip.t0,
         wave: r.wave,
         laneKey: String(r.clip.laneKey),
       },
@@ -369,12 +370,6 @@ export function drawOverlay(args: DrawOverlayArgs): void {
   for (const p of planned) {
     const route = routeCausalArrow(p.from, p.to, p.slot, p.slotCount);
     const col = hexAlpha(causeColor(theme, p.causeKey), 0.92);
-    const badge =
-      p.waveCount != null && p.waveCount > 1
-        ? p.waveCount
-        : p.slotCount > 1
-          ? p.slot
-          : undefined;
     drawCausalArrow({
       ctx,
       x1: route.x1,
@@ -386,7 +381,7 @@ export function drawOverlay(args: DrawOverlayArgs): void {
       color: col,
       lineWidth: p.slotCount > 6 ? 1.1 : 1.35,
       headSize: 7,
-      orderLabel: badge,
+      orderLabel: p.order,
     });
   }
 

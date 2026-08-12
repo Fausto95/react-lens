@@ -4,7 +4,15 @@ import { timelineKeyAction } from "./keymap.js";
 type KeyEvent = Parameters<typeof timelineKeyAction>[0];
 
 function ev(partial: Partial<KeyEvent>): KeyEvent {
-  return { key: "", code: "", metaKey: false, ctrlKey: false, altKey: false, ...partial };
+  return {
+    key: "",
+    code: "",
+    metaKey: false,
+    ctrlKey: false,
+    altKey: false,
+    shiftKey: false,
+    ...partial,
+  };
 }
 
 describe("timelineKeyAction", () => {
@@ -57,6 +65,15 @@ describe("timelineKeyAction", () => {
       kind: "nudge-playhead",
       dir: -1,
     });
+  });
+
+  it("steps commits with shift+arrows", () => {
+    expect(
+      timelineKeyAction(ev({ key: "ArrowLeft", code: "ArrowLeft", shiftKey: true })),
+    ).toEqual({ kind: "step-commit", dir: -1 });
+    expect(
+      timelineKeyAction(ev({ key: "ArrowRight", code: "ArrowRight", shiftKey: true })),
+    ).toEqual({ kind: "step-commit", dir: 1 });
   });
 
   it("returns to live with End or period", () => {

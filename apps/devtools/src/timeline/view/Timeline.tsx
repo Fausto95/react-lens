@@ -5,7 +5,7 @@ import type { TimeCursor } from "../../timeCursor.js";
 import { buildAxis, clamp, compactGap, easeOut, type TimeAxis } from "../model/axis.js";
 import { loupeAt, LOUPE_H, LOUPE_HALF_MS, LOUPE_W, loupeX } from "../model/loupe.js";
 import { clampView, fitWallRange, fitWallRangeAround, lerpView, reanchorAfterAxisChange } from "../model/viewport.js";
-import { advancePlayhead, cursorModeAtStop, playStartAxis } from "../model/transport.js";
+import { advancePlayhead, cursorModeAtStop, playStartAxis, stepCommitTime } from "../model/transport.js";
 import { timelineKeyAction } from "../keymap.js";
 import { clipAtTime, clipCauseColor, type Clip } from "../model/lanes.js";
 import type { Timeline as TimelineModel } from "../useTimeline.js";
@@ -40,6 +40,7 @@ const HELP: Array<[string, string]> = [
   ["double-click empty", "fit"],
   ["space", "play / pause (loops only with A/B)"],
   ["J / K / L", "reverse / stop / forward (tap again = faster)"],
+  ["⇧ ← / →", "previous / next commit"],
   ["End / .", "go live (resume capture)"],
   ["[ / ]", "set A / B at playhead"],
   ["Z + click", "zoom to burst"],
@@ -67,7 +68,8 @@ export function Timeline({
   onHighlight?: (id: ComponentId | null) => void;
   transport?: React.ReactNode;
 }) {
-  const { state, dispatch, acts, gapProgRef, layout, bounds, markers, arrows, lanes, axis } = model;
+  const { state, dispatch, acts, gapProgRef, layout, bounds, markers, arrows, lanes, axis, commits } =
+    model;
 
   const wrapRef = useRef<HTMLDivElement>(null);
   const baseRef = useRef<HTMLCanvasElement>(null);
@@ -87,7 +89,11 @@ export function Timeline({
   axisLiveRef.current = buildAxis(acts, gapProgRef.current);
 
   const playheadRef = useRef(model.playhead);
-  playheadRef.current = cursor.mode === "live" ? model.playhead : cursor.t;
+  // While playing, the transport owns the playhead. A stale live cursor (parent
+  // hasn't committed the historical seek yet) must not snap us back to t1.
+  if (!(state.playing && cursor.mode === "live")) {
+    playheadRef.current = cursor.mode === "live" ? model.playhead : cursor.t;
+  }
   const hoverRef = useRef<string | null>(null);
   const ghostRef = useRef<number | null>(null);
   const tipRef = useRef<{ clip: Clip; x: number; y: number } | null>(null);
@@ -374,6 +380,30 @@ export function Timeline({
     },
     [paint],
   );
+  // Transport must not restart when paint/scheduleDraw identity churns — that
+  // froze replay by resetting `last` every cursor tick (see useLatest.ts).
+  const scheduleDrawRef = useRef(scheduleDraw);
+  scheduleDrawRef.current = scheduleDraw;
+  const setPlayheadRef = useRef(setPlayhead);
+  setPlayheadRef.current = setPlayhead;
+  const playOptsRef = useRef({
+    speed: state.speed,
+    dir: state.playDir,
+    region: state.region,
+  });
+  playOptsRef.current = {
+    speed: state.speed,
+    dir: state.playDir,
+    region: state.region,
+  };
+
+  const stepCommit = (dir: -1 | 1) => {
+    if (state.playing) dispatch({ type: "pause" });
+    const next = stepCommitTime(commits, playheadRef.current, dir);
+    if (next == null) return;
+    setPlayhead(next);
+    scheduleDraw(false);
+  };
 
   useEffect(() => {
     const el = wrapRef.current;
@@ -837,20 +867,18 @@ export function Timeline({
     const step = (ts: number) => {
       if (last != null) {
         const ax = axisLiveRef.current;
-        const rg = state.region;
+        const { speed, dir, region: rg } = playOptsRef.current;
         const loop = rg != null;
         const aw0 = rg ? ax.wallToAxis(rg.start) : 0;
         const aw1 = rg ? ax.wallToAxis(rg.end) : ax.total;
         const pa = ax.wallToAxis(playheadRef.current);
-        const deltaA =
-          Math.min(ts - last, 100) * ((aw1 - aw0) / 2300) * state.speed * state.playDir;
+        const deltaA = Math.min(ts - last, 100) * ((aw1 - aw0) / 2300) * speed * dir;
         const next = advancePlayhead({ a: pa, deltaA, a0: aw0, a1: aw1, loop });
-        const live =
-          next.kind === "stop" && cursorModeAtStop({ dir: state.playDir, loop }) === "live";
+        const live = next.kind === "stop" && cursorModeAtStop({ dir, loop }) === "live";
         // Catching up with the present must release time travel, or the page
         // keeps dropping commits and nothing is traced after the replay.
-        setPlayhead(ax.axisToWall(next.a), !live);
-        scheduleDraw(false);
+        setPlayheadRef.current(ax.axisToWall(next.a), !live);
+        scheduleDrawRef.current(false);
         if (next.kind === "stop") {
           dispatch({ type: "pause" });
           return;
@@ -861,7 +889,7 @@ export function Timeline({
     };
     raf = requestAnimationFrame(step);
     return () => cancelAnimationFrame(raf);
-  }, [state.playing, state.speed, state.playDir, state.region, scheduleDraw]);
+  }, [state.playing]);
 
   useEffect(() => {
     const down = (e: KeyboardEvent) => {
@@ -951,6 +979,9 @@ export function Timeline({
           scheduleDraw(false);
           break;
         }
+        case "step-commit":
+          stepCommit(action.dir);
+          break;
         case "go-live":
           goLive();
           break;
@@ -1038,6 +1069,26 @@ export function Timeline({
           title={state.playing ? "Pause (Space)" : "Play (Space)"}
         >
           {state.playing ? "⏸" : "▶"}
+        </button>
+        <button
+          type="button"
+          className="tl-btn"
+          onClick={() => stepCommit(-1)}
+          aria-label="Previous commit"
+          title="Previous commit (⇧←)"
+          disabled={commits.length === 0}
+        >
+          ‹
+        </button>
+        <button
+          type="button"
+          className="tl-btn"
+          onClick={() => stepCommit(1)}
+          aria-label="Next commit"
+          title="Next commit (⇧→)"
+          disabled={commits.length === 0}
+        >
+          ›
         </button>
         <button
           type="button"
