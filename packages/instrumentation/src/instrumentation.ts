@@ -94,6 +94,15 @@ export function createInstrumentation(deps: {
   let pendingEvents: LensEvent[] = [];
   let pendingSnapshots: RenderSnapshot[] = [];
   let pendingInstances = new Map<ComponentId, ComponentInstance>();
+  /**
+   * What the consumer already knows, by identity signature.
+   *
+   * Instance records are static for a component's life, and both the
+   * content-script buffer and the panel's store keep them for the whole
+   * session. Re-sending one per render is the single largest avoidable cost on
+   * the capture path for a large app.
+   */
+  let announcedInstances = new Map<ComponentId, string>();
   let pendingCommitSnapshots: CommitSnapshot[] = [];
   let lastCommitDomAt = -Infinity;
   let flushScheduled = false;
@@ -127,6 +136,8 @@ export function createInstrumentation(deps: {
     if (recording) return;
     config = { ...DEFAULT_CONFIG, ...userConfig };
     recording = true;
+    // A fresh consumer has seen nothing, so nothing may be assumed announced.
+    announcedInstances = new Map();
     // Subscribe BEFORE install: install() may synchronously replay commits a
     // document_start stub buffered before the bridge loaded (the extension's
     // initial-mount tree). Installing first would fire that replay into no
@@ -172,7 +183,11 @@ export function createInstrumentation(deps: {
       const instance = fiber.getInstance(id);
       if (!detail || !instance) continue;
 
-      pendingInstances.set(id, instance);
+      const signature = instanceSignature(instance);
+      if (announcedInstances.get(id) !== signature) {
+        announcedInstances.set(id, signature);
+        pendingInstances.set(id, instance);
+      }
 
       const renderId = nextRenderId();
       const reasons = deriveReasons(detail, instance, renderedSet);
@@ -465,6 +480,20 @@ export function createInstrumentation(deps: {
   }
 
   return { start, stop, isRecording, snapshot, timeTravel };
+}
+
+/**
+ * The whole record, so nothing that can change is missed.
+ *
+ * Most fields are fixed for a component's life, but `suspended` /
+ * `underSuspense` / `source` are not, and a hand-picked field list would leave
+ * the panel showing a stale description the next time one of them moved.
+ * Stringifying costs the same walk the structured clone would have cost — and
+ * we now skip that clone, plus the panel's ingest, on every repeat. The record
+ * is built by one place, so key order is stable.
+ */
+function instanceSignature(instance: ComponentInstance): string {
+  return JSON.stringify(instance);
 }
 
 function approxBytes(frame: EventsBatchMessage["payload"]): number {

@@ -323,6 +323,11 @@ describe("interaction attribution — ignored containers", () => {
       root.render(React.createElement(Provider));
     });
     await flush();
+    // Instances are announced once per session, so hold onto the mount's
+    // descriptions before narrowing `frames` to the click's renders.
+    const names = new Map(
+      frames.flatMap((f) => f.instances.map((i) => [i.id as unknown as number, i.name] as const)),
+    );
     frames.length = 0;
 
     await act(async () => {
@@ -333,7 +338,7 @@ describe("interaction attribution — ignored containers", () => {
     const renders = allRenders(frames);
     const badgeUpdate = renders.find(
       (r) =>
-        nameOf(frames, r.componentId as unknown as number) === "Badge" &&
+        names.get(r.componentId as unknown as number) === "Badge" &&
         !r.reasons.some((reason) => reason.type === "mount"),
     );
     expect(badgeUpdate).toBeDefined();
