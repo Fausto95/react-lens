@@ -3,7 +3,7 @@
  * optionally expanded back toward wall time via per-gap progress).
  */
 
-import { GAP_AXIS_MAX, GAP_AXIS_MIN, IDLE_MS } from "../view/metrics.js";
+import { GAP_AXIS_SEAM, IDLE_MS } from "../view/metrics.js";
 
 /** Anything with a start/end in session time. */
 export interface TimeSpan {
@@ -70,9 +70,9 @@ export function buildActivity(
   return acts.map(([a, b]) => [Math.max(0, a - 40), b + 40] as [number, number]);
 }
 
-/** Collapsed gap length on the axis (log of wall idle duration). */
-export function gapAxisLen(ms: number): number {
-  return clamp(26 + 22 * Math.log10(Math.max(ms, 1) / 100), GAP_AXIS_MIN, GAP_AXIS_MAX);
+/** Collapsed gap length on the axis — fully compressed (no idle width). */
+export function gapAxisLen(_ms: number): number {
+  return GAP_AXIS_SEAM;
 }
 
 /**
@@ -114,6 +114,12 @@ export function buildAxis(
   const wallToAxis = (t: number): number => {
     if (t <= segs[0]!.w0) return 0;
     for (const s of segs) {
+      // Fully compressed idle: collapse interior wall times to the stitch
+      // point, but leave t === w1 for the following activity segment.
+      if (s.type === "gap" && s.a1 - s.a0 < 1e-9) {
+        if (t > s.w0 && t < s.w1) return s.a0;
+        continue;
+      }
       if (t <= s.w1) {
         return s.a0 + ((t - s.w0) / (s.w1 - s.w0 || 1)) * (s.a1 - s.a0);
       }
@@ -123,8 +129,22 @@ export function buildAxis(
 
   const axisToWall = (x: number): number => {
     if (x <= 0) return segs[0]!.w0;
-    for (const s of segs) {
+    for (let i = 0; i < segs.length; i++) {
+      const s = segs[i]!;
+      if (s.type === "gap" && s.a1 - s.a0 < 1e-9) continue;
       if (x <= s.a1) {
+        // Shared stitch with a following zero-width gap: prefer the next
+        // activity so scrubbing lands on content, not the previous act's end.
+        const next = segs[i + 1];
+        const next2 = segs[i + 2];
+        if (
+          Math.abs(x - s.a1) < 1e-9 &&
+          next?.type === "gap" &&
+          next.a1 - next.a0 < 1e-9 &&
+          next2?.type === "act"
+        ) {
+          continue;
+        }
         return s.w0 + ((x - s.a0) / (s.a1 - s.a0 || 1)) * (s.w1 - s.w0);
       }
     }

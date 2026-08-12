@@ -20,9 +20,11 @@ export const QUIET_TOTAL_MS = 8;
 export const STACK_MAX = 4;
 export const SNAP_PX = 5;
 export const IDLE_MS = 200;
-/** Collapsed gap axis length: log-scaled between these bounds (ms → axis units). */
-export const GAP_AXIS_MIN = 26;
-export const GAP_AXIS_MAX = 110;
+/**
+ * Collapsed idle gap axis length. `0` fully stitches activity — idle takes no
+ * horizontal space and is not drawn. Expand via `progress` still restores wall time.
+ */
+export const GAP_AXIS_SEAM = 0;
 
 /** Name gutter width (clamped from stage width). */
 export const NAME_W_MIN = 88;

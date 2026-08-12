@@ -8,10 +8,9 @@ import {
 } from "./axis.js";
 
 describe("gapAxisLen", () => {
-  it("grows with idle duration but stays bounded", () => {
-    expect(gapAxisLen(100)).toBeGreaterThanOrEqual(26);
-    expect(gapAxisLen(10_000)).toBeLessThanOrEqual(110);
-    expect(gapAxisLen(10_000)).toBeGreaterThan(gapAxisLen(200));
+  it("fully compresses idle to zero axis width", () => {
+    expect(gapAxisLen(100)).toBe(0);
+    expect(gapAxisLen(360_000)).toBe(0);
   });
 });
 
@@ -50,10 +49,11 @@ describe("buildAxis", () => {
     const gap = axis.segs.find((s) => s.type === "gap");
     expect(gap).toBeDefined();
     if (gap?.type === "gap") {
-      expect(gap.a1 - gap.a0).toBeCloseTo(gapAxisLen(gap.w1 - gap.w0), 5);
+      expect(gap.a1 - gap.a0).toBe(0);
       expect(gap.p).toBe(0);
     }
-    expect(axis.total).toBeLessThan(2100);
+    // Fully stitched: total axis length is only activity.
+    expect(axis.total).toBeCloseTo(200 + 200, 5);
   });
 
   it("expands gaps toward wall scale at progress 1", () => {
@@ -72,9 +72,18 @@ describe("buildAxis", () => {
 
   it("round-trips wall ↔ axis on activity", () => {
     const axis = buildAxis(acts);
-    for (const t of [100, 200, 300, 2000, 2100, 2200]) {
+    // Endpoints that share a zero-width stitch are ambiguous; interiors and
+    // the later act's start round-trip cleanly.
+    for (const t of [100, 200, 250, 2000, 2100, 2200]) {
       expect(axis.axisToWall(axis.wallToAxis(t))).toBeCloseTo(t, 5);
     }
+  });
+
+  it("collapses idle wall times onto the activity stitch", () => {
+    const axis = buildAxis(acts);
+    const stitch = axis.wallToAxis(2000);
+    expect(axis.wallToAxis(1000)).toBeCloseTo(stitch, 5);
+    expect(axis.axisToWall(stitch)).toBeCloseTo(2000, 5);
   });
 });
 

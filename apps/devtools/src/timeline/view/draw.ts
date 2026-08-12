@@ -101,6 +101,8 @@ export function drawBase(args: DrawBaseArgs): {
 
   for (const s of axis.segs) {
     if (s.type !== "gap") continue;
+    // Collapsed gaps have zero axis width — skip. Only paint when expanded to wall.
+    if (s.a1 - s.a0 < 1e-6) continue;
     const x0 = aToX(s.a0);
     const x1 = aToX(s.a1);
     if (x1 < NW || x0 > W) continue;

@@ -18,8 +18,8 @@ export {
 
 /** @deprecated Use IDLE_MS from metrics — kept for older tests. */
 export const IDLE_GAP_MS = 200;
-/** @deprecated Gaps are log-sized now. */
-export const IDLE_WIDTH = 34;
+/** @deprecated Use GAP_AXIS_SEAM from metrics (now 0 — fully compressed). */
+export const IDLE_WIDTH = 0;
 
 export const SCALE_MAX = 5000;
 export const SCALE_MIN = 0.01;

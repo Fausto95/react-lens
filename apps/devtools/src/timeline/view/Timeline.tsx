@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useReducer, useRef } from "react";
 import type { ComponentId } from "@reactlens/protocol";
 import type { LaneControls } from "../../laneFilter.js";
 import type { TimeCursor } from "../../timeCursor.js";
-import { buildAxis, clamp, compactGap, easeOut, type TimeAxis } from "../model/axis.js";
+import { buildAxis, clamp, easeOut, type TimeAxis } from "../model/axis.js";
 import { loupeAt, LOUPE_H, LOUPE_HALF_MS, LOUPE_W, loupeX } from "../model/loupe.js";
 import { clampView, fitWallRange, lerpView, reanchorAfterAxisChange } from "../model/viewport.js";
 import { advancePlayhead, cursorModeAtStop, playStartAxis } from "../model/transport.js";
@@ -841,6 +841,8 @@ export function Timeline({
 
   const gapChips = axisLiveRef.current.segs
     .filter((s): s is Extract<typeof s, { type: "gap" }> => s.type === "gap")
+    // Only expanded gaps are visible; collapsed idle is fully compressed away.
+    .filter((s) => s.a1 - s.a0 > 1e-6)
     .map((s) => ({ ...s, x0: aToX(s.a0), x1: aToX(s.a1) }))
     .filter((s) => s.x1 > nameW() + 3 && s.x0 < sizeRef.current.w);
 
@@ -1006,21 +1008,29 @@ export function Timeline({
           </div>
         ))}
 
-        {gapChips.map((s) => (
-          <div
-            key={s.id}
-            className="tl-gap"
-            style={{
-              left: Math.max(s.x0, nameW()) + 2,
-              top: RULER_H + 5,
-              width: Math.max(s.x1 - Math.max(s.x0, nameW()) - 4, 18),
-            }}
-            onPointerDown={(e) => e.stopPropagation()}
-            onClick={() => toggleGap(s.id)}
-          >
-            {state.expandedGaps.has(s.id) ? "◂ collapse" : `⋯ +${compactGap(s.w1 - s.w0)}`}
-          </div>
-        ))}
+        {gapChips.map((s) => {
+          const chipW = Math.max(s.x1 - s.x0 - 4, 56);
+          const left = clamp(
+            (s.x0 + s.x1) / 2 - chipW / 2,
+            nameW() + 2,
+            sizeRef.current.w - chipW - 2,
+          );
+          return (
+            <div
+              key={s.id}
+              className="tl-gap"
+              style={{
+                left,
+                top: RULER_H + 5,
+                width: chipW,
+              }}
+              onPointerDown={(e) => e.stopPropagation()}
+              onClick={() => toggleGap(s.id)}
+            >
+              ◂ collapse
+            </div>
+          );
+        })}
 
         {phX > nameW() && phX < sizeRef.current.w - 74 && (
           <div
