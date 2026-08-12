@@ -9,6 +9,8 @@
  * - Fan-out order: ports along the source edge + ordinal badge at the port
  */
 
+import type { ClipCauseColor } from "../model/lanes.js";
+
 export interface Point {
   x: number;
   y: number;
@@ -164,6 +166,104 @@ export interface DrawCausalArrowArgs {
   headSize?: number;
   /** 1-based ordinal when several arrows leave the same clip; omit if alone. */
   orderLabel?: number;
+}
+
+export interface ArrowEndpoint {
+  x0: number;
+  x1: number;
+  y0: number;
+  y1: number;
+  wave?: boolean;
+  laneKey?: string;
+}
+
+export interface PlannedArrow {
+  from: ArrowEndpoint;
+  to: ArrowEndpoint;
+  /** Fan slot among stack siblings (1-based). */
+  slot: number;
+  slotCount: number;
+  /** Collapsed wave-group size; when set, draw one arrow with this count badge. */
+  waveCount?: number;
+  causeKey: ClipCauseColor;
+}
+
+/**
+ * Build drawable arrows: stack fan-outs stay 1:1 with order slots; edges into the
+ * same wave lane collapse to one arrow aimed at the wave group.
+ */
+export function planCausalArrows(
+  edges: ReadonlyArray<{ from: string; to: string; causeKey: ClipCauseColor }>,
+  ports: ReadonlyMap<string, ArrowEndpoint>,
+): PlannedArrow[] {
+  const resolved = edges
+    .map((e) => {
+      const from = ports.get(e.from);
+      const to = ports.get(e.to);
+      if (!from || !to) return null;
+      return { from, to, fromId: e.from, toId: e.to, causeKey: e.causeKey };
+    })
+    .filter((e): e is NonNullable<typeof e> => e != null);
+
+  const waveGroups = new Map<string, typeof resolved>();
+  const stackEdges: typeof resolved = [];
+
+  for (const e of resolved) {
+    if (e.to.wave && e.to.laneKey) {
+      const key = `${e.fromId}>${e.to.laneKey}`;
+      const list = waveGroups.get(key) ?? [];
+      list.push(e);
+      waveGroups.set(key, list);
+    } else {
+      stackEdges.push(e);
+    }
+  }
+
+  const out: PlannedArrow[] = [];
+
+  for (const group of waveGroups.values()) {
+    const first = group[0]!;
+    const midX =
+      group.reduce((s, g) => s + (g.to.x0 + g.to.x1) / 2, 0) / group.length;
+    const y0 = Math.min(...group.map((g) => g.to.y0));
+    const y1 = Math.max(...group.map((g) => g.to.y1));
+    out.push({
+      from: first.from,
+      to: {
+        x0: midX - 4,
+        x1: midX + 4,
+        y0,
+        y1,
+        wave: true,
+        laneKey: first.to.laneKey,
+      },
+      slot: 1,
+      slotCount: 1,
+      waveCount: group.length,
+      causeKey: first.causeKey,
+    });
+  }
+
+  const outTotal = new Map<string, number>();
+  const outIndex = new Map<(typeof stackEdges)[number], number>();
+  for (const e of stackEdges) {
+    const n = (outTotal.get(e.fromId) ?? 0) + 1;
+    outTotal.set(e.fromId, n);
+    outIndex.set(e, n);
+  }
+  for (const e of stackEdges) {
+    const slot = outIndex.get(e) ?? 1;
+    const slotCount = outTotal.get(e.fromId) ?? 1;
+    out.push({
+      from: e.from,
+      to: e.to,
+      slot,
+      slotCount,
+      causeKey: e.causeKey,
+    });
+  }
+
+  return out;
 }
 
 /**

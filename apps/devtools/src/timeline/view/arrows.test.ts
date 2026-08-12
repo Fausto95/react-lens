@@ -2,6 +2,7 @@ import { describe, expect, it } from "vite-plus/test";
 import {
   causalBezierPoints,
   cubicTangent,
+  planCausalArrows,
   routeCausalArrow,
   tangentAngle,
 } from "./arrows.js";
@@ -71,6 +72,46 @@ describe("routeCausalArrow", () => {
     const a = routeCausalArrow(parent, child, 1, 3);
     const b = routeCausalArrow(parent, child, 3, 3);
     expect(b.y1).toBeGreaterThan(a.y1);
+  });
+});
+
+describe("planCausalArrows", () => {
+  it("collapses many edges into one arrow aimed at a wave lane", () => {
+    const ports = new Map([
+      ["src", { x0: 100, x1: 180, y0: 40, y1: 56 }],
+      ["a", { x0: 110, x1: 116, y0: 120, y1: 136, wave: true, laneKey: "t:Leaf" }],
+      ["b", { x0: 130, x1: 136, y0: 120, y1: 136, wave: true, laneKey: "t:Leaf" }],
+      ["c", { x0: 150, x1: 156, y0: 120, y1: 136, wave: true, laneKey: "t:Leaf" }],
+    ]);
+    const planned = planCausalArrows(
+      [
+        { from: "src", to: "a", causeKey: "props" },
+        { from: "src", to: "b", causeKey: "props" },
+        { from: "src", to: "c", causeKey: "props" },
+      ],
+      ports,
+    );
+    expect(planned).toHaveLength(1);
+    expect(planned[0]!.waveCount).toBe(3);
+    expect(planned[0]!.to.wave).toBe(true);
+  });
+
+  it("keeps stack fan-outs as individual ordered arrows", () => {
+    const ports = new Map([
+      ["src", { x0: 100, x1: 180, y0: 40, y1: 56 }],
+      ["a", { x0: 110, x1: 150, y0: 70, y1: 86 }],
+      ["b", { x0: 110, x1: 150, y0: 100, y1: 116 }],
+    ]);
+    const planned = planCausalArrows(
+      [
+        { from: "src", to: "a", causeKey: "props" },
+        { from: "src", to: "b", causeKey: "props" },
+      ],
+      ports,
+    );
+    expect(planned).toHaveLength(2);
+    expect(planned.map((p) => p.slot).sort()).toEqual([1, 2]);
+    expect(planned.every((p) => p.slotCount === 2)).toBe(true);
   });
 });
 

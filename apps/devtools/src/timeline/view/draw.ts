@@ -17,7 +17,7 @@ import {
   ROW_H,
   RULER_H,
 } from "./metrics.js";
-import { drawCausalArrow, routeCausalArrow } from "./arrows.js";
+import { drawCausalArrow, planCausalArrows, routeCausalArrow } from "./arrows.js";
 import { causeColor, clipPaint, hexAlpha, type TimelineTheme } from "./timelineTheme.js";
 
 export interface ClipRect {
@@ -26,6 +26,8 @@ export interface ClipRect {
   y0: number;
   y1: number;
   clip: Clip;
+  /** True when the port is a wave-lane stand-in (no stack bar). */
+  wave?: boolean;
 }
 
 export interface Projectors {
@@ -208,6 +210,20 @@ export function drawBase(args: DrawBaseArgs): {
         ctx.fill();
       }
       ctx.globalAlpha = 1;
+      // Wave ports so causality can still aim at the group when bars aren't drawn.
+      for (const c of row.clips) {
+        const xc = wToX((c.t0 + c.t1) / 2);
+        if (xc < NW - 4 || xc > W + 4) continue;
+        clipRects.set(String(c.renderId), {
+          x0: xc - 3,
+          x1: xc + 3,
+          y0: mid - 8,
+          y1: mid + 8,
+          clip: c,
+          wave: true,
+        });
+        snapEdges.push(c.t0, c.t1);
+      }
       continue;
     }
 
@@ -322,32 +338,43 @@ export function drawOverlay(args: DrawOverlayArgs): void {
   ctx.clearRect(0, 0, W, H);
 
   const sel = selectedRender != null ? String(selectedRender) : null;
-  const visible = edges.filter((e) => {
-    const a = String(e.from);
-    const b = String(e.to);
-    if (sel && a !== sel && b !== sel) return false;
-    return clipRects.has(a) && clipRects.has(b);
-  });
+  const edgeList = edges
+    .filter((e) => {
+      const a = String(e.from);
+      const b = String(e.to);
+      if (sel && a !== sel && b !== sel) return false;
+      return true;
+    })
+    .map((e) => ({
+      from: String(e.from),
+      to: String(e.to),
+      causeKey: clipCauseColor(e.cause),
+    }));
 
-  // Ordinals among arrows that leave the same clip (fan-out order).
-  const outTotal = new Map<string, number>();
-  const outIndex = new Map<(typeof visible)[number], number>();
-  for (const e of visible) {
-    const k = String(e.from);
-    const n = (outTotal.get(k) ?? 0) + 1;
-    outTotal.set(k, n);
-    outIndex.set(e, n);
-  }
+  const ports = new Map(
+    [...clipRects.entries()].map(([id, r]) => [
+      id,
+      {
+        x0: r.x0,
+        x1: r.x1,
+        y0: r.y0,
+        y1: r.y1,
+        wave: r.wave,
+        laneKey: String(r.clip.laneKey),
+      },
+    ]),
+  );
 
-  for (const e of visible) {
-    const a = String(e.from);
-    const b = String(e.to);
-    const ra = clipRects.get(a)!;
-    const rb = clipRects.get(b)!;
-    const slot = outIndex.get(e) ?? 1;
-    const slotCount = outTotal.get(a) ?? 1;
-    const route = routeCausalArrow(ra, rb, slot, slotCount);
-    const col = hexAlpha(causeColor(theme, clipCauseColor(e.cause)), 0.92);
+  const planned = planCausalArrows(edgeList, ports);
+  for (const p of planned) {
+    const route = routeCausalArrow(p.from, p.to, p.slot, p.slotCount);
+    const col = hexAlpha(causeColor(theme, p.causeKey), 0.92);
+    const badge =
+      p.waveCount != null && p.waveCount > 1
+        ? p.waveCount
+        : p.slotCount > 1
+          ? p.slot
+          : undefined;
     drawCausalArrow({
       ctx,
       x1: route.x1,
@@ -357,9 +384,9 @@ export function drawOverlay(args: DrawOverlayArgs): void {
       side: route.side,
       fanSpread: route.fanSpread,
       color: col,
-      lineWidth: slotCount > 6 ? 1.1 : 1.35,
+      lineWidth: p.slotCount > 6 ? 1.1 : 1.35,
       headSize: 7,
-      orderLabel: slotCount > 1 ? slot : undefined,
+      orderLabel: badge,
     });
   }
 
