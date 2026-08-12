@@ -4580,6 +4580,14 @@
 .rl-error-chip:hover {
   background: rgb(var(--rl-severe-rgb) / 0.2);
 }
+.rl-error-chip.notice {
+  border-color: rgb(var(--rl-warn-rgb) / 0.4);
+  background: rgb(var(--rl-warn-rgb) / 0.12);
+  color: var(--rl-warn);
+}
+.rl-error-chip.notice:hover {
+  background: rgb(var(--rl-warn-rgb) / 0.2);
+}
 .rl-error-list {
   display: flex;
   flex-direction: column;
@@ -4597,6 +4605,9 @@
 .rl-error-list .scope {
   color: var(--rl-severe);
   font-weight: 600;
+}
+.rl-error-list li.notice .scope {
+  color: var(--rl-warn);
 }
 .rl-error-list .count {
   color: var(--rl-text-faint);

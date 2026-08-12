@@ -9,6 +9,7 @@
     "./embed": "./src/embed.tsx",
     "./panel": "./src/Panel.tsx",
     "./errors": "./src/errorsEntry.ts",
+    "./wal": "./src/walEntry.ts",
     "./reveal": "./src/revealGeometry.ts",
     "./highlighter": "./src/highlighter.ts"
   },

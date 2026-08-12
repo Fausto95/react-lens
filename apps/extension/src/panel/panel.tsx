@@ -15,7 +15,13 @@ import {
   configureSourceRevealer,
 } from "@reactlens/devtools/panel";
 import type { EditApi, TimeTravelApi } from "@reactlens/devtools/panel";
-import { ErrorBoundary, installGlobalErrorHandlers, reportError } from "@reactlens/devtools/errors";
+import {
+  ErrorBoundary,
+  installGlobalErrorHandlers,
+  reportError,
+  reportNotice,
+} from "@reactlens/devtools/errors";
+import { createIdbWalStore, createTraceWal, type TraceWal } from "@reactlens/devtools/wal";
 import { isContextInvalidated, reconnectDelay } from "../connection.js";
 import {
   INITIAL_SESSION,
@@ -44,6 +50,8 @@ function ExtensionPanel() {
   const [connectionLost, setConnectionLost] = useState(false);
   const portRef = useRef<chrome.runtime.Port | null>(null);
   const heartbeatRef = useRef<Heartbeat | null>(null);
+  /** Durable copy of everything ingested; null where storage is unavailable. */
+  const walRef = useRef<TraceWal | null>(null);
   /** Lets the recovery screen retry in place instead of demanding a reopen. */
   const reconnectRef = useRef<(() => void) | null>(null);
   /** Which page document we are showing, and how much of it we have. */
@@ -82,10 +90,18 @@ function ExtensionPanel() {
           // used to lose that frame permanently.
           try {
             store.ingest(action.frame);
-            sessionRef.current = commitFrame(sessionRef.current, action.seq);
           } catch (err) {
             sessionRef.current = failFrame(sessionRef.current, action.seq);
             reportError("ingest", err);
+            continue;
+          }
+          const wal = walRef.current;
+          if (wal && state.sessionId !== null) {
+            // Held open until the log confirms the write: the page may only
+            // forget its copy once the frame survives this panel closing.
+            wal.append(state.sessionId, action.seq, action.frame);
+          } else {
+            sessionRef.current = commitFrame(sessionRef.current, action.seq);
           }
         } else if (action.type === "reset-store") {
           store.clear();
@@ -201,12 +217,10 @@ function ExtensionPanel() {
           // Retention has a floor, and the user has to know when it was hit —
           // a timeline that silently skips a minute is worse than one that says
           // it did.
-          reportError(
+          reportNotice(
             "trace",
-            new Error(
-              `${msg.frames} frames (seq ${msg.fromSeq}–${msg.toSeq}) could not be retained while ` +
-                `the panel was away: memory and extension storage were both full.`,
-            ),
+            `${msg.frames} frames (seq ${msg.fromSeq}–${msg.toSeq}) could not be retained while ` +
+              `the panel was away: memory and extension storage were both full.`,
           );
           return;
         }
@@ -269,7 +283,64 @@ function ExtensionPanel() {
       });
     };
     reconnectRef.current = connect;
-    connect();
+
+    /**
+     * Bring the log up before the port, so `panel-ready` carries the cursor we
+     * recovered rather than 0. Capture never stopped page-side, so the wait
+     * costs a slightly later first paint and loses nothing.
+     */
+    void (async () => {
+      const walStore = await createIdbWalStore();
+      if (disposed) return;
+      if (walStore) {
+        const wal = createTraceWal(walStore, {
+          onDurable: (sessionId, seqs) => {
+            // A reload may have moved us on while the write was in flight.
+            if (sessionId !== sessionRef.current.sessionId) return;
+            for (const seq of seqs) {
+              sessionRef.current = commitFrame(sessionRef.current, seq);
+            }
+            const port = portRef.current;
+            if (port) scheduleAck(port);
+          },
+          onFailed: (sessionId, seqs) => {
+            if (sessionId !== sessionRef.current.sessionId) return;
+            // Not on disk, so not ours to acknowledge: hold the cursor and let
+            // the page re-deliver on the next resync.
+            for (const seq of seqs) {
+              sessionRef.current = failFrame(sessionRef.current, seq);
+            }
+            reportError("wal", new Error("could not persist frames — storage is unavailable"));
+          },
+          onDropped: (count) =>
+            reportNotice(
+              "trace",
+              `${count} of the oldest frames left the recovery log (size budget).`,
+            ),
+        });
+        walRef.current = wal;
+        try {
+          const recovered = await wal.recover();
+          if (disposed) return;
+          if (recovered) {
+            for (const frame of recovered.frames) store.ingest(frame);
+            sessionRef.current = {
+              sessionId: recovered.sessionId,
+              lastSeq: recovered.lastSeq,
+              gapAt: null,
+              ahead: [],
+            };
+            reportNotice(
+              "recovery",
+              `Recovered ${recovered.frames.length} frames from the previous panel session.`,
+            );
+          }
+        } catch (err) {
+          reportError("recovery", err);
+        }
+      }
+      if (!disposed) connect();
+    })();
 
     configureSourceFetcher((url) => {
       return new Promise<string>((resolve, reject) => {
@@ -307,6 +378,13 @@ function ExtensionPanel() {
       heartbeatRef.current?.stop();
       heartbeatRef.current = null;
       reconnectRef.current = null;
+      // Flush before closing: frames queued in the trailing window are exactly
+      // the ones a recovery would otherwise be missing.
+      const wal = walRef.current;
+      walRef.current = null;
+      if (wal) {
+        void wal.flush().finally(() => wal.close());
+      }
       portRef.current?.disconnect();
     };
   }, [store]);

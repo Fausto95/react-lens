@@ -5,6 +5,7 @@
  */
 export {
   reportError,
+  reportNotice,
   subscribeErrors,
   lensErrors,
   clearErrors,

@@ -57,6 +57,7 @@ import { createTooltipLayer } from "./tooltip.js";
 import type { EditApi } from "./Inspector.js";
 import { RedesignShell } from "./redesign/RedesignShell.js";
 import { ErrorChip } from "./ErrorChip.js";
+import { reportNotice } from "./errors.js";
 import "./theme.css";
 import "./redesign.css";
 
@@ -234,6 +235,29 @@ export function Panel({
   const stats = store.stats();
   /** Session length so far — first activity to last activity+duration. */
   const sessionMs = sessionSpanMs(store);
+
+  /**
+   * Say when retention has eaten into the session. A timeline that begins
+   * mid-session is indistinguishable from an app that was idle, and the caps
+   * are tunable in Settings — but only if the user knows they were hit.
+   */
+  const reportedDrop = useRef(0);
+  const { droppedEvents } = store.retention();
+  useEffect(() => {
+    if (droppedEvents === 0) {
+      reportedDrop.current = 0;
+      return;
+    }
+    // Once per order of magnitude: enough to notice, not a running commentary.
+    const magnitude = Math.floor(Math.log10(droppedEvents));
+    if (magnitude <= reportedDrop.current && reportedDrop.current !== 0) return;
+    reportedDrop.current = magnitude;
+    reportNotice(
+      "retention",
+      `The oldest ${droppedEvents.toLocaleString("en-US")} events have left the trace ` +
+        `(retention caps). Raise them in Settings to keep more history.`,
+    );
+  }, [droppedEvents]);
 
   // Fast themed tooltips for every `title` in the panel (see tooltip.ts).
   const rootRef = useRef<HTMLDivElement>(null);

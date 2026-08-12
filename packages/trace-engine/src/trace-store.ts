@@ -50,6 +50,20 @@ const DEFAULTS: TraceStoreConfig = {
   maxAgeMs: null,
 };
 
+/**
+ * What the retention caps took. Every number here is loss the user cannot
+ * otherwise see: a timeline that begins mid-session looks exactly like an app
+ * that was idle, and a component whose early renders were evicted looks like
+ * one that never rendered.
+ */
+export interface RetentionAccount {
+  droppedEvents: number;
+  droppedRenders: number;
+  droppedSnapshots: number;
+  /** Timestamp of the oldest event still held, or null when empty. */
+  oldestRetainedAt: number | null;
+}
+
 interface MutableCommit {
   commitId: CommitId;
   timestamp: number;
@@ -99,6 +113,8 @@ export class TraceStore {
   private commitsDirty = false;
   /** Materialized commits(), invalidated whenever any commit mutates. */
   private commitsCache: CommitSummary[] | null = null;
+  /** Running account of what the caps evicted — see `retention()`. */
+  private dropped = { events: 0, renders: 0, snapshots: 0 };
   private readonly subscriptions = new Set<Subscription>();
   private readonly ingestObservers = new Set<(batch: EventsBatchMessage["payload"]) => void>();
 
@@ -170,12 +186,22 @@ export class TraceStore {
     if (event.type === "render" && this.rendersById.has(event.renderId)) return;
     this.seenEventIds.add(event.id);
     const evicted = this.events.push(event);
-    if (evicted) this.forgetEvent(evicted);
+    if (evicted) {
+      this.dropped.events++;
+      if (evicted.type === "render") this.dropped.renders++;
+      this.forgetEvent(evicted);
+    }
     if (event.type === "render") {
       const buf =
         this.rendersByComponent.get(event.componentId) ??
         this.createRenderBuffer(event.componentId);
-      buf.push(event);
+      const displaced = buf.push(event);
+      if (displaced) {
+        // The event ring may still hold it; this cap is the per-component
+        // history the inspector reads, and it fills long before the ring does.
+        this.dropped.renders++;
+        this.rendersById.delete(displaced.renderId);
+      }
       this.rendersById.set(event.renderId, event);
       this.renderTotals.set(event.componentId, (this.renderTotals.get(event.componentId) ?? 0) + 1);
       this.selfTimeTotals.set(
@@ -266,6 +292,14 @@ export class TraceStore {
    * what the app did, not what we still retain.
    */
   private reindexEvents(events: readonly LensEvent[]): void {
+    const lost = this.events.size - events.length;
+    if (lost > 0) {
+      this.dropped.events += lost;
+      const kept = new Set(events.map((e) => e.id));
+      for (const event of this.events.toArray()) {
+        if (event.type === "render" && !kept.has(event.id)) this.dropped.renders++;
+      }
+    }
     this.events.clear();
     this.rendersByComponent.clear();
     this.rendersById.clear();
@@ -339,7 +373,7 @@ export class TraceStore {
     // Evict the oldest snapshot when the ring wraps, so the Map stays bounded.
     if (this.snapshotOrder.size >= this.config.maxSnapshots) {
       const evicted = this.snapshotOrder.toArray()[0];
-      if (evicted !== undefined) this.snapshots.delete(evicted);
+      if (evicted !== undefined && this.snapshots.delete(evicted)) this.dropped.snapshots++;
     }
     this.snapshots.set(snapshot.renderId, snapshot);
     this.snapshotOrder.push(snapshot.renderId);
@@ -485,6 +519,16 @@ export class TraceStore {
     return best;
   }
 
+  /** What the retention caps have taken from this session so far. */
+  retention(): RetentionAccount {
+    return {
+      droppedEvents: this.dropped.events,
+      droppedRenders: this.dropped.renders,
+      droppedSnapshots: this.dropped.snapshots,
+      oldestRetainedAt: this.events.size > 0 ? this.events.at(0)!.timestamp : null,
+    };
+  }
+
   stats(): { events: number; renders: number; snapshots: number; components: number } {
     let renders = 0;
     for (const buf of this.rendersByComponent.values()) renders += buf.size;
@@ -552,6 +596,7 @@ export class TraceStore {
     this.commitsById.clear();
     this.commitOrder.clear();
     this.commitSnapshots.clear();
+    this.dropped = { events: 0, renders: 0, snapshots: 0 };
     this.commitsDirty = false;
     this.commitsCache = null;
     // Wake subscribers (Tree/Inspector/Timeline) so they re-render to empty.

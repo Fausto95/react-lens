@@ -80,13 +80,13 @@ describe("trace write-ahead log", () => {
   it("reports each seq durable only once it is actually written", async () => {
     const durable: number[] = [];
     const { store } = fakeStore();
-    const wal = createTraceWal(store, { onDurable: (_s, seq) => durable.push(seq) });
+    const wal = createTraceWal(store, { onDurable: (_s, seqs) => durable.push(...seqs) });
     wal.append("doc-1", 1, frame(1));
     wal.append("doc-1", 2, frame(2));
     expect(durable).toEqual([]);
 
     await settle(wal);
-    expect(durable).toEqual([2]);
+    expect(durable).toEqual([1, 2]);
   });
 
   it("reports a failed write so the caller can hold its cursor", async () => {
@@ -95,8 +95,8 @@ describe("trace write-ahead log", () => {
     const durable: number[] = [];
     const { store } = fakeStore({ failWrites: true });
     const wal = createTraceWal(store, {
-      onDurable: (_s, seq) => durable.push(seq),
-      onFailed: (_s, seq) => failed.push(seq),
+      onDurable: (_s, seqs) => durable.push(...seqs),
+      onFailed: (_s, seqs) => failed.push(...seqs),
     });
     wal.append("doc-1", 7, frame(7));
 
@@ -142,8 +142,8 @@ describe("trace write-ahead log", () => {
     // Belt and braces: a crash between the reset and the first write could
     // leave both behind.
     const { store, data } = fakeStore();
-    data.set(1, { sessionId: "old", seq: 4, frames: [frame(1)] });
-    data.set(2, { sessionId: "new", seq: 2, frames: [frame(2)] });
+    data.set(1, { sessionId: "old", seqs: [4], frames: [frame(1)] });
+    data.set(2, { sessionId: "new", seqs: [2], frames: [frame(2)] });
 
     const recovered = await createTraceWal(store).recover();
     expect(recovered?.sessionId).toBe("new");

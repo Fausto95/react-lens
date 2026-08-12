@@ -38,18 +38,27 @@ export function ErrorChip() {
   }, [open]);
 
   if (errors.length === 0) return null;
-  const total = errors.reduce((sum, e) => sum + e.count, 0);
+  const faults = errors.filter((e) => e.level === "error");
+  const total = faults.reduce((sum, e) => sum + e.count, 0);
+  // Notices are not faults, so they must not colour the chip red or be counted
+  // as errors — but they still have to be visible, which is the whole point.
+  const noticesOnly = total === 0;
 
   return (
     <>
       <button
         ref={anchorRef}
         type="button"
-        className="rl-error-chip"
-        title="React Lens hit errors — click for details"
+        className={`rl-error-chip${noticesOnly ? " notice" : ""}`}
+        title={
+          noticesOnly
+            ? "React Lens has something to report — click for details"
+            : "React Lens hit errors — click for details"
+        }
         onClick={() => setOpen((v) => !v)}
       >
-        {total} error{total === 1 ? "" : "s"}
+        {noticesOnly ? `${errors.length} notice${errors.length === 1 ? "" : "s"}` : null}
+        {noticesOnly ? null : `${total} error${total === 1 ? "" : "s"}`}
       </button>
       {open && (
         <div ref={menuRef} className="rl-menu" role="dialog" aria-label="React Lens errors">
@@ -67,7 +76,7 @@ export function ErrorChip() {
           </div>
           <ul className="rl-error-list">
             {errors.map((e) => (
-              <li key={`${e.scope}:${e.message}`}>
+              <li key={`${e.scope}:${e.message}`} className={e.level}>
                 <span className="scope">{e.scope}</span> {e.message}
                 {e.count > 1 && <span className="count"> ×{e.count}</span>}
               </li>
