@@ -8,19 +8,16 @@ export function Footer({
   wastedN,
   idleCollapsedMs,
   regionActive,
-  transport,
 }: {
   selection: Clip | null;
   inScope: number;
   wastedN: number;
   idleCollapsedMs: number;
   regionActive: boolean;
-  transport?: React.ReactNode;
 }) {
   const fmt = (t: number) => Math.round(t).toLocaleString("en-US");
   return (
     <div className="tlfoot tl-canvas-foot">
-      {transport && <div className="rl-tl-nav">{transport}</div>}
       {selection && (
         <span className="mono" style={{ fontFamily: "var(--mono)", fontSize: 10 }}>
           <b style={{ color: "var(--text)" }}>

@@ -26,10 +26,10 @@ import { causeColor, readTimelineTheme } from "./timelineTheme.js";
 
 const CAUSE_KEYS = ["state", "props", "context", "cascade"] as const;
 const CAUSE_VAR: Record<(typeof CAUSE_KEYS)[number], string> = {
-  state: "var(--state)",
-  props: "var(--props)",
-  context: "var(--ctx)",
-  cascade: "var(--cascade)",
+  state: "var(--tl-clip-state)",
+  props: "var(--tl-clip-props)",
+  context: "var(--tl-clip-context)",
+  cascade: "var(--tl-clip-cascade)",
 };
 
 const HELP: Array<[string, string]> = [
@@ -863,6 +863,12 @@ export function Timeline({
         >
           {state.speed}×
         </button>
+        {transport && (
+          <>
+            <span className="tl-toolbar-sep" />
+            <span className="tl-toolbar-transport">{transport}</span>
+          </>
+        )}
         <span className="tl-toolbar-sep" />
         <button type="button" className="tl-btn" onClick={() => zoomAt(0.72, sizeRef.current.w / 2, true)}>
           +
@@ -1061,7 +1067,6 @@ export function Timeline({
         wastedN={wastedN}
         idleCollapsedMs={idleTotal}
         regionActive={rg != null}
-        {...(transport ? { transport } : {})}
       />
     </div>
   );

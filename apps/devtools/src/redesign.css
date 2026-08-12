@@ -32,6 +32,11 @@
   --mono: var(--rl-mono);
   --sans: var(--rl-font);
   --r: 6px;
+  /* Clip hues stay on the dark-timeline palette in both themes. */
+  --tl-clip-props: #4c8dff;
+  --tl-clip-state: #3ecf8e;
+  --tl-clip-context: #a78bfa;
+  --tl-clip-cascade: #65656f;
 }
 /* The concept's reset was `* { margin: 0; padding: 0 }`. Scoped to the panel
    it also stripped every padding from the panes that predate the redesign —
@@ -1762,6 +1767,27 @@
   height: 16px;
   background: var(--line);
 }
+.rl-redesign .tl-toolbar-transport {
+  display: inline-flex;
+  align-items: center;
+}
+.rl-redesign .tl-toolbar-transport .rl-icon-btn {
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  border: 1px solid var(--line);
+  background: var(--panel-2);
+  color: var(--text-2);
+}
+.rl-redesign .tl-toolbar-transport .rl-icon-btn:hover {
+  border-color: var(--line-strong);
+  color: var(--text);
+}
+.rl-redesign .tl-toolbar-transport .rl-icon-btn.rl-tl-travel.active {
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 50%, transparent);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
 .rl-redesign .tl-toolbar-legend {
   margin-left: auto;
   display: flex;
@@ -1856,13 +1882,13 @@
   white-space: nowrap;
 }
 .rl-redesign .tl-lname-count {
-  color: #4a4a54;
+  color: var(--text-3);
   font-size: 9px;
 }
 .rl-redesign .tl-lname-stack {
   font-size: 8.5px;
-  color: #5c5c66;
-  border: 1px solid rgba(255, 255, 255, 0.13);
+  color: var(--text-3);
+  border: 1px solid var(--line-strong);
   border-radius: 3px;
   padding: 0 4px;
 }
@@ -1877,17 +1903,17 @@
   display: grid;
   place-items: center;
   border-radius: 4px;
-  color: #5c5c66;
+  color: var(--text-3);
   font-size: 9.5px;
   cursor: pointer;
 }
 .rl-redesign .tl-ra:hover {
-  background: rgba(255, 255, 255, 0.08);
-  color: #9a9aa3;
+  background: color-mix(in srgb, var(--text-3) 12%, transparent);
+  color: var(--text-2);
 }
 .rl-redesign .tl-ra.on {
-  color: #6e9bff;
-  background: rgba(110, 155, 255, 0.13);
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 13%, transparent);
 }
 
 .rl-redesign .tl-gap {
@@ -1895,28 +1921,28 @@
   text-align: center;
   font-family: var(--mono);
   font-size: 8.5px;
-  color: #5c5c66;
-  border: 1px dashed rgba(255, 255, 255, 0.16);
+  color: var(--text-3);
+  border: 1px dashed var(--line-strong);
   border-radius: 4px;
   padding: 2px 0;
-  background: #0c0c0e;
+  background: var(--panel);
   cursor: pointer;
   overflow: hidden;
   white-space: nowrap;
   z-index: 6;
 }
 .rl-redesign .tl-gap:hover {
-  border-color: rgba(110, 155, 255, 0.5);
-  color: #9a9aa3;
+  border-color: color-mix(in srgb, var(--accent) 50%, transparent);
+  color: var(--text-2);
 }
 
 .rl-redesign .tl-ph-chip {
   position: absolute;
   font-family: var(--mono);
   font-size: 9.5px;
-  color: #6e9bff;
-  background: rgba(110, 155, 255, 0.12);
-  border: 1px solid rgba(110, 155, 255, 0.35);
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
   border-radius: 4px;
   padding: 2px 7px;
   backdrop-filter: blur(4px);
@@ -1928,22 +1954,23 @@
   position: absolute;
   z-index: 22;
   pointer-events: none;
-  background: #101013;
-  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: var(--panel);
+  border: 1px solid var(--line-strong);
   border-radius: 7px;
   padding: 6px 9px;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.6);
+  box-shadow: 0 10px 30px rgba(var(--rl-shadow-rgb), 0.25);
   font-family: var(--mono);
   font-size: 10px;
   line-height: 1.6;
   min-width: 150px;
+  color: var(--text-2);
 }
 .rl-redesign .tl-tip-name {
-  color: #e8e8eb;
+  color: var(--text);
   font-weight: 600;
 }
 .rl-redesign .tl-tip-meta {
-  color: #5c5c66;
+  color: var(--text-3);
 }
 
 .rl-redesign .tl-loupe {
@@ -2005,18 +2032,18 @@
   gap: 8px;
   padding: 0 12px;
   font-size: 10px;
-  color: #5c5c66;
-  background: rgba(255, 255, 255, 0.015);
+  color: var(--text-3);
+  background: color-mix(in srgb, var(--text-3) 6%, transparent);
   cursor: pointer;
-  border-top: 1px solid rgba(255, 255, 255, 0.05);
+  border-top: 1px solid var(--line);
   flex: 0 0 auto;
 }
 .rl-redesign .tl-shelf:hover {
-  color: #9a9aa3;
+  color: var(--text-2);
 }
 .rl-redesign .tl-shelf-pill {
   font-size: 8.5px;
-  border: 1px solid rgba(255, 255, 255, 0.13);
+  border: 1px solid var(--line-strong);
   border-radius: 99px;
   padding: 1px 7px;
 }
@@ -2027,12 +2054,12 @@
 
 .rl-redesign .tl-nav {
   display: flex;
-  border-top: 1px solid rgba(255, 255, 255, 0.07);
-  background: #0c0c0e;
+  border-top: 1px solid var(--line);
+  background: var(--panel);
   flex: 0 0 auto;
 }
 .rl-redesign .tl-nav-spacer {
-  border-right: 1px solid rgba(255, 255, 255, 0.07);
+  border-right: 1px solid var(--line);
 }
 .rl-redesign .tl-nav-track {
   position: relative;
@@ -2045,7 +2072,7 @@
   background: repeating-linear-gradient(
     90deg,
     transparent 0 3px,
-    rgba(255, 255, 255, 0.035) 3px 6px
+    color-mix(in srgb, var(--text-3) 22%, transparent) 3px 6px
   );
 }
 .rl-redesign .tl-nav-blip {
@@ -2059,8 +2086,8 @@
   position: absolute;
   top: 3.5px;
   bottom: 3.5px;
-  background: rgba(110, 155, 255, 0.1);
-  border: 1px solid rgba(110, 155, 255, 0.55);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 55%, transparent);
   border-radius: 6px;
   cursor: grab;
   z-index: 3;
@@ -2084,7 +2111,7 @@
   width: 2.5px;
   height: 11px;
   border-radius: 2px;
-  background: rgba(110, 155, 255, 0.85);
+  background: color-mix(in srgb, var(--accent) 85%, transparent);
   display: block;
 }
 
@@ -2094,9 +2121,9 @@
   gap: 12px;
   flex-wrap: wrap;
   padding: 7px 12px;
-  border-top: 1px solid rgba(255, 255, 255, 0.07);
-  background: #0f0f11;
+  border-top: 1px solid var(--line);
+  background: var(--panel);
   font-size: 10.5px;
-  color: #9a9aa3;
+  color: var(--text-2);
   flex: 0 0 auto;
 }

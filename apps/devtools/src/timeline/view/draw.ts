@@ -17,7 +17,8 @@ import {
   ROW_H,
   RULER_H,
 } from "./metrics.js";
-import { causeColor, hexAlpha, type TimelineTheme } from "./timelineTheme.js";
+import { drawCausalArrow } from "./arrows.js";
+import { causeColor, clipPaint, hexAlpha, type TimelineTheme } from "./timelineTheme.js";
 
 export interface ClipRect {
   x0: number;
@@ -196,33 +197,31 @@ export function drawBase(args: DrawBaseArgs): {
       const clipH = ROW_H - 6;
       const cy = row.y + LANE_PAD / 2 + (c.row ?? 0) * ROW_H + 1.5;
       const col = causeColor(theme, clipCauseColor(c.cause));
+      const paint = clipPaint(theme, col);
       ctx.globalAlpha = row.dim ? 0.25 : 1;
 
       if (c.wasted && pattern) {
         ctx.fillStyle = pattern;
         roundRect(ctx, x0, cy, w, clipH, 4);
         ctx.fill();
-        ctx.strokeStyle = "rgba(150,150,160,.42)";
+        ctx.strokeStyle = hexAlpha(theme.text3, 0.55);
         ctx.setLineDash([3, 2]);
         ctx.stroke();
         ctx.setLineDash([]);
       } else {
         const grad = ctx.createLinearGradient(0, cy, 0, cy + clipH);
-        grad.addColorStop(0, col + "52");
-        grad.addColorStop(1, col + "38");
+        grad.addColorStop(0, paint.fillTop);
+        grad.addColorStop(1, paint.fillBottom);
         ctx.fillStyle = grad;
         roundRect(ctx, x0, cy, w, clipH, 4);
         ctx.fill();
-        ctx.strokeStyle = col + "78";
+        ctx.strokeStyle = paint.stroke;
         ctx.stroke();
         if (w > 74) {
           let px = x0 + 1;
-          for (const [frac, al] of [
-            [0.6, 0.55],
-            [0.25, 0.4],
-            [0.15, 0.28],
-          ] as const) {
-            ctx.fillStyle = col + Math.round(al * 255).toString(16).padStart(2, "0");
+          const barAlpha = theme.light ? 0.65 : 0.55;
+          for (const frac of [0.6, 0.25, 0.15] as const) {
+            ctx.fillStyle = hexAlpha(col, barAlpha);
             roundRect(ctx, px, cy + clipH - 4.5, frac * (w - 2), 3, 1.5);
             ctx.fill();
             px += frac * (w - 2);
@@ -242,7 +241,7 @@ export function drawBase(args: DrawBaseArgs): {
       }
 
       if (w > 48) {
-        ctx.fillStyle = c.wasted ? "rgba(160,160,170,.7)" : "rgba(255,255,255,.88)";
+        ctx.fillStyle = c.wasted ? hexAlpha(theme.text3, 0.85) : paint.label;
         ctx.font = `9px ${MONO}`;
         const lbl = c.wasted
           ? "wasted"
@@ -312,20 +311,8 @@ export function drawOverlay(args: DrawOverlayArgs): void {
     const y1 = (ra.y0 + ra.y1) / 2;
     const x2 = rb.x0 + 2;
     const y2 = (rb.y0 + rb.y1) / 2;
-    ctx.strokeStyle = hexAlpha(theme.context, 0.85);
-    ctx.lineWidth = 1.2;
-    ctx.beginPath();
-    ctx.moveTo(x1, y1);
-    ctx.bezierCurveTo(x1 + 34, y1, x2 - 34, y2, x2, y2);
-    ctx.stroke();
-    ctx.lineWidth = 1;
-    ctx.fillStyle = hexAlpha(theme.context, 0.9);
-    ctx.beginPath();
-    ctx.moveTo(x2, y2);
-    ctx.lineTo(x2 - 6, y2 - 3.5);
-    ctx.lineTo(x2 - 6, y2 + 3.5);
-    ctx.closePath();
-    ctx.fill();
+    const col = hexAlpha(causeColor(theme, clipCauseColor(e.cause)), 0.92);
+    drawCausalArrow({ ctx, x1, y1, x2, y2, color: col, lineWidth: 1.35, headSize: 7 });
   }
 
   if (marquee) {
@@ -341,7 +328,7 @@ export function drawOverlay(args: DrawOverlayArgs): void {
 
   const hv = hoverId && clipRects.get(hoverId);
   if (hv) {
-    ctx.strokeStyle = "rgba(255,255,255,.5)";
+    ctx.strokeStyle = hexAlpha(theme.text, theme.light ? 0.45 : 0.55);
     roundRect(ctx, hv.x0 - 0.5, hv.y0 - 0.5, hv.x1 - hv.x0 + 1, hv.y1 - hv.y0 + 1, 4.5);
     ctx.stroke();
   }
