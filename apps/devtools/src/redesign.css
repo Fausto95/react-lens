@@ -784,6 +784,9 @@
   overflow-y: auto;
   background: var(--panel);
 }
+.rl-redesign .insp .rl-inspector {
+  padding: 0 0 16px;
+}
 .rl-redesign .crumb {
   display: flex;
   align-items: center;
@@ -824,6 +827,14 @@
   color: var(--text-2);
   background: var(--panel-2);
   border: 1px solid var(--line);
+}
+.rl-redesign .ihead .right {
+  margin-left: auto;
+  font-family: var(--mono);
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--text-3);
 }
 .rl-redesign .why {
   font-size: 12px;

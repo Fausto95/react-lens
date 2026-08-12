@@ -14,7 +14,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { TraceStore } from "@reactlens/trace-engine";
 import type { Causality } from "@reactlens/causality";
-import type { ComponentId } from "@reactlens/protocol";
+import type { ComponentId, RenderId } from "@reactlens/protocol";
 import {
   buildTree,
   flatten,
@@ -29,6 +29,7 @@ import type { TimeCursor } from "../timeCursor.js";
 import { useTimeline } from "../timeline/useTimeline.js";
 import { Timeline } from "../timeline/view/Timeline.js";
 import { buildRenderStory } from "../inspector/renderStory.js";
+import { Inspector, type EditApi } from "../Inspector.js";
 import { TreeView, treeViewRows } from "./TreeView.js";
 import { InspectorView } from "./InspectorView.js";
 import { columnTemplate, nextColumnWidth, type CollapsedPanes } from "./columns.js";
@@ -56,6 +57,9 @@ export function RedesignShell({
   toolbarActions,
   transport,
   windowChrome = false,
+  edit,
+  onRequestSnapshot,
+  onAskAI,
 }: {
   store: TraceStore;
   causality: Causality;
@@ -78,6 +82,9 @@ export function RedesignShell({
    * as a screenshot-style card.
    */
   windowChrome?: boolean;
+  edit?: EditApi;
+  onRequestSnapshot?: (renderId: RenderId) => void;
+  onAskAI?: (question: string) => void;
 }) {
   const version = useTraceVersion(store, { kind: "global" });
   const [fixApplied, setFixApplied] = useState(false);
@@ -234,6 +241,8 @@ export function RedesignShell({
     [store, causality, selectedRender, version],
   );
   const selectedRenderEvent = selectedRender !== null ? store.getRender(selectedRender) : undefined;
+  /** Clip picks set this so a following `selected` change doesn't clear the clip. */
+  const fromClipRef = useRef(false);
 
   useEffect(() => {
     if (flashId === null) return;
@@ -241,8 +250,23 @@ export function RedesignShell({
     return () => window.clearTimeout(id);
   }, [flashId]);
 
+  // Tree / ⌘K / page-inspect change `selected` without a clip. Drop any prior
+  // clip so the inspector switches to component details.
+  useEffect(() => {
+    if (fromClipRef.current) {
+      fromClipRef.current = false;
+      return;
+    }
+    if (timeline.state.selectedRender !== null) {
+      timeline.dispatch({ type: "clearClip" });
+    }
+  }, [selected]);
+
   /** Picking in the tree highlights the matching lane and scrolls it into view. */
   const selectTreeComponent = (id: ComponentId) => {
+    // Always leave clip mode — even when re-clicking the same component — so
+    // the inspector shows props/state/… instead of the render story.
+    timeline.dispatch({ type: "clearClip" });
     onSelect(id);
     const name = store.instance(id)?.name;
     if (!name) return;
@@ -398,6 +422,7 @@ export function RedesignShell({
             lanes={lanes}
             fixApplied={fixApplied}
             onSelectComponent={(id) => {
+              fromClipRef.current = true;
               onSelect(id);
               setFlashId(id);
             }}
@@ -410,35 +435,75 @@ export function RedesignShell({
           <PaneRail label="Inspector" side="right" onExpand={() => togglePane("inspector")} />
         ) : (
           <div className="col insp">
-            <InspectorView
-              headAction={
-                <PaneToggle
-                  label="Inspector"
-                  side="right"
-                  onClick={() => togglePane("inspector")}
-                />
-              }
-              store={store}
-              componentId={selectedRenderEvent?.componentId ?? selected}
-              story={story}
-              t0={selectedRenderEvent ? selectedRenderEvent.timestamp - timeline.bounds.t0 : null}
-              t1={
-                selectedRenderEvent
-                  ? selectedRenderEvent.timestamp -
-                    timeline.bounds.t0 +
-                    selectedRenderEvent.selfDuration
-                  : null
-              }
-              fixApplied={fixApplied}
-              onToggleFix={() => setFixApplied((v) => !v)}
-              onSelectComponent={selectTreeComponent}
-              onHoverComponent={(id) => {
-                onHighlight?.(id);
-                if (id === null) return;
-                const name = store.instance(id)?.name;
-                if (name) timeline.dispatch({ type: "selectLane", laneKey: typeLaneKey(name) });
-              }}
-            />
+            {selectedRender !== null ? (
+              <InspectorView
+                headAction={
+                  <PaneToggle
+                    label="Inspector"
+                    side="right"
+                    onClick={() => togglePane("inspector")}
+                  />
+                }
+                store={store}
+                componentId={selectedRenderEvent?.componentId ?? selected}
+                story={story}
+                t0={
+                  selectedRenderEvent ? selectedRenderEvent.timestamp - timeline.bounds.t0 : null
+                }
+                t1={
+                  selectedRenderEvent
+                    ? selectedRenderEvent.timestamp -
+                      timeline.bounds.t0 +
+                      selectedRenderEvent.selfDuration
+                    : null
+                }
+                fixApplied={fixApplied}
+                onToggleFix={() => setFixApplied((v) => !v)}
+                onSelectComponent={selectTreeComponent}
+                onHoverComponent={(id) => {
+                  onHighlight?.(id);
+                  if (id === null) return;
+                  const name = store.instance(id)?.name;
+                  if (name) timeline.dispatch({ type: "selectLane", laneKey: typeLaneKey(name) });
+                }}
+              />
+            ) : selected !== null ? (
+              <Inspector
+                store={store}
+                causality={causality}
+                componentId={selected}
+                cursor={cursor}
+                onSelectComponent={selectTreeComponent}
+                headAction={
+                  <PaneToggle
+                    label="Inspector"
+                    side="right"
+                    onClick={() => togglePane("inspector")}
+                  />
+                }
+                {...(edit ? { edit } : {})}
+                {...(onHighlight ? { highlight: onHighlight } : {})}
+                {...(onRequestSnapshot ? { onRequestSnapshot } : {})}
+                {...(onAskAI ? { onAskAI } : {})}
+              />
+            ) : (
+              <InspectorView
+                headAction={
+                  <PaneToggle
+                    label="Inspector"
+                    side="right"
+                    onClick={() => togglePane("inspector")}
+                  />
+                }
+                store={store}
+                componentId={null}
+                story={null}
+                t0={null}
+                t1={null}
+                fixApplied={fixApplied}
+                onToggleFix={() => setFixApplied((v) => !v)}
+              />
+            )}
           </div>
         )}
       </div>

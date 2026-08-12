@@ -2,6 +2,7 @@ import { useState, type ReactNode } from "react";
 import type { ComponentId } from "@reactlens/protocol";
 import type { TraceStore } from "@reactlens/trace-engine";
 import type { RenderStory } from "../inspector/renderStory.js";
+import { ChangeDiffRows } from "../tabs/RendersTab.js";
 
 /**
  * The concept's inspector column: one scrollable column of numbered sections —
@@ -42,7 +43,7 @@ export function InspectorView({
           Inspector
           {headAction}
         </div>
-        <div className="isect why">Select a component, or a render clip on the timeline.</div>
+        <div className="isect why">Select a component in the tree, or a render clip on the timeline.</div>
       </>
     );
   }
@@ -152,28 +153,7 @@ export function InspectorView({
         <div className="ihead">
           <span className="n">2</span>Change
         </div>
-        {story.changes.length === 0 ? (
-          <div className="diff">
-            <div className="row neutral">· nothing captured for this render</div>
-          </div>
-        ) : (
-          <div className="diff">
-            {story.changes.map((change, i) => (
-              <div
-                key={i}
-                className={`row ${change.kind === "removed" ? "del" : change.kind === "added" ? "add" : "neutral"}`}
-              >
-                {change.text}
-                {change.identity && <span className="refchip"> @ref {change.identity}</span>}
-              </div>
-            ))}
-          </div>
-        )}
-        {story.refWarning && (
-          <div className="refwarn">
-            ⚠ <span>{story.refWarning}</span>
-          </div>
-        )}
+        <ChangeDiffRows changes={story.changes} refWarning={story.refWarning} />
       </div>
 
       <div className="isect">

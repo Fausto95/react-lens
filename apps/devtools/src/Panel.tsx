@@ -114,6 +114,8 @@ export function Panel({
   onToggleInspect,
   selectComponent,
   onSelectConsumed,
+  edit,
+  onRequestSnapshot,
 }: PanelProps) {
   // Re-render on every ingest. The reads below (`store.stats()`,
   // `sessionSpanMs(store)`, `diagnoseAll`) take their freshness from that
@@ -496,6 +498,8 @@ export function Panel({
         onSelect={select}
         sessionSpanMs={sessionMs}
         {...(onHighlight ? { onHighlight } : {})}
+        {...(edit ? { edit } : {})}
+        {...(onRequestSnapshot ? { onRequestSnapshot } : {})}
         transport={
           timeTravel ? (
             <button

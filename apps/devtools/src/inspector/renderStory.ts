@@ -362,24 +362,10 @@ export function buildRenderStory(
   }
 
   // ── Change: what actually differed, and whether only the reference did ─────
-  const previous = store
-    .rendersOf(render.componentId)
-    .filter((r) => r.timestamp < render.timestamp)
-    .at(-1);
-  const before = previous ? store.snapshot(previous.renderId) : undefined;
-  const after = store.snapshot(renderId);
-
-  const props = diffSection("props", before?.props, after?.props);
-  const state = diffSection("state", before?.state, after?.state);
-  const context = diffContexts(before, after);
-  const changes = [...props.rows, ...state.rows, ...context.rows];
-  const identityOnly = [...props.identityOnly, ...state.identityOnly, ...context.identityOnly];
-  const functionProps = props.identityOnly.filter((key) => isFunctionKey(after, key));
-
-  const refWarning =
-    identityOnly.length > 0
-      ? `${identityOnly.join(", ")} ${identityOnly.length === 1 ? "is" : "are"} referentially new but structurally identical — same shape, new reference. Memoized consumers are broken by this.`
-      : null;
+  const { changes, refWarning, identityOnly, functionProps, stateChanged } = changesForRender(
+    store,
+    renderId,
+  );
 
   // ── Cost: render / subtree / effects ──────────────────────────────────────
   const effects = store
@@ -420,8 +406,60 @@ export function buildRenderStory(
       componentName,
       changes.some((c) => c.kind !== "same"),
       contextName,
-      state.rows.some((r) => r.kind !== "same"),
+      stateChanged,
     ),
+  };
+}
+
+/**
+ * Props / state / context rows for one render vs the previous — the same
+ * Change list the clip inspector shows. Shared by the story and the Renders
+ * feed so the two never drift.
+ */
+export function changesForRender(
+  store: TraceStore,
+  renderId: RenderId,
+): {
+  changes: ChangeRow[];
+  refWarning: string | null;
+  identityOnly: string[];
+  functionProps: string[];
+  stateChanged: boolean;
+} {
+  const render = store.getRender(renderId);
+  if (!render) {
+    return {
+      changes: [],
+      refWarning: null,
+      identityOnly: [],
+      functionProps: [],
+      stateChanged: false,
+    };
+  }
+  const previous = store
+    .rendersOf(render.componentId)
+    .filter((r) => r.timestamp < render.timestamp)
+    .at(-1);
+  const before = previous ? store.snapshot(previous.renderId) : undefined;
+  const after = store.snapshot(renderId);
+
+  const props = diffSection("props", before?.props, after?.props);
+  const state = diffSection("state", before?.state, after?.state);
+  const context = diffContexts(before, after);
+  const changes = [...props.rows, ...state.rows, ...context.rows];
+  const identityOnly = [...props.identityOnly, ...state.identityOnly, ...context.identityOnly];
+  const functionProps = props.identityOnly.filter((key) => isFunctionKey(after, key));
+  const refWarning =
+    identityOnly.length > 0
+      ? `${identityOnly.join(", ")} ${identityOnly.length === 1 ? "is" : "are"} referentially new but structurally identical — same shape, new reference. Memoized consumers are broken by this.`
+      : null;
+
+  return {
+    changes,
+    refWarning,
+    identityOnly,
+    functionProps,
+    stateChanged: state.rows.some((r) => r.kind !== "same"),
   };
 }
 
