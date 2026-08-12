@@ -5,7 +5,7 @@ import type { TimeCursor } from "../../timeCursor.js";
 import { buildAxis, clamp, compactGap, easeOut, type TimeAxis } from "../model/axis.js";
 import { loupeAt, LOUPE_H, LOUPE_HALF_MS, LOUPE_W, loupeX } from "../model/loupe.js";
 import { clampView, fitWallRange, lerpView, reanchorAfterAxisChange } from "../model/viewport.js";
-import { advancePlayhead, playStartAxis } from "../model/transport.js";
+import { advancePlayhead, cursorModeAtStop, playStartAxis } from "../model/transport.js";
 import { timelineKeyAction } from "../keymap.js";
 import { clipAtTime, clipCauseColor, type Clip } from "../model/lanes.js";
 import type { Timeline as TimelineModel } from "../useTimeline.js";
@@ -627,7 +627,11 @@ export function Timeline({
           state.speed *
           state.playDir;
         const next = advancePlayhead({ a: pa, deltaA, a0: aw0, a1: aw1, loop });
-        setPlayhead(ax.axisToWall(next.a));
+        const live =
+          next.kind === "stop" && cursorModeAtStop({ dir: state.playDir, loop }) === "live";
+        // Catching up with the present must release time travel, or the page
+        // keeps dropping commits and nothing is traced after the replay.
+        setPlayhead(ax.axisToWall(next.a), !live);
         scheduleDraw(false);
         if (next.kind === "stop") {
           dispatch({ type: "pause" });

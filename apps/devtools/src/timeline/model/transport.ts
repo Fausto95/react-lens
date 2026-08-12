@@ -32,6 +32,23 @@ export function advancePlayhead(opts: {
 }
 
 /**
+ * Where the cursor belongs once transport stops.
+ *
+ * Not cosmetic: a historical cursor keeps time travel applied to the page, and
+ * the instrumentation drops every commit while travel is active (that is what
+ * keeps the rewound UI out of the log). Playing forward to the end means "catch
+ * up with the present", so it must hand the cursor back to live — otherwise a
+ * finished replay silently stops tracing. Playing back to the start, or looping
+ * an A/B region, is an explicit request to sit in the past.
+ */
+export function cursorModeAtStop(opts: {
+  dir: 1 | -1;
+  loop: boolean;
+}): "live" | "historical" {
+  return !opts.loop && opts.dir === 1 ? "live" : "historical";
+}
+
+/**
  * Where to put the playhead when starting transport.
  *
  * Keep the cursor if it still has room to travel in `dir`. If it's already at
