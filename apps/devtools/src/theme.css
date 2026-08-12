@@ -304,6 +304,124 @@
   border-color: rgba(var(--rl-healthy-rgb), 0.45);
   background: rgba(var(--rl-healthy-rgb), 0.12);
 }
+/* Doctor: icon + iOS-style yellow notification pastille */
+.rl-doctor-btn {
+  position: relative;
+}
+.rl-doctor-badge {
+  position: absolute;
+  top: -3px;
+  right: -4px;
+  min-width: 14px;
+  height: 14px;
+  padding: 0 4px;
+  box-sizing: border-box;
+  border-radius: 99px;
+  background: var(--rl-warn);
+  color: rgb(var(--rl-shadow-rgb));
+  font-size: 9px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  line-height: 14px;
+  text-align: center;
+  pointer-events: none;
+  box-shadow: 0 0 0 1.5px var(--rl-bg);
+}
+.rl-status-doctor .rl-doctor-btn {
+  display: inline-flex;
+  width: 16px;
+  height: 16px;
+  align-items: center;
+  justify-content: center;
+}
+.rl-status-doctor .rl-doctor-badge {
+  top: -5px;
+  right: -8px;
+  min-width: 12px;
+  height: 12px;
+  padding: 0 3px;
+  font-size: 8px;
+  line-height: 12px;
+  box-shadow: 0 0 0 1.5px var(--rl-bg-raised);
+}
+
+/* Doctor issues popover (toolbar badge) */
+.rl-doctor-menu {
+  min-width: 280px;
+  max-width: min(360px, 92vw);
+  padding: var(--rl-s2);
+  gap: 0;
+}
+.rl-doctor-menu-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  max-height: min(360px, 50vh);
+  overflow-y: auto;
+}
+.rl-doctor-menu-empty {
+  padding: 10px 8px;
+  color: var(--rl-text-faint);
+  font-size: 11px;
+}
+.rl-doctor-issue {
+  -webkit-app-region: no-drag;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  width: 100%;
+  margin: 0;
+  padding: 7px 8px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--rl-text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.rl-doctor-issue:hover {
+  background: var(--rl-bg-active);
+}
+.rl-doctor-issue .rl-doc-sev-pip {
+  margin-top: 4px;
+}
+.rl-doctor-issue.rl-sev-severe .rl-doc-sev-pip {
+  background: var(--rl-severe);
+}
+.rl-doctor-issue.rl-sev-suspicious .rl-doc-sev-pip {
+  background: var(--rl-suspicious);
+}
+.rl-doctor-issue.rl-sev-warn .rl-doc-sev-pip {
+  background: var(--rl-warn);
+}
+.rl-doctor-issue-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.rl-doctor-issue-title {
+  font-size: 12px;
+  line-height: 1.25;
+  color: var(--rl-text);
+}
+.rl-doctor-issue-comp {
+  font-size: 10px;
+  color: var(--rl-text-faint);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.rl-doctor-issue-impact {
+  flex: 0 0 auto;
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  color: var(--rl-text-dim);
+  padding-top: 1px;
+}
+
 .rl-icon-btn.recording .rl-rec-pulse {
   width: 8px;
   height: 8px;

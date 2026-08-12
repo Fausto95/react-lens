@@ -4,6 +4,7 @@ import type { Diagnostic } from "@reactlens/diagnostics";
 export interface DoctorResult {
   count: number;
   affected: Set<ComponentId>;
+  diagnostics: Diagnostic[];
   fused?: Diagnostic[];
 }
 
@@ -36,11 +37,17 @@ export function createDoctorClient(): DoctorClient | null {
 
   const subscribers = new Set<(result: DoctorResult) => void>();
   worker.onmessage = (
-    e: MessageEvent<{ count: number; affected: ComponentId[]; fused?: Diagnostic[] }>,
+    e: MessageEvent<{
+      count: number;
+      affected: ComponentId[];
+      diagnostics?: Diagnostic[];
+      fused?: Diagnostic[];
+    }>,
   ) => {
     const result: DoctorResult = {
       count: e.data.count,
       affected: new Set(e.data.affected),
+      diagnostics: e.data.diagnostics ?? [],
       ...(e.data.fused ? { fused: e.data.fused } : {}),
     };
     for (const cb of subscribers) cb(result);

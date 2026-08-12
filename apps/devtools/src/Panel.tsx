@@ -43,6 +43,7 @@ import {
   IconRewind,
 } from "@reactlens/icons";
 import { PanelMenu, type Retention } from "./PanelMenu.js";
+import { DoctorIssuesMenu } from "./DoctorIssuesMenu.js";
 import { applyThemePref, type ThemePref } from "./theme.js";
 import {
   downloadSession,
@@ -209,6 +210,8 @@ export function Panel({
   // Panel color scheme: dark by default, light/system via the header menu.
   const [themePref, setThemePrefState] = useState<ThemePref>(() => loadPanelPrefs().theme);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [doctorOpen, setDoctorOpen] = useState(false);
+  const doctorAnchorRef = useRef<HTMLSpanElement>(null);
   useEffect(() => applyThemePref(themePref), [themePref]);
   const setThemePref = useCallback((pref: ThemePref) => {
     setThemePrefState(pref);
@@ -352,6 +355,27 @@ export function Panel({
   const fallback = !doctorClient && stats.components <= 2000 ? diagnoseAll(store, causality) : null;
   const affected = workerDoctor?.affected ?? fallback?.affected ?? new Set<ComponentId>();
   const issueCount = workerDoctor?.count ?? fallback?.diagnostics.length ?? 0;
+  const diagnostics =
+    workerDoctor?.diagnostics ??
+    fallback?.diagnostics?.slice(0, 50) ??
+    [];
+  const openDoctor = () => {
+    setMenuOpen(false);
+    setDoctorOpen((v) => !v);
+  };
+  const pickDoctorIssue = (id: ComponentId) => {
+    select(id);
+    setDoctorOpen(false);
+    // Tree watchlist rows + Doctor section scroll into view when present.
+    requestAnimationFrame(() => {
+      document
+        .querySelector(`.node[data-component="${id}"]`)
+        ?.scrollIntoView({ block: "nearest" });
+      document.querySelector(".isect .rl-doctor")?.closest(".isect")?.scrollIntoView({
+        block: "nearest",
+      });
+    });
+  };
 
   // ⌘K / Ctrl+K opens the command palette; ⌘\ toggles page inspect.
   // Plain keys (R, ?) match the hints the palette advertises.
@@ -575,8 +599,29 @@ export function Panel({
               <IconUpload size={14} />
             </button>
             {issueCount > 0 && (
-              <span className="rl-icon-btn warn" title={`${issueCount} Doctor issues`}>
-                <IconDoctor size={12} /> {issueCount}
+              <span className="rl-menu-anchor" ref={doctorAnchorRef}>
+                <button
+                  type="button"
+                  className={`rl-icon-btn rl-doctor-btn${doctorOpen ? " active" : ""}`}
+                  onClick={openDoctor}
+                  title={`${issueCount} Doctor issues`}
+                  aria-label={`${issueCount} Doctor issues`}
+                  aria-haspopup="dialog"
+                  aria-expanded={doctorOpen}
+                >
+                  <IconDoctor size={14} />
+                  <span className="rl-doctor-badge">{issueCount}</span>
+                </button>
+                {doctorOpen && (
+                  <DoctorIssuesMenu
+                    diagnostics={diagnostics}
+                    issueCount={issueCount}
+                    store={store}
+                    anchorRef={doctorAnchorRef}
+                    onSelect={pickDoctorIssue}
+                    onClose={() => setDoctorOpen(false)}
+                  />
+                )}
               </span>
             )}
             {lanesFiltered && (
@@ -591,7 +636,10 @@ export function Panel({
             <span className="rl-menu-anchor">
               <button
                 className={`rl-icon-btn${menuOpen ? " active" : ""}`}
-                onClick={() => setMenuOpen((v) => !v)}
+                onClick={() => {
+                  setDoctorOpen(false);
+                  setMenuOpen((v) => !v);
+                }}
                 title="Panel settings"
                 aria-label="Panel settings"
                 aria-haspopup="dialog"
@@ -648,9 +696,18 @@ export function Panel({
           <span className="rl-status-k">cmp</span> {stats.components}
         </span>
         {issueCount > 0 && (
-          <span className="rl-status-metric warn" title="Doctor issues">
-            <IconDoctor size={11} /> {issueCount}
-          </span>
+          <button
+            type="button"
+            className="rl-status-metric rl-status-doctor rl-status-action"
+            title="Doctor issues"
+            onClick={openDoctor}
+            aria-expanded={doctorOpen}
+          >
+            <span className="rl-doctor-btn">
+              <IconDoctor size={11} />
+              <span className="rl-doctor-badge">{issueCount}</span>
+            </span>
+          </button>
         )}
         <span className="rl-spacer" />
         <span

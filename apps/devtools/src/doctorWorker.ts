@@ -32,6 +32,8 @@ type InMessage = FrameMessage | SourceMessage | ClearSourcesMessage;
 type DoctorResultMessage = {
   count: number;
   affected: ComponentId[];
+  /** Top diagnostics by impact — for the toolbar issues menu. */
+  diagnostics: Diagnostic[];
   /** Optional fused diagnostics for components that have source uploaded. */
   fused?: Diagnostic[];
 };
@@ -102,9 +104,11 @@ async function recompute(): Promise<void> {
   }
 
   const all = [...diagnostics, ...fusedExtra].sort((a, b) => b.impact - a.impact);
+  const top = all.slice(0, 50);
   ctx.postMessage({
     count: all.length,
     affected: [...affectedSet],
-    ...(sources.size > 0 ? { fused: all.slice(0, 50) } : {}),
+    diagnostics: top,
+    ...(sources.size > 0 ? { fused: top } : {}),
   });
 }
