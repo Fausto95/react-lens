@@ -33,11 +33,16 @@ test("capture resumes after a play-once reaches the present", async ({ page }) =
   await clickInPage(page, "Refresh prices");
   await expect.poll(() => renderCount(page)).toBeGreaterThan(0);
 
-  // Scrub into the past: time travel applies and the page stops reporting renders.
+  // Scrub into the past (drag — a tap no longer applies travel): time travel
+  // applies and the page stops reporting renders.
   const canvas = page.locator(".tl-canvas-root canvas").first();
   const box = await canvas.boundingBox();
   if (!box) throw new Error("timeline canvas has no box");
-  await page.mouse.click(box.x + box.width * 0.4, box.y + box.height * 0.5);
+  const y = box.y + box.height * 0.5;
+  await page.mouse.move(box.x + box.width * 0.55, y);
+  await page.mouse.down();
+  await page.mouse.move(box.x + box.width * 0.35, y, { steps: 8 });
+  await page.mouse.up();
 
   const scrubbed = await renderCount(page);
   await clickInPage(page, "Add");
