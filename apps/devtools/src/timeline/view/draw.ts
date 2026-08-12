@@ -17,7 +17,7 @@ import {
   ROW_H,
   RULER_H,
 } from "./metrics.js";
-import { drawCausalArrow } from "./arrows.js";
+import { drawCausalArrow, routeCausalArrow } from "./arrows.js";
 import { causeColor, clipPaint, hexAlpha, type TimelineTheme } from "./timelineTheme.js";
 
 export interface ClipRect {
@@ -322,19 +322,45 @@ export function drawOverlay(args: DrawOverlayArgs): void {
   ctx.clearRect(0, 0, W, H);
 
   const sel = selectedRender != null ? String(selectedRender) : null;
-  for (const e of edges) {
+  const visible = edges.filter((e) => {
     const a = String(e.from);
     const b = String(e.to);
-    if (sel && a !== sel && b !== sel) continue;
-    const ra = clipRects.get(a);
-    const rb = clipRects.get(b);
-    if (!ra || !rb) continue;
-    const x1 = ra.x1 - 2;
-    const y1 = (ra.y0 + ra.y1) / 2;
-    const x2 = rb.x0 + 2;
-    const y2 = (rb.y0 + rb.y1) / 2;
+    if (sel && a !== sel && b !== sel) return false;
+    return clipRects.has(a) && clipRects.has(b);
+  });
+
+  // Ordinals among arrows that leave the same clip (fan-out order).
+  const outTotal = new Map<string, number>();
+  const outIndex = new Map<(typeof visible)[number], number>();
+  for (const e of visible) {
+    const k = String(e.from);
+    const n = (outTotal.get(k) ?? 0) + 1;
+    outTotal.set(k, n);
+    outIndex.set(e, n);
+  }
+
+  for (const e of visible) {
+    const a = String(e.from);
+    const b = String(e.to);
+    const ra = clipRects.get(a)!;
+    const rb = clipRects.get(b)!;
+    const slot = outIndex.get(e) ?? 1;
+    const slotCount = outTotal.get(a) ?? 1;
+    const route = routeCausalArrow(ra, rb, slot, slotCount);
     const col = hexAlpha(causeColor(theme, clipCauseColor(e.cause)), 0.92);
-    drawCausalArrow({ ctx, x1, y1, x2, y2, color: col, lineWidth: 1.35, headSize: 7 });
+    drawCausalArrow({
+      ctx,
+      x1: route.x1,
+      y1: route.y1,
+      x2: route.x2,
+      y2: route.y2,
+      side: route.side,
+      fanSpread: route.fanSpread,
+      color: col,
+      lineWidth: slotCount > 6 ? 1.1 : 1.35,
+      headSize: 7,
+      orderLabel: slotCount > 1 ? slot : undefined,
+    });
   }
 
   if (marquee) {
