@@ -8,7 +8,13 @@ import type {
   RenderEvent,
   RenderId,
 } from "@reactlens/protocol";
-import { cascadeSize, chainFor, edgesForCommit, originOf } from "./edges.js";
+import {
+  cascadeSize,
+  chainFor,
+  contextConsumerCount,
+  edgesForCommit,
+  originOf,
+} from "./edges.js";
 
 let seq = 0;
 const inst = (id: number, name: string, parentId?: number): ComponentInstance => ({
@@ -139,5 +145,14 @@ describe("originOf / cascadeSize", () => {
   it("an origin is its own origin", () => {
     const commit = edgesForCommit(cascade(), 10 as RenderId);
     expect(originOf(commit, 10 as RenderId)).toBe(10);
+  });
+});
+
+describe("contextConsumerCount", () => {
+  it("counts only context-caused renders, not the props cascade they drag", () => {
+    const store = cascade();
+    const commit = edgesForCommit(store, 10 as RenderId);
+    // badge + list — not the 3 ListItems
+    expect(contextConsumerCount(commit, store, 10 as RenderId)).toBe(2);
   });
 });

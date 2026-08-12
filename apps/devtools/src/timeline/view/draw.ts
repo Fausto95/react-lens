@@ -17,7 +17,7 @@ import {
   ROW_H,
   RULER_H,
 } from "./metrics.js";
-import { drawCausalArrow } from "./arrows.js";
+import { drawCausalArrow, planCausalArrows, routeCausalArrow } from "./arrows.js";
 import { causeColor, clipPaint, hexAlpha, type TimelineTheme } from "./timelineTheme.js";
 
 export interface ClipRect {
@@ -26,6 +26,8 @@ export interface ClipRect {
   y0: number;
   y1: number;
   clip: Clip;
+  /** True when the port is a wave-lane stand-in (no stack bar). */
+  wave?: boolean;
 }
 
 export interface Projectors {
@@ -127,6 +129,25 @@ export function drawBase(args: DrawBaseArgs): {
 
   hline(RULER_H - 1, hexAlpha(theme.lineStrong, 0.75));
 
+  // Compressed idle stitches: hairline so wall-time jumps stay visible.
+  for (const s of axis.segs) {
+    if (s.type !== "gap" || s.a1 - s.a0 >= 1e-6) continue;
+    const x = aToX(s.a0);
+    if (x < NW || x > W) continue;
+    vline(x, RULER_H, H, hexAlpha(theme.lineStrong, 0.4), [2, 3]);
+    ctx.fillStyle = hexAlpha(theme.text3, 0.85);
+    ctx.beginPath();
+    ctx.moveTo(x, 2);
+    ctx.lineTo(x + 3.5, 7);
+    ctx.lineTo(x, 12);
+    ctx.lineTo(x - 3.5, 7);
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  // Ruler ticks + labels; cull major labels that would collide at stitches.
+  const LABEL_MIN_PX = 44;
+  let lastLabelX = -Infinity;
   for (const s of axis.segs) {
     if (s.type !== "act") continue;
     const step = niceStep(70 / Math.max(pxPerMs, 1e-6));
@@ -141,10 +162,11 @@ export function drawBase(args: DrawBaseArgs): {
         RULER_H,
         major ? hexAlpha(theme.lineStrong, 0.9) : hexAlpha(theme.line, 0.85),
       );
-      if (major) {
+      if (major && x - lastLabelX >= LABEL_MIN_PX) {
         ctx.fillStyle = theme.text3;
         ctx.font = `9.5px ${MONO}`;
         ctx.fillText(fmt(t - tOrigin), x + 4, RULER_H - 11);
+        lastLabelX = x;
       }
     }
   }
@@ -188,6 +210,20 @@ export function drawBase(args: DrawBaseArgs): {
         ctx.fill();
       }
       ctx.globalAlpha = 1;
+      // Wave ports so causality can still aim at the group when bars aren't drawn.
+      for (const c of row.clips) {
+        const xc = wToX((c.t0 + c.t1) / 2);
+        if (xc < NW - 4 || xc > W + 4) continue;
+        clipRects.set(String(c.renderId), {
+          x0: xc - 3,
+          x1: xc + 3,
+          y0: mid - 8,
+          y1: mid + 8,
+          clip: c,
+          wave: true,
+        });
+        snapEdges.push(c.t0, c.t1);
+      }
       continue;
     }
 
@@ -302,19 +338,51 @@ export function drawOverlay(args: DrawOverlayArgs): void {
   ctx.clearRect(0, 0, W, H);
 
   const sel = selectedRender != null ? String(selectedRender) : null;
-  for (const e of edges) {
-    const a = String(e.from);
-    const b = String(e.to);
-    if (sel && a !== sel && b !== sel) continue;
-    const ra = clipRects.get(a);
-    const rb = clipRects.get(b);
-    if (!ra || !rb) continue;
-    const x1 = ra.x1 - 2;
-    const y1 = (ra.y0 + ra.y1) / 2;
-    const x2 = rb.x0 + 2;
-    const y2 = (rb.y0 + rb.y1) / 2;
-    const col = hexAlpha(causeColor(theme, clipCauseColor(e.cause)), 0.92);
-    drawCausalArrow({ ctx, x1, y1, x2, y2, color: col, lineWidth: 1.35, headSize: 7 });
+  const edgeList = edges
+    .filter((e) => {
+      const a = String(e.from);
+      const b = String(e.to);
+      if (sel && a !== sel && b !== sel) return false;
+      return true;
+    })
+    .map((e) => ({
+      from: String(e.from),
+      to: String(e.to),
+      causeKey: clipCauseColor(e.cause),
+    }));
+
+  const ports = new Map(
+    [...clipRects.entries()].map(([id, r]) => [
+      id,
+      {
+        x0: r.x0,
+        x1: r.x1,
+        y0: r.y0,
+        y1: r.y1,
+        t0: r.clip.t0,
+        wave: r.wave,
+        laneKey: String(r.clip.laneKey),
+      },
+    ]),
+  );
+
+  const planned = planCausalArrows(edgeList, ports);
+  for (const p of planned) {
+    const route = routeCausalArrow(p.from, p.to, p.slot, p.slotCount);
+    const col = hexAlpha(causeColor(theme, p.causeKey), 0.92);
+    drawCausalArrow({
+      ctx,
+      x1: route.x1,
+      y1: route.y1,
+      x2: route.x2,
+      y2: route.y2,
+      side: route.side,
+      fanSpread: route.fanSpread,
+      color: col,
+      lineWidth: p.slotCount > 6 ? 1.1 : 1.35,
+      headSize: 7,
+      orderLabel: p.order,
+    });
   }
 
   if (marquee) {

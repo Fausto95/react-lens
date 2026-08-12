@@ -71,3 +71,25 @@ export function playStartAxis(opts: {
   if (opts.a > opts.a1) return opts.a1;
   return opts.a;
 }
+
+/**
+ * Wall time of the previous/next commit relative to `t`.
+ * Commits are assumed sorted ascending by `timestamp`.
+ */
+export function stepCommitTime(
+  commits: ReadonlyArray<{ timestamp: number }>,
+  t: number,
+  dir: -1 | 1,
+): number | null {
+  if (commits.length === 0) return null;
+  if (dir === 1) {
+    for (const c of commits) {
+      if (c.timestamp > t + 1e-6) return c.timestamp;
+    }
+    return null;
+  }
+  for (let i = commits.length - 1; i >= 0; i--) {
+    if (commits[i]!.timestamp < t - 1e-6) return commits[i]!.timestamp;
+  }
+  return null;
+}

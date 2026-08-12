@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vite-plus/test";
-import { advancePlayhead, playStartAxis, cursorModeAtStop } from "./transport.js";
+import {
+  advancePlayhead,
+  playStartAxis,
+  cursorModeAtStop,
+  stepCommitTime,
+} from "./transport.js";
 
 describe("advancePlayhead", () => {
   it("loops inside an A/B region", () => {
@@ -64,5 +69,23 @@ describe("playStartAxis", () => {
     // Past the out point while playing forward → restart at in, not freeze at out.
     expect(playStartAxis({ a: 200, a0: 20, a1: 80, dir: 1 })).toBe(20);
     expect(playStartAxis({ a: 200, a0: 20, a1: 80, dir: -1 })).toBe(80);
+  });
+});
+
+describe("stepCommitTime", () => {
+  const commits = [{ timestamp: 10 }, { timestamp: 20 }, { timestamp: 30 }];
+
+  it("steps to the next / previous commit", () => {
+    expect(stepCommitTime(commits, 15, 1)).toBe(20);
+    expect(stepCommitTime(commits, 15, -1)).toBe(10);
+  });
+
+  it("returns null at the ends", () => {
+    expect(stepCommitTime(commits, 30, 1)).toBeNull();
+    expect(stepCommitTime(commits, 10, -1)).toBeNull();
+  });
+
+  it("from live (past the last commit) steps back to the last", () => {
+    expect(stepCommitTime(commits, 100, -1)).toBe(30);
   });
 });

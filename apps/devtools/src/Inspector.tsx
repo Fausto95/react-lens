@@ -1,16 +1,14 @@
-import { useState, useEffect } from "react";
-import { Section, DiffLines } from "@reactlens/ui";
+import { useState, useEffect, type ReactNode } from "react";
+import { DiffLines, ms, shortSource } from "@reactlens/ui";
 import type { TraceStore } from "@reactlens/trace-engine";
 import type { Causality } from "@reactlens/causality";
 import type { ComponentId, RenderId, RenderSnapshot } from "@reactlens/protocol";
 import { diff, type DiffResult } from "@reactlens/diff-engine";
 import { useTraceVersion } from "./useLens.js";
-import { ms, shortSource } from "@reactlens/ui";
 import type { TimeCursor, ABMarks } from "./timeCursor.js";
 import { WhySection } from "./tabs/OverviewTab.js";
 import { PropsTab } from "./tabs/PropsTab.js";
 import { StateTab } from "./tabs/StateTab.js";
-import { HooksTab } from "./tabs/HooksTab.js";
 import { ContextTab } from "./tabs/ContextTab.js";
 import { EffectsTab } from "./tabs/EffectsTab.js";
 import { RendersTab } from "./tabs/RendersTab.js";
@@ -51,8 +49,9 @@ export interface InspectorContext {
 }
 
 /**
- * Detail inspector under the playhead: sticky header with cost chips, then
- * sparse disclosure sections. Why is a one-line verdict by default.
+ * Component inspector: same numbered-section chrome as clip inspection
+ * (no accordions) — Props → State → Context → Effects → Stack → Renders →
+ * Source → DOM.
  */
 export function Inspector({
   store,
@@ -65,6 +64,7 @@ export function Inspector({
   onSelectComponent,
   onRequestSnapshot,
   onAskAI,
+  headAction,
 }: {
   store: TraceStore;
   causality: Causality;
@@ -77,6 +77,8 @@ export function Inspector({
   onRequestSnapshot?: (renderId: RenderId) => void;
   /** Ask the AI drawer a targeted question (doctor Fix-with-AI). */
   onAskAI?: (question: string) => void;
+  /** Trailing control in the column heading — the shell's collapse toggle. */
+  headAction?: ReactNode;
 }) {
   useTraceVersion(store, { kind: "component", id: componentId });
   const inst = store.instance(componentId);
@@ -107,7 +109,17 @@ export function Inspector({
   // Production builds carry no React-provided source; locate it in the bundle.
   const located = useLocatedSource(componentId, inst?.source);
 
-  if (!inst) return <div className="rl-empty">Component no longer mounted.</div>;
+  if (!inst) {
+    return (
+      <>
+        <div className="colhead">
+          Inspector
+          {headAction}
+        </div>
+        <div className="isect why">Component no longer mounted.</div>
+      </>
+    );
+  }
 
   const snapshot = activeRenderId !== null ? store.snapshot(activeRenderId) : undefined;
 
@@ -134,100 +146,144 @@ export function Inspector({
   const selfTotal = store.selfTimeTotal(componentId);
   const activeSelf =
     activeRenderId != null ? store.getRender(activeRenderId)?.selfDuration : undefined;
+  const displayName = located?.originalName ?? inst.name;
+
+  let n = 0;
+  const next = () => ++n;
 
   return (
-    <div className="rl-inspector">
-      <div className="rl-insp-sticky">
-        <div className="rl-insp-head">
-          {/* On a minified build the fiber only knows the mangled name (`Qj`);
-              the source map's identifier is what the developer wrote. */}
-          <h2>{located?.originalName ?? inst.name}</h2>
-          {located?.originalName && located.originalName !== inst.name && (
-            <span className="rl-chip dim" title={`Minified as ${inst.name}`}>
-              {inst.name}
+    <>
+      <div className="colhead">
+        Inspector
+        {headAction}
+      </div>
+
+      <div className="rl-insp-head">
+        <h2>{displayName}</h2>
+        {located?.originalName && located.originalName !== inst.name && (
+          <span className="rl-chip dim" title={`Minified as ${inst.name}`}>
+            {inst.name}
+          </span>
+        )}
+        {historical && <span className="rl-chip warn">historical</span>}
+        {inst.compiler.compiled && (
+          <span className="rl-chip healthy" title="React Compiler optimized">
+            compiled
+          </span>
+        )}
+        {inst.kind === "server-boundary" && (
+          <span className="rl-chip render" title={rscTitle(inst)}>
+            {inst.rsc?.role === "server-reference"
+              ? "server action"
+              : inst.rsc?.role === "lazy-payload"
+                ? "RSC lazy"
+                : "RSC"}
+          </span>
+        )}
+        {(inst.kind === "suspense" || inst.underSuspense) && (
+          <span className={`rl-chip ${inst.suspended ? "warn" : "dim"}`}>
+            {inst.suspended ? "suspended" : "Suspense"}
+          </span>
+        )}
+      </div>
+
+      <div className="crumb" onMouseLeave={() => highlight?.(null)}>
+        {ownerChain(store, componentId).map((step, i, all) => (
+          <span key={step.id}>
+            {i > 0 && " › "}
+            {i === all.length - 1 ? (
+              <b>{step.name}</b>
+            ) : (
+              <span
+                role="button"
+                tabIndex={0}
+                onClick={() => onSelectComponent?.(step.id)}
+                onMouseEnter={() => highlight?.(step.id)}
+                onKeyDown={(e) => e.key === "Enter" && onSelectComponent?.(step.id)}
+              >
+                {step.name}
+              </span>
+            )}
+          </span>
+        ))}
+      </div>
+
+      <div className="isect why">
+        <div className="plegend" style={{ marginBottom: 8 }}>
+          <span>
+            renders <em>{renderCount}</em>
+          </span>
+          <span>
+            total <em>{ms(selfTotal)}</em>
+          </span>
+          {activeSelf != null && (
+            <span>
+              this <em>{ms(activeSelf)}</em>
             </span>
           )}
-          {historical && <span className="rl-chip warn">historical</span>}
-          {inst.compiler.compiled && (
-            <span className="rl-chip healthy" title="React Compiler optimized">
-              compiled
-            </span>
-          )}
-          {inst.kind === "server-boundary" && (
-            <span className="rl-chip render" title={rscTitle(inst)}>
-              {inst.rsc?.role === "server-reference"
-                ? "server action"
-                : inst.rsc?.role === "lazy-payload"
-                  ? "RSC lazy"
-                  : "RSC"}
-            </span>
-          )}
-          {(inst.kind === "suspense" || inst.underSuspense) && (
-            <span className={`rl-chip ${inst.suspended ? "warn" : "dim"}`}>
-              {inst.suspended ? "suspended" : "Suspense"}
+          {doctor.total > 0 && (
+            <span>
+              issues <em>{doctor.total}</em>
             </span>
           )}
         </div>
-        <div className="rl-insp-meta">
-          <span className="rl-insp-chip">{renderCount} renders</span>
-          <span className="rl-insp-chip">{ms(selfTotal)} total</span>
-          {activeSelf != null && <span className="rl-insp-chip accent">{ms(activeSelf)} this</span>}
-          {doctor.total > 0 && <span className="rl-insp-chip warn">{doctor.total} issues</span>}
-          {inst.source ? (
-            <button
-              type="button"
-              className="rl-insp-source rl-insp-source-link"
-              title="Open in editor"
-              onClick={() => {
-                // Resolve through the source map for the right line, then let
-                // the dev server (or the scheme, for absolute paths) open the
-                // full path on disk.
-                const src = inst.source!;
-                void getSourceResolver()
-                  .resolve(src)
-                  .then((loc) => openResolvedInEditor(src, loc));
-              }}
-            >
-              {shortSource(inst.source.file)}:{inst.source.line}
-            </button>
-          ) : located ? (
-            // Production build: React exposed no source, so this came from
-            // locating the component function in the shipped bundle.
-            <button
-              type="button"
-              className="rl-insp-source rl-insp-source-link"
-              title={
-                located.original
-                  ? `Open in editor · ${located.original.file}:${located.original.line}`
-                  : `Bundled at ${located.compiled.file}:${located.compiled.line} — deploy source maps for original paths`
-              }
-              onClick={() => void revealSource(located.compiled, located.original ?? null)}
-            >
-              {shortSource((located.original ?? located.compiled).file)}:
-              {(located.original ?? located.compiled).line}
-            </button>
-          ) : (
-            <span className="rl-insp-source">no source</span>
-          )}
-        </div>
+        {inst.source ? (
+          <button
+            type="button"
+            className="rl-insp-source rl-insp-source-link"
+            title="Open in editor"
+            onClick={() => {
+              const src = inst.source!;
+              void getSourceResolver()
+                .resolve(src)
+                .then((loc) => openResolvedInEditor(src, loc));
+            }}
+          >
+            {shortSource(inst.source.file)}:{inst.source.line}
+          </button>
+        ) : located ? (
+          <button
+            type="button"
+            className="rl-insp-source rl-insp-source-link"
+            title={
+              located.original
+                ? `Open in editor · ${located.original.file}:${located.original.line}`
+                : `Bundled at ${located.compiled.file}:${located.compiled.line} — deploy source maps for original paths`
+            }
+            onClick={() => void revealSource(located.compiled, located.original ?? null)}
+          >
+            {shortSource((located.original ?? located.compiled).file)}:
+            {(located.original ?? located.compiled).line}
+          </button>
+        ) : (
+          <span className="rl-insp-source">no source</span>
+        )}
       </div>
 
       {historical && activeRenderId === null && (
-        <div className="rl-empty rl-empty-compact">Not rendered yet at this cursor.</div>
+        <div className="isect why">Not rendered yet at this cursor.</div>
       )}
 
       {abDiff && (
-        <Section title="Compare A ↔ B" defaultOpen>
+        <div className="isect">
+          <div className="ihead">Compare A ↔ B</div>
           <ABCompare diff={abDiff} />
-        </Section>
+        </div>
       )}
 
-      <Section title="Why" defaultOpen>
+      <div className="isect">
+        <div className="ihead">
+          <span className="n">{next()}</span>Why
+        </div>
         <WhySection ctx={ctx} />
-      </Section>
+      </div>
 
       {doctor.total > 0 && (
-        <Section title="Doctor" count={doctor.total} defaultOpen>
+        <div className="isect">
+          <div className="ihead">
+            <span className="n">{next()}</span>Doctor
+            <span className="right">{doctor.total}</span>
+          </div>
           <DoctorTab
             runtime={doctor.runtime}
             staticFindings={doctor.staticFindings}
@@ -240,59 +296,91 @@ export function Inspector({
                 }
               : {})}
           />
-        </Section>
+        </div>
       )}
 
-      {/* Value sections keep a stable order and stay present when empty, so
-          the panel doesn't reflow as selection moves between components. */}
-      <Section title="Props" count={propCount} defaultOpen={propCount > 0}>
+      <div className="isect">
+        <div className="ihead">
+          <span className="n">{next()}</span>Props
+          {propCount > 0 && <span className="right">{propCount}</span>}
+        </div>
         {propCount > 0 ? <PropsTab ctx={ctx} /> : <SectionEmpty>No props</SectionEmpty>}
-      </Section>
+      </div>
 
-      <Section title="State" count={stateCount} defaultOpen={stateCount > 0}>
+      <div className="isect">
+        <div className="ihead">
+          <span className="n">{next()}</span>State
+          {stateCount > 0 && <span className="right">{stateCount}</span>}
+        </div>
         {stateCount > 0 ? <StateTab ctx={ctx} /> : <SectionEmpty>No state hooks</SectionEmpty>}
-      </Section>
+      </div>
 
-      <Section title="Hooks" count={hooks.length}>
-        {hooks.length > 0 ? <HooksTab ctx={ctx} /> : <SectionEmpty>No hooks</SectionEmpty>}
-      </Section>
+      <div className="isect">
+        <div className="ihead">
+          <span className="n">{next()}</span>Context
+          {contextCount > 0 && <span className="right">{contextCount}</span>}
+        </div>
+        {contextCount > 0 ? <ContextTab ctx={ctx} /> : <SectionEmpty>No context reads</SectionEmpty>}
+      </div>
 
-      <Section title="Context" count={contextCount}>
-        {contextCount > 0 ? (
-          <ContextTab ctx={ctx} />
-        ) : (
-          <SectionEmpty>No context reads</SectionEmpty>
-        )}
-      </Section>
-
-      <Section title="Effects" count={effectCount}>
+      <div className="isect">
+        <div className="ihead">
+          <span className="n">{next()}</span>Effects
+          {effectCount > 0 && <span className="right">{effectCount}</span>}
+        </div>
         {effectCount > 0 ? <EffectsTab ctx={ctx} /> : <SectionEmpty>No effects</SectionEmpty>}
-      </Section>
+      </div>
 
-      <Section title="Stack">
+      <div className="isect">
+        <div className="ihead">
+          <span className="n">{next()}</span>Stack
+        </div>
         <RelationsTab ctx={ctx} />
-      </Section>
+      </div>
 
-      <Section title="Renders" count={renders.length}>
+      <div className="isect">
+        <div className="ihead">
+          <span className="n">{next()}</span>Renders
+          {renders.length > 0 && <span className="right">{renders.length}</span>}
+        </div>
         <RendersTab ctx={ctx} renders={renders} />
-      </Section>
+      </div>
 
-      <Section title="Source">
+      <div className="isect">
+        <div className="ihead">
+          <span className="n">{next()}</span>Source
+        </div>
         <SourceTab inst={inst} ctx={ctx} />
-      </Section>
+      </div>
 
-      {snapshot?.dom && (
-        <Section title="DOM">
-          <DomTab ctx={ctx} />
-        </Section>
-      )}
-    </div>
+      <div className="isect" style={{ borderBottom: "none" }}>
+        <div className="ihead">
+          <span className="n">{next()}</span>DOM
+        </div>
+        {snapshot?.dom ? <DomTab ctx={ctx} /> : <SectionEmpty>No DOM snapshot</SectionEmpty>}
+      </div>
+    </>
   );
 }
 
 /** Quiet placeholder so empty sections hold their place without noise. */
 function SectionEmpty({ children }: { children: React.ReactNode }) {
   return <div className="rl-section-empty">{children}</div>;
+}
+
+/** Owner chain root-first, capped so a 14-deep tree doesn't wrap forever. */
+function ownerChain(store: TraceStore, id: ComponentId): Array<{ id: ComponentId; name: string }> {
+  const chain: Array<{ id: ComponentId; name: string }> = [];
+  const seen = new Set<ComponentId>();
+  let cur: ComponentId | undefined = id;
+  while (cur !== undefined && !seen.has(cur)) {
+    seen.add(cur);
+    const inst = store.instance(cur);
+    if (!inst) break;
+    chain.unshift({ id: cur, name: inst.name });
+    cur = inst.parentId;
+  }
+  return chain.length > 5 ? chain.slice(-5) : chain;
 }
 
 interface ABDiff {

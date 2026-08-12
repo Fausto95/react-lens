@@ -68,6 +68,16 @@ describe("timelineReducer — region / play / gaps", () => {
     expect(timelineReducer(playing, { type: "pause" }, CTX).playing).toBe(false);
   });
 
+  it("clears a selected clip", () => {
+    const withClip = timelineReducer(
+      start(),
+      { type: "selectClip", renderId: 7 as never, laneKey: "t:App" },
+      CTX,
+    );
+    expect(withClip.selectedRender).toBe(7);
+    expect(timelineReducer(withClip, { type: "clearClip" }, CTX).selectedRender).toBeNull();
+  });
+
   it("toggles gap expansion targets", () => {
     const s = timelineReducer(start(), { type: "toggleGap", id: "g1" }, CTX);
     expect(s.expandedGaps.has("g1")).toBe(true);

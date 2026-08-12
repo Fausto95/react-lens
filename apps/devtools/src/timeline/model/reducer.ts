@@ -48,6 +48,7 @@ export type TimelineAction =
   | { type: "fitWall"; w0: number; w1: number }
   | { type: "panBy"; dA: number }
   | { type: "selectClip"; renderId: RenderId; laneKey: LaneKey }
+  | { type: "clearClip" }
   | { type: "selectLane"; laneKey: LaneKey | null }
   | { type: "setRegion"; span: TimeSpan | null }
   | { type: "dragRegionEdge"; side: "start" | "end"; t: number }
@@ -115,6 +116,9 @@ export function timelineReducer(
 
     case "selectClip":
       return { ...state, selectedRender: action.renderId, selectedLane: action.laneKey };
+
+    case "clearClip":
+      return state.selectedRender === null ? state : { ...state, selectedRender: null };
 
     case "selectLane":
       return { ...state, selectedLane: action.laneKey };

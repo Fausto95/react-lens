@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vite-plus/test";
+import { buildAxis } from "./axis.js";
 import { clipsInLoupe, loupeAt, loupeX, LOUPE_HALF_MS } from "./loupe.js";
 
 describe("loupe", () => {
@@ -20,8 +21,19 @@ describe("loupe", () => {
     expect(clips).toHaveLength(1);
   });
 
-  it("maps the center to mid-canvas", () => {
+  it("maps the center to mid-canvas when the window is symmetric", () => {
     const win = loupeAt("t:A", 50);
     expect(loupeX(50, win, 100)).toBeCloseTo(50, 5);
+  });
+
+  it("clamps the window to the containing activity segment", () => {
+    const axis = buildAxis([
+      [0, 100],
+      [1000, 1100],
+    ]);
+    const win = loupeAt("t:A", 90, 34, axis);
+    expect(win.t0).toBeGreaterThanOrEqual(0);
+    expect(win.t1).toBeLessThanOrEqual(100);
+    expect(win.t1).toBe(100);
   });
 });

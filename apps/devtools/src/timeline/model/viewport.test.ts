@@ -4,6 +4,7 @@ import {
   clampView,
   fitView,
   fitWallRange,
+  fitWallRangeAround,
   wallWindow,
   zoomView,
 } from "./viewport.js";
@@ -56,5 +57,15 @@ describe("fitWallRange / wallWindow", () => {
     const win = wallWindow(AXIS, v);
     expect(win.start).toBeLessThanOrEqual(100 + 1);
     expect(win.end).toBeGreaterThanOrEqual(400 - 1);
+  });
+});
+
+describe("fitWallRangeAround", () => {
+  it("keeps the center wall time at the view midpoint", () => {
+    // Near the end of the first activity band so a symmetric ± window clamps.
+    const center = 480;
+    const v = fitWallRangeAround(AXIS, 400, 500, center);
+    const midA = (v.a0 + v.a1) / 2;
+    expect(AXIS.axisToWall(midA)).toBeCloseTo(center, 0);
   });
 });

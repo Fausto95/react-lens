@@ -1,11 +1,11 @@
-import { useCallback, useEffect, useMemo, useReducer, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import type { ComponentId } from "@reactlens/protocol";
 import type { LaneControls } from "../../laneFilter.js";
 import type { TimeCursor } from "../../timeCursor.js";
-import { buildAxis, clamp, easeOut, type TimeAxis } from "../model/axis.js";
+import { buildAxis, clamp, compactGap, easeOut, type TimeAxis } from "../model/axis.js";
 import { loupeAt, LOUPE_H, LOUPE_HALF_MS, LOUPE_W, loupeX } from "../model/loupe.js";
-import { clampView, fitWallRange, lerpView, reanchorAfterAxisChange } from "../model/viewport.js";
-import { advancePlayhead, cursorModeAtStop, playStartAxis } from "../model/transport.js";
+import { clampView, fitWallRange, fitWallRangeAround, lerpView, reanchorAfterAxisChange } from "../model/viewport.js";
+import { advancePlayhead, cursorModeAtStop, playStartAxis, stepCommitTime } from "../model/transport.js";
 import { timelineKeyAction } from "../keymap.js";
 import { clipAtTime, clipCauseColor, type Clip } from "../model/lanes.js";
 import type { Timeline as TimelineModel } from "../useTimeline.js";
@@ -29,16 +29,20 @@ const HELP: Array<[string, string]> = [
   ["click empty / ruler", "seek playhead (time-travel)"],
   ["drag", "scrub / time-travel (snaps to clip edges)"],
   ["click clip", "inspect without pausing capture"],
+  ["click stitch ◆", "expand compressed idle"],
   ["⇧ drag", "set A/B loop region"],
   ["⌥ drag", "marquee zoom"],
   ["middle-drag", "pan with momentum"],
   ["pinch / ⌘ scroll", "zoom at cursor"],
   ["scroll", "pan time · scroll lanes vertically when tall"],
+  ["click empty wave", "zoom loupe window"],
   ["double-click clip", "zoom to clip"],
   ["double-click region", "zoom to region"],
   ["double-click empty", "fit"],
   ["space", "play / pause (loops only with A/B)"],
   ["J / K / L", "reverse / stop / forward (tap again = faster)"],
+  ["⇧ ← / →", "previous / next commit"],
+  ["End / .", "go live (resume capture)"],
   ["[ / ]", "set A / B at playhead"],
   ["Z + click", "zoom to burst"],
   ["F", "zoom to selection"],
@@ -65,20 +69,32 @@ export function Timeline({
   onHighlight?: (id: ComponentId | null) => void;
   transport?: React.ReactNode;
 }) {
-  const { state, dispatch, acts, gapProgRef, layout, bounds, markers, arrows, lanes, axis } = model;
-  const [, force] = useReducer((x: number) => x + 1, 0);
+  const { state, dispatch, acts, gapProgRef, layout, bounds, markers, arrows, lanes, axis, commits } =
+    model;
 
   const wrapRef = useRef<HTMLDivElement>(null);
   const baseRef = useRef<HTMLCanvasElement>(null);
   const overRef = useRef<HTMLCanvasElement>(null);
   const loupeCvRef = useRef<HTMLCanvasElement>(null);
+  const tipElRef = useRef<HTMLDivElement>(null);
+  const tipNameRef = useRef<HTMLDivElement>(null);
+  const tipCauseRef = useRef<HTMLSpanElement>(null);
+  const tipWasteRef = useRef<HTMLSpanElement>(null);
+  const tipMetaRef = useRef<HTMLDivElement>(null);
+  const loupeElRef = useRef<HTMLDivElement>(null);
+  const loupeHeadRef = useRef<HTMLDivElement>(null);
+  const phChipRef = useRef<HTMLDivElement>(null);
   const patternRef = useRef<CanvasPattern | null>(null);
   /** Live axis for drawing (tracks gapProg animation frames). */
   const axisLiveRef = useRef<TimeAxis>(axis);
   axisLiveRef.current = buildAxis(acts, gapProgRef.current);
 
   const playheadRef = useRef(model.playhead);
-  playheadRef.current = cursor.mode === "live" ? model.playhead : cursor.t;
+  // While playing, the transport owns the playhead. A stale live cursor (parent
+  // hasn't committed the historical seek yet) must not snap us back to t1.
+  if (!(state.playing && cursor.mode === "live")) {
+    playheadRef.current = cursor.mode === "live" ? model.playhead : cursor.t;
+  }
   const hoverRef = useRef<string | null>(null);
   const ghostRef = useRef<number | null>(null);
   const tipRef = useRef<{ clip: Clip; x: number; y: number } | null>(null);
@@ -91,8 +107,10 @@ export function Timeline({
   const marqueeRef = useRef<{ x0: number; x1: number } | null>(null);
   const dragRef = useRef<
     | { type: "scrub" }
-    /** Pointer down on empty track — becomes scrub only after a drag threshold. */
+    /** Pointer down on a clip — becomes scrub only after a drag threshold. */
     | { type: "scrubPending"; x0: number; y0: number }
+    /** Empty wave hover target — click zooms the loupe window; drag scrubs. */
+    | { type: "waveTap"; x0: number; y0: number; laneKey: string; wallT: number }
     | { type: "pan"; lastX: number; vel: number; lastT: number }
     | { type: "marquee" }
     | { type: "region"; side: "start" | "end" }
@@ -160,6 +178,79 @@ export function Timeline({
     onCursor(historical ? { mode: "historical", t } : { mode: "live", t: model.bounds.t1 });
   };
 
+  /**
+   * Hover chrome (tip / loupe / playhead chip) is driven from refs during paint
+   * so scrubbing and hover do not force a React re-render every frame.
+   */
+  const syncChrome = useCallback(() => {
+    const fmtMs = (t: number) => Math.round(t - bounds.t0).toLocaleString("en-US");
+    const tipEl = tipElRef.current;
+    const tip = tipRef.current;
+    if (tipEl) {
+      if (!tip) {
+        tipEl.style.display = "none";
+      } else {
+        tipEl.style.display = "block";
+        tipEl.style.left = `${tip.x}px`;
+        tipEl.style.top = `${tip.y}px`;
+        if (tipNameRef.current) {
+          tipNameRef.current.textContent = `${tip.clip.name} #${tip.clip.componentId}`;
+        }
+        if (tipCauseRef.current) {
+          const cause = clipCauseColor(tip.clip.cause);
+          tipCauseRef.current.textContent = cause;
+          tipCauseRef.current.style.color = CAUSE_VAR[cause];
+        }
+        if (tipWasteRef.current) {
+          tipWasteRef.current.style.display = tip.clip.wasted ? "" : "none";
+        }
+        if (tipMetaRef.current) {
+          const self =
+            tip.clip.self < tip.clip.total * 0.95
+              ? ` · ${tip.clip.self.toFixed(1)} ms self`
+              : "";
+          tipMetaRef.current.textContent = `${fmtMs(tip.clip.t0)}–${fmtMs(tip.clip.t1)} ms · ${tip.clip.total.toFixed(1)} ms total${self} · row ${(tip.clip.row ?? 0) + 1}`;
+        }
+      }
+    }
+
+    const loupeEl = loupeElRef.current;
+    const loupe = loupeRef.current;
+    if (loupeEl) {
+      if (!loupe) {
+        loupeEl.style.display = "none";
+        delete loupeEl.dataset.t0;
+        delete loupeEl.dataset.t1;
+        delete loupeEl.dataset.wallT;
+      } else {
+        const win = loupeAt(loupe.laneKey, loupe.wallT, LOUPE_HALF_MS, axisLiveRef.current);
+        loupeEl.style.display = "block";
+        loupeEl.style.left = `${loupe.x}px`;
+        loupeEl.style.top = `${Math.max(loupe.y, 2)}px`;
+        loupeEl.dataset.t0 = String(win.t0);
+        loupeEl.dataset.t1 = String(win.t1);
+        loupeEl.dataset.wallT = String(win.wallT);
+        if (loupeHeadRef.current) {
+          loupeHeadRef.current.textContent = `↳ ${fmtMs(win.t0)}–${fmtMs(win.t1)} ms · click to zoom`;
+        }
+      }
+    }
+
+    const ph = phChipRef.current;
+    if (ph) {
+      const x = wToX(playheadRef.current);
+      const nw = nameW();
+      if (x > nw && x < sizeRef.current.w - 74) {
+        ph.style.display = "block";
+        ph.style.left = `${x + 8}px`;
+        const speed = state.playing && state.speed !== 1 ? ` · ${state.speed}×` : "";
+        ph.textContent = `t = ${fmtMs(playheadRef.current)} ms${speed}`;
+      } else {
+        ph.style.display = "none";
+      }
+    }
+  }, [bounds.t0, state.playing, state.speed, wToX]);
+
   /** Start transport from the cursor, or from the range start if already at the end. */
   const startPlay = (dir: 1 | -1, speed = 1) => {
     const ax = axisLiveRef.current;
@@ -181,7 +272,7 @@ export function Timeline({
     const lane = lanes.find((l) => l.key === lp.laneKey);
     if (!lane) return;
     const theme = themeRef.current;
-    const win = loupeAt(lp.laneKey, lp.wallT);
+    const win = loupeAt(lp.laneKey, lp.wallT, LOUPE_HALF_MS, axisLiveRef.current);
     ctx.clearRect(0, 0, LOUPE_W, LOUPE_H);
     for (const c of lane.clips) {
       if (c.t1 < win.t0 || c.t0 > win.t1) continue;
@@ -198,10 +289,12 @@ export function Timeline({
       ctx.stroke();
       ctx.setLineDash([]);
     }
+    // Crosshair at the hover time (not canvas mid — window may be asymmetric).
+    const cx = loupeX(win.wallT, win);
     ctx.strokeStyle = theme.accent + "b3";
     ctx.beginPath();
-    ctx.moveTo(LOUPE_W / 2 + 0.5, 0);
-    ctx.lineTo(LOUPE_W / 2 + 0.5, LOUPE_H);
+    ctx.moveTo(Math.round(cx) + 0.5, 0);
+    ctx.lineTo(Math.round(cx) + 0.5, LOUPE_H);
     ctx.stroke();
   }, [lanes]);
 
@@ -263,7 +356,7 @@ export function Timeline({
         theme,
       });
       drawLoupe();
-      force();
+      syncChrome();
     },
     [
       aToX,
@@ -277,6 +370,7 @@ export function Timeline({
       arrows,
       model.pxPerMs,
       drawLoupe,
+      syncChrome,
       acts,
       state.expandedGaps,
     ],
@@ -289,6 +383,30 @@ export function Timeline({
     },
     [paint],
   );
+  // Transport must not restart when paint/scheduleDraw identity churns — that
+  // froze replay by resetting `last` every cursor tick (see useLatest.ts).
+  const scheduleDrawRef = useRef(scheduleDraw);
+  scheduleDrawRef.current = scheduleDraw;
+  const setPlayheadRef = useRef(setPlayhead);
+  setPlayheadRef.current = setPlayhead;
+  const playOptsRef = useRef({
+    speed: state.speed,
+    dir: state.playDir,
+    region: state.region,
+  });
+  playOptsRef.current = {
+    speed: state.speed,
+    dir: state.playDir,
+    region: state.region,
+  };
+
+  const stepCommit = (dir: -1 | 1) => {
+    if (state.playing) dispatch({ type: "pause" });
+    const next = stepCommitTime(commits, playheadRef.current, dir);
+    if (next == null) return;
+    setPlayhead(next);
+    scheduleDraw(false);
+  };
 
   useEffect(() => {
     const el = wrapRef.current;
@@ -370,6 +488,21 @@ export function Timeline({
     else setView(v.a0, v.a1 - v.a0);
   };
 
+  const doFitLoupe = (w0: number, w1: number, centerW: number) => {
+    const v = fitWallRangeAround(axisLiveRef.current, w0, w1, centerW);
+    animateView(v.a0, v.a1 - v.a0, 180);
+  };
+
+  /** Zoom the timeline to a loupe wall window, keeping `centerW` centered. */
+  const applyLoupeZoom = (laneKey: string, wallT: number) => {
+    const win = loupeAt(laneKey, wallT, LOUPE_HALF_MS, axisLiveRef.current);
+    doFitLoupe(win.t0, win.t1, win.wallT);
+    loupeRef.current = null;
+    tipRef.current = null;
+    syncChrome();
+    scheduleDraw(true);
+  };
+
   const toggleGap = (id: string) => {
     const target = state.expandedGaps.has(id) ? 0 : 1;
     dispatch({ type: "toggleGap", id });
@@ -391,6 +524,42 @@ export function Timeline({
       if (t < 1) gapAnim.current = requestAnimationFrame(step);
     };
     gapAnim.current = requestAnimationFrame(step);
+  };
+
+  /** Expand every fully-compressed idle gap toward wall time. */
+  const expandAllIdle = () => {
+    const ids = axisLiveRef.current.segs
+      .filter((s): s is Extract<typeof s, { type: "gap" }> => s.type === "gap")
+      .filter((s) => s.a1 - s.a0 < 1e-6 && !state.expandedGaps.has(s.id))
+      .map((s) => s.id);
+    if (ids.length === 0) return;
+    for (const id of ids) dispatch({ type: "toggleGap", id });
+    cancelAnimationFrame(gapAnim.current);
+    const from = new Map(ids.map((id) => [id, gapProgRef.current.get(id) ?? 0]));
+    const start = performance.now();
+    const dur = 280;
+    const step = (now: number) => {
+      const t = easeOut(clamp((now - start) / dur, 0, 1));
+      const prev = axisLiveRef.current;
+      const centerW = prev.axisToWall((state.view.a0 + state.view.a1) / 2);
+      const prevTotal = prev.total;
+      for (const id of ids) {
+        gapProgRef.current.set(id, (from.get(id) ?? 0) + (1 - (from.get(id) ?? 0)) * t);
+      }
+      const next = buildAxis(acts, gapProgRef.current);
+      axisLiveRef.current = next;
+      const re = reanchorAfterAxisChange(state.view, prevTotal, next, centerW);
+      dispatch({ type: "setView", a0: re.a0, span: re.a1 - re.a0 });
+      scheduleDraw(true);
+      if (t < 1) gapAnim.current = requestAnimationFrame(step);
+    };
+    gapAnim.current = requestAnimationFrame(step);
+  };
+
+  const goLive = () => {
+    playheadRef.current = bounds.t1;
+    onCursor({ mode: "live", t: bounds.t1 });
+    scheduleDraw(false);
   };
 
   const hitClip = (x: number, y: number): ClipRect | null => {
@@ -509,6 +678,21 @@ export function Timeline({
         e.currentTarget.setPointerCapture(e.pointerId);
         return;
       }
+      // Empty wave: tap zooms the loupe window; drag still scrubs.
+      const waveRow = layout.rows.find(
+        (r) => y >= r.y && y <= r.y + r.h && r.mode === "wave",
+      );
+      if (waveRow && x > nameW()) {
+        dragRef.current = {
+          type: "waveTap",
+          x0: x,
+          y0: y,
+          laneKey: waveRow.key,
+          wallT: xToW(x),
+        };
+        e.currentTarget.setPointerCapture(e.pointerId);
+        return;
+      }
       // Empty track / ruler: place the playhead under the cursor. Clip taps
       // above stay inspect-only so capture is not paused by accident.
       setPlayhead(snap(xToW(x), x));
@@ -545,28 +729,30 @@ export function Timeline({
     const { x, y, viewY } = localXY(e);
     const d = dragRef.current;
     if (!d) {
-      const hit = hitClip(x, y);
-      const id = hit ? String(hit.clip.renderId) : null;
+      const soft = clipUnderPointer(x, y);
+      const id = soft ? String(soft.renderId) : null;
       if (id !== hoverRef.current) {
         hoverRef.current = id;
-        onHighlight?.(hit?.clip.componentId ?? null);
+        onHighlight?.(soft?.componentId ?? null);
       }
       const scrollTop = wrapRef.current?.scrollTop ?? 0;
-      tipRef.current = hit
+      tipRef.current = soft
         ? {
-            clip: hit.clip,
+            clip: soft,
             x: clamp(x + 14, nameW(), sizeRef.current.w - 190),
             y: viewY + 16,
           }
         : null;
       ghostRef.current = x > nameW() ? xToW(x) : null;
+      // Loupe is a wave-only empty-track preview — never over clips, stack
+      // rows, the ruler, or while a tip is showing.
       const row = layout.rows.find((r) => y >= r.y && y <= r.y + r.h && r.mode === "wave");
-      if (row && x > nameW() && !hit) {
+      if (row && x > nameW() && !soft) {
         loupeRef.current = {
           laneKey: row.key,
           wallT: xToW(x),
           x: clamp(x - 145, nameW() + 4, sizeRef.current.w - 296),
-          y: row.y - scrollTop - 76,
+          y: row.y - scrollTop - 52,
         };
       } else loupeRef.current = null;
       scheduleDraw(false);
@@ -586,6 +772,15 @@ export function Timeline({
       if (Math.hypot(x - d.x0, y - d.y0) >= SCRUB_DRAG_PX) {
         dragRef.current = { type: "scrub" };
         setPlayhead(snap(xToW(x), x));
+        scheduleDraw(false);
+      }
+      return;
+    }
+    if (d.type === "waveTap") {
+      if (Math.hypot(x - d.x0, y - d.y0) >= SCRUB_DRAG_PX) {
+        dragRef.current = { type: "scrub" };
+        setPlayhead(snap(xToW(x), x));
+        loupeRef.current = null;
         scheduleDraw(false);
       }
       return;
@@ -617,6 +812,12 @@ export function Timeline({
     const d = dragRef.current;
     if (d?.type === "scrubPending") {
       // Clip tap released without dragging — inspection already applied on down.
+      dragRef.current = null;
+      return;
+    }
+    if (d?.type === "waveTap") {
+      // Empty-wave click — zoom to the loupe window under the press.
+      applyLoupeZoom(d.laneKey, d.wallT);
       dragRef.current = null;
       return;
     }
@@ -695,20 +896,18 @@ export function Timeline({
     const step = (ts: number) => {
       if (last != null) {
         const ax = axisLiveRef.current;
-        const rg = state.region;
+        const { speed, dir, region: rg } = playOptsRef.current;
         const loop = rg != null;
         const aw0 = rg ? ax.wallToAxis(rg.start) : 0;
         const aw1 = rg ? ax.wallToAxis(rg.end) : ax.total;
         const pa = ax.wallToAxis(playheadRef.current);
-        const deltaA =
-          Math.min(ts - last, 100) * ((aw1 - aw0) / 2300) * state.speed * state.playDir;
+        const deltaA = Math.min(ts - last, 100) * ((aw1 - aw0) / 2300) * speed * dir;
         const next = advancePlayhead({ a: pa, deltaA, a0: aw0, a1: aw1, loop });
-        const live =
-          next.kind === "stop" && cursorModeAtStop({ dir: state.playDir, loop }) === "live";
+        const live = next.kind === "stop" && cursorModeAtStop({ dir, loop }) === "live";
         // Catching up with the present must release time travel, or the page
         // keeps dropping commits and nothing is traced after the replay.
-        setPlayhead(ax.axisToWall(next.a), !live);
-        scheduleDraw(false);
+        setPlayheadRef.current(ax.axisToWall(next.a), !live);
+        scheduleDrawRef.current(false);
         if (next.kind === "stop") {
           dispatch({ type: "pause" });
           return;
@@ -719,7 +918,7 @@ export function Timeline({
     };
     raf = requestAnimationFrame(step);
     return () => cancelAnimationFrame(raf);
-  }, [state.playing, state.speed, state.playDir, state.region, scheduleDraw]);
+  }, [state.playing]);
 
   useEffect(() => {
     const down = (e: KeyboardEvent) => {
@@ -809,8 +1008,11 @@ export function Timeline({
           scheduleDraw(false);
           break;
         }
+        case "step-commit":
+          stepCommit(action.dir);
+          break;
         case "go-live":
-          onCursor({ mode: "live", t: bounds.t1 });
+          goLive();
           break;
       }
     };
@@ -846,6 +1048,12 @@ export function Timeline({
     .map((s) => ({ ...s, x0: aToX(s.a0), x1: aToX(s.a1) }))
     .filter((s) => s.x1 > nameW() + 3 && s.x0 < sizeRef.current.w);
 
+  const stitches = axisLiveRef.current.segs
+    .filter((s): s is Extract<typeof s, { type: "gap" }> => s.type === "gap")
+    .filter((s) => s.a1 - s.a0 < 1e-6)
+    .map((s) => ({ id: s.id, x: aToX(s.a0), ms: s.w1 - s.w0 }))
+    .filter((s) => s.x > nameW() + 2 && s.x < sizeRef.current.w - 2);
+
   const liveAxis = axisLiveRef.current;
   const rg = state.region;
   const inScope = lanes
@@ -862,11 +1070,7 @@ export function Timeline({
     state.selectedRender != null
       ? (lanes.flatMap((l) => l.clips).find((c) => c.renderId === state.selectedRender) ?? null)
       : null;
-  const phX = wToX(playheadRef.current);
-  const loupe = loupeRef.current;
-  const tip = tipRef.current;
   const narrow = sizeRef.current.w < 720;
-  const fmt = (t: number) => Math.round(t - bounds.t0).toLocaleString("en-US");
 
   return (
     <div className="tl tl-canvas-root">
@@ -894,6 +1098,26 @@ export function Timeline({
           title={state.playing ? "Pause (Space)" : "Play (Space)"}
         >
           {state.playing ? "⏸" : "▶"}
+        </button>
+        <button
+          type="button"
+          className="tl-btn"
+          onClick={() => stepCommit(-1)}
+          aria-label="Previous commit"
+          title="Previous commit (⇧←)"
+          disabled={commits.length === 0}
+        >
+          ‹
+        </button>
+        <button
+          type="button"
+          className="tl-btn"
+          onClick={() => stepCommit(1)}
+          aria-label="Next commit"
+          title="Next commit (⇧→)"
+          disabled={commits.length === 0}
+        >
+          ›
         </button>
         <button
           type="button"
@@ -931,6 +1155,16 @@ export function Timeline({
         <button type="button" className="tl-btn" onClick={fit}>
           Fit
         </button>
+        {cursor.mode === "historical" && (
+          <button
+            type="button"
+            className="tl-btn on"
+            onClick={goLive}
+            title="Go live — resume capture (End)"
+          >
+            Live
+          </button>
+        )}
         <button type="button" className="tl-btn" onClick={() => dispatch({ type: "toggleHelp" })}>
           ?
         </button>
@@ -959,6 +1193,7 @@ export function Timeline({
           ghostRef.current = null;
           tipRef.current = null;
           loupeRef.current = null;
+          hoverRef.current = null;
           scheduleDraw(false);
         }}
       >
@@ -1008,6 +1243,19 @@ export function Timeline({
           </div>
         ))}
 
+        {stitches.map((s) => (
+          <button
+            key={s.id}
+            type="button"
+            className="tl-stitch"
+            style={{ left: s.x - 6 }}
+            title={`Expand idle +${compactGap(s.ms)}`}
+            aria-label={`Expand idle +${compactGap(s.ms)}`}
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={() => toggleGap(s.id)}
+          />
+        ))}
+
         {gapChips.map((s) => {
           const chipW = Math.max(s.x1 - s.x0 - 4, 56);
           const left = clamp(
@@ -1032,62 +1280,35 @@ export function Timeline({
           );
         })}
 
-        {phX > nameW() && phX < sizeRef.current.w - 74 && (
-          <div
-            className="tl-ph-chip"
-            style={{ left: phX + 8, top: RULER_H + 4, pointerEvents: "none" }}
-          >
-            t = {fmt(playheadRef.current)} ms
-            {state.playing && state.speed !== 1 ? ` · ${state.speed}×` : ""}
-          </div>
-        )}
+        <div
+          ref={phChipRef}
+          className="tl-ph-chip"
+          style={{ top: RULER_H + 4, pointerEvents: "none", display: "none" }}
+        />
 
-        {tip && (
-          <div className="tl-tip" style={{ left: tip.x, top: tip.y }}>
-            <div className="tl-tip-name">
-              {tip.clip.name}
-              {` #${tip.clip.componentId}`}
-            </div>
-            <div>
-              <span style={{ color: CAUSE_VAR[clipCauseColor(tip.clip.cause)] }}>
-                {clipCauseColor(tip.clip.cause)}
-              </span>
-              {tip.clip.wasted && <span style={{ color: "var(--warn)" }}> · wasted</span>}
-            </div>
-            <div className="tl-tip-meta">
-              {fmt(tip.clip.t0)}–{fmt(tip.clip.t1)} ms · {tip.clip.total.toFixed(1)} ms total
-              {tip.clip.self < tip.clip.total * 0.95
-                ? ` · ${tip.clip.self.toFixed(1)} ms self`
-                : ""}
-              · row {(tip.clip.row ?? 0) + 1}
-            </div>
+        <div ref={tipElRef} className="tl-tip" style={{ display: "none" }}>
+          <div ref={tipNameRef} className="tl-tip-name" />
+          <div>
+            <span ref={tipCauseRef} />
+            <span ref={tipWasteRef} style={{ color: "var(--warn)", display: "none" }}>
+              {" "}
+              · wasted
+            </span>
           </div>
-        )}
+          <div ref={tipMetaRef} className="tl-tip-meta" />
+        </div>
 
-        {loupe && (
-          <div
-            className="tl-loupe"
-            style={{
-              left: loupe.x,
-              top: Math.max(loupe.y, 2),
-              width: 292,
-            }}
-            onPointerDown={(e) => {
-              e.stopPropagation();
-              doFitWall(loupe.wallT - LOUPE_HALF_MS, loupe.wallT + LOUPE_HALF_MS);
-              loupeRef.current = null;
-            }}
-          >
-            <div className="tl-loupe-head">
-              ↳ {fmt(loupe.wallT - LOUPE_HALF_MS)}–{fmt(loupe.wallT + LOUPE_HALF_MS)} ms · click to
-              zoom
-            </div>
-            <canvas
-              ref={loupeCvRef}
-              style={{ display: "block", width: LOUPE_W, height: LOUPE_H }}
-            />
-          </div>
-        )}
+        <div
+          ref={loupeElRef}
+          className="tl-loupe"
+          style={{ display: "none", width: 292, pointerEvents: "none" }}
+        >
+          <div ref={loupeHeadRef} className="tl-loupe-head" />
+          <canvas
+            ref={loupeCvRef}
+            style={{ display: "block", width: LOUPE_W, height: LOUPE_H }}
+          />
+        </div>
 
         {state.showHelp && (
           <div className="tl-help" onPointerDown={(e) => e.stopPropagation()}>
@@ -1123,6 +1344,7 @@ export function Timeline({
         wastedN={wastedN}
         idleCollapsedMs={idleTotal}
         regionActive={rg != null}
+        onExpandIdle={idleTotal > 0 ? expandAllIdle : undefined}
       />
     </div>
   );

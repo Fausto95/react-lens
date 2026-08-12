@@ -1,14 +1,13 @@
-import type { RenderEvent, RenderSnapshot } from "@reactlens/protocol";
+import type { RenderEvent } from "@reactlens/protocol";
 import type { InspectorContext } from "../Inspector.js";
 import { ms, timeAxis } from "@reactlens/ui";
-import { DiffLines, EmptyTab } from "./shared.js";
-import { diff, type DiffResult } from "@reactlens/diff-engine";
+import { EmptyTab } from "./shared.js";
+import { changesForRender, type ChangeRow } from "../inspector/renderStory.js";
 
 /**
- * Render history as an activity feed: newest first, each row carrying its
- * cause, position in the session, and a self-time bar. The selected render
- * expands inline with what actually changed vs the previous one (props /
- * state / context diffs from the captured snapshots).
+ * Render history as an activity feed: newest first. Expanding a row shows the
+ * same Change diff the clip inspector uses (props / state / context rows with
+ * @ref chips), so the two views stay in lockstep.
  */
 export function RendersTab({ ctx, renders }: { ctx: InspectorContext; renders: RenderEvent[] }) {
   const { store, activeRenderId, onSelectRender } = ctx;
@@ -22,7 +21,6 @@ export function RendersTab({ ctx, renders }: { ctx: InspectorContext; renders: R
     <div className="rl-render-feed">
       {newestFirst.map((r) => {
         const idx = renders.findIndex((x) => x.renderId === r.renderId);
-        const prev = idx > 0 ? renders[idx - 1]! : null;
         const open = r.renderId === activeRenderId;
         return (
           <div key={r.renderId} className={`rl-render-item${open ? " open" : ""}`}>
@@ -46,7 +44,7 @@ export function RendersTab({ ctx, renders }: { ctx: InspectorContext; renders: R
               </span>
               <span className="rl-render-cost">{ms(r.selfDuration)}</span>
             </button>
-            {open && <RenderDiff store={store} cur={r} prev={prev} />}
+            {open && <RenderChangeDiff store={store} renderId={r.renderId} />}
           </div>
         );
       })}
@@ -54,86 +52,57 @@ export function RendersTab({ ctx, renders }: { ctx: InspectorContext; renders: R
   );
 }
 
-/** Inline expansion: what this render changed relative to the previous one. */
-function RenderDiff({
+/** Same Change block the clip inspector paints for a selected render. */
+function RenderChangeDiff({
   store,
-  cur,
-  prev,
+  renderId,
 }: {
   store: InspectorContext["store"];
-  cur: RenderEvent;
-  prev: RenderEvent | null;
+  renderId: RenderEvent["renderId"];
 }) {
-  const curSnap = store.snapshot(cur.renderId);
-  if (!curSnap) {
+  const { changes, refWarning } = changesForRender(store, renderId);
+  if (!store.snapshot(renderId)) {
     return <div className="rl-render-note">Snapshot no longer retained for this render.</div>;
-  }
-  if (!prev) {
-    // Mount: everything is "added" — show the initial values as such.
-    const initial = diff({ kind: "props", before: UNDEF, after: curSnap.props });
-    return (
-      <div className="rl-render-diff">
-        <DiffGroup title="Mount — initial props" result={initial} />
-      </div>
-    );
-  }
-  const prevSnap = store.snapshot(prev.renderId);
-  if (!prevSnap) {
-    return (
-      <div className="rl-render-note">
-        Previous render's snapshot no longer retained — nothing to compare.
-      </div>
-    );
-  }
-  const groups = diffGroups(prevSnap, curSnap);
-  if (groups.every(({ result }) => result.summary.changed === 0)) {
-    return (
-      <div className="rl-render-note">
-        No captured value changed — parent render or reference-only churn.
-      </div>
-    );
   }
   return (
     <div className="rl-render-diff">
-      {groups.map(
-        ({ title, result }) =>
-          result.summary.changed > 0 && <DiffGroup key={title} title={title} result={result} />,
-      )}
+      <ChangeDiffRows changes={changes} refWarning={refWarning} />
     </div>
   );
 }
 
-const UNDEF = { k: "undefined" } as const;
-
-function diffGroups(prev: RenderSnapshot, cur: RenderSnapshot) {
-  return [
-    { title: "Props", result: diff({ kind: "props", before: prev.props, after: cur.props }) },
-    {
-      title: "State",
-      result: diff({ kind: "state", before: prev.state ?? UNDEF, after: cur.state ?? UNDEF }),
-    },
-    {
-      title: "Context",
-      result: diff({
-        kind: "context",
-        before: prev.context ?? UNDEF,
-        after: cur.context ?? UNDEF,
-      }),
-    },
-  ];
-}
-
-function DiffGroup({ title, result }: { title: string; result: DiffResult }) {
+export function ChangeDiffRows({
+  changes,
+  refWarning,
+}: {
+  changes: ChangeRow[];
+  refWarning: string | null;
+}) {
   return (
-    <div className="rl-render-diff-group">
-      <div className="rl-render-diff-head">
-        {title}
-        {result.summary.changed > 0 && (
-          <span className="rl-render-diff-count">{result.summary.changed}</span>
-        )}
-      </div>
-      <DiffLines result={result} />
-    </div>
+    <>
+      {changes.length === 0 ? (
+        <div className="diff">
+          <div className="row neutral">· nothing captured for this render</div>
+        </div>
+      ) : (
+        <div className="diff">
+          {changes.map((change, i) => (
+            <div
+              key={i}
+              className={`row ${change.kind === "removed" ? "del" : change.kind === "added" ? "add" : "neutral"}`}
+            >
+              {change.text}
+              {change.identity && <span className="refchip"> @ref {change.identity}</span>}
+            </div>
+          ))}
+        </div>
+      )}
+      {refWarning && (
+        <div className="refwarn">
+          ⚠ <span>{refWarning}</span>
+        </div>
+      )}
+    </>
   );
 }
 
