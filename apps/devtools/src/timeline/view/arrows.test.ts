@@ -119,13 +119,8 @@ describe("planCausalArrows", () => {
       ["src", { x0: 100, x1: 180, y0: 40, y1: 56, t0: 10 }],
       ["a", { x0: 110, x1: 150, y0: 70, y1: 86, t0: 20 }],
     ]);
-    const planned = planCausalArrows(
-      [{ from: "src", to: "a", causeKey: "state" }],
-      ports,
-    );
-    expect(planned).toEqual([
-      expect.objectContaining({ slot: 1, slotCount: 1, order: 1 }),
-    ]);
+    const planned = planCausalArrows([{ from: "src", to: "a", causeKey: "state" }], ports);
+    expect(planned).toEqual([expect.objectContaining({ slot: 1, slotCount: 1, order: 1 })]);
   });
 
   it("numbers a chain globally by effect time, not per source", () => {

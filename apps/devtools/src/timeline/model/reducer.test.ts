@@ -43,11 +43,7 @@ describe("timelineReducer — view", () => {
 
 describe("timelineReducer — region / play / gaps", () => {
   it("normalises a backwards region", () => {
-    const s = timelineReducer(
-      start(),
-      { type: "setRegion", span: { start: 200, end: 100 } },
-      CTX,
-    );
+    const s = timelineReducer(start(), { type: "setRegion", span: { start: 200, end: 100 } }, CTX);
     expect(s.region).toEqual({ start: 100, end: 200 });
   });
 

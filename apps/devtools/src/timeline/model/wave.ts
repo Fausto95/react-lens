@@ -32,10 +32,7 @@ export function lodClipMs(total: number): number {
 }
 
 /** Mean painted clip width in px at the current zoom. Grows as pxPerMs grows. */
-export function avgClipWidthPx(
-  clips: ReadonlyArray<{ total: number }>,
-  pxPerMs: number,
-): number {
+export function avgClipWidthPx(clips: ReadonlyArray<{ total: number }>, pxPerMs: number): number {
   if (clips.length === 0) return 99;
   const sum = clips.reduce((a, c) => a + lodClipMs(c.total) * pxPerMs, 0);
   return sum / clips.length;
@@ -45,11 +42,7 @@ export function avgClipWidthPx(
  * Choose stack vs wave. Heavy lanes histogram only while painted marks are
  * still narrower than WAVE_AVG_PX — zooming in progressively reveals clips.
  */
-export function laneMode(
-  depth: number,
-  clipCount: number,
-  avgClipPx: number,
-): LaneMode {
+export function laneMode(depth: number, clipCount: number, avgClipPx: number): LaneMode {
   const heavy = depth > 3 || clipCount > 60;
   return heavy && avgClipPx < WAVE_AVG_PX ? "wave" : "stack";
 }
@@ -87,10 +80,7 @@ export function waveBins(
   const bins: WaveBin[] = Array.from({ length: n }, () => ({ count: 0, wasted: 0 }));
 
   for (const c of clips) {
-    const selfMs = Math.max(
-      c.self !== undefined ? c.self : c.t1 - c.t0,
-      WAVE_MIN_MS,
-    );
+    const selfMs = Math.max(c.self !== undefined ? c.self : c.t1 - c.t0, WAVE_MIN_MS);
     const x0 = wallToX(c.t0);
     const x1 = wallToX(c.t0 + selfMs);
     // Fully outside the plot.

@@ -1,38 +1,39 @@
 import { describe, expect, it } from "vite-plus/test";
-import {
-  advancePlayhead,
-  playStartAxis,
-  cursorModeAtStop,
-  stepCommitTime,
-} from "./transport.js";
+import { advancePlayhead, playStartAxis, cursorModeAtStop, stepCommitTime } from "./transport.js";
 
 describe("advancePlayhead", () => {
   it("loops inside an A/B region", () => {
-    expect(
-      advancePlayhead({ a: 90, deltaA: 20, a0: 0, a1: 100, loop: true }),
-    ).toEqual({ kind: "continue", a: 0 });
-    expect(
-      advancePlayhead({ a: 10, deltaA: -20, a0: 0, a1: 100, loop: true }),
-    ).toEqual({ kind: "continue", a: 100 });
+    expect(advancePlayhead({ a: 90, deltaA: 20, a0: 0, a1: 100, loop: true })).toEqual({
+      kind: "continue",
+      a: 0,
+    });
+    expect(advancePlayhead({ a: 10, deltaA: -20, a0: 0, a1: 100, loop: true })).toEqual({
+      kind: "continue",
+      a: 100,
+    });
   });
 
   it("stops at the end when no loop region is set", () => {
     // Without an intentional A/B band, play-once should not wrap the session.
-    expect(
-      advancePlayhead({ a: 90, deltaA: 20, a0: 0, a1: 100, loop: false }),
-    ).toEqual({ kind: "stop", a: 100 });
-    expect(
-      advancePlayhead({ a: 10, deltaA: -20, a0: 0, a1: 100, loop: false }),
-    ).toEqual({ kind: "stop", a: 0 });
+    expect(advancePlayhead({ a: 90, deltaA: 20, a0: 0, a1: 100, loop: false })).toEqual({
+      kind: "stop",
+      a: 100,
+    });
+    expect(advancePlayhead({ a: 10, deltaA: -20, a0: 0, a1: 100, loop: false })).toEqual({
+      kind: "stop",
+      a: 0,
+    });
   });
 
   it("keeps moving while inside the range", () => {
-    expect(
-      advancePlayhead({ a: 40, deltaA: 10, a0: 0, a1: 100, loop: false }),
-    ).toEqual({ kind: "continue", a: 50 });
-    expect(
-      advancePlayhead({ a: 40, deltaA: 10, a0: 0, a1: 100, loop: true }),
-    ).toEqual({ kind: "continue", a: 50 });
+    expect(advancePlayhead({ a: 40, deltaA: 10, a0: 0, a1: 100, loop: false })).toEqual({
+      kind: "continue",
+      a: 50,
+    });
+    expect(advancePlayhead({ a: 40, deltaA: 10, a0: 0, a1: 100, loop: true })).toEqual({
+      kind: "continue",
+      a: 50,
+    });
   });
 });
 

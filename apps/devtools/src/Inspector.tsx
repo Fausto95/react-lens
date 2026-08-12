@@ -320,7 +320,11 @@ export function Inspector({
           <span className="n">{next()}</span>Context
           {contextCount > 0 && <span className="right">{contextCount}</span>}
         </div>
-        {contextCount > 0 ? <ContextTab ctx={ctx} /> : <SectionEmpty>No context reads</SectionEmpty>}
+        {contextCount > 0 ? (
+          <ContextTab ctx={ctx} />
+        ) : (
+          <SectionEmpty>No context reads</SectionEmpty>
+        )}
       </div>
 
       <div className="isect">

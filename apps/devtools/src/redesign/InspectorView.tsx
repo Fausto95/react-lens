@@ -43,7 +43,9 @@ export function InspectorView({
           Inspector
           {headAction}
         </div>
-        <div className="isect why">Select a component in the tree, or a render clip on the timeline.</div>
+        <div className="isect why">
+          Select a component in the tree, or a render clip on the timeline.
+        </div>
       </>
     );
   }

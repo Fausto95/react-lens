@@ -17,10 +17,7 @@ async function clickLaneClip(page: Page, laneName: string, xFrac: number): Promi
   const canvas = page.locator(".tl-canvas-root canvas").first();
   const canvasBox = await canvas.boundingBox();
   if (!laneBox || !canvasBox) throw new Error("timeline lane/canvas has no box");
-  await page.mouse.click(
-    canvasBox.x + canvasBox.width * xFrac,
-    laneBox.y + laneBox.height * 0.5,
-  );
+  await page.mouse.click(canvasBox.x + canvasBox.width * xFrac, laneBox.y + laneBox.height * 0.5);
 }
 
 test("capture continues after tapping the timeline to inspect clips", async ({ page }) => {

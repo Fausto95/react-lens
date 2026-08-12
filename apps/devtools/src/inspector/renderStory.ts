@@ -9,11 +9,7 @@ import type {
 } from "@reactlens/protocol";
 import { hasIdentity } from "@reactlens/protocol";
 import { causeOf, type ClipCause } from "../timeline/model/lanes.js";
-import {
-  edgesForCommit,
-  originOf,
-  contextConsumerCount,
-} from "../timeline/model/edges.js";
+import { edgesForCommit, originOf, contextConsumerCount } from "../timeline/model/edges.js";
 
 /**
  * One render, told as a story: **Cause → Change → Cost → Fix**.

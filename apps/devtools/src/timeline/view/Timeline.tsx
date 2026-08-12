@@ -4,8 +4,19 @@ import type { LaneControls } from "../../laneFilter.js";
 import type { TimeCursor } from "../../timeCursor.js";
 import { buildAxis, clamp, compactGap, easeOut, type TimeAxis } from "../model/axis.js";
 import { loupeAt, LOUPE_H, LOUPE_HALF_MS, LOUPE_W, loupeX } from "../model/loupe.js";
-import { clampView, fitWallRange, fitWallRangeAround, lerpView, reanchorAfterAxisChange } from "../model/viewport.js";
-import { advancePlayhead, cursorModeAtStop, playStartAxis, stepCommitTime } from "../model/transport.js";
+import {
+  clampView,
+  fitWallRange,
+  fitWallRangeAround,
+  lerpView,
+  reanchorAfterAxisChange,
+} from "../model/viewport.js";
+import {
+  advancePlayhead,
+  cursorModeAtStop,
+  playStartAxis,
+  stepCommitTime,
+} from "../model/transport.js";
 import { timelineKeyAction } from "../keymap.js";
 import { clipAtTime, clipCauseColor, type Clip } from "../model/lanes.js";
 import type { Timeline as TimelineModel } from "../useTimeline.js";
@@ -69,8 +80,19 @@ export function Timeline({
   onHighlight?: (id: ComponentId | null) => void;
   transport?: React.ReactNode;
 }) {
-  const { state, dispatch, acts, gapProgRef, layout, bounds, markers, arrows, lanes, axis, commits } =
-    model;
+  const {
+    state,
+    dispatch,
+    acts,
+    gapProgRef,
+    layout,
+    bounds,
+    markers,
+    arrows,
+    lanes,
+    axis,
+    commits,
+  } = model;
 
   const wrapRef = useRef<HTMLDivElement>(null);
   const baseRef = useRef<HTMLCanvasElement>(null);
@@ -206,9 +228,7 @@ export function Timeline({
         }
         if (tipMetaRef.current) {
           const self =
-            tip.clip.self < tip.clip.total * 0.95
-              ? ` · ${tip.clip.self.toFixed(1)} ms self`
-              : "";
+            tip.clip.self < tip.clip.total * 0.95 ? ` · ${tip.clip.self.toFixed(1)} ms self` : "";
           tipMetaRef.current.textContent = `${fmtMs(tip.clip.t0)}–${fmtMs(tip.clip.t1)} ms · ${tip.clip.total.toFixed(1)} ms total${self} · row ${(tip.clip.row ?? 0) + 1}`;
         }
       }
@@ -679,9 +699,7 @@ export function Timeline({
         return;
       }
       // Empty wave: tap zooms the loupe window; drag still scrubs.
-      const waveRow = layout.rows.find(
-        (r) => y >= r.y && y <= r.y + r.h && r.mode === "wave",
-      );
+      const waveRow = layout.rows.find((r) => y >= r.y && y <= r.y + r.h && r.mode === "wave");
       if (waveRow && x > nameW()) {
         dragRef.current = {
           type: "waveTap",
@@ -1304,10 +1322,7 @@ export function Timeline({
           style={{ display: "none", width: 292, pointerEvents: "none" }}
         >
           <div ref={loupeHeadRef} className="tl-loupe-head" />
-          <canvas
-            ref={loupeCvRef}
-            style={{ display: "block", width: LOUPE_W, height: LOUPE_H }}
-          />
+          <canvas ref={loupeCvRef} style={{ display: "block", width: LOUPE_W, height: LOUPE_H }} />
         </div>
 
         {state.showHelp && (

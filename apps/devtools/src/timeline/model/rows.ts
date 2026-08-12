@@ -5,14 +5,7 @@
 import type { LaneKey } from "../../laneFilter.js";
 import type { Clip, Lane } from "./lanes.js";
 import { avgClipWidthPx, laneMode, type LaneMode } from "./wave.js";
-import {
-  LANE_PAD,
-  QUIET_MAX,
-  QUIET_TOTAL_MS,
-  ROW_H,
-  RULER_H,
-  WAVE_H,
-} from "../view/metrics.js";
+import { LANE_PAD, QUIET_MAX, QUIET_TOTAL_MS, ROW_H, RULER_H, WAVE_H } from "../view/metrics.js";
 
 export interface LayoutRow {
   lane: Lane;

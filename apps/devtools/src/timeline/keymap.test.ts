@@ -68,9 +68,10 @@ describe("timelineKeyAction", () => {
   });
 
   it("steps commits with shift+arrows", () => {
-    expect(
-      timelineKeyAction(ev({ key: "ArrowLeft", code: "ArrowLeft", shiftKey: true })),
-    ).toEqual({ kind: "step-commit", dir: -1 });
+    expect(timelineKeyAction(ev({ key: "ArrowLeft", code: "ArrowLeft", shiftKey: true }))).toEqual({
+      kind: "step-commit",
+      dir: -1,
+    });
     expect(
       timelineKeyAction(ev({ key: "ArrowRight", code: "ArrowRight", shiftKey: true })),
     ).toEqual({ kind: "step-commit", dir: 1 });

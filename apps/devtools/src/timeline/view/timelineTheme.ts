@@ -91,7 +91,10 @@ export function hexAlpha(hex: string, alpha: number): string {
   return `rgba(${r},${g},${b},${alpha})`;
 }
 
-export function clipPaint(theme: TimelineTheme, col: string): {
+export function clipPaint(
+  theme: TimelineTheme,
+  col: string,
+): {
   fillTop: string;
   fillBottom: string;
   stroke: string;

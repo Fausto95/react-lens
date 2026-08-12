@@ -11,12 +11,7 @@ import type { LaneLayout } from "../model/rows.js";
 import type { TimeSpan } from "../model/axis.js";
 import type { ViewWindow } from "../model/viewport.js";
 import { waveBins } from "../model/wave.js";
-import {
-  LANE_PAD,
-  MIN_CLIP_PX,
-  ROW_H,
-  RULER_H,
-} from "./metrics.js";
+import { LANE_PAD, MIN_CLIP_PX, ROW_H, RULER_H } from "./metrics.js";
 import { drawCausalArrow, planCausalArrows, routeCausalArrow } from "./arrows.js";
 import { causeColor, clipPaint, hexAlpha, type TimelineTheme } from "./timelineTheme.js";
 
@@ -203,8 +198,7 @@ export function drawBase(args: DrawBaseArgs): {
         if (!bin.count) continue;
         const hh = 2 + (bin.count / max) * (row.h - 16);
         const ratio = bin.wasted / bin.count;
-        ctx.fillStyle =
-          ratio > 0.3 ? hexAlpha(theme.bad, 0.55) : hexAlpha(theme.props, 0.5);
+        ctx.fillStyle = ratio > 0.3 ? hexAlpha(theme.bad, 0.55) : hexAlpha(theme.props, 0.5);
         const x = NW + b * 3;
         roundRect(ctx, x, mid - hh / 2, 2.3, hh, 1.2);
         ctx.fill();
@@ -281,9 +275,7 @@ export function drawBase(args: DrawBaseArgs): {
       if (w > 48) {
         ctx.fillStyle = c.wasted ? hexAlpha(theme.text3, 0.85) : paint.label;
         ctx.font = `9px ${MONO}`;
-        const lbl = c.wasted
-          ? "wasted"
-          : `${clipCauseColor(c.cause)} · ${c.total.toFixed(0)}ms`;
+        const lbl = c.wasted ? "wasted" : `${clipCauseColor(c.cause)} · ${c.total.toFixed(0)}ms`;
         ctx.fillText(lbl.slice(0, Math.floor(w / 5.5)), x0 + 5, cy + clipH / 2 + 3);
       }
       ctx.globalAlpha = 1;

@@ -28,9 +28,7 @@ export function loupeAt(
   let t0 = wallT - half;
   let t1 = wallT + half;
   if (axis) {
-    const act = axis.segs.find(
-      (s) => s.type === "act" && wallT >= s.w0 && wallT <= s.w1,
-    );
+    const act = axis.segs.find((s) => s.type === "act" && wallT >= s.w0 && wallT <= s.w1);
     if (act && act.type === "act") {
       t0 = Math.max(t0, act.w0);
       t1 = Math.min(t1, act.w1);

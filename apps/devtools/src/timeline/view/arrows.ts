@@ -240,8 +240,7 @@ export function planCausalArrows(
 
   for (const group of waveGroups.values()) {
     const first = group[0]!;
-    const midX =
-      group.reduce((s, g) => s + (g.to.x0 + g.to.x1) / 2, 0) / group.length;
+    const midX = group.reduce((s, g) => s + (g.to.x0 + g.to.x1) / 2, 0) / group.length;
     const y0 = Math.min(...group.map((g) => g.to.y0));
     const y1 = Math.max(...group.map((g) => g.to.y1));
     const sortT = Math.min(...group.map((g) => g.to.t0 ?? Number.POSITIVE_INFINITY));

@@ -8,13 +8,7 @@ import type {
   RenderEvent,
   RenderId,
 } from "@reactlens/protocol";
-import {
-  cascadeSize,
-  chainFor,
-  contextConsumerCount,
-  edgesForCommit,
-  originOf,
-} from "./edges.js";
+import { cascadeSize, chainFor, contextConsumerCount, edgesForCommit, originOf } from "./edges.js";
 
 let seq = 0;
 const inst = (id: number, name: string, parentId?: number): ComponentInstance => ({

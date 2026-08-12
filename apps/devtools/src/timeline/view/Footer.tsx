@@ -38,8 +38,8 @@ export function Footer({
         </span>
       )}
       <span style={{ marginLeft: "auto" }}>
-        {regionActive ? "selection" : "all"}:{" "}
-        <b style={{ color: "var(--text)" }}>{inScope}</b> renders
+        {regionActive ? "selection" : "all"}: <b style={{ color: "var(--text)" }}>{inScope}</b>{" "}
+        renders
       </span>
       <span className="mono" style={{ color: "var(--warn)" }}>
         {wastedN} wasted

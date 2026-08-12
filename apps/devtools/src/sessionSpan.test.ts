@@ -1,12 +1,6 @@
 import { describe, expect, it } from "vite-plus/test";
 import { TraceStore } from "@reactlens/trace-engine";
-import type {
-  CommitId,
-  ComponentId,
-  EventId,
-  RenderEvent,
-  RenderId,
-} from "@reactlens/protocol";
+import type { CommitId, ComponentId, EventId, RenderEvent, RenderId } from "@reactlens/protocol";
 import { sessionSpanMs } from "./sessionSpan.js";
 
 let seq = 0;

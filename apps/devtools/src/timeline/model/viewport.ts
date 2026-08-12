@@ -57,12 +57,7 @@ export function zoomView(
 }
 
 /** Fit a wall-time range with padding, mapped through the axis. */
-export function fitWallRange(
-  axis: TimeAxis,
-  w0: number,
-  w1: number,
-  padFrac = 0.08,
-): ViewWindow {
+export function fitWallRange(axis: TimeAxis, w0: number, w1: number, padFrac = 0.08): ViewWindow {
   const a0 = axis.wallToAxis(Math.min(w0, w1));
   const a1 = axis.wallToAxis(Math.max(w0, w1));
   const span = Math.max(VIEW_SPAN_MIN, a1 - a0);
