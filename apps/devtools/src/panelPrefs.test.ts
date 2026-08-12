@@ -54,4 +54,30 @@ describe("panel prefs", () => {
     savePanelPrefs({ laneFilter: { v: 1, solo: "nope", muted: [7] } as never });
     expect(loadPanelPrefs().laneFilter).toEqual({ v: 1, solo: [], muted: [] });
   });
+
+  it("defaults retention to the store's own caps", () => {
+    const prefs = loadPanelPrefs();
+    expect(prefs.maxEvents).toBe(10_000);
+    // No time window until the user asks for one.
+    expect(prefs.maxAgeMs).toBeNull();
+  });
+
+  it("round-trips retention settings", () => {
+    savePanelPrefs({ maxEvents: 50_000, maxAgeMs: 120_000 });
+    expect(loadPanelPrefs().maxEvents).toBe(50_000);
+    expect(loadPanelPrefs().maxAgeMs).toBe(120_000);
+  });
+
+  it("clamps the event cap to a usable range", () => {
+    // A zero cap would throw in the ring buffer; an unbounded one would OOM.
+    savePanelPrefs({ maxEvents: 0 });
+    expect(loadPanelPrefs().maxEvents).toBe(1_000);
+    savePanelPrefs({ maxEvents: 10_000_000 });
+    expect(loadPanelPrefs().maxEvents).toBe(500_000);
+  });
+
+  it("treats a non-positive window as no window", () => {
+    savePanelPrefs({ maxAgeMs: 0 });
+    expect(loadPanelPrefs().maxAgeMs).toBeNull();
+  });
 });
