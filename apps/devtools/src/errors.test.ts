@@ -6,6 +6,8 @@ import {
   reportError,
   subscribeErrors,
   ERROR_RING_MAX,
+  type ErrorEventTarget,
+  type ErrorLikeEvent,
 } from "./errors.js";
 
 beforeEach(() => {
@@ -80,10 +82,14 @@ describe("panel error seam", () => {
   });
 
   it("routes uncaught errors and rejections into the same ring", () => {
-    const listeners = new Map<string, (event: unknown) => void>();
-    const target = {
-      addEventListener: (type: string, cb: (event: unknown) => void) => listeners.set(type, cb),
-      removeEventListener: (type: string) => listeners.delete(type),
+    const listeners = new Map<string, (event: ErrorLikeEvent) => void>();
+    const target: ErrorEventTarget = {
+      addEventListener(type, cb) {
+        listeners.set(type, cb);
+      },
+      removeEventListener(type) {
+        listeners.delete(type);
+      },
     };
 
     const dispose = installGlobalErrorHandlers(target);

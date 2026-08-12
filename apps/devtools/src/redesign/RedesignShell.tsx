@@ -33,6 +33,7 @@ import { Inspector, type EditApi } from "../Inspector.js";
 import { TreeView, treeViewRows } from "./TreeView.js";
 import { InspectorView } from "./InspectorView.js";
 import { columnTemplate, nextColumnWidth, type CollapsedPanes } from "./columns.js";
+import { ErrorBoundary } from "../ErrorBoundary.js";
 
 /**
  * Panel layout: toolbar over three columns — Components · Timeline · Inspector.
@@ -384,21 +385,23 @@ export function RedesignShell({
                 matchCount !== null && <span className="rl-tree-search-count">{matchCount}</span>
               )}
             </div>
-            <TreeView
-              rows={treeRows}
-              maxSelf={maxSelf}
-              selected={selected}
-              onSelect={selectTreeComponent}
-              onToggle={toggleTree}
-              watchlist={watchlist}
-              lanes={lanes}
-              regionHeat={timeline.statsRaw.byLane}
-              componentHeat={timeline.statsRaw.byComponent}
-              fixApplied={fixApplied}
-              flashId={flashId}
-              {...(doctor ? { doctor } : {})}
-              {...(onHighlight ? { onHover: onHighlight } : {})}
-            />
+            <ErrorBoundary scope="components">
+              <TreeView
+                rows={treeRows}
+                maxSelf={maxSelf}
+                selected={selected}
+                onSelect={selectTreeComponent}
+                onToggle={toggleTree}
+                watchlist={watchlist}
+                lanes={lanes}
+                regionHeat={timeline.statsRaw.byLane}
+                componentHeat={timeline.statsRaw.byComponent}
+                fixApplied={fixApplied}
+                flashId={flashId}
+                {...(doctor ? { doctor } : {})}
+                {...(onHighlight ? { onHover: onHighlight } : {})}
+              />
+            </ErrorBoundary>
           </div>
         )}
 
@@ -415,95 +418,99 @@ export function RedesignShell({
                 : `${timeline.stats.renders} renders in view`}
             </span>
           </div>
-          <Timeline
-            model={timeline}
-            cursor={cursor}
-            onCursor={onCursor}
-            lanes={lanes}
-            fixApplied={fixApplied}
-            onSelectComponent={(id) => {
-              fromClipRef.current = true;
-              onSelect(id);
-              setFlashId(id);
-            }}
-            {...(onHighlight ? { onHighlight } : {})}
-            {...(transport ? { transport } : {})}
-          />
+          <ErrorBoundary scope="timeline">
+            <Timeline
+              model={timeline}
+              cursor={cursor}
+              onCursor={onCursor}
+              lanes={lanes}
+              fixApplied={fixApplied}
+              onSelectComponent={(id) => {
+                fromClipRef.current = true;
+                onSelect(id);
+                setFlashId(id);
+              }}
+              {...(onHighlight ? { onHighlight } : {})}
+              {...(transport ? { transport } : {})}
+            />
+          </ErrorBoundary>
         </div>
 
         {collapsed.inspector ? (
           <PaneRail label="Inspector" side="right" onExpand={() => togglePane("inspector")} />
         ) : (
           <div className="col insp">
-            {selectedRender !== null ? (
-              <InspectorView
-                headAction={
-                  <PaneToggle
-                    label="Inspector"
-                    side="right"
-                    onClick={() => togglePane("inspector")}
-                  />
-                }
-                store={store}
-                componentId={selectedRenderEvent?.componentId ?? selected}
-                story={story}
-                t0={
-                  selectedRenderEvent ? selectedRenderEvent.timestamp - timeline.bounds.t0 : null
-                }
-                t1={
-                  selectedRenderEvent
-                    ? selectedRenderEvent.timestamp -
-                      timeline.bounds.t0 +
-                      selectedRenderEvent.selfDuration
-                    : null
-                }
-                fixApplied={fixApplied}
-                onToggleFix={() => setFixApplied((v) => !v)}
-                onSelectComponent={selectTreeComponent}
-                onHoverComponent={(id) => {
-                  onHighlight?.(id);
-                  if (id === null) return;
-                  const name = store.instance(id)?.name;
-                  if (name) timeline.dispatch({ type: "selectLane", laneKey: typeLaneKey(name) });
-                }}
-              />
-            ) : selected !== null ? (
-              <Inspector
-                store={store}
-                causality={causality}
-                componentId={selected}
-                cursor={cursor}
-                onSelectComponent={selectTreeComponent}
-                headAction={
-                  <PaneToggle
-                    label="Inspector"
-                    side="right"
-                    onClick={() => togglePane("inspector")}
-                  />
-                }
-                {...(edit ? { edit } : {})}
-                {...(onHighlight ? { highlight: onHighlight } : {})}
-                {...(onRequestSnapshot ? { onRequestSnapshot } : {})}
-                {...(onAskAI ? { onAskAI } : {})}
-              />
-            ) : (
-              <InspectorView
-                headAction={
-                  <PaneToggle
-                    label="Inspector"
-                    side="right"
-                    onClick={() => togglePane("inspector")}
-                  />
-                }
-                store={store}
-                componentId={null}
-                story={null}
-                t0={null}
-                t1={null}
-                fixApplied={fixApplied}
-                onToggleFix={() => setFixApplied((v) => !v)}
-              />
-            )}
+            <ErrorBoundary scope="inspector">
+              {selectedRender !== null ? (
+                <InspectorView
+                  headAction={
+                    <PaneToggle
+                      label="Inspector"
+                      side="right"
+                      onClick={() => togglePane("inspector")}
+                    />
+                  }
+                  store={store}
+                  componentId={selectedRenderEvent?.componentId ?? selected}
+                  story={story}
+                  t0={
+                    selectedRenderEvent ? selectedRenderEvent.timestamp - timeline.bounds.t0 : null
+                  }
+                  t1={
+                    selectedRenderEvent
+                      ? selectedRenderEvent.timestamp -
+                        timeline.bounds.t0 +
+                        selectedRenderEvent.selfDuration
+                      : null
+                  }
+                  fixApplied={fixApplied}
+                  onToggleFix={() => setFixApplied((v) => !v)}
+                  onSelectComponent={selectTreeComponent}
+                  onHoverComponent={(id) => {
+                    onHighlight?.(id);
+                    if (id === null) return;
+                    const name = store.instance(id)?.name;
+                    if (name) timeline.dispatch({ type: "selectLane", laneKey: typeLaneKey(name) });
+                  }}
+                />
+              ) : selected !== null ? (
+                <Inspector
+                  store={store}
+                  causality={causality}
+                  componentId={selected}
+                  cursor={cursor}
+                  onSelectComponent={selectTreeComponent}
+                  headAction={
+                    <PaneToggle
+                      label="Inspector"
+                      side="right"
+                      onClick={() => togglePane("inspector")}
+                    />
+                  }
+                  {...(edit ? { edit } : {})}
+                  {...(onHighlight ? { highlight: onHighlight } : {})}
+                  {...(onRequestSnapshot ? { onRequestSnapshot } : {})}
+                  {...(onAskAI ? { onAskAI } : {})}
+                />
+              ) : (
+                <InspectorView
+                  headAction={
+                    <PaneToggle
+                      label="Inspector"
+                      side="right"
+                      onClick={() => togglePane("inspector")}
+                    />
+                  }
+                  store={store}
+                  componentId={null}
+                  story={null}
+                  t0={null}
+                  t1={null}
+                  fixApplied={fixApplied}
+                  onToggleFix={() => setFixApplied((v) => !v)}
+                />
+              )}
+            </ErrorBoundary>
           </div>
         )}
       </div>

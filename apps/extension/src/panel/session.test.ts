@@ -1,11 +1,5 @@
 import { describe, it, expect } from "vite-plus/test";
-import {
-  INITIAL_SESSION,
-  stepSession,
-  resyncRequest,
-  commitFrame,
-  failFrame,
-} from "./session.js";
+import { INITIAL_SESSION, stepSession, resyncRequest, commitFrame, failFrame } from "./session.js";
 import type { PortMessage } from "../transport.js";
 import type { EventsBatchMessage } from "@reactlens/protocol";
 
@@ -22,7 +16,7 @@ function hello(sessionId: string, seq = 1): PortMessage {
 describe("panel session reducer", () => {
   it("adopts the first document and ingests its frames", () => {
     const a = stepSession(INITIAL_SESSION, hello("doc-1"));
-    expect(a.state).toEqual({ sessionId: "doc-1", lastSeq: 1, gapAt: null });
+    expect(a.state).toEqual({ sessionId: "doc-1", lastSeq: 1, gapAt: null, ahead: [] });
     expect(a.actions).toEqual([{ type: "reset-store" }]);
 
     const b = stepSession(a.state, frame("doc-1", 2));
@@ -39,7 +33,7 @@ describe("panel session reducer", () => {
     const reloaded = stepSession(seen, hello("doc-2"));
     expect(reloaded.actions).toEqual([{ type: "reset-store" }]);
     // The new document's buffer starts its own cursor at 1.
-    expect(reloaded.state).toEqual({ sessionId: "doc-2", lastSeq: 1, gapAt: null });
+    expect(reloaded.state).toEqual({ sessionId: "doc-2", lastSeq: 1, gapAt: null, ahead: [] });
   });
 
   it("resets on a frame from an unannounced document, then ingests it", () => {
@@ -55,7 +49,7 @@ describe("panel session reducer", () => {
       { type: "reset-store" },
       { type: "ingest", frame: EMPTY, seq: 1 },
     ]);
-    expect(next.state).toEqual({ sessionId: "doc-2", lastSeq: 1, gapAt: null });
+    expect(next.state).toEqual({ sessionId: "doc-2", lastSeq: 1, gapAt: null, ahead: [] });
   });
 
   it("ignores a replayed frame the panel already ingested", () => {
@@ -79,7 +73,7 @@ describe("panel session reducer", () => {
   });
 
   it("carries the cursor in the resync request", () => {
-    expect(resyncRequest({ sessionId: "doc-1", lastSeq: 12, gapAt: null })).toEqual({
+    expect(resyncRequest({ sessionId: "doc-1", lastSeq: 12, gapAt: null, ahead: [] })).toEqual({
       kind: "panel-ready",
       sessionId: "doc-1",
       fromSeq: 12,
@@ -158,6 +152,6 @@ describe("frame quarantine", () => {
     const state = failFrame(stepSession(settled(), frame("doc-1", 4)).state, 4);
     const reloaded = stepSession(state, hello("doc-2"));
 
-    expect(reloaded.state).toEqual({ sessionId: "doc-2", lastSeq: 1, gapAt: null });
+    expect(reloaded.state).toEqual({ sessionId: "doc-2", lastSeq: 1, gapAt: null, ahead: [] });
   });
 });

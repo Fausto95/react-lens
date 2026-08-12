@@ -15,8 +15,16 @@ import {
   configureSourceRevealer,
 } from "@reactlens/devtools/panel";
 import type { EditApi, TimeTravelApi } from "@reactlens/devtools/panel";
+import { ErrorBoundary, installGlobalErrorHandlers, reportError } from "@reactlens/devtools/errors";
 import { isContextInvalidated, reconnectDelay } from "./connection.js";
-import { INITIAL_SESSION, resyncRequest, stepSession, type SessionState } from "./session.js";
+import {
+  INITIAL_SESSION,
+  commitFrame,
+  failFrame,
+  resyncRequest,
+  stepSession,
+  type SessionState,
+} from "./session.js";
 import { PANEL_PORT_PREFIX, type EditPrimitive, type PortMessage } from "../transport.js";
 
 /**
@@ -42,6 +50,11 @@ function ExtensionPanel() {
   const pendingTravel = useRef(new Map<string, (result: TimeTravelResult) => void>());
   const pendingLocate = useRef(new Map<string, (loc: SourceLocation | null) => void>());
 
+  // Anything that escapes React — a throw in a port listener, a rejection
+  // nobody awaited — lands in the same ring the boundaries report to, so the
+  // toolbar chip is the whole truth about what broke.
+  useEffect(() => installGlobalErrorHandlers(window), []);
+
   useEffect(() => {
     let disposed = false;
     const tabId = chrome.devtools.inspectedWindow.tabId;
@@ -55,16 +68,27 @@ function ExtensionPanel() {
       const { state, actions } = stepSession(sessionRef.current, msg);
       sessionRef.current = state;
       for (const action of actions) {
-        if (action.type === "ingest") store.ingest(action.frame);
-        else if (action.type === "reset-store") {
+        if (action.type === "ingest") {
+          // The cursor is the panel's only record of what it holds, so it may
+          // only advance over a frame the store actually took. A throw here
+          // used to lose that frame permanently.
+          try {
+            store.ingest(action.frame);
+            sessionRef.current = commitFrame(sessionRef.current, action.seq);
+          } catch (err) {
+            sessionRef.current = failFrame(sessionRef.current, action.seq);
+            reportError("ingest", err);
+          }
+        } else if (action.type === "reset-store") {
           store.clear();
           setInspecting(false);
           setPickedId(null);
         } else if (action.type === "resync") {
           try {
             port.postMessage(resyncRequest(sessionRef.current));
-          } catch {
+          } catch (err) {
             // onDisconnect / retry path will reconnect.
+            reportError("resync", err);
           }
         }
       }
@@ -96,8 +120,9 @@ function ExtensionPanel() {
       try {
         port.postMessage({ kind: "record", recording: true } satisfies PortMessage);
         port.postMessage(resyncRequest(sessionRef.current));
-      } catch {
+      } catch (err) {
         // onDisconnect / retry path will reconnect.
+        reportError("connect", err);
       }
       port.onMessage.addListener((msg: PortMessage) => {
         applySession(port, msg);
@@ -200,8 +225,9 @@ function ExtensionPanel() {
     if (!port) return;
     try {
       port.postMessage(msg);
-    } catch {
+    } catch (err) {
       portRef.current = null;
+      reportError("send", err);
     }
   };
 
@@ -392,23 +418,28 @@ function ExtensionPanel() {
     );
   }
 
+  // The port effect lives above this boundary on purpose: when the UI throws,
+  // ingest keeps running and the store keeps filling, so "Retry" renders
+  // everything that arrived in the meantime instead of a truncated trace.
   return (
-    <Panel
-      store={store}
-      causality={causality}
-      recording
-      edit={edit}
-      inspecting={inspecting}
-      onToggleInspect={onToggleInspect}
-      selectComponent={pickedId}
-      onSelectConsumed={() => setPickedId(null)}
-      onRequestSnapshot={(renderId) => send({ kind: "snapshot-request", renderId })}
-      onHighlight={(componentId, opts) =>
-        send({ kind: "highlight", componentId, ...(opts?.reveal ? { reveal: true } : {}) })
-      }
-      onReplayCommit={(componentIds) => send({ kind: "replay", componentIds })}
-      timeTravel={timeTravel}
-    />
+    <ErrorBoundary scope="panel">
+      <Panel
+        store={store}
+        causality={causality}
+        recording
+        edit={edit}
+        inspecting={inspecting}
+        onToggleInspect={onToggleInspect}
+        selectComponent={pickedId}
+        onSelectConsumed={() => setPickedId(null)}
+        onRequestSnapshot={(renderId) => send({ kind: "snapshot-request", renderId })}
+        onHighlight={(componentId, opts) =>
+          send({ kind: "highlight", componentId, ...(opts?.reveal ? { reveal: true } : {}) })
+        }
+        onReplayCommit={(componentIds) => send({ kind: "replay", componentIds })}
+        timeTravel={timeTravel}
+      />
+    </ErrorBoundary>
   );
 }
 

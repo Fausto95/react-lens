@@ -25,7 +25,11 @@ describe("panel error boundary", () => {
   it("renders its region normally when nothing throws", async () => {
     const React = await import("react");
     const { container } = await mount(
-      React.createElement(ErrorBoundary, { scope: "timeline" }, React.createElement("p", null, "ok")),
+      React.createElement(
+        ErrorBoundary,
+        { scope: "timeline" },
+        React.createElement("p", null, "ok"),
+      ),
     );
 
     expect(container.textContent).toContain("ok");

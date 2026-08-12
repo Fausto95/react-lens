@@ -56,6 +56,7 @@ import { sourceResolver } from "./sourceResolver.js";
 import { createTooltipLayer } from "./tooltip.js";
 import type { EditApi } from "./Inspector.js";
 import { RedesignShell } from "./redesign/RedesignShell.js";
+import { ErrorChip } from "./ErrorChip.js";
 import "./theme.css";
 import "./redesign.css";
 
@@ -355,10 +356,7 @@ export function Panel({
   const fallback = !doctorClient && stats.components <= 2000 ? diagnoseAll(store, causality) : null;
   const affected = workerDoctor?.affected ?? fallback?.affected ?? new Set<ComponentId>();
   const issueCount = workerDoctor?.count ?? fallback?.diagnostics.length ?? 0;
-  const diagnostics =
-    workerDoctor?.diagnostics ??
-    fallback?.diagnostics?.slice(0, 50) ??
-    [];
+  const diagnostics = workerDoctor?.diagnostics ?? fallback?.diagnostics?.slice(0, 50) ?? [];
   const openDoctor = () => {
     setMenuOpen(false);
     setDoctorOpen((v) => !v);
@@ -368,9 +366,7 @@ export function Panel({
     setDoctorOpen(false);
     // Tree watchlist rows + Doctor section scroll into view when present.
     requestAnimationFrame(() => {
-      document
-        .querySelector(`.node[data-component="${id}"]`)
-        ?.scrollIntoView({ block: "nearest" });
+      document.querySelector(`.node[data-component="${id}"]`)?.scrollIntoView({ block: "nearest" });
       document.querySelector(".isect .rl-doctor")?.closest(".isect")?.scrollIntoView({
         block: "nearest",
       });
@@ -554,6 +550,7 @@ export function Panel({
         }
         toolbarActions={
           <span className="rl-toolbar-actions">
+            <ErrorChip />
             {onToggleInspect && (
               <button
                 className={`rl-icon-btn${inspecting ? " active" : ""}`}

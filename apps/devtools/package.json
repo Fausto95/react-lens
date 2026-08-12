@@ -8,6 +8,7 @@
     "./runtime": "./src/runtime.ts",
     "./embed": "./src/embed.tsx",
     "./panel": "./src/Panel.tsx",
+    "./errors": "./src/errorsEntry.ts",
     "./reveal": "./src/revealGeometry.ts",
     "./highlighter": "./src/highlighter.ts"
   },
