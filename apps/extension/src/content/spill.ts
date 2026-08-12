@@ -50,8 +50,9 @@ export function parseSpillKey(key: string): SpillRange | null {
  * in-memory retention rather than failing to construct.
  */
 export function createChromeSpillStore(): SpillStore | null {
-  const area = (globalThis as { chrome?: { storage?: { local?: chrome.storage.LocalStorageArea } } })
-    .chrome?.storage?.local;
+  const area = (
+    globalThis as { chrome?: { storage?: { local?: chrome.storage.LocalStorageArea } } }
+  ).chrome?.storage?.local;
   if (!area) return null;
   return {
     async write(key, msgs) {
