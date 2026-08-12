@@ -1,5 +1,9 @@
 import { PAGE_PORT_NAME, PANEL_PORT_PREFIX, type PortMessage } from "../transport.js";
-import { commandsOnPanelConnect, commandsOnPanelDisconnect } from "./pairing.js";
+import {
+  commandsOnPageConnect,
+  commandsOnPanelConnect,
+  commandsOnPanelDisconnect,
+} from "./pairing.js";
 import { registerWithRetry } from "./register.js";
 
 /**
@@ -96,11 +100,13 @@ chrome.runtime.onConnect.addListener((port) => {
     const pair = pairFor(tabId);
     pair.page = port;
 
-    // If a panel is already listening (page reloaded, or worker restarted and
-    // the content script reconnected), ask the content buffer to replay.
+    // A panel may already be listening (page reloaded, or the worker restarted
+    // and the content script reconnected). Tell it a page is live again; it
+    // replies with its own cursor, which is the only thing that knows what it
+    // is missing.
     if (pair.panel) {
-      for (const cmd of commandsOnPanelConnect()) {
-        port.postMessage(cmd satisfies PortMessage);
+      for (const cmd of commandsOnPageConnect()) {
+        pair.panel.postMessage(cmd satisfies PortMessage);
       }
     }
 
@@ -118,8 +124,9 @@ chrome.runtime.onConnect.addListener((port) => {
     const pair = pairFor(tabId);
     pair.panel = port;
 
-    // Tell the content script to replay its durable buffer now that a panel is
-    // listening — this is what surfaces the already-captured tree.
+    // Make sure the page is capturing. The panel sends its own `panel-ready`
+    // (with the cursor) as soon as it connects, which is what surfaces the
+    // already-captured tree.
     for (const cmd of commandsOnPanelConnect()) {
       pair.page?.postMessage(cmd satisfies PortMessage);
     }

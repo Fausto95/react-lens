@@ -9,18 +9,18 @@ function frame(sessionId: string, seq: number): PortMessage {
   return { kind: "frame", frame: EMPTY, sessionId, seq };
 }
 
-function hello(sessionId: string): PortMessage {
-  return { kind: "hello", reactVersion: "19.0.0", sessionId };
+function hello(sessionId: string, seq = 1): PortMessage {
+  return { kind: "hello", reactVersion: "19.0.0", sessionId, seq };
 }
 
 describe("panel session reducer", () => {
   it("adopts the first document and ingests its frames", () => {
     const a = stepSession(INITIAL_SESSION, hello("doc-1"));
-    expect(a.state).toEqual({ sessionId: "doc-1", lastSeq: 0 });
+    expect(a.state).toEqual({ sessionId: "doc-1", lastSeq: 1 });
     expect(a.actions).toEqual([{ type: "reset-store" }]);
 
-    const b = stepSession(a.state, frame("doc-1", 1));
-    expect(b.state.lastSeq).toBe(1);
+    const b = stepSession(a.state, frame("doc-1", 2));
+    expect(b.state.lastSeq).toBe(2);
     expect(b.actions).toEqual([{ type: "ingest", frame: EMPTY }]);
   });
 
@@ -32,14 +32,17 @@ describe("panel session reducer", () => {
 
     const reloaded = stepSession(seen, hello("doc-2"));
     expect(reloaded.actions).toEqual([{ type: "reset-store" }]);
-    expect(reloaded.state).toEqual({ sessionId: "doc-2", lastSeq: 0 });
+    // The new document's buffer starts its own cursor at 1.
+    expect(reloaded.state).toEqual({ sessionId: "doc-2", lastSeq: 1 });
   });
 
   it("resets on a frame from an unannounced document, then ingests it", () => {
     // `hello` can be lost with the port it was queued on; the frame's own
     // session id is the authority.
-    const seen = stepSession(stepSession(INITIAL_SESSION, hello("doc-1")).state, frame("doc-1", 3))
-      .state;
+    const seen = stepSession(
+      stepSession(INITIAL_SESSION, hello("doc-1")).state,
+      frame("doc-1", 3),
+    ).state;
 
     const next = stepSession(seen, frame("doc-2", 1));
     expect(next.actions).toEqual([{ type: "reset-store" }, { type: "ingest", frame: EMPTY }]);
@@ -47,16 +50,20 @@ describe("panel session reducer", () => {
   });
 
   it("ignores a replayed frame the panel already ingested", () => {
-    const seen = stepSession(stepSession(INITIAL_SESSION, hello("doc-1")).state, frame("doc-1", 5))
-      .state;
+    const seen = stepSession(
+      stepSession(INITIAL_SESSION, hello("doc-1")).state,
+      frame("doc-1", 5),
+    ).state;
     const stale = stepSession(seen, frame("doc-1", 3));
     expect(stale.actions).toEqual([]);
     expect(stale.state.lastSeq).toBe(5);
   });
 
   it("asks for a resync when the page port (re)connects", () => {
-    const seen = stepSession(stepSession(INITIAL_SESSION, hello("doc-1")).state, frame("doc-1", 4))
-      .state;
+    const seen = stepSession(
+      stepSession(INITIAL_SESSION, hello("doc-1")).state,
+      frame("doc-1", 4),
+    ).state;
     const reconnect = stepSession(seen, { kind: "page-connected" });
     expect(reconnect.actions).toEqual([{ type: "resync" }]);
     expect(reconnect.state).toEqual(seen);

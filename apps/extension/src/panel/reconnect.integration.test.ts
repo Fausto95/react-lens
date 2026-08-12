@@ -116,9 +116,7 @@ describe("page → panel resync", () => {
     h.reconnect();
 
     const renders = h.store.rendersOf(1 as ComponentId);
-    expect(renders.map((r) => r.renderId)).toEqual(
-      Array.from({ length: 20 }, (_, i) => i + 1),
-    );
+    expect(renders.map((r) => r.renderId)).toEqual(Array.from({ length: 20 }, (_, i) => i + 1));
     // No duplicates: the log holds one event per render, in order.
     expect(h.store.allEvents()).toHaveLength(20);
     expect(h.store.commits()).toHaveLength(20);

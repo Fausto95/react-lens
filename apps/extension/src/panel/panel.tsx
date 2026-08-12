@@ -16,6 +16,7 @@ import {
 } from "@reactlens/devtools/panel";
 import type { EditApi, TimeTravelApi } from "@reactlens/devtools/panel";
 import { isContextInvalidated, reconnectDelay } from "./connection.js";
+import { INITIAL_SESSION, resyncRequest, stepSession, type SessionState } from "./session.js";
 import { PANEL_PORT_PREFIX, type EditPrimitive, type PortMessage } from "../transport.js";
 
 /**
@@ -30,6 +31,8 @@ function ExtensionPanel() {
   /** The extension was reloaded under us; only reopening DevTools recovers. */
   const [connectionLost, setConnectionLost] = useState(false);
   const portRef = useRef<chrome.runtime.Port | null>(null);
+  /** Which page document we are showing, and how much of it we have. */
+  const sessionRef = useRef<SessionState>(INITIAL_SESSION);
   const pendingSource = useRef(
     new Map<string, { resolve: (body: string) => void; reject: (err: Error) => void }>(),
   );
@@ -42,6 +45,30 @@ function ExtensionPanel() {
   useEffect(() => {
     let disposed = false;
     const tabId = chrome.devtools.inspectedWindow.tabId;
+
+    /**
+     * Fold a port message into the page session, then perform what it asks.
+     * The reset arrives in order with the frames, so a reload can't wipe the
+     * new document's mount (which is what watching `onNavigated` did).
+     */
+    const applySession = (port: chrome.runtime.Port, msg: PortMessage) => {
+      const { state, actions } = stepSession(sessionRef.current, msg);
+      sessionRef.current = state;
+      for (const action of actions) {
+        if (action.type === "ingest") store.ingest(action.frame);
+        else if (action.type === "reset-store") {
+          store.clear();
+          setInspecting(false);
+          setPickedId(null);
+        } else if (action.type === "resync") {
+          try {
+            port.postMessage(resyncRequest(sessionRef.current));
+          } catch {
+            // onDisconnect / retry path will reconnect.
+          }
+        }
+      }
+    };
 
     let attempt = 0;
     const connect = () => {
@@ -63,14 +90,19 @@ function ExtensionPanel() {
       attempt = 0;
       portRef.current = port;
       // Capture is always on; re-assert after (re)connect in case an older
-      // background left the page paused.
+      // background left the page paused. Then ask the page for whatever we
+      // missed while the port was down — the panel owns that cursor, because
+      // anything the content script sent into a dead port never arrived.
       try {
         port.postMessage({ kind: "record", recording: true } satisfies PortMessage);
+        port.postMessage(resyncRequest(sessionRef.current));
       } catch {
         // onDisconnect / retry path will reconnect.
       }
       port.onMessage.addListener((msg: PortMessage) => {
-        if (msg.kind === "frame" || msg.kind === "snapshot") store.ingest(msg.frame);
+        applySession(port, msg);
+        // On-demand snapshots answer a request; they carry no sequence.
+        if (msg.kind === "snapshot") store.ingest(msg.frame);
         if (msg.kind === "source") {
           const pending = pendingSource.current.get(msg.requestId);
           if (!pending) return;
@@ -151,16 +183,14 @@ function ExtensionPanel() {
       });
     });
 
-    const onNavigated = () => {
-      store.clear();
-      setInspecting(false);
-    };
-    chrome.devtools.network.onNavigated.addListener(onNavigated);
+    // Navigation is handled in-band, by the page session id on the frames
+    // themselves. Clearing from `chrome.devtools.network.onNavigated` raced the
+    // new document's first frames and could wipe its mount — leaving the panel
+    // empty for a page that was in fact streaming.
 
     return () => {
       disposed = true;
       configureSourceFetcher(undefined);
-      chrome.devtools.network.onNavigated.removeListener(onNavigated);
       portRef.current?.disconnect();
     };
   }, [store]);

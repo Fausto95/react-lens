@@ -3,6 +3,7 @@ import type {
   RenderEvent,
   ComponentId,
   ComponentInstance,
+  EventId,
   InteractionId,
   RenderId,
   CommitId,
@@ -31,6 +32,13 @@ export interface TraceStoreConfig {
   maxCommits: number;
   /** Whole-page DOM snapshots retained for offline replay. */
   maxCommitSnapshots: number;
+  /**
+   * Sliding time window: drop events older than `newest - maxAgeMs`. Null keeps
+   * everything the count caps allow. A count cap alone is a poor fit for an app
+   * that churns in the background — it silently trades the interesting minute
+   * for a thousand idle commits.
+   */
+  maxAgeMs: number | null;
 }
 
 const DEFAULTS: TraceStoreConfig = {
@@ -39,6 +47,7 @@ const DEFAULTS: TraceStoreConfig = {
   maxSnapshots: 5_000,
   maxCommits: 1_000,
   maxCommitSnapshots: 300,
+  maxAgeMs: null,
 };
 
 interface MutableCommit {
@@ -69,21 +78,23 @@ interface Subscription {
  * ingestion never touches React state.
  */
 export class TraceStore {
-  private readonly config: TraceStoreConfig;
-  private readonly events: RingBuffer<LensEvent>;
+  private config: TraceStoreConfig;
+  private events: RingBuffer<LensEvent>;
   private readonly rendersByComponent = new Map<ComponentId, RingBuffer<RenderEvent>>();
   private readonly rendersById = new Map<RenderId, RenderEvent>();
   private readonly snapshots = new Map<RenderId, RenderSnapshot>();
-  private readonly snapshotOrder: RingBuffer<RenderId>;
+  private snapshotOrder: RingBuffer<RenderId>;
   private readonly instances = new Map<ComponentId, ComponentInstance>();
   /** Uncapped lifetime render count per component (rendersOf is capped). */
   private readonly renderTotals = new Map<ComponentId, number>();
   private readonly selfTimeTotals = new Map<ComponentId, number>();
   private readonly eventsByInteractionId = new Map<InteractionId, LensEvent[]>();
+  /** Ids currently in the event ring — replays must not double-count. */
+  private readonly seenEventIds = new Set<EventId>();
   private readonly commitsById = new Map<CommitId, MutableCommit>();
-  private readonly commitOrder: RingBuffer<CommitId>;
+  private commitOrder: RingBuffer<CommitId>;
   /** Throttled whole-page DOM per commit (offline replay), oldest→newest. */
-  private readonly commitSnapshots: RingBuffer<CommitSnapshot>;
+  private commitSnapshots: RingBuffer<CommitSnapshot>;
   /** Set when the event ring overwrites a render — commits rebuild on next read/ingest end. */
   private commitsDirty = false;
   /** Materialized commits(), invalidated whenever any commit mutates. */
@@ -119,6 +130,7 @@ export class TraceStore {
       if (event.componentId !== undefined) touched.add(event.componentId);
       if (event.interactionId !== undefined) touchedInteractions.add(event.interactionId);
     }
+    this.trimByAge();
     if (this.commitsDirty) this.rebuildCommitsFromEvents();
     this.notify(touched, touchedInteractions);
     for (const observer of this.ingestObservers) observer(batch);
@@ -151,9 +163,12 @@ export class TraceStore {
   }
 
   private addEvent(event: LensEvent): void {
-    // Idempotent on renderId: the content-script buffer can replay (e.g. after a
-    // panel reconnect), and re-ingesting the same render must not double-count.
+    // Idempotent on event id: the content-script buffer can replay (e.g. after
+    // a panel reconnect), and re-ingesting must not double-count. Renders are
+    // also keyed by renderId, which snapshots and time travel resolve against.
+    if (this.seenEventIds.has(event.id)) return;
     if (event.type === "render" && this.rendersById.has(event.renderId)) return;
+    this.seenEventIds.add(event.id);
     const evicted = this.events.push(event);
     if (evicted) this.forgetEvent(evicted);
     if (event.type === "render") {
@@ -182,6 +197,7 @@ export class TraceStore {
    * summaries outlive their renders and show up in the timeline idle gutter.
    */
   private forgetEvent(event: LensEvent): void {
+    this.seenEventIds.delete(event.id);
     if (event.interactionId !== undefined) {
       const list = this.eventsByInteractionId.get(event.interactionId);
       if (list) {
@@ -194,6 +210,82 @@ export class TraceStore {
     // Only clear if this renderId still maps to the evicted event (not a newer ingest).
     if (this.rendersById.get(event.renderId) === event) {
       this.rendersById.delete(event.renderId);
+    }
+    this.commitsDirty = true;
+  }
+
+  /**
+   * Change retention at runtime (the panel's History settings). Shrinking a cap
+   * keeps the newest entries; widening one just makes room.
+   */
+  configure(next: Partial<TraceStoreConfig>): void {
+    const before = this.config;
+    this.config = { ...before, ...next };
+
+    if (this.config.maxSnapshots !== before.maxSnapshots) {
+      this.snapshotOrder = resized(this.snapshotOrder, this.config.maxSnapshots);
+      const kept = new Set(this.snapshotOrder.toArray());
+      for (const id of [...this.snapshots.keys()]) {
+        if (!kept.has(id)) this.snapshots.delete(id);
+      }
+    }
+    if (this.config.maxCommitSnapshots !== before.maxCommitSnapshots) {
+      this.commitSnapshots = resized(this.commitSnapshots, this.config.maxCommitSnapshots);
+    }
+    if (this.config.maxCommits !== before.maxCommits) {
+      this.commitOrder = resized(this.commitOrder, this.config.maxCommits);
+      this.commitsDirty = true;
+    }
+    if (
+      this.config.maxEvents !== before.maxEvents ||
+      this.config.maxRendersPerComponent !== before.maxRendersPerComponent
+    ) {
+      const kept = this.events.toArray().slice(-this.config.maxEvents);
+      this.events = new RingBuffer<LensEvent>(this.config.maxEvents);
+      this.reindexEvents(kept);
+    }
+    this.trimByAge();
+    if (this.commitsDirty) this.rebuildCommitsFromEvents();
+    this.commitsCache = null;
+    this.notify(new Set(), new Set());
+  }
+
+  /** Drop events that fell out of the `maxAgeMs` window behind the newest one. */
+  private trimByAge(): void {
+    const maxAge = this.config.maxAgeMs;
+    if (maxAge === null || this.events.size === 0) return;
+    const newest = this.events.at(this.events.size - 1)!.timestamp;
+    const cutoff = newest - maxAge;
+    if (this.events.at(0)!.timestamp >= cutoff) return;
+    this.reindexEvents(this.events.toArray().filter((e) => e.timestamp >= cutoff));
+  }
+
+  /**
+   * Rebuild every event-derived index from `events`. Lifetime totals
+   * (`renderTotals` / `selfTimeTotals`) are deliberately untouched — they count
+   * what the app did, not what we still retain.
+   */
+  private reindexEvents(events: readonly LensEvent[]): void {
+    this.events.clear();
+    this.rendersByComponent.clear();
+    this.rendersById.clear();
+    this.eventsByInteractionId.clear();
+    this.seenEventIds.clear();
+    for (const event of events) {
+      this.events.push(event);
+      this.seenEventIds.add(event.id);
+      if (event.type === "render") {
+        const buf =
+          this.rendersByComponent.get(event.componentId) ??
+          this.createRenderBuffer(event.componentId);
+        buf.push(event);
+        this.rendersById.set(event.renderId, event);
+      }
+      if (event.interactionId !== undefined) {
+        const list = this.eventsByInteractionId.get(event.interactionId) ?? [];
+        list.push(event);
+        this.eventsByInteractionId.set(event.interactionId, list);
+      }
     }
     this.commitsDirty = true;
   }
@@ -233,8 +325,7 @@ export class TraceStore {
     commit.totalSelfTime += event.selfDuration;
     // Renders in one commit share `timestamp`; fold durations so the commit
     // span (and session length) reflect real work, not a zero-width instant.
-    const end =
-      event.timestamp + Math.max(event.selfDuration, event.totalDuration, 0);
+    const end = event.timestamp + Math.max(event.selfDuration, event.totalDuration, 0);
     commit.endTimestamp = Math.max(commit.endTimestamp, end);
   }
 
@@ -441,10 +532,17 @@ export class TraceStore {
     }
   }
 
+  /**
+   * Drop everything. The panel calls this at a session boundary: every id
+   * factory lives in the inspected page and restarts at 1 on each document
+   * load, so carrying the previous document's log over would make the new
+   * one's renders look like duplicates and silently drop them.
+   */
   clear(): void {
     this.events.clear();
     this.rendersByComponent.clear();
     this.rendersById.clear();
+    this.seenEventIds.clear();
     this.snapshots.clear();
     this.snapshotOrder.clear();
     this.instances.clear();
@@ -459,4 +557,12 @@ export class TraceStore {
     // Wake subscribers (Tree/Inspector/Timeline) so they re-render to empty.
     this.notify(new Set(), new Set());
   }
+}
+
+/** A copy at a new capacity, keeping the newest entries. */
+function resized<T>(buffer: RingBuffer<T>, capacity: number): RingBuffer<T> {
+  if (buffer.capacity === capacity) return buffer;
+  const next = new RingBuffer<T>(capacity);
+  for (const item of buffer.toArray().slice(-capacity)) next.push(item);
+  return next;
 }

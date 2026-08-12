@@ -19,10 +19,7 @@ function instance(id: number): ComponentInstance {
   };
 }
 
-function frame(
-  instances: ComponentInstance[],
-  sessionId = SESSION,
-): Unsequenced<SequencedMessage> {
+function frame(instances: ComponentInstance[], sessionId = SESSION): Unsequenced<SequencedMessage> {
   const payload: EventsBatchMessage["payload"] = { events: [], snapshots: [], instances };
   return { kind: "frame", frame: payload, sessionId };
 }

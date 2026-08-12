@@ -14,7 +14,7 @@ describe("panel pairing commands", () => {
     // The background is stateless and cannot know how much the panel already
     // ingested; synthesizing `panel-ready` here re-sent the whole buffer on
     // every service-worker restart, duplicating events and reordering the log.
-    expect(commandsOnPanelConnect().some((c) => c.kind === "panel-ready")).toBe(false);
+    expect(commandsOnPanelConnect().map((c) => c.kind)).toEqual(["record"]);
   });
 
   it("does not stop page capture when the panel disconnects", () => {

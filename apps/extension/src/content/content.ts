@@ -5,11 +5,17 @@ import {
   type PageToContent,
   type PortMessage,
   type ContentToPage,
+  type SequencedMessage,
+  type Unsequenced,
 } from "../transport.js";
 import { createMessageBuffer } from "./buffer.js";
 
 /**
  * ISOLATED-world bridge and DURABLE buffer.
+ *
+ * Capture in the page never stops, so this buffer holds the session while the
+ * panel is away (DevTools closed, MV3 worker recycled, tab backgrounded). The
+ * panel resumes from its own cursor — see `createMessageBuffer`.
  */
 const buffer = createMessageBuffer(4000);
 let port: chrome.runtime.Port | null = null;
@@ -141,7 +147,10 @@ function connect(): void {
       );
     } else if (msg.kind === "panel-ready") {
       panelReady = true;
-      for (const m of buffer.snapshot()) p.postMessage(m);
+      // The panel carries the cursor: send only what it is missing. A session
+      // it never saw (or a reloaded document) replays from the start.
+      const from = msg.sessionId !== null && msg.sessionId === buffer.sessionId ? msg.fromSeq : 0;
+      for (const m of buffer.since(from)) p.postMessage(m);
     }
   });
   p.onDisconnect.addListener(() => {
@@ -245,15 +254,17 @@ window.addEventListener("message", (event: MessageEvent) => {
     return;
   }
 
-  const msg: PortMessage | null =
+  const unsequenced: Unsequenced<SequencedMessage> | null =
     data.kind === "frame"
-      ? { kind: "frame", frame: data.frame }
+      ? { kind: "frame", frame: data.frame, sessionId: data.sessionId }
       : data.kind === "hello"
-        ? { kind: "hello", reactVersion: data.reactVersion }
+        ? { kind: "hello", reactVersion: data.reactVersion, sessionId: data.sessionId }
         : null;
-  if (!msg) return;
+  if (!unsequenced) return;
 
-  buffer.push(msg);
+  // Buffer first, always: the cursor is what makes the panel's reconnect
+  // lossless, so a message must be retained even if this send succeeds.
+  const msg = buffer.push(unsequenced);
   if (panelReady && port) {
     try {
       port.postMessage(msg);
