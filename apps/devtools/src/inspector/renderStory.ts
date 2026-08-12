@@ -9,7 +9,11 @@ import type {
 } from "@reactlens/protocol";
 import { hasIdentity } from "@reactlens/protocol";
 import { causeOf, type ClipCause } from "../timeline/model/lanes.js";
-import { edgesForCommit, originOf, cascadeSize } from "../timeline/model/edges.js";
+import {
+  edgesForCommit,
+  originOf,
+  contextConsumerCount,
+} from "../timeline/model/edges.js";
 
 /**
  * One render, told as a story: **Cause → Change → Cost → Fix**.
@@ -328,7 +332,7 @@ export function buildRenderStory(
     } else if (cause === "cascade") {
       chain.push({ kind: "link", text: "parent re-rendered (no own changes)" });
     }
-    const fanout = cascadeSize(commitEdges, origin);
+    const fanout = contextConsumerCount(commitEdges, store, origin);
     if (fanout > 1 && (cause === "context" || contextName)) {
       chain.push({
         kind: "target",

@@ -131,3 +131,29 @@ export function cascadeSize(commit: CommitEdges, originRender: RenderId): number
   }
   return count;
 }
+
+/**
+ * How many renders in the cascade are true context consumers — not the prop /
+ * cascade children they then dragged along. Used by the Cause line
+ * "N consumers re-rendered", which must not inflate to the full subtree.
+ */
+export function contextConsumerCount(
+  commit: CommitEdges,
+  store: TraceStore,
+  originRender: RenderId,
+): number {
+  let count = 0;
+  const stack = [originRender];
+  const seen = new Set<RenderId>();
+  while (stack.length > 0) {
+    const cur = stack.pop()!;
+    if (seen.has(cur)) continue;
+    seen.add(cur);
+    for (const child of commit.effectsOfRender.get(cur) ?? []) {
+      stack.push(child);
+      const r = store.getRender(child);
+      if (r && causeOf(r) === "context") count++;
+    }
+  }
+  return count;
+}
