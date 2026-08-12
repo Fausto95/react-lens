@@ -139,6 +139,27 @@ describe("TraceStore — commits", () => {
     expect(commits[1]!.componentIds).toEqual([1]);
   });
 
+  it("widens commit endTimestamp by render duration", () => {
+    // All renders in a commit share one timestamp; without folding duration
+    // the commit (and session chrome) looked zero-width.
+    const store = new TraceStore();
+    store.ingest(
+      batch({
+        events: [
+          renderEvent({
+            timestamp: 100,
+            selfDuration: 5,
+            totalDuration: 40,
+            commitId: 1 as CommitId,
+          }),
+        ],
+      }),
+    );
+    const [commit] = store.commits();
+    expect(commit!.timestamp).toBe(100);
+    expect(commit!.endTimestamp).toBe(140);
+  });
+
   it("bounds the commit list", () => {
     const store = new TraceStore({ maxCommits: 2 });
     const events = [1, 2, 3].map((n) =>
@@ -230,6 +251,111 @@ describe("TraceStore — subscriptions", () => {
     dispose();
     store.ingest(batch({ events: [renderEvent()] }));
     expect(cb).not.toHaveBeenCalled();
+  });
+});
+
+describe("TraceStore — session boundaries", () => {
+  /**
+   * Every id factory lives in the inspected page and restarts at 1 on each
+   * document load, while the panel's store outlives navigation. Without a
+   * clean break the second document's renders collide with the first's and
+   * the idempotency guard silently drops them — the panel looks dead after a
+   * reload.
+   */
+  it("accepts a new document's renders after clear(), despite reused ids", () => {
+    const store = new TraceStore();
+    const session = (name: string) =>
+      batch({
+        instances: [instance(1, name)],
+        events: [1, 2, 3].map((n) =>
+          renderEvent({
+            id: n as EventId,
+            renderId: n as RenderId,
+            commitId: n as CommitId,
+            componentId: 1 as ComponentId,
+            timestamp: n,
+          }),
+        ),
+      });
+
+    store.ingest(session("Before"));
+    store.clear();
+    store.ingest(session("After"));
+
+    expect(store.rendersOf(1 as ComponentId).map((r) => r.renderId)).toEqual([1, 2, 3]);
+    expect(store.commits().map((c) => c.commitId)).toEqual([1, 2, 3]);
+    expect(store.instance(1 as ComponentId)?.name).toBe("After");
+    expect(store.renderCount(1 as ComponentId)).toBe(3);
+  });
+
+  it("counts a replayed event once, whatever its type", () => {
+    // The content-script buffer can re-send a window of messages after a
+    // reconnect. Renders were already idempotent; interactions and effects
+    // were not, so every reconnect inflated the log.
+    const store = new TraceStore();
+    const interaction: EventsBatchMessage["payload"]["events"][number] = {
+      id: 500 as EventId,
+      type: "interaction",
+      timestamp: 5,
+      interactionId: 3 as InteractionId,
+      kind: "click",
+    };
+    store.ingest(batch({ events: [interaction] }));
+    store.ingest(batch({ events: [interaction] }));
+
+    expect(store.allEvents()).toHaveLength(1);
+    expect(store.eventsByInteraction(3 as InteractionId)).toHaveLength(1);
+  });
+});
+
+describe("TraceStore — retention", () => {
+  it("drops events older than maxAgeMs and re-derives commits", () => {
+    const store = new TraceStore({ maxAgeMs: 100 });
+    store.ingest(
+      batch({
+        events: [
+          renderEvent({ timestamp: 10, commitId: 1 as CommitId, componentId: 1 as ComponentId }),
+          renderEvent({ timestamp: 50, commitId: 2 as CommitId, componentId: 1 as ComponentId }),
+        ],
+      }),
+    );
+    expect(store.commits().map((c) => c.commitId)).toEqual([1, 2]);
+
+    store.ingest(
+      batch({
+        events: [
+          renderEvent({ timestamp: 200, commitId: 3 as CommitId, componentId: 1 as ComponentId }),
+        ],
+      }),
+    );
+
+    // Only events within 100ms of the newest survive.
+    expect(store.allEvents().map((e) => e.timestamp)).toEqual([200]);
+    expect(store.commits().map((c) => c.commitId)).toEqual([3]);
+  });
+
+  it("configure() resizes the event cap and keeps the newest events", () => {
+    const store = new TraceStore({ maxEvents: 10 });
+    store.ingest(
+      batch({
+        events: [1, 2, 3, 4].map((n) =>
+          renderEvent({ id: n as EventId, renderId: n as RenderId, timestamp: n }),
+        ),
+      }),
+    );
+    store.configure({ maxEvents: 2 });
+    expect(store.allEvents().map((e) => e.timestamp)).toEqual([3, 4]);
+
+    store.ingest(batch({ events: [renderEvent({ id: 9 as EventId, renderId: 9 as RenderId })] }));
+    expect(store.allEvents()).toHaveLength(2);
+  });
+
+  it("configure() notifies subscribers so the panel redraws the trimmed log", () => {
+    const store = new TraceStore({ maxEvents: 10 });
+    const cb = vi.fn();
+    store.subscribe({ kind: "global" }, cb);
+    store.configure({ maxAgeMs: 5_000 });
+    expect(cb).toHaveBeenCalledTimes(1);
   });
 });
 

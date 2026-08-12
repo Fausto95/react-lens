@@ -13,7 +13,6 @@ const WAVE_MAX_NODES = 400;
 const WAVE_MAX_MS = 1600;
 
 function EmbeddedPanel({ runtime, host }: { runtime: LensRuntime; host: HTMLElement }) {
-  const [recording, setRecording] = useState(true);
   const [overlayOn, setOverlayOn] = useState(false);
   const [inspecting, setInspecting] = useState(false);
   const [pickedId, setPickedId] = useState<ComponentId | null>(null);
@@ -100,7 +99,7 @@ function EmbeddedPanel({ runtime, host }: { runtime: LensRuntime; host: HTMLElem
     <Panel
       store={runtime.store}
       causality={runtime.causality}
-      recording={recording}
+      recording
       embedded
       overlayEnabled={overlayOn}
       inspecting={inspecting}
@@ -124,11 +123,6 @@ function EmbeddedPanel({ runtime, host }: { runtime: LensRuntime; host: HTMLElem
         const nodes = runtime.domNodesOf(id);
         if (opts?.reveal) highlighter.reveal(nodes);
         else highlighter.show(nodes);
-      }}
-      onToggleRecording={() => {
-        if (recording) runtime.stop();
-        else runtime.start();
-        setRecording((r) => !r);
       }}
     />
   );

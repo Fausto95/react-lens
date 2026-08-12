@@ -1,4 +1,10 @@
 import { THEME_PREFS, type ThemePref } from "./theme.js";
+import {
+  EMPTY_LANE_FILTER,
+  deserializeLaneFilter,
+  serializeLaneFilter,
+  type SerializedLaneFilter,
+} from "./laneFilter.js";
 
 /**
  * Small persisted panel preferences (localStorage; distinct from the agent's
@@ -14,11 +20,33 @@ export interface PanelPrefs {
   theme: ThemePref;
   /** Embedded dock width (px); null keeps the CSS default. */
   dockWidth: number | null;
-  /** Tree/inspector split as a percent of the body width. */
-  splitPct: number;
+  /** Column widths (px) for the components and inspector panes; the timeline
+   *  takes whatever is left. */
+  treeWidth: number;
+  inspectorWidth: number;
+  /** Side panes collapsed to a rail; each keeps its width for when it returns. */
+  treeCollapsed: boolean;
+  inspectorCollapsed: boolean;
   /** Selecting a component scrolls the inspected page to it when off-screen. */
   revealOnSelect: boolean;
+  /**
+   * Solo / mute lanes. View-only (the store keeps recording muted lanes), but
+   * persisted so a noisy component stays hidden across reloads.
+   */
+  laneFilter: SerializedLaneFilter;
+  /** How many events the trace store retains before dropping the oldest. */
+  maxEvents: number;
+  /**
+   * Keep only the last N ms of activity. Null keeps whatever `maxEvents`
+   * allows. A count alone is a poor fit for an app that churns in the
+   * background — it trades the interesting minute for a thousand idle commits.
+   */
+  maxAgeMs: number | null;
 }
+
+/** Below this the ring is useless; above it the panel starts eating memory. */
+export const MIN_MAX_EVENTS = 1_000;
+export const MAX_MAX_EVENTS = 500_000;
 
 const KEY = "react-lens/panel-prefs";
 
@@ -28,9 +56,21 @@ const DEFAULTS: PanelPrefs = {
   tlCollapsed: false,
   theme: "dark",
   dockWidth: null,
-  splitPct: 50,
+  treeWidth: 272,
+  inspectorWidth: 320,
+  treeCollapsed: false,
+  inspectorCollapsed: false,
   revealOnSelect: true,
+  laneFilter: serializeLaneFilter(EMPTY_LANE_FILTER),
+  maxEvents: 10_000,
+  maxAgeMs: null,
 };
+
+function num(value: unknown, fallback: number, min: number, max: number): number {
+  return typeof value === "number" && Number.isFinite(value)
+    ? Math.max(min, Math.min(max, value))
+    : fallback;
+}
 
 export function loadPanelPrefs(): PanelPrefs {
   try {
@@ -49,14 +89,28 @@ export function loadPanelPrefs(): PanelPrefs {
         typeof parsed.dockWidth === "number" && Number.isFinite(parsed.dockWidth)
           ? parsed.dockWidth
           : DEFAULTS.dockWidth,
-      splitPct:
-        typeof parsed.splitPct === "number" && Number.isFinite(parsed.splitPct)
-          ? Math.max(22, Math.min(78, parsed.splitPct))
-          : DEFAULTS.splitPct,
+      treeWidth: num(parsed.treeWidth, DEFAULTS.treeWidth, 180, 460),
+      inspectorWidth: num(parsed.inspectorWidth, DEFAULTS.inspectorWidth, 240, 560),
+      treeCollapsed:
+        typeof parsed.treeCollapsed === "boolean" ? parsed.treeCollapsed : DEFAULTS.treeCollapsed,
+      inspectorCollapsed:
+        typeof parsed.inspectorCollapsed === "boolean"
+          ? parsed.inspectorCollapsed
+          : DEFAULTS.inspectorCollapsed,
       revealOnSelect:
         typeof parsed.revealOnSelect === "boolean"
           ? parsed.revealOnSelect
           : DEFAULTS.revealOnSelect,
+      // Round-tripped through the filter's own parser so a corrupt entry
+      // degrades to "show everything" instead of hiding lanes forever.
+      laneFilter: serializeLaneFilter(deserializeLaneFilter(parsed.laneFilter)),
+      maxEvents: num(parsed.maxEvents, DEFAULTS.maxEvents, MIN_MAX_EVENTS, MAX_MAX_EVENTS),
+      maxAgeMs:
+        typeof parsed.maxAgeMs === "number" && Number.isFinite(parsed.maxAgeMs)
+          ? parsed.maxAgeMs > 0
+            ? parsed.maxAgeMs
+            : null
+          : DEFAULTS.maxAgeMs,
     };
   } catch {
     return { ...DEFAULTS };

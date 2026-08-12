@@ -1,28 +1,38 @@
+"use no memo";
+
 import { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import type { TraceStore } from "@reactlens/trace-engine";
 import type { Causality } from "@reactlens/causality";
 import type { ComponentId, RenderId } from "@reactlens/protocol";
 import { useTraceVersion } from "./useLens.js";
-import { timeAxis } from "@reactlens/ui";
-import { Inspector, type EditApi } from "./Inspector.js";
-import { Tree } from "./Tree.js";
-import { Timeline } from "./Timeline.js";
 import { diagnoseAll } from "./doctor.js";
 import { createDoctorClient, type DoctorResult } from "./doctorClient.js";
 import { CommandPalette, type Command } from "./CommandPalette.js";
-import type { TimeCursor, ABMarks } from "./timeCursor.js";
+import type { TimeCursor } from "./timeCursor.js";
 import {
   createPanelTimeTravel,
   type RestoreStatus,
   type TimeTravelApi,
 } from "./timeTravelController.js";
 import { loadPanelPrefs, savePanelPrefs } from "./panelPrefs.js";
+import { useLatest } from "./useLatest.js";
+import {
+  EMPTY_LANE_FILTER,
+  deserializeLaneFilter,
+  laneFilterActive,
+  serializeLaneFilter,
+  toggleMute,
+  toggleSolo,
+  type LaneControls,
+  type LaneFilter,
+  type LaneKey,
+} from "./laneFilter.js";
 import { loadAgentSettings } from "./settings.js";
 import type { AgentSettings } from "@reactlens/agent";
+import { sessionSpanMs } from "./sessionSpan.js";
 import { AgentPane } from "./AgentPane.js";
 import { SettingsPopover } from "./SettingsPopover.js";
 import {
-  IconLens,
   IconSearch,
   IconSparkle,
   IconDoctor,
@@ -30,8 +40,9 @@ import {
   IconUpload,
   IconCrosshair,
   IconSliders,
+  IconRewind,
 } from "@reactlens/icons";
-import { PanelMenu } from "./PanelMenu.js";
+import { PanelMenu, type Retention } from "./PanelMenu.js";
 import { applyThemePref, type ThemePref } from "./theme.js";
 import {
   downloadSession,
@@ -40,10 +51,12 @@ import {
   loadSessionFromIdb,
   importSession,
 } from "./session.js";
-import { WasteBanner } from "./WasteBanner.js";
 import { sourceResolver } from "./sourceResolver.js";
 import { createTooltipLayer } from "./tooltip.js";
+import type { EditApi } from "./Inspector.js";
+import { RedesignShell } from "./redesign/RedesignShell.js";
 import "./theme.css";
+import "./redesign.css";
 
 export { configureSourceFetcher, getSourceResolver } from "./sourceResolver.js";
 export { configureComponentLocator } from "./sourceLocator.js";
@@ -56,6 +69,7 @@ export interface PanelProps {
   store: TraceStore;
   causality: Causality;
   recording: boolean;
+  /** @deprecated Recording is always on; pause control has been removed. */
   onToggleRecording?: () => void;
   embedded?: boolean;
   /**
@@ -91,20 +105,23 @@ export function Panel({
   store,
   causality,
   recording,
-  onToggleRecording,
   embedded,
   onHighlight,
-  edit,
   overlayEnabled,
   onToggleOverlay,
-  onReplayCommit,
   timeTravel,
-  onRequestSnapshot,
   inspecting = false,
   onToggleInspect,
   selectComponent,
   onSelectConsumed,
 }: PanelProps) {
+  // Re-render on every ingest. The reads below (`store.stats()`,
+  // `sessionSpanMs(store)`, `diagnoseAll`) take their freshness from that
+  // re-render alone — hence `"use no memo"` at the top of this file: the store's
+  // identity never changes, so the compiler would treat them as constant and
+  // serve the mount's answer for the rest of the session, making every later
+  // event look lost. Listing the version in a dep array does not help; the
+  // compiler infers deps from what the callback actually reads.
   useTraceVersion(store, { kind: "global" });
   const [selected, setSelected] = useState<ComponentId | null>(null);
   // Scroll the inspected page to a newly selected component (off-screen only).
@@ -114,6 +131,18 @@ export function Panel({
     setRevealOnSelectState(next);
     savePanelPrefs({ revealOnSelect: next });
   }, []);
+  /** How much history the store keeps — user-tunable in Settings. */
+  const [retention, setRetentionState] = useState<Retention>(() => {
+    const prefs = loadPanelPrefs();
+    return { maxEvents: prefs.maxEvents, maxAgeMs: prefs.maxAgeMs };
+  });
+  const setRetention = useCallback((next: Retention) => {
+    setRetentionState(next);
+    savePanelPrefs(next);
+  }, []);
+  useEffect(() => {
+    store.configure(retention);
+  }, [store, retention]);
   /**
    * The one writer for selection: every pick — tree, ⌘K, timeline, relations,
    * waste banner, page inspect — flows through here so reveal can't drift out
@@ -126,18 +155,51 @@ export function Panel({
     },
     [revealOnSelect, onHighlight],
   );
+  /**
+   * Solo / mute: one filter, honored by every view (timeline lanes, tree rows,
+   * region stats). Purely a view filter — the store keeps recording muted
+   * lanes, so un-muting brings the full history back.
+   */
+  const [laneFilter, setLaneFilter] = useState<LaneFilter>(() =>
+    deserializeLaneFilter(loadPanelPrefs().laneFilter),
+  );
+  // Toggles update functionally, never from the render closure: soloing and
+  // muting in the same tick must compose, not clobber each other. Persistence
+  // is an effect so the updater stays pure.
+  useEffect(() => {
+    savePanelPrefs({ laneFilter: serializeLaneFilter(laneFilter) });
+  }, [laneFilter]);
+  const lanes: LaneControls = {
+    filter: laneFilter,
+    toggleSolo: (key: LaneKey) => setLaneFilter((f) => toggleSolo(f, key)),
+    toggleMute: (key: LaneKey) => setLaneFilter((f) => toggleMute(f, key)),
+    clear: () => setLaneFilter(EMPTY_LANE_FILTER),
+  };
+  const lanesFiltered = laneFilterActive(laneFilter);
+
   const [paletteOpen, setPaletteOpen] = useState(false);
-  const [treeModeHint, setTreeModeHint] = useState<"components" | "waste" | null>(null);
   const [sessionLabel, setSessionLabel] = useState<string | null>(null);
   const [recentSessions, setRecentSessions] = useState<
     Array<{ id: string; title: string; eventCount: number }>
   >([]);
   const importRef = useRef<HTMLInputElement>(null);
+  /**
+   * Opening the file picker is a request, not a DOM poke.
+   *
+   * Reaching into the input's ref is legal in a handler but not in render,
+   * and the command palette's list is *built* during render — so any closure
+   * there that touches the ref reads as a render-time access, which makes the
+   * whole component uncompilable. Bumping a counter keeps render pure and
+   * moves the ref access into the effect, where it belongs.
+   */
+  const [importRequests, setImportRequests] = useState(0);
+  const openImport = useCallback(() => setImportRequests((n) => n + 1), []);
+  useEffect(() => {
+    if (importRequests > 0) importRef.current?.click();
+  }, [importRequests]);
   // Global time cursor + A/B marks (redesign §6, §28) — the temporal spine
   // shared by the Timeline, Tree, and Inspector.
   const [cursor, setCursor] = useState<TimeCursor>({ t: 0, mode: "live" });
-  const [ab, setAB] = useState<ABMarks>({});
-  const [explainToken, setExplainToken] = useState(0);
   // BYOK AI assistant (drawer) + its provider settings popover.
   const [agentOpen, setAgentOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -161,19 +223,11 @@ export function Panel({
       alive = false;
     };
   }, [settingsVersion]);
-  const [agentAsk, setAgentAsk] = useState<{ token: number; question: string } | null>(null);
-  const askAI = useCallback((question: string) => {
-    setAgentOpen(true);
-    setAgentAsk((prev) => ({ token: (prev?.token ?? 0) + 1, question }));
-  }, []);
-  const { width, onResizeStart } = useDockResize(embedded);
-  const { splitPct, bodyRef, onSplitStart } = usePaneSplit();
+  const [agentAsk] = useState<{ token: number; question: string } | null>(null);
+  const { dockWidth, onDockResize } = useDockResize(embedded);
   const stats = store.stats();
-  /** Session length so far — first to last captured commit. */
-  const sessionSpanMs = (() => {
-    const commits = store.commits();
-    return commits.length > 0 ? commits.at(-1)!.endTimestamp - commits[0]!.timestamp : 0;
-  })();
+  /** Session length so far — first activity to last activity+duration. */
+  const sessionMs = sessionSpanMs(store);
 
   // Fast themed tooltips for every `title` in the panel (see tooltip.ts).
   const rootRef = useRef<HTMLDivElement>(null);
@@ -193,16 +247,10 @@ export function Panel({
   // Real time travel: while the cursor is historical (and the toggle is on),
   // the page's state follows the playhead. On by default when supported;
   // the toggle persists across sessions.
-  const [travelOn, setTravelOnState] = useState(() => loadPanelPrefs().travelOn);
-  const setTravelOn = (update: (v: boolean) => boolean) =>
-    setTravelOnState((v) => {
-      const next = update(v);
-      savePanelPrefs({ travelOn: next });
-      return next;
-    });
+  const [travelOn, setTravelOn] = useState(() => loadPanelPrefs().travelOn);
   const [travelSupported, setTravelSupported] = useState(false);
   // Set-wide restore feedback while traveling (partial-restore pill + markers).
-  const [restoreStatus, setRestoreStatus] = useState<RestoreStatus | null>(null);
+  const [, setRestoreStatus] = useState<RestoreStatus | null>(null);
   useEffect(() => {
     if (!timeTravel) return;
     let alive = true;
@@ -215,7 +263,9 @@ export function Panel({
   }, [timeTravel]);
   const travelCtl = useMemo(
     () => (timeTravel ? createPanelTimeTravel(store, timeTravel, setRestoreStatus) : null),
-    [store, timeTravel],
+    // `setRestoreStatus` is a stable setter, but listing it lets the Compiler
+    // verify this memo instead of giving up on the whole component.
+    [store, timeTravel, setRestoreStatus],
   );
   useEffect(() => () => travelCtl?.dispose(), [travelCtl]);
   // Imported sessions never drive the live page: their renderIds belong to a
@@ -231,25 +281,15 @@ export function Panel({
       if (batch.events.length > 0) setSessionLabel(null);
     });
   }, [store, sessionLabel]);
-  /** Common post-import state: fresh cursor, no marks, recording paused. */
-  const enterSessionView = useCallback(
-    (label: string) => {
-      setSelected(null);
-      setCursor({ t: 0, mode: "live" });
-      setAB({});
-      setSessionLabel(label);
-      if (recording) onToggleRecording?.();
-    },
-    [recording, onToggleRecording],
-  );
+  /** Common post-import state: fresh cursor, no marks. Capture stays on. */
+  const enterSessionView = useCallback((label: string) => {
+    setSelected(null);
+    setCursor({ t: 0, mode: "live" });
+    setSessionLabel(label);
+  }, []);
   useEffect(() => {
     travelCtl?.onCursor(cursor, travelOn && travelSupported && !offlineSession);
   }, [travelCtl, cursor, travelOn, travelSupported, offlineSession]);
-
-  // Time sync: when scrubbed into the past, dim tree components that weren't in
-  // the commit at the cursor (reuses the Freeze-Frame styling).
-  const frozenSet =
-    cursor.mode === "historical" ? new Set(store.commitAt(cursor.t)?.componentIds ?? []) : null;
 
   // Doctor: components with at least one diagnostic (for tree badges + count).
   // The pass walks every component and runs causality per render, so it runs in
@@ -302,7 +342,6 @@ export function Panel({
   useEffect(() => {
     if (empty) {
       setCursor({ t: 0, mode: "live" });
-      setAB({});
       setSelected(null);
       setSessionLabel(null);
     }
@@ -311,12 +350,6 @@ export function Panel({
   const fallback = !doctorClient && stats.components <= 2000 ? diagnoseAll(store, causality) : null;
   const affected = workerDoctor?.affected ?? fallback?.affected ?? new Set<ComponentId>();
   const issueCount = workerDoctor?.count ?? fallback?.diagnostics.length ?? 0;
-  const suspended = new Set(
-    store
-      .allInstances()
-      .filter((i) => i.suspended)
-      .map((i) => i.id),
-  );
 
   // ⌘K / Ctrl+K opens the command palette; ⌘\ toggles page inspect.
   // Plain keys (R, ?) match the hints the palette advertises.
@@ -341,12 +374,10 @@ export function Panel({
       if (e.metaKey || e.ctrlKey || e.altKey) return;
       const el = document.activeElement;
       if (el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA")) return;
-      if ((e.key === "r" || e.key === "R") && onToggleRecording) onToggleRecording();
-      else if (e.key === "?") setExplainToken((n) => n + 1);
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [onToggleInspect, onToggleRecording]);
+  }, [onToggleInspect]);
 
   useEffect(() => {
     if (!paletteOpen) return;
@@ -374,13 +405,15 @@ export function Panel({
     group: "Navigate",
     run: () => setAgentOpen((v) => !v),
   });
-  commands.push({
-    id: "explain-interaction",
-    label: "Explain this interaction",
-    hint: "?",
-    group: "Timeline",
-    run: () => setExplainToken((n) => n + 1),
-  });
+  if (lanesFiltered) {
+    commands.push({
+      id: "clear-lane-filter",
+      label: "Show all lanes (clear solo/mute)",
+      hint: `${laneFilter.solo.size + laneFilter.muted.size}`,
+      group: "Timeline",
+      run: lanes.clear,
+    });
+  }
   if (onToggleInspect) {
     commands.push({
       id: "toggle-inspect",
@@ -408,15 +441,6 @@ export function Panel({
       run: () => setThemePref(pref),
     });
   }
-  if (onToggleRecording) {
-    commands.push({
-      id: "toggle-recording",
-      label: recording ? "Pause recording" : "Start recording",
-      hint: "R",
-      group: "Navigate",
-      run: onToggleRecording,
-    });
-  }
   commands.push({
     id: "export-session",
     label: "Export session",
@@ -429,7 +453,7 @@ export function Panel({
     label: "Import session",
     hint: "↑",
     group: "Session",
-    run: () => importRef.current?.click(),
+    run: openImport,
   });
   for (const entry of recentSessions) {
     commands.push({
@@ -450,211 +474,162 @@ export function Panel({
   return (
     <div
       ref={rootRef}
-      className={`rl-root${embedded ? " rl-embedded" : ""}`}
-      style={embedded && width ? { width } : undefined}
+      className={`rl-root rl-redesign${embedded ? " rl-embedded" : ""}`}
+      style={embedded && dockWidth ? { width: dockWidth } : undefined}
     >
-      {embedded && <div className="rl-resize-handle" onPointerDown={onResizeStart} />}
-      <div className="rl-topbar">
-        <span className="rl-brand">
-          <IconLens className="rl-brand-icon" /> React Lens
-        </span>
-        {sessionLabel && (
-          <span className="rl-session-label" title={sessionLabel}>
-            {sessionLabel}
-          </span>
-        )}
-        <span className="rl-spacer" />
-        {onToggleInspect && (
-          <button
-            className={`rl-icon-btn${inspecting ? " active" : ""}`}
-            onClick={onToggleInspect}
-            title="Inspect element on page (⌘\\)"
-            aria-label="Inspect element on page"
-            aria-pressed={inspecting}
-          >
-            <IconCrosshair size={14} />
-          </button>
-        )}
-        <button
-          className={`rl-icon-btn${agentOpen ? " active" : ""}`}
-          onClick={() => setAgentOpen((v) => !v)}
-          title="AI assistant (⌘I)"
-          aria-label="AI assistant (⌘I)"
-          aria-pressed={agentOpen}
-        >
-          <IconSparkle size={14} />
-        </button>
-        <button
-          className="rl-icon-btn"
-          onClick={() => setPaletteOpen(true)}
-          title="Command palette (⌘K)"
-          aria-label="Command palette (⌘K)"
-        >
-          <IconSearch size={14} />
-        </button>
-        <button
-          className="rl-icon-btn"
-          onClick={() => downloadSession(store)}
-          title="Export session"
-          aria-label="Export session"
-        >
-          <IconDownload size={14} />
-        </button>
-        <button
-          className="rl-icon-btn"
-          onClick={() => importRef.current?.click()}
-          title="Import session"
-          aria-label="Import session"
-        >
-          <IconUpload size={14} />
-        </button>
-        <input
-          ref={importRef}
-          type="file"
-          accept="application/json,.json,.lens.json"
-          hidden
-          onChange={(e) => {
-            const file = e.target.files?.[0];
-            e.target.value = "";
-            if (!file) return;
-            void importSessionFromFile(store, file)
-              .then((session) => {
-                enterSessionView(session.meta?.title ?? file.name);
-              })
-              .catch(() => {
-                /* invalid file — ignore for MVP */
-              });
-          }}
+      {embedded && (
+        <div
+          className="rl-resize-handle"
+          title="Drag to resize the panel"
+          onPointerDown={onDockResize}
         />
-        <span className="rl-menu-anchor">
-          <button
-            className={`rl-icon-btn${menuOpen ? " active" : ""}`}
-            onClick={() => setMenuOpen((v) => !v)}
-            title="Panel settings"
-            aria-label="Panel settings"
-            aria-haspopup="dialog"
-            aria-expanded={menuOpen}
-          >
-            <IconSliders size={14} />
-          </button>
-          <PanelMenu
-            open={menuOpen}
-            onClose={() => setMenuOpen(false)}
-            theme={themePref}
-            onThemeChange={setThemePref}
-            overlay={
-              onToggleOverlay
-                ? { enabled: overlayEnabled ?? false, toggle: onToggleOverlay }
-                : undefined
-            }
-            reveal={
-              onHighlight
-                ? {
-                    enabled: revealOnSelect,
-                    toggle: () => setRevealOnSelect(!revealOnSelect),
-                  }
-                : undefined
-            }
-            reading={embedded ? "embedded" : "devtools"}
-          />
-        </span>
-        <button
-          className={`rl-icon-btn recording severe${recording ? " active" : ""}`}
-          onClick={onToggleRecording}
-          title={recording ? "Pause recording (R)" : "Start recording (R)"}
-          aria-label={recording ? "Pause recording (R)" : "Start recording (R)"}
-          aria-pressed={recording}
-        >
-          <span className="rl-rec-pulse" />
-        </button>
-      </div>
-
-      <WasteBanner
+      )}
+      <RedesignShell
         store={store}
         causality={causality}
-        onInspect={({ worstId }) => {
-          setTreeModeHint("waste");
-          if (worstId) select(worstId);
-        }}
-      />
-
-      <div
-        className="rl-body"
-        ref={bodyRef}
-        style={{ gridTemplateColumns: `${splitPct}% 6px 1fr` }}
-      >
-        <div className="rl-pane rl-pane-tree">
-          <div className="rl-pane-title">Tree</div>
-          <Tree
-            store={store}
-            causality={causality}
-            selected={selected}
-            onSelect={select}
-            onHover={onHighlight}
-            doctor={affected}
-            suspended={suspended}
-            modeHint={treeModeHint}
-            onModeHintConsumed={() => setTreeModeHint(null)}
-            onAskAI={askAI}
-            {...(frozenSet ? { frozen: frozenSet } : {})}
-            {...(restoreStatus && restoreStatus.failedIds.size > 0
-              ? { unrestorable: new Set(restoreStatus.failedIds.keys()) }
-              : {})}
-          />
-        </div>
-
-        <div className="rl-resizer" onPointerDown={onSplitStart} title="Drag to resize" />
-
-        <div className="rl-pane">
-          <div className="rl-pane-title">Inspector</div>
-          {selected === null ? (
-            <div className="rl-empty rl-empty-action">
-              <span>No component selected.</span>
-              <span className="rl-empty-hint">Pick one in the tree, waterfall, or ⌘K.</span>
-            </div>
-          ) : (
-            <Inspector
-              store={store}
-              causality={causality}
-              componentId={selected}
-              cursor={cursor}
-              ab={ab}
-              onSelectComponent={select}
-              onAskAI={askAI}
-              {...(edit ? { edit } : {})}
-              {...(onHighlight ? { highlight: onHighlight } : {})}
-              {...(onRequestSnapshot ? { onRequestSnapshot } : {})}
-            />
-          )}
-        </div>
-      </div>
-
-      <Timeline
-        store={store}
-        causality={causality}
+        recording={recording}
         cursor={cursor}
-        ab={ab}
         onCursor={setCursor}
-        onSetAB={setAB}
-        onSelectComponent={select}
-        selectedComponent={selected}
-        explainToken={explainToken}
-        onAskAI={askAI}
-        offline={offlineSession}
+        lanes={lanes}
+        doctor={affected}
+        selected={selected}
+        onSelect={select}
+        sessionSpanMs={sessionMs}
         {...(onHighlight ? { onHighlight } : {})}
-        {...(onReplayCommit ? { onReplay: onReplayCommit } : {})}
-        {...(timeTravel
-          ? {
-              travel: {
-                on: travelOn && travelSupported && !offlineSession,
-                supported: travelSupported && !offlineSession,
-                toggle: () => setTravelOn((v) => !v),
-                status: restoreStatus,
-              },
-            }
-          : {})}
+        transport={
+          timeTravel ? (
+            <button
+              type="button"
+              className={`rl-icon-btn rl-tl-travel${travelOn ? " active" : ""}`}
+              disabled={!travelSupported || offlineSession}
+              title={
+                offlineSession
+                  ? "Imported session — time travel needs the original live page. Resume recording to go back live."
+                  : !travelSupported
+                    ? "Time travel requires a development React build"
+                    : travelOn
+                      ? "Time travel on — the page follows the playhead"
+                      : "Time travel off — scrubbing only moves the panel views"
+              }
+              aria-label="Apply state to the page while scrubbing"
+              aria-pressed={travelOn}
+              onClick={() => {
+                setTravelOn((on) => {
+                  savePanelPrefs({ travelOn: !on });
+                  return !on;
+                });
+              }}
+            >
+              <IconRewind size={13} />
+            </button>
+          ) : undefined
+        }
+        toolbarActions={
+          <span className="rl-toolbar-actions">
+            {onToggleInspect && (
+              <button
+                className={`rl-icon-btn${inspecting ? " active" : ""}`}
+                onClick={onToggleInspect}
+                title="Inspect element on page (⌘\\)"
+                aria-label="Inspect element on page"
+                aria-pressed={inspecting}
+              >
+                <IconCrosshair size={14} />
+              </button>
+            )}
+            <button
+              className={`rl-icon-btn${agentOpen ? " active" : ""}`}
+              onClick={() => setAgentOpen((v) => !v)}
+              title="AI assistant (⌘I)"
+              aria-label="AI assistant (⌘I)"
+              aria-pressed={agentOpen}
+            >
+              <IconSparkle size={14} />
+            </button>
+            <button
+              className="rl-icon-btn"
+              onClick={() => setPaletteOpen(true)}
+              title="Command palette (⌘K)"
+              aria-label="Command palette (⌘K)"
+            >
+              <IconSearch size={14} />
+            </button>
+            <button
+              className="rl-icon-btn"
+              onClick={() => downloadSession(store)}
+              title="Export session"
+              aria-label="Export session"
+            >
+              <IconDownload size={14} />
+            </button>
+            <button
+              className="rl-icon-btn"
+              onClick={openImport}
+              title="Import session"
+              aria-label="Import session"
+            >
+              <IconUpload size={14} />
+            </button>
+            {issueCount > 0 && (
+              <span className="rl-icon-btn warn" title={`${issueCount} Doctor issues`}>
+                <IconDoctor size={12} /> {issueCount}
+              </span>
+            )}
+            {lanesFiltered && (
+              <button
+                className="rl-icon-btn rl-filtered-chip"
+                onClick={lanes.clear}
+                title={`Views are filtered — ${laneFilter.solo.size} soloed, ${laneFilter.muted.size} muted. Click to show all lanes.`}
+              >
+                filtered
+              </button>
+            )}
+            <span className="rl-menu-anchor">
+              <button
+                className={`rl-icon-btn${menuOpen ? " active" : ""}`}
+                onClick={() => setMenuOpen((v) => !v)}
+                title="Panel settings"
+                aria-label="Panel settings"
+                aria-haspopup="dialog"
+                aria-expanded={menuOpen}
+              >
+                <IconSliders size={14} />
+              </button>
+              <PanelMenu
+                open={menuOpen}
+                onClose={() => setMenuOpen(false)}
+                theme={themePref}
+                onThemeChange={setThemePref}
+                overlay={
+                  onToggleOverlay
+                    ? { enabled: overlayEnabled ?? false, toggle: onToggleOverlay }
+                    : undefined
+                }
+                reveal={
+                  onHighlight
+                    ? { enabled: revealOnSelect, toggle: () => setRevealOnSelect(!revealOnSelect) }
+                    : undefined
+                }
+                retention={retention}
+                onRetentionChange={setRetention}
+                reading={embedded ? "embedded" : "devtools"}
+              />
+            </span>
+            <span
+              className={`rl-icon-btn recording severe${recording ? " active" : ""}`}
+              title="Recording is always on"
+              aria-label="Recording is always on"
+              aria-pressed={recording}
+            >
+              <span className="rl-rec-pulse" />
+            </span>
+          </span>
+        }
       />
 
+      {/* Status bar: the panel's at-a-glance counters. Kept below the concept's
+          three columns — it's the one piece of v1 chrome the concept has no
+          equivalent for, and it's load-bearing (event counts, Doctor issues). */}
       <div className="rl-statusbar">
         <span
           className="rl-status-metric"
@@ -662,35 +637,12 @@ export function Panel({
         >
           <span className="rl-status-k">ev</span> {stats.events}
         </span>
-        <button
-          type="button"
-          className="rl-status-metric rl-status-action"
-          title="Renders recorded — click to jump to the heaviest commit"
-          onClick={() => {
-            const worst = store
-              .commits()
-              .reduce<ReturnType<typeof store.commits>[number] | null>(
-                (acc, c) => (acc === null || c.totalSelfTime > acc.totalSelfTime ? c : acc),
-                null,
-              );
-            if (worst) setCursor({ t: worst.timestamp, mode: "historical" });
-          }}
-        >
+        <span className="rl-status-metric" title="Renders recorded">
           <span className="rl-status-k">rnd</span> {stats.renders}
-        </button>
-        <button
-          type="button"
-          className="rl-status-metric rl-status-action"
-          title="Components seen — click to browse the tree"
-          onClick={() => setTreeModeHint("components")}
-        >
+        </span>
+        <span className="rl-status-metric" title="Components seen">
           <span className="rl-status-k">cmp</span> {stats.components}
-        </button>
-        {suspended.size > 0 && (
-          <span className="rl-status-metric warn" title="Suspended">
-            <span className="rl-status-k">sus</span> {suspended.size}
-          </span>
-        )}
+        </span>
         {issueCount > 0 && (
           <span className="rl-status-metric warn" title="Doctor issues">
             <IconDoctor size={11} /> {issueCount}
@@ -699,12 +651,31 @@ export function Panel({
         <span className="rl-spacer" />
         <span
           className={`rl-status-metric rl-status-rec${recording ? " on" : ""}`}
-          title={recording ? "Recording (R to pause)" : "Recording paused (R to resume)"}
+          title="Recording is always on"
         >
           <span className="rl-status-rec-dot" />
-          {recording ? `rec · ${timeAxis(Math.max(0, sessionSpanMs))}` : "paused"}
+          {recording ? `rec · ${(sessionMs / 1000).toFixed(1)} s` : "paused"}
         </span>
       </div>
+
+      <input
+        ref={importRef}
+        type="file"
+        accept="application/json,.json,.lens.json"
+        hidden
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          e.target.value = "";
+          if (!file) return;
+          void importSessionFromFile(store, file)
+            .then((session) => {
+              enterSessionView(session.meta?.title ?? file.name);
+            })
+            .catch(() => {
+              /* invalid file — ignore for MVP */
+            });
+        }}
+      />
 
       {paletteOpen && (
         <CommandPalette
@@ -740,92 +711,39 @@ export function Panel({
   );
 }
 
-/** Draggable split between the tree and inspector panes. */
-function usePaneSplit(): {
-  splitPct: number;
-  bodyRef: React.RefObject<HTMLDivElement | null>;
-  onSplitStart: (e: React.PointerEvent) => void;
-} {
-  const [splitPct, setSplitPct] = useState(() => loadPanelPrefs().splitPct);
-  const splitRef = useRef(splitPct);
-  splitRef.current = splitPct;
-  const bodyRef = useRef<HTMLDivElement>(null);
-  const dragging = useRef(false);
-
-  useEffect(() => {
-    const move = (e: PointerEvent) => {
-      if (!dragging.current || !bodyRef.current) return;
-      const r = bodyRef.current.getBoundingClientRect();
-      const pct = ((e.clientX - r.left) / r.width) * 100;
-      setSplitPct(Math.max(22, Math.min(78, pct)));
-    };
-    const up = () => {
-      if (!dragging.current) return;
-      dragging.current = false;
-      document.body.style.userSelect = "";
-      savePanelPrefs({ splitPct: splitRef.current });
-    };
-    window.addEventListener("pointermove", move);
-    window.addEventListener("pointerup", up);
-    return () => {
-      window.removeEventListener("pointermove", move);
-      window.removeEventListener("pointerup", up);
-    };
-  }, []);
-
-  const onSplitStart = useCallback((e: React.PointerEvent) => {
-    e.preventDefault();
-    dragging.current = true;
-    document.body.style.userSelect = "none";
-  }, []);
-
-  return { splitPct, bodyRef, onSplitStart };
-}
-
-const MIN_WIDTH = 320;
-const MAX_WIDTH_MARGIN = 160; // leave at least this much of the page visible
+const DOCK_MIN = 720;
+/** Leave at least this much of the inspected page visible. */
+const DOCK_PAGE_MARGIN = 160;
 
 /**
  * Drag-to-resize for the right-docked embedded panel. The handle sits on the
- * left edge; dragging left widens the panel (width = viewport − pointer X).
- * No-op when not embedded (the extension panel fills its own DevTools pane).
+ * panel's left edge, so dragging left widens it.
  */
 function useDockResize(embedded?: boolean): {
-  width: number | null;
-  onResizeStart: (e: React.PointerEvent) => void;
+  dockWidth: number | null;
+  onDockResize: (e: React.PointerEvent<HTMLDivElement>) => void;
 } {
-  const [width, setWidth] = useState<number | null>(() => loadPanelPrefs().dockWidth);
-  const widthRef = useRef(width);
-  widthRef.current = width;
-  const dragging = useRef(false);
+  const [dockWidth, setDockWidth] = useState<number | null>(() => loadPanelPrefs().dockWidth);
+  const latest = useLatest(dockWidth);
 
-  useEffect(() => {
+  const onDockResize = (e: React.PointerEvent<HTMLDivElement>) => {
     if (!embedded) return;
-    const onMove = (e: PointerEvent) => {
-      if (!dragging.current) return;
-      const max = window.innerWidth - MAX_WIDTH_MARGIN;
-      setWidth(Math.max(MIN_WIDTH, Math.min(max, window.innerWidth - e.clientX)));
-    };
-    const onUp = () => {
-      if (!dragging.current) return;
-      dragging.current = false;
-      document.body.style.userSelect = "";
-      if (widthRef.current != null) savePanelPrefs({ dockWidth: widthRef.current });
-    };
-    window.addEventListener("pointermove", onMove);
-    window.addEventListener("pointerup", onUp);
-    return () => {
-      window.removeEventListener("pointermove", onMove);
-      window.removeEventListener("pointerup", onUp);
-    };
-  }, [embedded]);
-
-  const onResizeStart = useCallback((e: React.PointerEvent) => {
     e.preventDefault();
-    dragging.current = true;
-    // Prevent text selection on the page while dragging.
     document.body.style.userSelect = "none";
-  }, []);
+    // Window-level so the drag survives leaving the 7px handle.
+    const move = (ev: PointerEvent) => {
+      const max = window.innerWidth - DOCK_PAGE_MARGIN;
+      setDockWidth(Math.max(DOCK_MIN, Math.min(max, window.innerWidth - ev.clientX)));
+    };
+    const up = () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+      document.body.style.userSelect = "";
+      if (latest.current != null) savePanelPrefs({ dockWidth: latest.current });
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+  };
 
-  return { width, onResizeStart };
+  return { dockWidth, onDockResize };
 }

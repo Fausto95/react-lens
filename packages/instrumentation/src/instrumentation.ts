@@ -6,6 +6,7 @@ import type {
   InteractionEvent,
   ComponentId,
   ComponentInstance,
+  ComponentType,
   CommitSnapshot,
   RenderSnapshot,
   RenderId,
@@ -19,7 +20,12 @@ import type {
 import { createIdFactory } from "@reactlens/protocol";
 import type { ContextSnapshot } from "@reactlens/protocol";
 import type { FiberBridge, CommitObservation, RenderDetail, RawHook } from "@reactlens/fiber";
-import { inspectHooks, inspectContexts, inspectClassState } from "@reactlens/fiber";
+import {
+  inspectHooks,
+  inspectContexts,
+  changedContexts,
+  inspectClassState,
+} from "@reactlens/fiber";
 import type { Serializer } from "@reactlens/serializer";
 import { snapshotDom } from "./dom-snapshot.js";
 import { createTimeTravel, type TimeTravelController } from "./time-travel.js";
@@ -332,13 +338,26 @@ export function createInstrumentation(deps: {
       case "props":
         reasons.push({ type: "props", changed: detail.changedPropKeys });
         break;
-      case "state-or-parent":
-        if (instance.parentId !== undefined && rendered.has(instance.parentId)) {
+      case "state-or-parent": {
+        // Fiber only reports props vs state-or-parent. Promote to context when
+        // a subscribed context value actually changed — otherwise CartBadge
+        // looks like "state" and ProductList like "casc" even though both
+        // re-rendered from CartContext.
+        const ctx = changedContexts(detail.fiber);
+        if (ctx.length > 0) {
+          reasons.push({
+            type: "context",
+            // Context objects aren't component instances; 0 is a stable stand-in
+            // for timeline coloring. Display names live on the snapshot.
+            contextType: 0 as ComponentType,
+          });
+        } else if (instance.parentId !== undefined && rendered.has(instance.parentId)) {
           reasons.push({ type: "parent", componentId: instance.parentId });
         } else {
           reasons.push({ type: "state", hookIndex: 0 });
         }
         break;
+      }
     }
     // Compiler-aware: a re-render of an uncompiled component with a fresh parent
     // is exactly the case manual memoization used to target — surface it as

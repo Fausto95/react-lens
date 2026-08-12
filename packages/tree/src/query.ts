@@ -14,7 +14,7 @@ export interface ParsedQuery {
  *   renders:>20  renders:>=5  renders:<3  renders:10
  *   self:>5                                (self time in ms)
  *   compiled:true|false
- *   visual-change:false | changed:true     (observable DOM change)
+ *   visual-change:false | changed:true | wasted:true  (observable DOM change)
  *   name:Foo | bare words                  (case-insensitive name substring)
  *   /pattern/flags | name:/pattern/flags   (regex over the name)
  * Unknown tokens are treated as name substrings, so free text just works.
@@ -52,6 +52,9 @@ function tokenToPredicate(token: string, errors: string[]): Predicate {
     case "visual-change":
     case "changed":
       return (d) => observable(d) === parseBool(value);
+    case "wasted":
+      // `wasted:true` ≡ no observable DOM change on the latest render.
+      return (d) => (parseBool(value) ? !observable(d) : observable(d));
     case "name": {
       const valueRegex = parseRegexToken(value);
       return valueRegex ? regexPredicate(valueRegex, errors) : nameContains(value);

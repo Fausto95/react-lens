@@ -15,6 +15,17 @@ import { createInspectController, tryReactTextOverride } from "./inspect.js";
  */
 type Frame = EventsBatchMessage["payload"];
 
+/**
+ * This document's identity. Every id factory below (renderId, commitId,
+ * componentId…) restarts at 1 on each page load, so the panel — whose store
+ * outlives navigation — needs an in-band signal to start a new session instead
+ * of treating the new document's ids as duplicates of the old one's.
+ */
+const sessionId =
+  typeof crypto !== "undefined" && "randomUUID" in crypto
+    ? crypto.randomUUID()
+    : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+
 const serializer = createSerializer();
 const fiber = createFiberBridge(globalThis);
 const instrumentation = createInstrumentation({ fiber, serializer });
@@ -38,7 +49,7 @@ const inspect = createInspectController({
 });
 
 function post(frame: Frame): void {
-  window.postMessage({ source: PAGE_SOURCE, kind: "frame", frame }, "*");
+  window.postMessage({ source: PAGE_SOURCE, kind: "frame", frame, sessionId }, "*");
 }
 
 function start(): void {
@@ -50,7 +61,7 @@ function start(): void {
     onFrame: (frame) => post(frame),
   });
   window.postMessage(
-    { source: PAGE_SOURCE, kind: "hello", reactVersion: fiber.reactVersion() },
+    { source: PAGE_SOURCE, kind: "hello", reactVersion: fiber.reactVersion(), sessionId },
     "*",
   );
 }
@@ -117,8 +128,9 @@ window.addEventListener("message", (event: MessageEvent) => {
   const data = event.data as ContentToPage | undefined;
   if (!data || data.source !== CONTENT_SOURCE) return;
   if (data.kind === "record") {
+    // Recording is always on. Older panels / stray control messages may still
+    // send `recording: false`; ignore stops so capture cannot be silenced.
     if (data.recording) start();
-    else instrumentation.stop();
   } else if (data.kind === "snapshot-request") {
     const snapshot = instrumentation.snapshot(data.renderId);
     if (!snapshot) return;

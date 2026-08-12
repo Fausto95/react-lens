@@ -14,8 +14,18 @@ export const CONTENT_SOURCE = "react-lens/content";
 export type EditPrimitive = string | number | boolean | null;
 
 export type PageToContent =
-  | { source: typeof PAGE_SOURCE; kind: "frame"; frame: EventsBatchMessage["payload"] }
-  | { source: typeof PAGE_SOURCE; kind: "hello"; reactVersion: string | null }
+  | {
+      source: typeof PAGE_SOURCE;
+      kind: "frame";
+      frame: EventsBatchMessage["payload"];
+      sessionId: string;
+    }
+  | {
+      source: typeof PAGE_SOURCE;
+      kind: "hello";
+      reactVersion: string | null;
+      sessionId: string;
+    }
   | { source: typeof PAGE_SOURCE; kind: "snapshot"; frame: EventsBatchMessage["payload"] }
   | {
       source: typeof PAGE_SOURCE;
@@ -119,12 +129,22 @@ export type ContentToPage =
       componentId: ComponentId;
     };
 
-/** Port protocol for content ↔ background ↔ panel hops. */
+/**
+ * Port protocol for content ↔ background ↔ panel hops.
+ *
+ * `frame` and `hello` form one ordered, resumable stream. The page stamps them
+ * with a per-document `sessionId` (its id factories restart at 1 on every load,
+ * so the panel must know when to start over) and the content script's durable
+ * buffer stamps the delivery cursor `seq`.
+ */
 export type PortMessage =
-  | { kind: "frame"; frame: EventsBatchMessage["payload"] }
-  | { kind: "hello"; reactVersion: string | null }
+  | { kind: "frame"; frame: EventsBatchMessage["payload"]; sessionId: string; seq: number }
+  | { kind: "hello"; reactVersion: string | null; sessionId: string; seq: number }
   | { kind: "record"; recording: boolean }
-  | { kind: "panel-ready" }
+  /** Panel → page: replay everything after `fromSeq` of `sessionId`. */
+  | { kind: "panel-ready"; sessionId: string | null; fromSeq: number }
+  /** Background → panel: a page port is live again; ask it for a replay. */
+  | { kind: "page-connected" }
   | { kind: "snapshot-request"; renderId: RenderId }
   | { kind: "snapshot"; frame: EventsBatchMessage["payload"] }
   | { kind: "source-request"; requestId: string; url: string }
@@ -187,6 +207,12 @@ export type PortMessage =
       supported: boolean;
       failures: TimeTravelFailure[];
     };
+
+/** The resumable half of the protocol — everything else is request/response. */
+export type SequencedMessage = Extract<PortMessage, { kind: "frame" | "hello" }>;
+
+/** A sequenced message as the page emits it, before the buffer stamps a seq. */
+export type Unsequenced<T> = T extends unknown ? Omit<T, "seq"> : never;
 
 export const PANEL_PORT_PREFIX = "react-lens/panel:";
 export const PAGE_PORT_NAME = "react-lens/page";

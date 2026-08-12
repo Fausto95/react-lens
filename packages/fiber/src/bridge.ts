@@ -608,8 +608,15 @@ function walkRendered(root: Fiber, visit: (f: Fiber) => void): void {
 /** Reason + timing for a fiber already known to have rendered this commit. */
 function renderInfo(fiber: Fiber): RenderDetail {
   const alternate = fiber.alternate;
-  const selfDuration = typeof fiber.actualDuration === "number" ? fiber.actualDuration : 0;
-  const totalDuration = fiber.treeBaseDuration ?? selfDuration;
+  // Prefer exclusive self time (selfBaseDuration). actualDuration is subtree
+  // time — subtract children when base isn't available. Treat React's -0
+  // sentinel as "no measurement".
+  const selfDuration = exclusiveSelfMs(fiber);
+  const tree =
+    typeof fiber.treeBaseDuration === "number" && fiber.treeBaseDuration > 0
+      ? fiber.treeBaseDuration
+      : selfDuration;
+  const totalDuration = tree;
 
   if (!alternate) {
     return { reason: "mount", changedPropKeys: [], selfDuration, totalDuration, fiber };
@@ -622,6 +629,22 @@ function renderInfo(fiber: Fiber): RenderDetail {
     totalDuration,
     fiber,
   };
+}
+
+/** Exclusive render ms for a fiber; 0 when the profiler recorded nothing. */
+function exclusiveSelfMs(fiber: Fiber): number {
+  const base = fiber.selfBaseDuration;
+  if (typeof base === "number" && base > 0) return base;
+
+  let actual = fiber.actualDuration;
+  if (typeof actual !== "number" || !(actual > 0)) return 0;
+  let child = fiber.child;
+  while (child) {
+    const childActual = child.actualDuration;
+    if (typeof childActual === "number" && childActual > 0) actual -= childActual;
+    child = child.sibling;
+  }
+  return actual > 0 ? actual : 0;
 }
 
 function shallowChangedKeys(before: unknown, after: unknown): string[] {

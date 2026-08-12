@@ -1,4 +1,10 @@
 import { PAGE_PORT_NAME, PANEL_PORT_PREFIX, type PortMessage } from "../transport.js";
+import {
+  commandsOnPageConnect,
+  commandsOnPanelConnect,
+  commandsOnPanelDisconnect,
+} from "./pairing.js";
+import { registerWithRetry } from "./register.js";
 
 /**
  * Inject the MAIN-world scripts natively via chrome.scripting rather than as
@@ -37,19 +43,34 @@ const MAIN_SCRIPTS: chrome.scripting.RegisteredContentScript[] = [
 // concurrent double-registration that multiple event listeners would cause.
 async function registerMainScripts(): Promise<void> {
   const ids = MAIN_SCRIPTS.map((s) => s.id);
-  try {
-    await chrome.scripting.unregisterContentScripts({ ids });
-  } catch {
-    // Nothing registered yet — expected on first run.
-  }
-  try {
+  const result = await registerWithRetry(async () => {
+    try {
+      await chrome.scripting.unregisterContentScripts({ ids });
+    } catch {
+      // Nothing registered yet — expected on first run.
+    }
     await chrome.scripting.registerContentScripts(MAIN_SCRIPTS);
-  } catch (err) {
-    console.error("[react-lens] failed to register MAIN-world scripts", err);
-  }
+  });
+
+  if (result.ok) return;
+
+  // Out of retries. Say what this means rather than printing a bare rejection:
+  // without these scripts the hook never installs, so the panel will sit empty
+  // and the cause is nowhere near the symptom.
+  console.error(
+    "[react-lens] could not register the MAIN-world scripts, so React Lens will not " +
+      "attach to pages. Reload the extension from chrome://extensions to retry.",
+    result.error,
+  );
 }
 
 void registerMainScripts();
+
+// The worker is terminated at will and these registrations are what make the
+// extension work at all, so re-assert them at every lifecycle point Chrome
+// offers rather than only on a cold start that may have raced its own startup.
+chrome.runtime.onInstalled.addListener(() => void registerMainScripts());
+chrome.runtime.onStartup.addListener(() => void registerMainScripts());
 
 /**
  * Stateless relay (MV3 terminates it at will). Pairs a page port with the panel
@@ -79,9 +100,15 @@ chrome.runtime.onConnect.addListener((port) => {
     const pair = pairFor(tabId);
     pair.page = port;
 
-    // If a panel is already listening (page reloaded, or worker restarted and
-    // the content script reconnected), ask the content buffer to replay.
-    if (pair.panel) port.postMessage({ kind: "panel-ready" } satisfies PortMessage);
+    // A panel may already be listening (page reloaded, or the worker restarted
+    // and the content script reconnected). Tell it a page is live again; it
+    // replies with its own cursor, which is the only thing that knows what it
+    // is missing.
+    if (pair.panel) {
+      for (const cmd of commandsOnPageConnect()) {
+        pair.panel.postMessage(cmd satisfies PortMessage);
+      }
+    }
 
     port.onMessage.addListener((msg: PortMessage) => {
       pair.panel?.postMessage(msg);
@@ -97,16 +124,23 @@ chrome.runtime.onConnect.addListener((port) => {
     const pair = pairFor(tabId);
     pair.panel = port;
 
-    // Tell the content script to replay its durable buffer now that a panel is
-    // listening — this is what surfaces the already-captured tree.
-    pair.page?.postMessage({ kind: "panel-ready" } satisfies PortMessage);
+    // Make sure the page is capturing. The panel sends its own `panel-ready`
+    // (with the cursor) as soon as it connects, which is what surfaces the
+    // already-captured tree.
+    for (const cmd of commandsOnPanelConnect()) {
+      pair.page?.postMessage(cmd satisfies PortMessage);
+    }
 
     port.onMessage.addListener((msg: PortMessage) => {
       pair.page?.postMessage(msg);
     });
     port.onDisconnect.addListener(() => {
       pair.panel = undefined;
-      pair.page?.postMessage({ kind: "record", recording: false } satisfies PortMessage);
+      // Do not stop page capture — the content script keeps buffering so
+      // activity while DevTools is closed is still available on reconnect.
+      for (const cmd of commandsOnPanelDisconnect()) {
+        pair.page?.postMessage(cmd satisfies PortMessage);
+      }
     });
   }
 });

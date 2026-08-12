@@ -1,3 +1,16 @@
+"use no memo";
+
+// The Compiler is off for this file deliberately.
+//
+// `useTraceVersion` returns a counter used purely to bust caches: the trace
+// store mutates in place, so its identity never changes and only the version
+// says the data moved on. The memos below therefore list `version` as a
+// dependency without reading it. The Compiler infers dependencies from actual
+// reads, so it would drop `version`, cache on the store's stable identity and
+// never recompute — the panel would freeze on its first frame.
+//
+// Everything that does not read the store this way is compiled normally.
+
 import { useEffect, useRef, useState } from "react";
 import type { TraceStore, Interaction } from "@reactlens/trace-engine";
 import type { Causality } from "@reactlens/causality";
