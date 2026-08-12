@@ -1,5 +1,11 @@
 import { describe, it, expect } from "vite-plus/test";
-import { INITIAL_SESSION, stepSession, resyncRequest } from "./session.js";
+import {
+  INITIAL_SESSION,
+  stepSession,
+  resyncRequest,
+  commitFrame,
+  failFrame,
+} from "./session.js";
 import type { PortMessage } from "../transport.js";
 import type { EventsBatchMessage } from "@reactlens/protocol";
 
@@ -16,12 +22,12 @@ function hello(sessionId: string, seq = 1): PortMessage {
 describe("panel session reducer", () => {
   it("adopts the first document and ingests its frames", () => {
     const a = stepSession(INITIAL_SESSION, hello("doc-1"));
-    expect(a.state).toEqual({ sessionId: "doc-1", lastSeq: 1 });
+    expect(a.state).toEqual({ sessionId: "doc-1", lastSeq: 1, gapAt: null });
     expect(a.actions).toEqual([{ type: "reset-store" }]);
 
     const b = stepSession(a.state, frame("doc-1", 2));
     expect(b.state.lastSeq).toBe(2);
-    expect(b.actions).toEqual([{ type: "ingest", frame: EMPTY }]);
+    expect(b.actions).toEqual([{ type: "ingest", frame: EMPTY, seq: 2 }]);
   });
 
   it("resets the store when the page announces a new document", () => {
@@ -33,7 +39,7 @@ describe("panel session reducer", () => {
     const reloaded = stepSession(seen, hello("doc-2"));
     expect(reloaded.actions).toEqual([{ type: "reset-store" }]);
     // The new document's buffer starts its own cursor at 1.
-    expect(reloaded.state).toEqual({ sessionId: "doc-2", lastSeq: 1 });
+    expect(reloaded.state).toEqual({ sessionId: "doc-2", lastSeq: 1, gapAt: null });
   });
 
   it("resets on a frame from an unannounced document, then ingests it", () => {
@@ -45,8 +51,11 @@ describe("panel session reducer", () => {
     ).state;
 
     const next = stepSession(seen, frame("doc-2", 1));
-    expect(next.actions).toEqual([{ type: "reset-store" }, { type: "ingest", frame: EMPTY }]);
-    expect(next.state).toEqual({ sessionId: "doc-2", lastSeq: 1 });
+    expect(next.actions).toEqual([
+      { type: "reset-store" },
+      { type: "ingest", frame: EMPTY, seq: 1 },
+    ]);
+    expect(next.state).toEqual({ sessionId: "doc-2", lastSeq: 1, gapAt: null });
   });
 
   it("ignores a replayed frame the panel already ingested", () => {
@@ -70,7 +79,7 @@ describe("panel session reducer", () => {
   });
 
   it("carries the cursor in the resync request", () => {
-    expect(resyncRequest({ sessionId: "doc-1", lastSeq: 12 })).toEqual({
+    expect(resyncRequest({ sessionId: "doc-1", lastSeq: 12, gapAt: null })).toEqual({
       kind: "panel-ready",
       sessionId: "doc-1",
       fromSeq: 12,
@@ -87,5 +96,68 @@ describe("panel session reducer", () => {
     const out = stepSession(INITIAL_SESSION, snapshot);
     expect(out.state).toEqual(INITIAL_SESSION);
     expect(out.actions).toEqual([]);
+  });
+});
+
+describe("frame quarantine", () => {
+  /** A panel that has adopted doc-1 and ingested seq 1..3. */
+  function settled() {
+    let state = stepSession(INITIAL_SESSION, hello("doc-1")).state;
+    for (const seq of [2, 3]) {
+      state = stepSession(state, frame("doc-1", seq)).state;
+      state = commitFrame(state, seq);
+    }
+    return state;
+  }
+
+  it("holds the resync cursor at a frame whose ingest threw", () => {
+    // The cursor is the only record of what the panel has. Advancing it past a
+    // frame the store rejected loses that frame for good.
+    const state = failFrame(stepSession(settled(), frame("doc-1", 4)).state, 4);
+
+    expect(state.lastSeq).toBe(4);
+    expect(resyncRequest(state).fromSeq).toBe(3);
+  });
+
+  it("keeps ingesting later frames while a gap is open", () => {
+    let state = failFrame(stepSession(settled(), frame("doc-1", 4)).state, 4);
+    const next = stepSession(state, frame("doc-1", 5));
+    expect(next.actions).toEqual([{ type: "ingest", frame: EMPTY, seq: 5 }]);
+
+    // ...but the cursor still stops short of the gap, so a resync re-delivers it.
+    state = commitFrame(next.state, 5);
+    expect(resyncRequest(state).fromSeq).toBe(3);
+  });
+
+  it("re-ingests the quarantined frame when it is replayed", () => {
+    // Without this the replayed frame looks stale (seq <= lastSeq) and the gap
+    // could never close.
+    const state = failFrame(stepSession(settled(), frame("doc-1", 4)).state, 4);
+    const replayed = stepSession(state, frame("doc-1", 4));
+
+    expect(replayed.actions).toEqual([{ type: "ingest", frame: EMPTY, seq: 4 }]);
+  });
+
+  it("closes the gap once the frame ingests, and the cursor catches up", () => {
+    let state = failFrame(stepSession(settled(), frame("doc-1", 4)).state, 4);
+    state = commitFrame(stepSession(state, frame("doc-1", 5)).state, 5);
+    state = commitFrame(stepSession(state, frame("doc-1", 4)).state, 4);
+
+    expect(state.gapAt).toBeNull();
+    expect(resyncRequest(state).fromSeq).toBe(5);
+  });
+
+  it("holds at the earliest gap when several frames fail", () => {
+    let state = failFrame(stepSession(settled(), frame("doc-1", 6)).state, 6);
+    state = failFrame(stepSession(state, frame("doc-1", 4)).state, 4);
+
+    expect(resyncRequest(state).fromSeq).toBe(3);
+  });
+
+  it("forgets a gap from the previous document", () => {
+    const state = failFrame(stepSession(settled(), frame("doc-1", 4)).state, 4);
+    const reloaded = stepSession(state, hello("doc-2"));
+
+    expect(reloaded.state).toEqual({ sessionId: "doc-2", lastSeq: 1, gapAt: null });
   });
 });
