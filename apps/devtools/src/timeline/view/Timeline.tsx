@@ -26,6 +26,7 @@ const CAUSE_VAR: Record<(typeof CAUSE_KEYS)[number], string> = {
 };
 
 const HELP: Array<[string, string]> = [
+  ["click empty / ruler", "seek playhead (time-travel)"],
   ["drag", "scrub / time-travel (snaps to clip edges)"],
   ["click clip", "inspect without pausing capture"],
   ["⇧ drag", "set A/B loop region"],
@@ -418,14 +419,28 @@ export function Timeline({
     scheduleDraw(true);
   };
 
-  /** Stack hit, or soft-hit a wave/lane clip under the pointer. */
+  /**
+   * Stack hit, or a tight soft-hit on a wave/lane clip.
+   * Soft-hit is for inspection only (wave rows have no stack targets) and must
+   * stay local — a generous radius would steal empty-track seeks from the
+   * playhead / ruler.
+   */
   const clipUnderPointer = (x: number, y: number): Clip | null => {
     const hard = hitClip(x, y);
     if (hard) return hard.clip;
     if (x <= nameW() || y < RULER_H) return null;
     const row = layout.rows.find((r) => y >= r.y && y <= r.y + r.h);
     if (!row) return null;
-    return clipAtTime([row.lane], xToW(x), row.key);
+    const t = xToW(x);
+    const clip = clipAtTime([row.lane], t, row.key);
+    if (!clip) return null;
+    if (t >= clip.t0 && t <= clip.t1) return clip;
+    const SOFT_PX = 10;
+    if (Math.abs(wToX(clip.t0) - x) <= SOFT_PX || Math.abs(wToX(clip.t1) - x) <= SOFT_PX) {
+      return clip;
+    }
+    if (Math.abs(wToX((clip.t0 + clip.t1) / 2) - x) <= SOFT_PX) return clip;
+    return null;
   };
 
   const localXY = (e: { clientX: number; clientY: number }) => {
@@ -494,9 +509,11 @@ export function Timeline({
         e.currentTarget.setPointerCapture(e.pointerId);
         return;
       }
-      // Empty track: wait for a drag before entering historical scrub — a tap
-      // used to apply time travel and silently stop tracing.
-      dragRef.current = { type: "scrubPending", x0: x, y0: y };
+      // Empty track / ruler: place the playhead under the cursor. Clip taps
+      // above stay inspect-only so capture is not paused by accident.
+      setPlayhead(snap(xToW(x), x));
+      dragRef.current = { type: "scrub" };
+      scheduleDraw(false);
     }
     e.currentTarget.setPointerCapture(e.pointerId);
   };
@@ -599,10 +616,7 @@ export function Timeline({
     pointersRef.current.delete(e.pointerId);
     const d = dragRef.current;
     if (d?.type === "scrubPending") {
-      // Tap on empty track: soft-select a nearby clip if any; never scrub.
-      const { x, y } = localXY(e);
-      const soft = clipUnderPointer(x, y);
-      if (soft) inspectClip(soft);
+      // Clip tap released without dragging — inspection already applied on down.
       dragRef.current = null;
       return;
     }
