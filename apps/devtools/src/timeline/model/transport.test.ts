@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vite-plus/test";
-import { advancePlayhead, playStartAxis } from "./transport.js";
+import { advancePlayhead, playStartAxis, cursorModeAtStop } from "./transport.js";
 
 describe("advancePlayhead", () => {
   it("loops inside an A/B region", () => {
@@ -28,6 +28,23 @@ describe("advancePlayhead", () => {
     expect(
       advancePlayhead({ a: 40, deltaA: 10, a0: 0, a1: 100, loop: true }),
     ).toEqual({ kind: "continue", a: 50 });
+  });
+});
+
+describe("cursorModeAtStop", () => {
+  it("lands live after playing forward to the present", () => {
+    // A historical cursor keeps time travel applied, and the page drops every
+    // commit while it is — so a finished play-once silently killed capture.
+    expect(cursorModeAtStop({ dir: 1, loop: false })).toBe("live");
+  });
+
+  it("stays historical when play-once ends at the start of the session", () => {
+    expect(cursorModeAtStop({ dir: -1, loop: false })).toBe("historical");
+  });
+
+  it("stays historical inside an A/B region", () => {
+    // Looping playback is an explicit request to sit in the past.
+    expect(cursorModeAtStop({ dir: 1, loop: true })).toBe("historical");
   });
 });
 
