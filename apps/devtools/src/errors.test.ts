@@ -4,6 +4,7 @@ import {
   installGlobalErrorHandlers,
   lensErrors,
   reportError,
+  reportNotice,
   subscribeErrors,
   ERROR_RING_MAX,
   type ErrorEventTarget,
@@ -79,6 +80,16 @@ describe("panel error seam", () => {
 
     expect(() => reportError("timeline", new Error("boom"))).not.toThrow();
     expect(lensErrors().map((e) => e.message)).toEqual(["boom"]);
+  });
+
+  it("keeps notices in the same ring but distinguishes them from faults", () => {
+    // "Recovered 900 frames" and "the oldest minute left the log" are things the
+    // user must see, but filing them as errors would make the chip cry wolf.
+    reportError("timeline", new Error("bad clip"));
+    reportNotice("recovery", "Recovered 900 frames from the previous session.");
+
+    expect(lensErrors().map((e) => e.level)).toEqual(["error", "notice"]);
+    expect(lensErrors().filter((e) => e.level === "error")).toHaveLength(1);
   });
 
   it("routes uncaught errors and rejections into the same ring", () => {
