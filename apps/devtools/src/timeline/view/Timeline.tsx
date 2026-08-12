@@ -797,6 +797,9 @@ export function Timeline({
           type="button"
           className={`tl-btn${state.playing && state.playDir === -1 ? " on" : ""}`}
           onClick={() => startPlay(-1, 1)}
+          aria-label="Play in reverse"
+          aria-pressed={state.playing && state.playDir === -1}
+          title="Play in reverse (J)"
         >
           ◂◂
         </button>
@@ -804,6 +807,9 @@ export function Timeline({
           type="button"
           className={`tl-btn${state.playing ? " on" : ""}`}
           onClick={() => (state.playing ? dispatch({ type: "pause" }) : startPlay(1, 1))}
+          aria-label="Play"
+          aria-pressed={state.playing}
+          title={state.playing ? "Pause (Space)" : "Play (Space)"}
         >
           {state.playing ? "⏸" : "▶"}
         </button>

@@ -1,3 +1,5 @@
+"use no memo";
+
 import { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import type { TraceStore } from "@reactlens/trace-engine";
 import type { Causality } from "@reactlens/causality";
@@ -113,6 +115,13 @@ export function Panel({
   selectComponent,
   onSelectConsumed,
 }: PanelProps) {
+  // Re-render on every ingest. The reads below (`store.stats()`,
+  // `sessionSpanMs(store)`, `diagnoseAll`) take their freshness from that
+  // re-render alone — hence `"use no memo"` at the top of this file: the store's
+  // identity never changes, so the compiler would treat them as constant and
+  // serve the mount's answer for the rest of the session, making every later
+  // event look lost. Listing the version in a dep array does not help; the
+  // compiler infers deps from what the callback actually reads.
   useTraceVersion(store, { kind: "global" });
   const [selected, setSelected] = useState<ComponentId | null>(null);
   // Scroll the inspected page to a newly selected component (off-screen only).
