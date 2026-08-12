@@ -6,20 +6,15 @@ import {
   type PortMessage,
   type ContentToPage,
 } from "../transport.js";
+import { createMessageBuffer } from "./buffer.js";
 
 /**
  * ISOLATED-world bridge and DURABLE buffer.
  */
-const MAX_BUFFER = 4000;
-const buffer: PortMessage[] = [];
+const buffer = createMessageBuffer(4000);
 let port: chrome.runtime.Port | null = null;
 let panelReady = false;
 let reconnectScheduled = false;
-
-function record(msg: PortMessage): void {
-  buffer.push(msg);
-  if (buffer.length > MAX_BUFFER) buffer.shift();
-}
 
 function connect(): void {
   let p: chrome.runtime.Port;
@@ -146,7 +141,7 @@ function connect(): void {
       );
     } else if (msg.kind === "panel-ready") {
       panelReady = true;
-      for (const m of buffer) p.postMessage(m);
+      for (const m of buffer.snapshot()) p.postMessage(m);
     }
   });
   p.onDisconnect.addListener(() => {
@@ -258,7 +253,7 @@ window.addEventListener("message", (event: MessageEvent) => {
         : null;
   if (!msg) return;
 
-  record(msg);
+  buffer.push(msg);
   if (panelReady && port) {
     try {
       port.postMessage(msg);

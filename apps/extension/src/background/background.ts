@@ -1,4 +1,5 @@
 import { PAGE_PORT_NAME, PANEL_PORT_PREFIX, type PortMessage } from "../transport.js";
+import { commandsOnPanelConnect, commandsOnPanelDisconnect } from "./pairing.js";
 import { registerWithRetry } from "./register.js";
 
 /**
@@ -97,7 +98,11 @@ chrome.runtime.onConnect.addListener((port) => {
 
     // If a panel is already listening (page reloaded, or worker restarted and
     // the content script reconnected), ask the content buffer to replay.
-    if (pair.panel) port.postMessage({ kind: "panel-ready" } satisfies PortMessage);
+    if (pair.panel) {
+      for (const cmd of commandsOnPanelConnect()) {
+        port.postMessage(cmd satisfies PortMessage);
+      }
+    }
 
     port.onMessage.addListener((msg: PortMessage) => {
       pair.panel?.postMessage(msg);
@@ -115,14 +120,20 @@ chrome.runtime.onConnect.addListener((port) => {
 
     // Tell the content script to replay its durable buffer now that a panel is
     // listening — this is what surfaces the already-captured tree.
-    pair.page?.postMessage({ kind: "panel-ready" } satisfies PortMessage);
+    for (const cmd of commandsOnPanelConnect()) {
+      pair.page?.postMessage(cmd satisfies PortMessage);
+    }
 
     port.onMessage.addListener((msg: PortMessage) => {
       pair.page?.postMessage(msg);
     });
     port.onDisconnect.addListener(() => {
       pair.panel = undefined;
-      pair.page?.postMessage({ kind: "record", recording: false } satisfies PortMessage);
+      // Do not stop page capture — the content script keeps buffering so
+      // activity while DevTools is closed is still available on reconnect.
+      for (const cmd of commandsOnPanelDisconnect()) {
+        pair.page?.postMessage(cmd satisfies PortMessage);
+      }
     });
   }
 });

@@ -1,5 +1,5 @@
-import { describe, it, expect } from "vite-plus/test";
-import { createCoalescer } from "./coalesce.js";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vite-plus/test";
+import { createCoalescer, frameScheduler } from "./coalesce.js";
 
 /** A scheduler the test drives by hand, standing in for rAF. */
 function fakeScheduler() {
@@ -82,5 +82,37 @@ describe("createCoalescer", () => {
     fire();
     fire();
     expect(scheduled).toBe(1);
+  });
+});
+
+describe("frameScheduler — hidden-tab fallback", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("still runs when rAF is paused (background / other navigator tab)", () => {
+    // Without a timer fallback, coalesced UI updates stall while the tab is
+    // hidden — embedded/playground looks like events were lost until focus
+    // returns (and can stick if a deferred rAF never settles the handle).
+    const rafCbs: FrameRequestCallback[] = [];
+    const rafSpy = vi.spyOn(globalThis, "requestAnimationFrame").mockImplementation((cb) => {
+      rafCbs.push(cb);
+      return rafCbs.length;
+    });
+    vi.spyOn(globalThis, "cancelAnimationFrame").mockImplementation(() => {});
+
+    let ran = 0;
+    const fire = createCoalescer(() => ran++, frameScheduler);
+    fire();
+    expect(ran).toBe(0);
+    expect(rafCbs).toHaveLength(1);
+
+    vi.advanceTimersByTime(32);
+    expect(ran).toBe(1);
+
+    rafSpy.mockRestore();
   });
 });

@@ -17,22 +17,48 @@ export interface Scheduler {
 }
 
 /**
- * rAF, with a timer fallback: rAF never fires in a hidden tab, and the panel
- * still has to notice that the trace moved on.
+ * rAF for visible tabs, plus a short timer so a hidden/backgrounded tab still
+ * notices that the trace moved on. Whichever fires first wins; the other is
+ * cancelled. (rAF alone is paused while the document is hidden.)
  */
-export const frameScheduler: Scheduler = {
-  schedule: (fn) => {
-    if (typeof requestAnimationFrame === "function") {
-      const raf = requestAnimationFrame(fn);
-      return raf;
+export const frameScheduler: Scheduler = (() => {
+  let seq = 1;
+  const pending = new Map<
+    number,
+    { raf: number | null; timer: ReturnType<typeof setTimeout> | null }
+  >();
+
+  const clear = (id: number) => {
+    const p = pending.get(id);
+    if (!p) return;
+    if (p.raf != null && typeof cancelAnimationFrame === "function") {
+      cancelAnimationFrame(p.raf);
     }
-    return setTimeout(fn, 16) as unknown as number;
-  },
-  cancel: (handle) => {
-    if (typeof cancelAnimationFrame === "function") cancelAnimationFrame(handle);
-    else clearTimeout(handle);
-  },
-};
+    if (p.timer != null) clearTimeout(p.timer);
+    pending.delete(id);
+  };
+
+  return {
+    schedule: (fn) => {
+      const id = seq++;
+      let done = false;
+      const run = () => {
+        if (done) return;
+        done = true;
+        clear(id);
+        fn();
+      };
+      const raf =
+        typeof requestAnimationFrame === "function" ? requestAnimationFrame(run) : null;
+      const timer = setTimeout(run, 32);
+      pending.set(id, { raf, timer });
+      return id;
+    },
+    cancel: (handle) => {
+      clear(handle);
+    },
+  };
+})();
 
 export interface Coalescer {
   (): void;
