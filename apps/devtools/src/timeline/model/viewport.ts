@@ -4,7 +4,7 @@
  */
 
 import { clamp, type TimeAxis, type TimeSpan } from "./axis.js";
-import { VIEW_SPAN_MIN } from "../view/metrics.js";
+import { VIEW_SPAN_MAX, VIEW_SPAN_MIN } from "../view/metrics.js";
 
 export interface ViewWindow {
   a0: number;
@@ -21,13 +21,20 @@ export type ActiveSpans = ReadonlyArray<readonly [number, number]>;
 /** Smallest usable stage width. */
 export const MIN_WIDTH = 120;
 
+/** Furthest zoom-out span for an axis of length `total`. */
+export function maxViewSpan(total: number): number {
+  return Math.max(VIEW_SPAN_MIN, total, VIEW_SPAN_MAX);
+}
+
 export function viewSpan(view: ViewWindow): number {
   return Math.max(VIEW_SPAN_MIN, view.a1 - view.a0);
 }
 
 export function clampView(a0: number, span: number, total: number): ViewWindow {
-  const s = clamp(span, VIEW_SPAN_MIN, Math.max(VIEW_SPAN_MIN, total));
-  const start = clamp(a0, 0, Math.max(0, total - s));
+  const t = Math.max(0, total);
+  const s = clamp(span, VIEW_SPAN_MIN, maxViewSpan(t));
+  // When s > t, allow negative a0 so content can sit centered with empty margins.
+  const start = clamp(a0, Math.min(0, t - s), Math.max(0, t - s));
   return { a0: start, a1: start + s };
 }
 
@@ -42,10 +49,11 @@ export function zoomView(
   anchorA: number,
   total: number,
 ): ViewWindow {
+  const t = Math.max(0, total);
   const span = viewSpan(view);
-  const ns = clamp(span * factor, VIEW_SPAN_MIN, Math.max(VIEW_SPAN_MIN, total));
+  const ns = clamp(span * factor, VIEW_SPAN_MIN, maxViewSpan(t));
   const na0 = anchorA - ((anchorA - view.a0) / span) * ns;
-  return clampView(na0, ns, total);
+  return clampView(na0, ns, t);
 }
 
 /** Fit a wall-time range with padding, mapped through the axis. */
@@ -90,7 +98,7 @@ export function reanchorAfterAxisChange(
   centerWall: number,
 ): ViewWindow {
   const spanFrac = viewSpan(prev) / Math.max(prevTotal, 1);
-  const span = clamp(spanFrac * next.total, VIEW_SPAN_MIN, Math.max(VIEW_SPAN_MIN, next.total));
+  const span = clamp(spanFrac * next.total, VIEW_SPAN_MIN, maxViewSpan(next.total));
   const centerA = next.wallToAxis(centerWall);
   return clampView(centerA - span / 2, span, next.total);
 }

@@ -20,8 +20,9 @@ export function WallStrip({
 }) {
   const total = Math.max(1, axis.total);
   const pct = (a: number) => (a / total) * 100;
-  const left = pct(view.a0);
-  const width = Math.max(pct(view.a1) - left, 0.5);
+  // Past-fit zoom: clamp the chrome window to the track.
+  const left = Math.max(0, pct(view.a0));
+  const width = Math.max(Math.min(100, pct(view.a1)) - left, 0.5);
 
   return (
     <div className="tl-wall" style={{ height: WALL_H }}>

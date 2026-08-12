@@ -20,6 +20,7 @@ import {
   NAME_W,
   RULER_H,
   SNAP_PX,
+  VIEW_SPAN_MAX,
   VIEW_SPAN_MIN,
   nameWidthFor,
 } from "./metrics.js";
@@ -330,7 +331,7 @@ export function Timeline({
     const ax = axisLiveRef.current;
     const anchor = xToA(Math.max(anchorX, nameW()));
     const span = state.view.a1 - state.view.a0;
-    const ns = clamp(span * factor, VIEW_SPAN_MIN, ax.total);
+    const ns = clamp(span * factor, VIEW_SPAN_MIN, Math.max(ax.total, VIEW_SPAN_MAX));
     const na0 = anchor - ((anchor - state.view.a0) / span) * ns;
     if (animated) animateView(na0, ns);
     else setView(na0, ns);

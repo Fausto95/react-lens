@@ -31,8 +31,9 @@ export function Navigator({
 
   const total = Math.max(1, axis.total);
   const pct = (a: number) => (a / total) * 100;
-  const left = pct(view.a0);
-  const width = Math.max(pct(view.a1) - left, 1.2);
+  // Past-fit zoom: clamp the chrome window to the track (full width = seeing margins).
+  const left = Math.max(0, pct(view.a0));
+  const width = Math.max(Math.min(100, pct(view.a1)) - left, 1.2);
 
   const onDown = (e: React.PointerEvent, mode: "pan" | "l" | "r") => {
     e.stopPropagation();
@@ -47,13 +48,13 @@ export function Navigator({
     const dA = ((e.clientX - d.x) / navW) * total;
     const span = d.a1 - d.a0;
     if (d.mode === "pan") {
-      const na0 = Math.max(0, Math.min(total - span, d.a0 + dA));
-      onView(na0, span, false);
+      // clampView (via setView) allows a0 < 0 when span > total.
+      onView(d.a0 + dA, span, false);
     } else if (d.mode === "l") {
-      const na0 = Math.max(0, Math.min(d.a1 - 30, d.a0 + dA));
+      const na0 = Math.min(d.a1 - 30, d.a0 + dA);
       onView(na0, d.a1 - na0, false);
     } else {
-      const na1 = Math.max(d.a0 + 30, Math.min(total, d.a1 + dA));
+      const na1 = Math.max(d.a0 + 30, d.a1 + dA);
       onView(d.a0, na1 - d.a0, false);
     }
   };
