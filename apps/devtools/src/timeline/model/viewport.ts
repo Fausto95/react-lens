@@ -63,11 +63,32 @@ export function fitWallRange(
   w1: number,
   padFrac = 0.08,
 ): ViewWindow {
-  const a0 = axis.wallToAxis(w0);
-  const a1 = axis.wallToAxis(w1);
+  const a0 = axis.wallToAxis(Math.min(w0, w1));
+  const a1 = axis.wallToAxis(Math.max(w0, w1));
   const span = Math.max(VIEW_SPAN_MIN, a1 - a0);
   const pad = span * padFrac;
   return clampView(a0 - pad, span + pad * 2, axis.total);
+}
+
+/**
+ * Fit a wall range but keep `centerW` at the view midpoint.
+ * Loupe zoom must preserve the crosshair (hover time), not the [t0,t1] midpoint —
+ * clamping to an activity segment makes those diverge.
+ */
+export function fitWallRangeAround(
+  axis: TimeAxis,
+  w0: number,
+  w1: number,
+  centerW: number,
+  padFrac = 0.12,
+): ViewWindow {
+  const a0 = axis.wallToAxis(Math.min(w0, w1));
+  const a1 = axis.wallToAxis(Math.max(w0, w1));
+  const span = Math.max(VIEW_SPAN_MIN, a1 - a0);
+  const pad = span * padFrac;
+  const total = span + pad * 2;
+  const centerA = axis.wallToAxis(centerW);
+  return clampView(centerA - total / 2, total, axis.total);
 }
 
 /** Visible wall-time window for the current view. */

@@ -58,4 +58,9 @@ describe("timelineKeyAction", () => {
       dir: -1,
     });
   });
+
+  it("returns to live with End or period", () => {
+    expect(timelineKeyAction(ev({ key: "End", code: "End" }))).toEqual({ kind: "go-live" });
+    expect(timelineKeyAction(ev({ key: ".", code: "Period" }))).toEqual({ kind: "go-live" });
+  });
 });

@@ -54,6 +54,8 @@ const BINDINGS: Binding[] = [
   { keys: ["?"], action: { kind: "toggle-help" } },
   { keys: ["ArrowLeft"], action: { kind: "nudge-playhead", dir: -1 } },
   { keys: ["ArrowRight"], action: { kind: "nudge-playhead", dir: 1 } },
+  { keys: ["End"], codes: ["End"], action: { kind: "go-live" } },
+  { keys: ["."], codes: ["Period"], action: { kind: "go-live" } },
 ];
 
 export function timelineKeyAction(e: TimelineKeyEvent): TimelineKeyAction | null {

@@ -82,7 +82,9 @@ export function Navigator({
         }}
       >
         {axis.segs
-          .filter((s) => s.type === "gap" && s.a1 - s.a0 > 1e-6)
+          .filter((s): s is Extract<(typeof axis.segs)[number], { type: "gap" }> => {
+            return s.type === "gap" && s.a1 - s.a0 > 1e-6;
+          })
           .map((s) => (
             <div
               key={s.id}

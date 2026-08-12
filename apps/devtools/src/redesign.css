@@ -1936,6 +1936,38 @@
   color: var(--text-2);
 }
 
+.rl-redesign .tl-stitch {
+  position: absolute;
+  top: 0;
+  width: 12px;
+  height: 30px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  z-index: 7;
+}
+.rl-redesign .tl-stitch:hover {
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+.rl-redesign .tl-stitch:focus-visible {
+  outline: 1px solid var(--accent);
+  outline-offset: -1px;
+}
+
+.rl-redesign .tl-foot-idle {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--text-3);
+  background: transparent;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+}
+.rl-redesign .tl-foot-idle:hover {
+  color: var(--accent);
+}
+
 .rl-redesign .tl-ph-chip {
   position: absolute;
   font-family: var(--mono);

@@ -127,6 +127,25 @@ export function drawBase(args: DrawBaseArgs): {
 
   hline(RULER_H - 1, hexAlpha(theme.lineStrong, 0.75));
 
+  // Compressed idle stitches: hairline so wall-time jumps stay visible.
+  for (const s of axis.segs) {
+    if (s.type !== "gap" || s.a1 - s.a0 >= 1e-6) continue;
+    const x = aToX(s.a0);
+    if (x < NW || x > W) continue;
+    vline(x, RULER_H, H, hexAlpha(theme.lineStrong, 0.4), [2, 3]);
+    ctx.fillStyle = hexAlpha(theme.text3, 0.85);
+    ctx.beginPath();
+    ctx.moveTo(x, 2);
+    ctx.lineTo(x + 3.5, 7);
+    ctx.lineTo(x, 12);
+    ctx.lineTo(x - 3.5, 7);
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  // Ruler ticks + labels; cull major labels that would collide at stitches.
+  const LABEL_MIN_PX = 44;
+  let lastLabelX = -Infinity;
   for (const s of axis.segs) {
     if (s.type !== "act") continue;
     const step = niceStep(70 / Math.max(pxPerMs, 1e-6));
@@ -141,10 +160,11 @@ export function drawBase(args: DrawBaseArgs): {
         RULER_H,
         major ? hexAlpha(theme.lineStrong, 0.9) : hexAlpha(theme.line, 0.85),
       );
-      if (major) {
+      if (major && x - lastLabelX >= LABEL_MIN_PX) {
         ctx.fillStyle = theme.text3;
         ctx.font = `9.5px ${MONO}`;
         ctx.fillText(fmt(t - tOrigin), x + 4, RULER_H - 11);
+        lastLabelX = x;
       }
     }
   }

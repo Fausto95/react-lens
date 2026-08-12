@@ -8,14 +8,18 @@ export function Footer({
   wastedN,
   idleCollapsedMs,
   regionActive,
+  onExpandIdle,
 }: {
   selection: Clip | null;
   inScope: number;
   wastedN: number;
   idleCollapsedMs: number;
   regionActive: boolean;
+  /** Expand all fully-compressed idle gaps back toward wall time. */
+  onExpandIdle?: () => void;
 }) {
   const fmt = (t: number) => Math.round(t).toLocaleString("en-US");
+  const idleLabel = `idle collapsed ${(idleCollapsedMs / 1000).toFixed(1)}s`;
   return (
     <div className="tlfoot tl-canvas-foot">
       {selection && (
@@ -40,9 +44,20 @@ export function Footer({
       <span className="mono" style={{ color: "var(--warn)" }}>
         {wastedN} wasted
       </span>
-      <span className="mono" style={{ color: "var(--text-3)" }}>
-        idle collapsed {(idleCollapsedMs / 1000).toFixed(1)}s
-      </span>
+      {idleCollapsedMs > 0 && onExpandIdle ? (
+        <button
+          type="button"
+          className="tl-foot-idle"
+          title="Expand compressed idle gaps"
+          onClick={onExpandIdle}
+        >
+          {idleLabel} · expand
+        </button>
+      ) : (
+        <span className="mono" style={{ color: "var(--text-3)" }}>
+          {idleLabel}
+        </span>
+      )}
       <span className="mono" style={{ color: "var(--text-3)" }}>
         ? for shortcuts
       </span>
