@@ -16,7 +16,7 @@ import {
 } from "@reactlens/devtools/panel";
 import type { EditApi, TimeTravelApi } from "@reactlens/devtools/panel";
 import { ErrorBoundary, installGlobalErrorHandlers, reportError } from "@reactlens/devtools/errors";
-import { isContextInvalidated, reconnectDelay } from "./connection.js";
+import { isContextInvalidated, reconnectDelay } from "../connection.js";
 import {
   INITIAL_SESSION,
   commitFrame,
@@ -26,6 +26,10 @@ import {
   type SessionState,
 } from "./session.js";
 import { PANEL_PORT_PREFIX, type EditPrimitive, type PortMessage } from "../transport.js";
+import { createHeartbeat, type Heartbeat } from "../heartbeat.js";
+
+/** Trailing window for cursor acks — the page only needs the newest one. */
+const ACK_INTERVAL_MS = 250;
 
 /**
  * The DevTools panel. Owns the authoritative trace store on the panel side and
@@ -39,6 +43,9 @@ function ExtensionPanel() {
   /** The extension was reloaded under us; only reopening DevTools recovers. */
   const [connectionLost, setConnectionLost] = useState(false);
   const portRef = useRef<chrome.runtime.Port | null>(null);
+  const heartbeatRef = useRef<Heartbeat | null>(null);
+  /** Lets the recovery screen retry in place instead of demanding a reopen. */
+  const reconnectRef = useRef<(() => void) | null>(null);
   /** Which page document we are showing, and how much of it we have. */
   const sessionRef = useRef<SessionState>(INITIAL_SESSION);
   const pendingSource = useRef(
@@ -65,6 +72,7 @@ function ExtensionPanel() {
      * new document's mount (which is what watching `onNavigated` did).
      */
     const applySession = (port: chrome.runtime.Port, msg: PortMessage) => {
+      const before = resyncRequest(sessionRef.current).fromSeq;
       const { state, actions } = stepSession(sessionRef.current, msg);
       sessionRef.current = state;
       for (const action of actions) {
@@ -92,6 +100,30 @@ function ExtensionPanel() {
           }
         }
       }
+
+      // Tell the page how far it can forget. Without this the page-side buffer
+      // retains the whole session and spills to storage for no reason.
+      if (resyncRequest(sessionRef.current).fromSeq > before) scheduleAck(port);
+    };
+
+    /**
+     * Acks are throttled, never one per frame: a busy app commits many times a
+     * frame and the page only needs the newest cursor. Trailing, so a burst
+     * still ends with an ack.
+     */
+    let ackTimer: ReturnType<typeof setTimeout> | null = null;
+    const scheduleAck = (port: chrome.runtime.Port) => {
+      if (ackTimer !== null) return;
+      ackTimer = setTimeout(() => {
+        ackTimer = null;
+        const { sessionId, fromSeq } = resyncRequest(sessionRef.current);
+        if (sessionId === null || fromSeq <= 0) return;
+        try {
+          port.postMessage({ kind: "ack", sessionId, seq: fromSeq } satisfies PortMessage);
+        } catch (err) {
+          reportError("ack", err);
+        }
+      }, ACK_INTERVAL_MS);
     };
 
     let attempt = 0;
@@ -111,8 +143,33 @@ function ExtensionPanel() {
         setTimeout(connect, reconnectDelay(attempt++));
         return;
       }
-      attempt = 0;
       portRef.current = port;
+      // A port that stops answering is worse than one that closes: frames go
+      // into it while the panel believes it is connected. Force the close so
+      // the reconnect-and-resync path runs.
+      const beat = createHeartbeat({
+        send: (id) => {
+          try {
+            port.postMessage({ kind: "ping", id } satisfies PortMessage);
+          } catch {
+            // onDisconnect handles it.
+          }
+        },
+        onDead: () => {
+          reportError("heartbeat", new Error("port stopped answering — reconnecting"));
+          try {
+            port.disconnect();
+          } catch {
+            // Already gone.
+          }
+          if (portRef.current === port) {
+            portRef.current = null;
+            if (!disposed) setTimeout(connect, reconnectDelay(attempt++));
+          }
+        },
+      });
+      heartbeatRef.current?.stop();
+      heartbeatRef.current = beat;
       // Capture is always on; re-assert after (re)connect in case an older
       // background left the page paused. Then ask the page for whatever we
       // missed while the port was down — the panel owns that cursor, because
@@ -125,6 +182,34 @@ function ExtensionPanel() {
         reportError("connect", err);
       }
       port.onMessage.addListener((msg: PortMessage) => {
+        if (msg.kind === "pong") {
+          beat.pong(msg.id);
+          // Proven, not merely opened: resetting on `connect()` returning made
+          // a port that dies immediately reset the backoff every attempt.
+          attempt = 0;
+          return;
+        }
+        if (msg.kind === "ping") {
+          try {
+            port.postMessage({ kind: "pong", id: msg.id } satisfies PortMessage);
+          } catch {
+            // onDisconnect handles it.
+          }
+          return;
+        }
+        if (msg.kind === "compacted") {
+          // Retention has a floor, and the user has to know when it was hit —
+          // a timeline that silently skips a minute is worse than one that says
+          // it did.
+          reportError(
+            "trace",
+            new Error(
+              `${msg.frames} frames (seq ${msg.fromSeq}–${msg.toSeq}) could not be retained while ` +
+                `the panel was away: memory and extension storage were both full.`,
+            ),
+          );
+          return;
+        }
         applySession(port, msg);
         // On-demand snapshots answer a request; they carry no sequence.
         if (msg.kind === "snapshot") store.ingest(msg.frame);
@@ -173,6 +258,7 @@ function ExtensionPanel() {
       });
       port.onDisconnect.addListener(() => {
         portRef.current = null;
+        beat.stop();
         // `lastError` must be read here or Chrome logs it as unchecked.
         const err = chrome.runtime.lastError;
         if (err && isContextInvalidated(err)) {
@@ -182,6 +268,7 @@ function ExtensionPanel() {
         if (!disposed) setTimeout(connect, reconnectDelay(attempt++));
       });
     };
+    reconnectRef.current = connect;
     connect();
 
     configureSourceFetcher((url) => {
@@ -216,6 +303,10 @@ function ExtensionPanel() {
     return () => {
       disposed = true;
       configureSourceFetcher(undefined);
+      if (ackTimer !== null) clearTimeout(ackTimer);
+      heartbeatRef.current?.stop();
+      heartbeatRef.current = null;
+      reconnectRef.current = null;
       portRef.current?.disconnect();
     };
   }, [store]);
@@ -401,16 +492,26 @@ function ExtensionPanel() {
   }, []);
 
   if (connectionLost) {
-    // Nothing here is recoverable in place: this panel's extension context is
-    // gone, so the store will never receive another frame. Say what happened
-    // and what fixes it, rather than showing a panel frozen on stale data.
+    // Usually terminal — a reloaded extension invalidates this panel's context
+    // for good — but "usually" is not "always": the same signal shows up when a
+    // reload happens to land between two connects. Offer the cheap retry first
+    // and keep the reopen instruction for when it fails.
     return (
       <div className="rl-lost">
         <h1>React Lens disconnected</h1>
         <p>
-          The extension was reloaded or updated, which invalidates this panel. Close and reopen
-          DevTools to reconnect.
+          The extension was reloaded or updated, which invalidates this panel. Try reconnecting; if
+          that fails, close and reopen DevTools.
         </p>
+        <button
+          type="button"
+          onClick={() => {
+            setConnectionLost(false);
+            reconnectRef.current?.();
+          }}
+        >
+          Reconnect
+        </button>
         <button type="button" onClick={() => location.reload()}>
           Reload panel
         </button>

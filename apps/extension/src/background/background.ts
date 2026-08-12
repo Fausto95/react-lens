@@ -93,6 +93,34 @@ function pairFor(tabId: number): Pair {
   return pair;
 }
 
+/**
+ * Post without letting a dying port throw out of the listener.
+ *
+ * A port can be torn down between the sender's check and our post; the
+ * exception then escapes into Chrome's dispatch, which aborts the rest of this
+ * message's handling. The peer resyncs from its own cursor, so dropping one
+ * post here is recoverable — losing the handler is not.
+ */
+function post(port: chrome.runtime.Port | undefined, msg: PortMessage): void {
+  if (!port) return;
+  try {
+    port.postMessage(msg);
+  } catch {
+    // Its onDisconnect will clear the pair.
+  }
+}
+
+/**
+ * Liveness probes are answered by the immediate peer, never relayed. The point
+ * is to prove *this* hop is alive; forwarding would make the answer depend on
+ * whether the other end of the pair happens to be attached.
+ */
+function answeredPing(port: chrome.runtime.Port, msg: PortMessage): boolean {
+  if (msg.kind !== "ping") return false;
+  post(port, { kind: "pong", id: msg.id });
+  return true;
+}
+
 chrome.runtime.onConnect.addListener((port) => {
   if (port.name === PAGE_PORT_NAME) {
     const tabId = port.sender?.tab?.id;
@@ -106,12 +134,13 @@ chrome.runtime.onConnect.addListener((port) => {
     // is missing.
     if (pair.panel) {
       for (const cmd of commandsOnPageConnect()) {
-        pair.panel.postMessage(cmd satisfies PortMessage);
+        post(pair.panel, cmd satisfies PortMessage);
       }
     }
 
     port.onMessage.addListener((msg: PortMessage) => {
-      pair.panel?.postMessage(msg);
+      if (answeredPing(port, msg)) return;
+      post(pair.panel, msg);
     });
     port.onDisconnect.addListener(() => {
       pair.page = undefined;
@@ -128,18 +157,19 @@ chrome.runtime.onConnect.addListener((port) => {
     // (with the cursor) as soon as it connects, which is what surfaces the
     // already-captured tree.
     for (const cmd of commandsOnPanelConnect()) {
-      pair.page?.postMessage(cmd satisfies PortMessage);
+      post(pair.page, cmd satisfies PortMessage);
     }
 
     port.onMessage.addListener((msg: PortMessage) => {
-      pair.page?.postMessage(msg);
+      if (answeredPing(port, msg)) return;
+      post(pair.page, msg);
     });
     port.onDisconnect.addListener(() => {
       pair.panel = undefined;
       // Do not stop page capture — the content script keeps buffering so
       // activity while DevTools is closed is still available on reconnect.
       for (const cmd of commandsOnPanelDisconnect()) {
-        pair.page?.postMessage(cmd satisfies PortMessage);
+        post(pair.page, cmd satisfies PortMessage);
       }
     });
   }
