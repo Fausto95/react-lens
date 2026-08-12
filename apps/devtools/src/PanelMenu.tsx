@@ -15,9 +15,26 @@ const EDITOR_LABELS: Record<EditorId, string> = {
   webstorm: "WebStorm",
 };
 
+/** How much history the trace store keeps. */
+export interface Retention {
+  maxEvents: number;
+  /** Null = no time window; keep whatever the event cap allows. */
+  maxAgeMs: number | null;
+}
+
+const EVENT_CAPS = [10_000, 50_000, 100_000, 500_000] as const;
+
+const WINDOWS: ReadonlyArray<{ label: string; ms: number | null }> = [
+  { label: "No limit", ms: null },
+  { label: "Last 1 min", ms: 60_000 },
+  { label: "Last 5 min", ms: 300_000 },
+  { label: "Last 15 min", ms: 900_000 },
+];
+
 /**
  * Panel preferences popover (header sliders icon): theme, render overlay,
- * editor for open-in-editor links, and the transport/protocol readout.
+ * history retention, editor for open-in-editor links, and the
+ * transport/protocol readout.
  */
 export function PanelMenu({
   open,
@@ -26,6 +43,8 @@ export function PanelMenu({
   onThemeChange,
   overlay,
   reveal,
+  retention,
+  onRetentionChange,
   reading,
 }: {
   open: boolean;
@@ -36,6 +55,9 @@ export function PanelMenu({
   overlay?: { enabled: boolean; toggle: () => void } | undefined;
   /** Scroll the inspected page to the selected component when it's off-screen. */
   reveal?: { enabled: boolean; toggle: () => void } | undefined;
+  /** How much of the session to retain; oldest activity is dropped first. */
+  retention?: Retention | undefined;
+  onRetentionChange?: ((next: Retention) => void) | undefined;
   /** Where the panel reads from: embedded page or extension devtools. */
   reading: string;
 }) {
@@ -112,6 +134,54 @@ export function PanelMenu({
             <span className="rl-menu-switch-knob" />
           </button>
         </div>
+      )}
+      {retention && onRetentionChange && (
+        <>
+          <div className="rl-menu-row">
+            <span className="rl-menu-label" title="Events kept before the oldest are dropped">
+              History
+            </span>
+            <select
+              className="rl-menu-select"
+              value={String(retention.maxEvents)}
+              aria-label="Event history cap"
+              onChange={(e) =>
+                onRetentionChange({ ...retention, maxEvents: Number(e.target.value) })
+              }
+            >
+              {EVENT_CAPS.map((n) => (
+                <option key={n} value={n}>
+                  {n.toLocaleString()} events
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="rl-menu-row">
+            <span
+              className="rl-menu-label"
+              title="Drop activity older than this, however few events it is"
+            >
+              Time window
+            </span>
+            <select
+              className="rl-menu-select"
+              value={String(retention.maxAgeMs ?? "")}
+              aria-label="History time window"
+              onChange={(e) =>
+                onRetentionChange({
+                  ...retention,
+                  maxAgeMs: e.target.value === "" ? null : Number(e.target.value),
+                })
+              }
+            >
+              {WINDOWS.map((w) => (
+                <option key={w.label} value={w.ms ?? ""}>
+                  {w.label}
+                </option>
+              ))}
+            </select>
+          </div>
+        </>
       )}
       <div className="rl-menu-row">
         <span className="rl-menu-label">Editor</span>

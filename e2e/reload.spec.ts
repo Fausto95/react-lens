@@ -20,9 +20,7 @@ async function bootPanel(page: import("@playwright/test").Page): Promise<void> {
  * docks over the demo, so Playwright's actionability check sees it covered.
  */
 const refresh = (page: import("@playwright/test").Page) =>
-  page
-    .getByRole("button", { name: "Refresh prices" })
-    .evaluate((el: HTMLElement) => el.click());
+  page.getByRole("button", { name: "Refresh prices" }).evaluate((el: HTMLElement) => el.click());
 
 test("a reload starts a clean session and keeps capturing", async ({ page }) => {
   await bootPanel(page);

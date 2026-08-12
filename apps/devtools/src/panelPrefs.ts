@@ -34,7 +34,19 @@ export interface PanelPrefs {
    * persisted so a noisy component stays hidden across reloads.
    */
   laneFilter: SerializedLaneFilter;
+  /** How many events the trace store retains before dropping the oldest. */
+  maxEvents: number;
+  /**
+   * Keep only the last N ms of activity. Null keeps whatever `maxEvents`
+   * allows. A count alone is a poor fit for an app that churns in the
+   * background — it trades the interesting minute for a thousand idle commits.
+   */
+  maxAgeMs: number | null;
 }
+
+/** Below this the ring is useless; above it the panel starts eating memory. */
+export const MIN_MAX_EVENTS = 1_000;
+export const MAX_MAX_EVENTS = 500_000;
 
 const KEY = "react-lens/panel-prefs";
 
@@ -50,6 +62,8 @@ const DEFAULTS: PanelPrefs = {
   inspectorCollapsed: false,
   revealOnSelect: true,
   laneFilter: serializeLaneFilter(EMPTY_LANE_FILTER),
+  maxEvents: 10_000,
+  maxAgeMs: null,
 };
 
 function num(value: unknown, fallback: number, min: number, max: number): number {
@@ -90,6 +104,13 @@ export function loadPanelPrefs(): PanelPrefs {
       // Round-tripped through the filter's own parser so a corrupt entry
       // degrades to "show everything" instead of hiding lanes forever.
       laneFilter: serializeLaneFilter(deserializeLaneFilter(parsed.laneFilter)),
+      maxEvents: num(parsed.maxEvents, DEFAULTS.maxEvents, MIN_MAX_EVENTS, MAX_MAX_EVENTS),
+      maxAgeMs:
+        typeof parsed.maxAgeMs === "number" && Number.isFinite(parsed.maxAgeMs)
+          ? parsed.maxAgeMs > 0
+            ? parsed.maxAgeMs
+            : null
+          : DEFAULTS.maxAgeMs,
     };
   } catch {
     return { ...DEFAULTS };

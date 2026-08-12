@@ -2808,6 +2808,15 @@
   margin-top: -4px;
   opacity: 0.85;
 }
+.rl-settings-sep {
+  height: 1px;
+  background: var(--rl-border);
+  margin: 2px 0;
+}
+.rl-settings-group {
+  color: var(--rl-text);
+  font-size: 12px;
+}
 .rl-settings-actions {
   display: flex;
   gap: 8px;

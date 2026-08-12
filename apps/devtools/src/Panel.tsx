@@ -42,7 +42,7 @@ import {
   IconSliders,
   IconRewind,
 } from "@reactlens/icons";
-import { PanelMenu } from "./PanelMenu.js";
+import { PanelMenu, type Retention } from "./PanelMenu.js";
 import { applyThemePref, type ThemePref } from "./theme.js";
 import {
   downloadSession,
@@ -131,6 +131,18 @@ export function Panel({
     setRevealOnSelectState(next);
     savePanelPrefs({ revealOnSelect: next });
   }, []);
+  /** How much history the store keeps — user-tunable in Settings. */
+  const [retention, setRetentionState] = useState<Retention>(() => {
+    const prefs = loadPanelPrefs();
+    return { maxEvents: prefs.maxEvents, maxAgeMs: prefs.maxAgeMs };
+  });
+  const setRetention = useCallback((next: Retention) => {
+    setRetentionState(next);
+    savePanelPrefs(next);
+  }, []);
+  useEffect(() => {
+    store.configure(retention);
+  }, [store, retention]);
   /**
    * The one writer for selection: every pick — tree, ⌘K, timeline, relations,
    * waste banner, page inspect — flows through here so reveal can't drift out
@@ -598,6 +610,8 @@ export function Panel({
                     ? { enabled: revealOnSelect, toggle: () => setRevealOnSelect(!revealOnSelect) }
                     : undefined
                 }
+                retention={retention}
+                onRetentionChange={setRetention}
                 reading={embedded ? "embedded" : "devtools"}
               />
             </span>
