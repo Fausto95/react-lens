@@ -35,6 +35,7 @@ const HELP: Array<[string, string]> = [
   ["middle-drag", "pan with momentum"],
   ["pinch / ⌘ scroll", "zoom at cursor"],
   ["scroll", "pan time · scroll lanes vertically when tall"],
+  ["click empty wave", "zoom loupe window"],
   ["double-click clip", "zoom to clip"],
   ["double-click region", "zoom to region"],
   ["double-click empty", "fit"],
@@ -106,8 +107,10 @@ export function Timeline({
   const marqueeRef = useRef<{ x0: number; x1: number } | null>(null);
   const dragRef = useRef<
     | { type: "scrub" }
-    /** Pointer down on empty track — becomes scrub only after a drag threshold. */
+    /** Pointer down on a clip — becomes scrub only after a drag threshold. */
     | { type: "scrubPending"; x0: number; y0: number }
+    /** Empty wave hover target — click zooms the loupe window; drag scrubs. */
+    | { type: "waveTap"; x0: number; y0: number; laneKey: string; wallT: number }
     | { type: "pan"; lastX: number; vel: number; lastT: number }
     | { type: "marquee" }
     | { type: "region"; side: "start" | "end" }
@@ -490,6 +493,16 @@ export function Timeline({
     animateView(v.a0, v.a1 - v.a0, 180);
   };
 
+  /** Zoom the timeline to a loupe wall window, keeping `centerW` centered. */
+  const applyLoupeZoom = (laneKey: string, wallT: number) => {
+    const win = loupeAt(laneKey, wallT, LOUPE_HALF_MS, axisLiveRef.current);
+    doFitLoupe(win.t0, win.t1, win.wallT);
+    loupeRef.current = null;
+    tipRef.current = null;
+    syncChrome();
+    scheduleDraw(true);
+  };
+
   const toggleGap = (id: string) => {
     const target = state.expandedGaps.has(id) ? 0 : 1;
     dispatch({ type: "toggleGap", id });
@@ -665,6 +678,21 @@ export function Timeline({
         e.currentTarget.setPointerCapture(e.pointerId);
         return;
       }
+      // Empty wave: tap zooms the loupe window; drag still scrubs.
+      const waveRow = layout.rows.find(
+        (r) => y >= r.y && y <= r.y + r.h && r.mode === "wave",
+      );
+      if (waveRow && x > nameW()) {
+        dragRef.current = {
+          type: "waveTap",
+          x0: x,
+          y0: y,
+          laneKey: waveRow.key,
+          wallT: xToW(x),
+        };
+        e.currentTarget.setPointerCapture(e.pointerId);
+        return;
+      }
       // Empty track / ruler: place the playhead under the cursor. Clip taps
       // above stay inspect-only so capture is not paused by accident.
       setPlayhead(snap(xToW(x), x));
@@ -701,21 +729,6 @@ export function Timeline({
     const { x, y, viewY } = localXY(e);
     const d = dragRef.current;
     if (!d) {
-      // Keep the loupe alive while the pointer is on it — otherwise moving from
-      // the wave row onto the popup clears loupeRef and "click to zoom" never fires.
-      const loupeEl = loupeElRef.current;
-      if (
-        loupeRef.current &&
-        loupeEl &&
-        loupeEl.style.display !== "none" &&
-        loupeEl.contains(e.target as Node)
-      ) {
-        tipRef.current = null;
-        ghostRef.current = null;
-        scheduleDraw(false);
-        return;
-      }
-
       const soft = clipUnderPointer(x, y);
       const id = soft ? String(soft.renderId) : null;
       if (id !== hoverRef.current) {
@@ -731,13 +744,14 @@ export function Timeline({
           }
         : null;
       ghostRef.current = x > nameW() ? xToW(x) : null;
+      // Loupe is a wave-only empty-track preview — never over clips, stack
+      // rows, the ruler, or while a tip is showing.
       const row = layout.rows.find((r) => y >= r.y && y <= r.y + r.h && r.mode === "wave");
       if (row && x > nameW() && !soft) {
         loupeRef.current = {
           laneKey: row.key,
           wallT: xToW(x),
           x: clamp(x - 145, nameW() + 4, sizeRef.current.w - 296),
-          // Overlap the wave row so the pointer can enter the loupe without a gap.
           y: row.y - scrollTop - 52,
         };
       } else loupeRef.current = null;
@@ -758,6 +772,15 @@ export function Timeline({
       if (Math.hypot(x - d.x0, y - d.y0) >= SCRUB_DRAG_PX) {
         dragRef.current = { type: "scrub" };
         setPlayhead(snap(xToW(x), x));
+        scheduleDraw(false);
+      }
+      return;
+    }
+    if (d.type === "waveTap") {
+      if (Math.hypot(x - d.x0, y - d.y0) >= SCRUB_DRAG_PX) {
+        dragRef.current = { type: "scrub" };
+        setPlayhead(snap(xToW(x), x));
+        loupeRef.current = null;
         scheduleDraw(false);
       }
       return;
@@ -789,6 +812,12 @@ export function Timeline({
     const d = dragRef.current;
     if (d?.type === "scrubPending") {
       // Clip tap released without dragging — inspection already applied on down.
+      dragRef.current = null;
+      return;
+    }
+    if (d?.type === "waveTap") {
+      // Empty-wave click — zoom to the loupe window under the press.
+      applyLoupeZoom(d.laneKey, d.wallT);
       dragRef.current = null;
       return;
     }
@@ -1272,30 +1301,7 @@ export function Timeline({
         <div
           ref={loupeElRef}
           className="tl-loupe"
-          style={{ display: "none", width: 292 }}
-          onPointerDown={(e) => {
-            // Don't let the stage start a scrub under the loupe.
-            e.stopPropagation();
-            e.preventDefault();
-          }}
-          onClick={(e) => {
-            e.stopPropagation();
-            const el = loupeElRef.current;
-            const lp = loupeRef.current;
-            const win =
-              lp != null
-                ? loupeAt(lp.laneKey, lp.wallT, LOUPE_HALF_MS, axisLiveRef.current)
-                : null;
-            const w0 = win?.t0 ?? Number(el?.dataset.t0);
-            const w1 = win?.t1 ?? Number(el?.dataset.t1);
-            const center = win?.wallT ?? Number(el?.dataset.wallT);
-            if (!Number.isFinite(w0) || !Number.isFinite(w1) || !Number.isFinite(center)) return;
-            doFitLoupe(w0, w1, center);
-            loupeRef.current = null;
-            tipRef.current = null;
-            syncChrome();
-            scheduleDraw(true);
-          }}
+          style={{ display: "none", width: 292, pointerEvents: "none" }}
         >
           <div ref={loupeHeadRef} className="tl-loupe-head" />
           <canvas
