@@ -9,7 +9,7 @@ import { computeClipRects } from "./clipRects.js";
 const NAME_W = 100;
 const STAGE_W = 500;
 
-function clip(id: number, t0: number, t1: number, row = 0): Clip {
+function clip(id: number, t0: number, t1: number, row = 0, self = 1): Clip {
   return {
     renderId: id as RenderId,
     componentId: 1 as ComponentId,
@@ -17,7 +17,7 @@ function clip(id: number, t0: number, t1: number, row = 0): Clip {
     name: "Comp",
     t0,
     t1,
-    self: 1,
+    self,
     total: t1 - t0,
     cause: "props",
     wasted: false,
@@ -92,7 +92,7 @@ describe("computeClipRects", () => {
   });
 
   it("registers wave stand-in ports for off-screen wave clips", () => {
-    const layout = layoutWith([{ mode: "wave", clips: [clip(4, -300, -290)] }]);
+    const layout = layoutWith([{ mode: "wave", clips: [clip(4, -300, -290, 0, 10)] }]);
     const { clipRects } = computeClipRects(layout, proj);
     const r = clipRects.get("4");
     expect(r).toBeDefined();
@@ -100,6 +100,17 @@ describe("computeClipRects", () => {
     const mid = proj.wToX(-295);
     expect(r!.x0).toBe(mid - 3);
     expect(r!.x1).toBe(mid + 3);
+  });
+
+  it("centers wave ports on the painted self span, not the inclusive span", () => {
+    // waveBins paints [t0, t0 + self]; a parent whose total covers its cascade
+    // must not get a port floating in the middle of the invisible tail.
+    const layout = layoutWith([{ mode: "wave", clips: [clip(7, 100, 200, 0, 10)] }]);
+    const { clipRects } = computeClipRects(layout, proj);
+    const r = clipRects.get("7")!;
+    const mid = proj.wToX(105);
+    expect(r.x0).toBe(mid - 3);
+    expect(r.x1).toBe(mid + 3);
   });
 
   it("collects snap edges for every clip, on-screen or not", () => {
