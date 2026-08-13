@@ -669,6 +669,9 @@ export function Timeline({
   };
 
   const goLive = () => {
+    // Stop the transport first — a still-running play tick re-seeks the cursor
+    // historical on the next frame and swallows the go-live.
+    if (state.playing) dispatch({ type: "pause" });
     playheadRef.current = bounds.t1;
     onCursor({ mode: "live", t: bounds.t1 });
     scheduleDraw(false);
