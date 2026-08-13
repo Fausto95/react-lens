@@ -1,12 +1,6 @@
 import { test, expect } from "@playwright/test";
 import { boot, bumpCounter, openaiSse, seedAgentKey } from "./helpers.js";
 
-/**
- * AI drawer with a mocked OpenAI SSE provider — covers streaming text,
- * tool-activity chips, [component:N] citation navigation (closes drawer),
- * and copy. Fully offline against the agent plumbing.
- */
-
 test("mocked OpenAI stream: chips, citations, copy, and drawer close", async ({
   page,
   context,

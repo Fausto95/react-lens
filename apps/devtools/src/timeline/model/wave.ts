@@ -21,6 +21,12 @@ export type LaneMode = "stack" | "wave";
 export const WAVE_AVG_PX = 12;
 
 /**
+ * Re-enter wave only below this width. The 9–12 px band keeps the previous
+ * mode so lanes don't flicker (and row heights don't jump) at the threshold.
+ */
+export const WAVE_ENTER_PX = 9;
+
+/**
  * Min ms for LOD width when painted bars are tinier (near-zero-self leaves).
  * Ensures max zoom can still exit wave without forcing early clip mode.
  */
@@ -32,10 +38,7 @@ export function lodClipMs(total: number): number {
 }
 
 /** Mean painted clip width in px at the current zoom. Grows as pxPerMs grows. */
-export function avgClipWidthPx(
-  clips: ReadonlyArray<{ total: number }>,
-  pxPerMs: number,
-): number {
+export function avgClipWidthPx(clips: ReadonlyArray<{ total: number }>, pxPerMs: number): number {
   if (clips.length === 0) return 99;
   const sum = clips.reduce((a, c) => a + lodClipMs(c.total) * pxPerMs, 0);
   return sum / clips.length;
@@ -44,14 +47,18 @@ export function avgClipWidthPx(
 /**
  * Choose stack vs wave. Heavy lanes histogram only while painted marks are
  * still narrower than WAVE_AVG_PX — zooming in progressively reveals clips.
+ * Inside the WAVE_ENTER_PX..WAVE_AVG_PX band the previous mode wins.
  */
 export function laneMode(
   depth: number,
   clipCount: number,
   avgClipPx: number,
+  prev?: LaneMode,
 ): LaneMode {
   const heavy = depth > 3 || clipCount > 60;
-  return heavy && avgClipPx < WAVE_AVG_PX ? "wave" : "stack";
+  if (!heavy || avgClipPx >= WAVE_AVG_PX) return "stack";
+  if (avgClipPx < WAVE_ENTER_PX) return "wave";
+  return prev ?? "wave";
 }
 
 export interface WaveBin {
@@ -87,10 +94,7 @@ export function waveBins(
   const bins: WaveBin[] = Array.from({ length: n }, () => ({ count: 0, wasted: 0 }));
 
   for (const c of clips) {
-    const selfMs = Math.max(
-      c.self !== undefined ? c.self : c.t1 - c.t0,
-      WAVE_MIN_MS,
-    );
+    const selfMs = Math.max(c.self !== undefined ? c.self : c.t1 - c.t0, WAVE_MIN_MS);
     const x0 = wallToX(c.t0);
     const x1 = wallToX(c.t0 + selfMs);
     // Fully outside the plot.

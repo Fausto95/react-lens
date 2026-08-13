@@ -1,5 +1,11 @@
 export { TraceStore } from "./trace-store.js";
-export type { TraceStoreConfig, TraceSelector, Dispose, CommitSummary } from "./trace-store.js";
+export type {
+  TraceStoreConfig,
+  TraceSelector,
+  Dispose,
+  CommitSummary,
+  RetentionAccount,
+} from "./trace-store.js";
 export { RingBuffer } from "./ring-buffer.js";
 export { applySetAt, compareApplySets, createApplySetCursor, diffApplySet } from "./time-travel.js";
 export type { ApplySetCursor, ApplySetChange, ApplySetComparison } from "./time-travel.js";

@@ -10,10 +10,12 @@ import type {
 import { hasIdentity } from "@reactlens/protocol";
 import { causeOf, type ClipCause } from "../timeline/model/lanes.js";
 import {
+  cascadeSize,
+  contextConsumerCount,
   edgesForCommit,
   originOf,
-  contextConsumerCount,
 } from "../timeline/model/edges.js";
+import { typeLaneKey, type LaneKey } from "../laneFilter.js";
 
 /**
  * One render, told as a story: **Cause → Change → Cost → Fix**.
@@ -53,6 +55,18 @@ export interface Fix {
   replayable: boolean;
 }
 
+/** A render this one directly triggered — the forward half of causality. */
+export interface TriggeredEntry {
+  renderId: RenderId;
+  componentId: ComponentId;
+  name: string;
+  laneKey: LaneKey;
+  cause: ClipCause;
+  selfMs: number;
+  /** What changed in that child (its own diff vs its previous snapshot). */
+  changes: ChangeRow[];
+}
+
 export interface RenderStory {
   cause: ClipCause;
   headline: string;
@@ -67,7 +81,15 @@ export interface RenderStory {
   cost: { render: number; subtree: number; effects: number };
   wasted: boolean;
   fix: Fix;
+  /**
+   * Direct renders this one caused (capped at TRIGGERED_CAP), plus the full
+   * direct count and the transitive cascade size.
+   */
+  triggered: { entries: TriggeredEntry[]; triggeredTotal: number; cascadeTotal: number };
 }
+
+/** Entries shown in the inspector's Triggered section before "+N more". */
+export const TRIGGERED_CAP = 8;
 
 const SHORT = 60;
 
@@ -383,6 +405,29 @@ export function buildRenderStory(
     )
     .reduce((sum, e) => sum + (e as { duration: number }).duration, 0);
 
+  // ── Triggered: the forward half — what this render directly caused ────────
+  const direct = (commitEdges.effectsOfRender.get(renderId) ?? [])
+    .map((rid) => store.getRender(rid))
+    .filter((r): r is NonNullable<typeof r> => r != null)
+    .sort((a, b) => a.timestamp - b.timestamp);
+  const triggered = {
+    entries: direct.slice(0, TRIGGERED_CAP).map((r): TriggeredEntry => {
+      const name = store.instance(r.componentId)?.name ?? `#${r.componentId}`;
+      return {
+        renderId: r.renderId,
+        componentId: r.componentId,
+        name,
+        laneKey: typeLaneKey(name),
+        cause: causeOf(r),
+        selfMs: r.selfDuration,
+        // Unchanged rows are noise here — the child's inspector has the rest.
+        changes: changesForRender(store, r.renderId).changes.filter((c) => c.kind !== "same"),
+      };
+    }),
+    triggeredTotal: direct.length,
+    cascadeTotal: cascadeSize(commitEdges, renderId),
+  };
+
   const renderMs = Math.max(0, render.selfDuration);
   const residual = Math.max(0, render.totalDuration - render.selfDuration);
   const cost = {
@@ -403,6 +448,7 @@ export function buildRenderStory(
     refWarning,
     cost,
     wasted,
+    triggered,
     fix: suggestFix(
       cause,
       identityOnly,
@@ -494,8 +540,23 @@ function diffContexts(
     return diffSection("context", before?.context, after?.context);
   }
 
-  const keyOf = (c: { displayName?: string; contextType?: unknown }, i: number) =>
-    c.displayName ?? (c.contextType !== undefined ? String(c.contextType) : `context[${i}]`);
+  const keyOf = (c: { displayName?: string; contextType?: unknown }, i: number) => {
+    if (c.displayName) return c.displayName;
+    if (c.contextType === undefined) return `context[${i}]`;
+    if (typeof c.contextType === "string") return c.contextType;
+    if (typeof c.contextType === "function") {
+      return (c.contextType as { name?: string }).name || `context[${i}]`;
+    }
+    if (
+      typeof c.contextType === "object" &&
+      c.contextType !== null &&
+      "displayName" in c.contextType &&
+      typeof (c.contextType as { displayName?: unknown }).displayName === "string"
+    ) {
+      return (c.contextType as { displayName: string }).displayName;
+    }
+    return `context[${i}]`;
+  };
 
   const beforeMap = new Map(beforeList.map((c, i) => [keyOf(c, i), c.value]));
   const afterMap = new Map(afterList.map((c, i) => [keyOf(c, i), c.value]));

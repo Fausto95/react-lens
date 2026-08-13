@@ -880,6 +880,30 @@
   background: var(--line-strong);
   margin-left: 4.5px;
 }
+.rl-redesign .trig .trow {
+  align-items: center;
+  cursor: pointer;
+}
+.rl-redesign .trig .trow:hover {
+  background: rgba(62, 207, 142, 0.12);
+}
+.rl-redesign .trig .tcause {
+  color: var(--text-3);
+}
+.rl-redesign .trig .tms {
+  margin-left: auto;
+  color: var(--text-3);
+}
+.rl-redesign .trig .row.sub {
+  padding-left: 24px;
+  font-size: 10px;
+}
+.rl-redesign .tfoot {
+  margin-top: 8px;
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--text-3);
+}
 .rl-redesign .diff {
   font-family: var(--mono);
   font-size: 10.5px;
@@ -1929,13 +1953,19 @@
 
 .rl-redesign .tl-gap {
   position: absolute;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  min-height: 22px;
+  padding: 5px 10px;
   text-align: center;
   font-family: var(--mono);
   font-size: 8.5px;
+  line-height: 1.2;
   color: var(--text-3);
   border: 1px dashed var(--line-strong);
   border-radius: 4px;
-  padding: 2px 0;
   background: var(--panel);
   cursor: pointer;
   overflow: hidden;
@@ -1951,7 +1981,7 @@
   position: absolute;
   top: 0;
   width: 12px;
-  height: 30px;
+  height: 40px;
   padding: 0;
   border: 0;
   background: transparent;

@@ -33,6 +33,59 @@ export interface TimeAxis {
   w1: number;
 }
 
+/** Serializable axis snapshot for OffscreenCanvas workers (no methods). */
+export type AxisSnapshot = Pick<TimeAxis, "segs" | "total" | "w0" | "w1">;
+
+/** Rebuild wall↔axis maps from a structured-cloned snapshot. */
+export function hydrateAxis(snap: AxisSnapshot): TimeAxis {
+  const { segs, total, w0, w1 } = snap;
+  if (segs.length === 0) {
+    return {
+      segs: [{ type: "act", w0: 0, w1: 1, a0: 0, a1: 1 }],
+      total: 1,
+      wallToAxis: () => 0,
+      axisToWall: () => 0,
+      w0: 0,
+      w1: 1,
+    };
+  }
+  const wallToAxis = (t: number): number => {
+    if (t <= segs[0]!.w0) return 0;
+    for (const s of segs) {
+      if (s.type === "gap" && s.a1 - s.a0 < 1e-9) {
+        if (t > s.w0 && t < s.w1) return s.a0;
+        continue;
+      }
+      if (t <= s.w1) {
+        return s.a0 + ((t - s.w0) / (s.w1 - s.w0 || 1)) * (s.a1 - s.a0);
+      }
+    }
+    return total;
+  };
+  const axisToWall = (x: number): number => {
+    if (x <= 0) return segs[0]!.w0;
+    for (let i = 0; i < segs.length; i++) {
+      const s = segs[i]!;
+      if (s.type === "gap" && s.a1 - s.a0 < 1e-9) continue;
+      if (x <= s.a1) {
+        const next = segs[i + 1];
+        const next2 = segs[i + 2];
+        if (
+          Math.abs(x - s.a1) < 1e-9 &&
+          next?.type === "gap" &&
+          next.a1 - next.a0 < 1e-9 &&
+          next2?.type === "act"
+        ) {
+          continue;
+        }
+        return s.w0 + ((x - s.a0) / (s.a1 - s.a0 || 1)) * (s.w1 - s.w0);
+      }
+    }
+    return segs[segs.length - 1]!.w1;
+  };
+  return { segs, total, wallToAxis, axisToWall, w0, w1 };
+}
+
 /** Merge overlapping/near spans into activity intervals. */
 export function mergeActive(spans: readonly TimeSpan[], idleMs = IDLE_MS): Array<[number, number]> {
   const ivals = spans

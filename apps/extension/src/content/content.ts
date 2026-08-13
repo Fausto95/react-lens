@@ -9,20 +9,41 @@ import {
   type Unsequenced,
 } from "../transport.js";
 import { createMessageBuffer } from "./buffer.js";
+import { createChromeSpillStore } from "./spill.js";
+import { reconnectDelay } from "../connection.js";
+import { createHeartbeat, type Heartbeat } from "../heartbeat.js";
 
 /**
  * ISOLATED-world bridge and DURABLE buffer.
  *
  * Capture in the page never stops, so this buffer holds the session while the
  * panel is away (DevTools closed, MV3 worker recycled, tab backgrounded). The
- * panel resumes from its own cursor — see `createMessageBuffer`.
+ * panel resumes from its own cursor and acknowledges what it kept, and the
+ * overflow spills to extension storage rather than being dropped — see
+ * `createMessageBuffer`.
  */
-const buffer = createMessageBuffer(4000);
+const buffer = createMessageBuffer(4000, createChromeSpillStore() ?? undefined);
 let port: chrome.runtime.Port | null = null;
 let panelReady = false;
 let reconnectScheduled = false;
+/** Consecutive failed connects, for the shared backoff. */
+let attempt = 0;
+let heartbeat: Heartbeat | null = null;
+/** The compaction we have already told the panel about. */
+let reportedCompactionTo = 0;
 
 function connect(): void {
+  // Extension context gone (reload/update) — keep buffering and retry; never
+  // throw into the host page.
+  try {
+    if (!chrome.runtime?.id) {
+      scheduleReconnect();
+      return;
+    }
+  } catch {
+    scheduleReconnect();
+    return;
+  }
   let p: chrome.runtime.Port;
   try {
     p = chrome.runtime.connect({ name: PAGE_PORT_NAME });
@@ -31,6 +52,24 @@ function connect(): void {
     return;
   }
   port = p;
+  heartbeat?.stop();
+  heartbeat = createHeartbeat({
+    send: (id) => relayLive({ kind: "ping", id }),
+    // A port the background stopped answering on is worse than a closed one:
+    // frames vanish into it while both sides believe they are connected.
+    onDead: () => {
+      try {
+        p.disconnect();
+      } catch {
+        // Already gone; onDisconnect may not fire for a self-initiated close.
+      }
+      if (port === p) {
+        port = null;
+        panelReady = false;
+        scheduleReconnect();
+      }
+    },
+  });
   p.onMessage.addListener((msg: PortMessage) => {
     if (msg.kind === "record") {
       const toPage: ContentToPage = {
@@ -145,17 +184,29 @@ function connect(): void {
         } satisfies ContentToPage,
         "*",
       );
+    } else if (msg.kind === "pong") {
+      heartbeat?.pong(msg.id);
+      // Proven, not merely opened: a port that dies on arrival must not reset
+      // the backoff and turn the retry loop into a spin.
+      attempt = 0;
+    } else if (msg.kind === "ping") {
+      relayLive({ kind: "pong", id: msg.id });
+    } else if (msg.kind === "ack") {
+      // Only the current document's cursor means anything here.
+      if (msg.sessionId === buffer.sessionId) void buffer.ack(msg.seq);
     } else if (msg.kind === "panel-ready") {
       panelReady = true;
       // The panel carries the cursor: send only what it is missing. A session
       // it never saw (or a reloaded document) replays from the start.
       const from = msg.sessionId !== null && msg.sessionId === buffer.sessionId ? msg.fromSeq : 0;
-      for (const m of buffer.since(from)) p.postMessage(m);
+      void replay(p, from);
     }
   });
   p.onDisconnect.addListener(() => {
     port = null;
     panelReady = false;
+    heartbeat?.stop();
+    heartbeat = null;
     // The panel may have closed mid-scrub — never leave the app stuck in the
     // past with recording suppressed.
     window.postMessage(
@@ -170,16 +221,48 @@ function connect(): void {
   });
 }
 
+/**
+ * Send the panel the tail it is missing, then tell it about anything nothing
+ * could retain. Reading back spilled chunks is async, so this must not race a
+ * second replay request.
+ */
+async function replay(p: chrome.runtime.Port, fromSeq: number): Promise<void> {
+  const missing = await buffer.since(fromSeq);
+  if (port !== p) return;
+  for (const m of missing) {
+    try {
+      p.postMessage(m);
+    } catch {
+      // The port died mid-replay. The panel's cursor is unchanged for anything
+      // it did not receive, so its next resync asks for the same range again.
+      return;
+    }
+  }
+  const compacted = buffer.compacted;
+  if (compacted && compacted.toSeq > reportedCompactionTo && buffer.sessionId) {
+    reportedCompactionTo = compacted.toSeq;
+    relayLive({ kind: "compacted", sessionId: buffer.sessionId, ...compacted });
+  }
+}
+
 function scheduleReconnect(): void {
   if (reconnectScheduled) return;
   reconnectScheduled = true;
+  // Shared backoff with the panel: a flat 500ms retry against a worker that is
+  // gone for good is just noise.
   setTimeout(() => {
     reconnectScheduled = false;
     connect();
-  }, 500);
+  }, reconnectDelay(attempt++));
 }
 
 connect();
+
+window.addEventListener("pagehide", () => {
+  // Best-effort: flush pending spill chunks before the document goes away so a
+  // later panel reopen can still replay what was in the ring.
+  void buffer.settled();
+});
 
 function relayLive(msg: PortMessage): void {
   if (!port) return;
@@ -258,7 +341,12 @@ window.addEventListener("message", (event: MessageEvent) => {
     data.kind === "frame"
       ? { kind: "frame", frame: data.frame, sessionId: data.sessionId }
       : data.kind === "hello"
-        ? { kind: "hello", reactVersion: data.reactVersion, sessionId: data.sessionId }
+        ? {
+            kind: "hello",
+            reactVersion: data.reactVersion,
+            sessionId: data.sessionId,
+            protocolVersion: data.protocolVersion ?? 1,
+          }
         : null;
   if (!unsequenced) return;
 

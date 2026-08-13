@@ -3,7 +3,6 @@
  */
 
 import type { CausalEdge } from "../model/edges.js";
-import type { Clip } from "../model/lanes.js";
 import { clipCauseColor } from "../model/lanes.js";
 import type { TimeAxis } from "../model/axis.js";
 import { niceStep } from "../model/axis.js";
@@ -11,24 +10,12 @@ import type { LaneLayout } from "../model/rows.js";
 import type { TimeSpan } from "../model/axis.js";
 import type { ViewWindow } from "../model/viewport.js";
 import { waveBins } from "../model/wave.js";
-import {
-  LANE_PAD,
-  MIN_CLIP_PX,
-  ROW_H,
-  RULER_H,
-} from "./metrics.js";
-import { drawCausalArrow, planCausalArrows, routeCausalArrow } from "./arrows.js";
+import { LANE_PAD, MIN_CLIP_PX, ROW_H, RULER_H } from "./metrics.js";
+import { arrowSpanVisible, drawCausalArrow, planCausalArrows, routeCausalArrow } from "./arrows.js";
+import { computeClipRects, type ClipRect } from "./clipRects.js";
 import { causeColor, clipPaint, hexAlpha, type TimelineTheme } from "./timelineTheme.js";
 
-export interface ClipRect {
-  x0: number;
-  x1: number;
-  y0: number;
-  y1: number;
-  clip: Clip;
-  /** True when the port is a wave-lane stand-in (no stack bar). */
-  wave?: boolean;
-}
+export type { ClipRect } from "./clipRects.js";
 
 export interface Projectors {
   aToX: (a: number) => number;
@@ -56,7 +43,11 @@ export interface DrawBaseArgs {
 const fmt = (t: number) => Math.round(t).toLocaleString("en-US");
 
 export function ensureHatchPattern(ctx: CanvasRenderingContext2D): CanvasPattern | null {
-  const p = document.createElement("canvas");
+  // OffscreenCanvas workers have no `document`; prefer OffscreenCanvas when available.
+  const p =
+    typeof OffscreenCanvas !== "undefined"
+      ? new OffscreenCanvas(6, 6)
+      : document.createElement("canvas");
   p.width = p.height = 6;
   const pc = p.getContext("2d");
   if (!pc) return null;
@@ -66,7 +57,7 @@ export function ensureHatchPattern(ctx: CanvasRenderingContext2D): CanvasPattern
   pc.moveTo(-2, 8);
   pc.lineTo(8, -2);
   pc.stroke();
-  return ctx.createPattern(p, "repeat");
+  return ctx.createPattern(p as CanvasImageSource, "repeat");
 }
 
 export function drawBase(args: DrawBaseArgs): {
@@ -165,32 +156,59 @@ export function drawBase(args: DrawBaseArgs): {
       if (major && x - lastLabelX >= LABEL_MIN_PX) {
         ctx.fillStyle = theme.text3;
         ctx.font = `9.5px ${MONO}`;
-        ctx.fillText(fmt(t - tOrigin), x + 4, RULER_H - 11);
+        ctx.fillText(fmt(t - tOrigin), x + 4, RULER_H - 8);
         lastLabelX = x;
       }
     }
   }
 
+  // Diamonds always; labels only when they fit. Ruler ticks already cull —
+  // markers used to paint every string on one baseline and piled up on clicks.
+  // Long-task labels claim space first so dense "Click Button" spam yields to them.
+  const MARKER_LABEL_GAP = 10;
+  const markerLabelYs = [14, 26] as const;
+  const markerLabelSpans: Array<Array<{ left: number; right: number }>> = [[], []];
+  const visibleMarkers: Array<{ x: number; label: string; warn: boolean }> = [];
   for (const m of markers) {
     const x = wToX(m.t);
     if (x < NW || x > W) continue;
     ctx.fillStyle = m.warn ? theme.warn : theme.text2;
     ctx.beginPath();
-    ctx.moveTo(x, 5);
-    ctx.lineTo(x + 4, 9);
-    ctx.lineTo(x, 13);
-    ctx.lineTo(x - 4, 9);
+    ctx.moveTo(x, 6);
+    ctx.lineTo(x + 4.5, 11);
+    ctx.lineTo(x, 16);
+    ctx.lineTo(x - 4.5, 11);
     ctx.closePath();
     ctx.fill();
-    if (pxPerMs > 0.3) {
-      ctx.fillStyle = m.warn ? theme.warn : theme.text3;
-      ctx.font = `9px ${MONO}`;
-      ctx.fillText(m.label, x + 8, 12);
-    }
+    if (pxPerMs > 0.3) visibleMarkers.push({ x, label: m.label, warn: m.warn });
   }
+  const labelFits = (row: number, left: number, right: number) =>
+    markerLabelSpans[row]!.every(
+      (s) => right + MARKER_LABEL_GAP <= s.left || left >= s.right + MARKER_LABEL_GAP,
+    );
+  const placeMarkerLabels = (items: typeof visibleMarkers) => {
+    for (const m of items) {
+      ctx.font = `9px ${MONO}`;
+      const left = m.x + 8;
+      const right = left + ctx.measureText(m.label).width;
+      let row = -1;
+      for (let r = 0; r < markerLabelYs.length; r++) {
+        if (labelFits(r, left, right)) {
+          row = r;
+          break;
+        }
+      }
+      if (row < 0) continue;
+      ctx.fillStyle = m.warn ? theme.warn : theme.text3;
+      ctx.fillText(m.label, left, markerLabelYs[row]!);
+      markerLabelSpans[row]!.push({ left, right });
+    }
+  };
+  placeMarkerLabels(visibleMarkers.filter((m) => m.warn).sort((a, b) => a.x - b.x));
+  placeMarkerLabels(visibleMarkers.filter((m) => !m.warn).sort((a, b) => a.x - b.x));
 
-  const clipRects = new Map<string, ClipRect>();
-  const snapEdges: number[] = [];
+  // Ports for every clip, visible or not — arrows keep anchors off-screen.
+  const { clipRects, snapEdges } = computeClipRects(layout, proj);
 
   for (const row of layout.rows) {
     hline(row.y + row.h - 1, hexAlpha(theme.line, 0.55));
@@ -203,27 +221,12 @@ export function drawBase(args: DrawBaseArgs): {
         if (!bin.count) continue;
         const hh = 2 + (bin.count / max) * (row.h - 16);
         const ratio = bin.wasted / bin.count;
-        ctx.fillStyle =
-          ratio > 0.3 ? hexAlpha(theme.bad, 0.55) : hexAlpha(theme.props, 0.5);
+        ctx.fillStyle = ratio > 0.3 ? hexAlpha(theme.bad, 0.55) : hexAlpha(theme.props, 0.5);
         const x = NW + b * 3;
         roundRect(ctx, x, mid - hh / 2, 2.3, hh, 1.2);
         ctx.fill();
       }
       ctx.globalAlpha = 1;
-      // Wave ports so causality can still aim at the group when bars aren't drawn.
-      for (const c of row.clips) {
-        const xc = wToX((c.t0 + c.t1) / 2);
-        if (xc < NW - 4 || xc > W + 4) continue;
-        clipRects.set(String(c.renderId), {
-          x0: xc - 3,
-          x1: xc + 3,
-          y0: mid - 8,
-          y1: mid + 8,
-          clip: c,
-          wave: true,
-        });
-        snapEdges.push(c.t0, c.t1);
-      }
       continue;
     }
 
@@ -281,15 +284,10 @@ export function drawBase(args: DrawBaseArgs): {
       if (w > 48) {
         ctx.fillStyle = c.wasted ? hexAlpha(theme.text3, 0.85) : paint.label;
         ctx.font = `9px ${MONO}`;
-        const lbl = c.wasted
-          ? "wasted"
-          : `${clipCauseColor(c.cause)} · ${c.total.toFixed(0)}ms`;
+        const lbl = c.wasted ? "wasted" : `${clipCauseColor(c.cause)} · ${c.total.toFixed(0)}ms`;
         ctx.fillText(lbl.slice(0, Math.floor(w / 5.5)), x0 + 5, cy + clipH / 2 + 3);
       }
       ctx.globalAlpha = 1;
-      const id = String(c.renderId);
-      clipRects.set(id, { x0, x1: x0 + w, y0: cy, y1: cy + clipH, clip: c });
-      snapEdges.push(c.t0, c.t1);
     }
   }
 
@@ -368,6 +366,7 @@ export function drawOverlay(args: DrawOverlayArgs): void {
 
   const planned = planCausalArrows(edgeList, ports);
   for (const p of planned) {
+    if (!arrowSpanVisible(p.from, p.to, NW, W)) continue;
     const route = routeCausalArrow(p.from, p.to, p.slot, p.slotCount);
     const col = hexAlpha(causeColor(theme, p.causeKey), 0.92);
     drawCausalArrow({

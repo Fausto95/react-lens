@@ -57,17 +57,38 @@ export function zoomView(
 }
 
 /** Fit a wall-time range with padding, mapped through the axis. */
-export function fitWallRange(
-  axis: TimeAxis,
-  w0: number,
-  w1: number,
-  padFrac = 0.08,
-): ViewWindow {
+export function fitWallRange(axis: TimeAxis, w0: number, w1: number, padFrac = 0.08): ViewWindow {
   const a0 = axis.wallToAxis(Math.min(w0, w1));
   const a1 = axis.wallToAxis(Math.max(w0, w1));
   const span = Math.max(VIEW_SPAN_MIN, a1 - a0);
   const pad = span * padFrac;
-  return clampView(a0 - pad, span + pad * 2, axis.total);
+  // Flooring to VIEW_SPAN_MIN grows the window; keep the range centered in it
+  // rather than pinned to the left edge.
+  const grow = (span - (a1 - a0)) / 2;
+  return clampView(a0 - grow - pad, span + pad * 2, axis.total);
+}
+
+/**
+ * Pad a clip's wall range by `padFactor × duration` per side, clamped to the
+ * activity segment containing the clip midpoint so padding never dissolves
+ * into a compressed idle gap.
+ */
+export function padClipRange(
+  axis: TimeAxis,
+  t0: number,
+  t1: number,
+  padFactor = 1,
+): { w0: number; w1: number; centerW: number } {
+  const centerW = (t0 + t1) / 2;
+  const pad = Math.max(t1 - t0, 0) * padFactor;
+  let w0 = t0 - pad;
+  let w1 = t1 + pad;
+  const act = axis.segs.find((s) => s.type === "act" && centerW >= s.w0 && centerW <= s.w1);
+  if (act && act.type === "act") {
+    w0 = Math.max(w0, act.w0);
+    w1 = Math.min(w1, act.w1);
+  }
+  return { w0, w1, centerW };
 }
 
 /**

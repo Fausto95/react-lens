@@ -34,8 +34,13 @@
       return id;
     },
     onCommitFiberRoot: function (_id, root) {
-      queue.push(root);
-      if (queue.length > MAX) queue.shift();
+      try {
+        queue.push(root);
+        if (queue.length > MAX) queue.shift();
+      } catch {
+        // Never throw into React's commit path — a stub failure must not
+        // take down the host app. Overflow beyond MAX is already silent.
+      }
     },
     onCommitFiberUnmount: function () {},
     onPostCommitFiberRoot: function () {},

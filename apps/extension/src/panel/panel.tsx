@@ -1,7 +1,6 @@
+/* oxlint-disable react/react-compiler -- WAL client closes over session/port refs; factory is intentionally render-stable */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
-import { TraceStore } from "@reactlens/trace-engine";
-import { createCausality } from "@reactlens/causality";
 import type {
   ComponentId,
   SourceLocation,
@@ -15,24 +14,114 @@ import {
   configureSourceRevealer,
 } from "@reactlens/devtools/panel";
 import type { EditApi, TimeTravelApi } from "@reactlens/devtools/panel";
-import { isContextInvalidated, reconnectDelay } from "./connection.js";
-import { INITIAL_SESSION, resyncRequest, stepSession, type SessionState } from "./session.js";
+import {
+  ErrorBoundary,
+  installGlobalErrorHandlers,
+  reportError,
+  reportNotice,
+} from "@reactlens/devtools/errors";
+import { createTraceClient, TraceProvider } from "@reactlens/devtools/trace";
+import { isContextInvalidated, reconnectDelay } from "../connection.js";
+import {
+  INITIAL_SESSION,
+  commitFrame,
+  failFrame,
+  resyncRequest,
+  stepSession,
+  type SessionState,
+} from "./session.js";
 import { PANEL_PORT_PREFIX, type EditPrimitive, type PortMessage } from "../transport.js";
+import { createHeartbeat, type Heartbeat } from "../heartbeat.js";
+
+/** Trailing window for cursor acks — the page only needs the newest one. */
+const ACK_INTERVAL_MS = 250;
 
 /**
- * The DevTools panel. Owns the authoritative trace store on the panel side and
- * feeds it frames arriving over the background port for the inspected tab.
+ * The DevTools panel. Prefers a worker-backed TraceClient (authoritative store
+ * + WAL off-thread) with a main-thread cache for sync UI reads; falls back to a
+ * plain TraceStore when the worker cannot spawn.
  */
 function ExtensionPanel() {
-  const store = useMemo(() => new TraceStore(), []);
-  const causality = useMemo(() => createCausality(store), [store]);
+  const sessionRef = useRef<SessionState>(INITIAL_SESSION);
+  const portRef = useRef<chrome.runtime.Port | null>(null);
+  const ackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const scheduleAck = useCallback((port: chrome.runtime.Port) => {
+    if (ackTimerRef.current !== null) return;
+    ackTimerRef.current = setTimeout(() => {
+      ackTimerRef.current = null;
+      const { sessionId, fromSeq } = resyncRequest(sessionRef.current);
+      if (sessionId === null || fromSeq <= 0) return;
+      try {
+        port.postMessage({ kind: "ack", sessionId, seq: fromSeq } satisfies PortMessage);
+      } catch (err) {
+        reportError("ack", err);
+      }
+    }, ACK_INTERVAL_MS);
+  }, []);
+
+  const { store, causality, client } = useMemo(() => {
+    return createTraceClient({
+      durableWal: true,
+      wal: {
+        onDurable: (sessionId, seqs) => {
+          if (sessionId !== sessionRef.current.sessionId) return;
+          for (const seq of seqs) {
+            sessionRef.current = commitFrame(sessionRef.current, seq);
+          }
+          const port = portRef.current;
+          if (port) scheduleAck(port);
+        },
+        onFailed: (sessionId, seqs) => {
+          if (sessionId !== sessionRef.current.sessionId) return;
+          for (const seq of seqs) {
+            sessionRef.current = failFrame(sessionRef.current, seq);
+          }
+          reportError("wal", new Error("could not persist frames — storage is unavailable"));
+        },
+        onDropped: (count) =>
+          reportNotice(
+            "trace",
+            `${count} of the oldest frames left the recovery log (size budget).`,
+          ),
+        onRecovered: (recovered) => {
+          if (!recovered) return;
+          sessionRef.current = {
+            sessionId: recovered.sessionId,
+            lastSeq: recovered.lastSeq,
+            gapAt: null,
+            ahead: [],
+          };
+          reportNotice(
+            "recovery",
+            `Recovered ${recovered.frames.length} frames from the previous panel session.`,
+          );
+        },
+        onResync: () => {
+          // Worker respawned (<1s target): ask the page for anything not yet durable.
+          const port = portRef.current;
+          if (!port) return;
+          try {
+            port.postMessage(resyncRequest(sessionRef.current));
+          } catch (err) {
+            reportError("resync", err);
+          }
+        },
+      },
+    });
+  }, [scheduleAck]);
+
+  useEffect(() => () => client.dispose(), [client]);
+
   const [inspecting, setInspecting] = useState(false);
   const [pickedId, setPickedId] = useState<ComponentId | null>(null);
   /** The extension was reloaded under us; only reopening DevTools recovers. */
   const [connectionLost, setConnectionLost] = useState(false);
-  const portRef = useRef<chrome.runtime.Port | null>(null);
-  /** Which page document we are showing, and how much of it we have. */
-  const sessionRef = useRef<SessionState>(INITIAL_SESSION);
+  const heartbeatRef = useRef<Heartbeat | null>(null);
+  /** Lets the recovery screen retry in place instead of demanding a reopen. */
+  const reconnectRef = useRef<(() => void) | null>(null);
+  /** How many times each seq has failed ingest — twice → quarantine. */
+  const poisonRef = useRef(new Map<number, number>());
   const pendingSource = useRef(
     new Map<string, { resolve: (body: string) => void; reject: (err: Error) => void }>(),
   );
@@ -41,6 +130,11 @@ function ExtensionPanel() {
   );
   const pendingTravel = useRef(new Map<string, (result: TimeTravelResult) => void>());
   const pendingLocate = useRef(new Map<string, (loc: SourceLocation | null) => void>());
+
+  // Anything that escapes React — a throw in a port listener, a rejection
+  // nobody awaited — lands in the same ring the boundaries report to, so the
+  // toolbar chip is the whole truth about what broke.
+  useEffect(() => installGlobalErrorHandlers(window), []);
 
   useEffect(() => {
     let disposed = false;
@@ -52,22 +146,68 @@ function ExtensionPanel() {
      * new document's mount (which is what watching `onNavigated` did).
      */
     const applySession = (port: chrome.runtime.Port, msg: PortMessage) => {
+      const before = resyncRequest(sessionRef.current).fromSeq;
       const { state, actions } = stepSession(sessionRef.current, msg);
       sessionRef.current = state;
       for (const action of actions) {
-        if (action.type === "ingest") store.ingest(action.frame);
-        else if (action.type === "reset-store") {
-          store.clear();
+        if (action.type === "ingest") {
+          // The cursor is the panel's only record of what it holds, so it may
+          // only advance over a frame the store actually took. A throw here
+          // used to lose that frame permanently.
+          try {
+            if (state.sessionId !== null) {
+              client.ingest(action.frame, { sessionId: state.sessionId, seq: action.seq });
+            } else {
+              client.ingest(action.frame);
+              sessionRef.current = commitFrame(sessionRef.current, action.seq);
+            }
+            poisonRef.current.delete(action.seq);
+          } catch (err) {
+            const fails = (poisonRef.current.get(action.seq) ?? 0) + 1;
+            poisonRef.current.set(action.seq, fails);
+            if (fails >= 2) {
+              // Same seq crashed twice — skip it, keep the session alive.
+              sessionRef.current = commitFrame(sessionRef.current, action.seq);
+              reportNotice(
+                "poison",
+                `Skipped poison frame seq ${action.seq} after repeated ingest failures.`,
+              );
+            } else {
+              sessionRef.current = failFrame(sessionRef.current, action.seq);
+              reportError("ingest", err);
+            }
+            continue;
+          }
+          // Durability (and therefore ack) is owned by the trace worker WAL —
+          // onDurable/onFailed handlers advance the session cursor.
+        } else if (action.type === "reset-store") {
+          // Keep prior documents as stitchable segments (Phase 3) instead of
+          // wiping the session forever. Live UI still shows only the new doc.
+          void client.beginSegment(action.previousSessionId, action.nextSessionId);
+          poisonRef.current.clear();
           setInspecting(false);
           setPickedId(null);
+        } else if (action.type === "protocol-mismatch") {
+          reportError(
+            "protocol",
+            new Error(
+              `Page speaks protocol v${action.protocolVersion}; this panel expects a compatible version. Reload DevTools after updating the extension.`,
+            ),
+          );
+          setConnectionLost(true);
         } else if (action.type === "resync") {
           try {
             port.postMessage(resyncRequest(sessionRef.current));
-          } catch {
+          } catch (err) {
             // onDisconnect / retry path will reconnect.
+            reportError("resync", err);
           }
         }
       }
+
+      // Tell the page how far it can forget. Without this the page-side buffer
+      // retains the whole session and spills to storage for no reason.
+      if (resyncRequest(sessionRef.current).fromSeq > before) scheduleAck(port);
     };
 
     let attempt = 0;
@@ -87,8 +227,33 @@ function ExtensionPanel() {
         setTimeout(connect, reconnectDelay(attempt++));
         return;
       }
-      attempt = 0;
       portRef.current = port;
+      // A port that stops answering is worse than one that closes: frames go
+      // into it while the panel believes it is connected. Force the close so
+      // the reconnect-and-resync path runs.
+      const beat = createHeartbeat({
+        send: (id) => {
+          try {
+            port.postMessage({ kind: "ping", id } satisfies PortMessage);
+          } catch {
+            // onDisconnect handles it.
+          }
+        },
+        onDead: () => {
+          reportError("heartbeat", new Error("port stopped answering — reconnecting"));
+          try {
+            port.disconnect();
+          } catch {
+            // Already gone.
+          }
+          if (portRef.current === port) {
+            portRef.current = null;
+            if (!disposed) setTimeout(connect, reconnectDelay(attempt++));
+          }
+        },
+      });
+      heartbeatRef.current?.stop();
+      heartbeatRef.current = beat;
       // Capture is always on; re-assert after (re)connect in case an older
       // background left the page paused. Then ask the page for whatever we
       // missed while the port was down — the panel owns that cursor, because
@@ -96,13 +261,40 @@ function ExtensionPanel() {
       try {
         port.postMessage({ kind: "record", recording: true } satisfies PortMessage);
         port.postMessage(resyncRequest(sessionRef.current));
-      } catch {
+      } catch (err) {
         // onDisconnect / retry path will reconnect.
+        reportError("connect", err);
       }
       port.onMessage.addListener((msg: PortMessage) => {
+        if (msg.kind === "pong") {
+          beat.pong(msg.id);
+          // Proven, not merely opened: resetting on `connect()` returning made
+          // a port that dies immediately reset the backoff every attempt.
+          attempt = 0;
+          return;
+        }
+        if (msg.kind === "ping") {
+          try {
+            port.postMessage({ kind: "pong", id: msg.id } satisfies PortMessage);
+          } catch {
+            // onDisconnect handles it.
+          }
+          return;
+        }
+        if (msg.kind === "compacted") {
+          // Retention has a floor, and the user has to know when it was hit —
+          // a timeline that silently skips a minute is worse than one that says
+          // it did.
+          reportNotice(
+            "trace",
+            `${msg.frames} frames (seq ${msg.fromSeq}–${msg.toSeq}) could not be retained while ` +
+              `the panel was away: memory and extension storage were both full.`,
+          );
+          return;
+        }
         applySession(port, msg);
         // On-demand snapshots answer a request; they carry no sequence.
-        if (msg.kind === "snapshot") store.ingest(msg.frame);
+        if (msg.kind === "snapshot") client.ingest(msg.frame);
         if (msg.kind === "source") {
           const pending = pendingSource.current.get(msg.requestId);
           if (!pending) return;
@@ -148,6 +340,7 @@ function ExtensionPanel() {
       });
       port.onDisconnect.addListener(() => {
         portRef.current = null;
+        beat.stop();
         // `lastError` must be read here or Chrome logs it as unchecked.
         const err = chrome.runtime.lastError;
         if (err && isContextInvalidated(err)) {
@@ -157,7 +350,17 @@ function ExtensionPanel() {
         if (!disposed) setTimeout(connect, reconnectDelay(attempt++));
       });
     };
-    connect();
+    reconnectRef.current = connect;
+
+    /**
+     * Bring the worker WAL up before the port, so `panel-ready` carries the
+     * cursor we recovered rather than 0. Capture never stopped page-side, so
+     * the wait costs a slightly later first paint and loses nothing.
+     */
+    void (async () => {
+      await client.whenReady();
+      if (!disposed) connect();
+    })();
 
     configureSourceFetcher((url) => {
       return new Promise<string>((resolve, reject) => {
@@ -191,17 +394,25 @@ function ExtensionPanel() {
     return () => {
       disposed = true;
       configureSourceFetcher(undefined);
+      if (ackTimerRef.current !== null) clearTimeout(ackTimerRef.current);
+      heartbeatRef.current?.stop();
+      heartbeatRef.current = null;
+      reconnectRef.current = null;
+      // Flush worker WAL before closing: frames queued in the trailing window
+      // are exactly the ones a recovery would otherwise be missing.
+      void client.flushWal();
       portRef.current?.disconnect();
     };
-  }, [store]);
+  }, [client, scheduleAck, sessionRef, portRef, ackTimerRef]);
 
   const send = (msg: PortMessage) => {
     const port = portRef.current;
     if (!port) return;
     try {
       port.postMessage(msg);
-    } catch {
+    } catch (err) {
       portRef.current = null;
+      reportError("send", err);
     }
   };
 
@@ -366,25 +577,35 @@ function ExtensionPanel() {
     return () => configureSourceRevealer(undefined);
   }, []);
 
-  const onToggleInspect = useCallback(() => {
+  const onToggleInspect = () => {
     setInspecting((on) => {
       const next = !on;
       send({ kind: next ? "inspect-start" : "inspect-stop" });
       return next;
     });
-  }, []);
+  };
 
   if (connectionLost) {
-    // Nothing here is recoverable in place: this panel's extension context is
-    // gone, so the store will never receive another frame. Say what happened
-    // and what fixes it, rather than showing a panel frozen on stale data.
+    // Usually terminal — a reloaded extension invalidates this panel's context
+    // for good — but "usually" is not "always": the same signal shows up when a
+    // reload happens to land between two connects. Offer the cheap retry first
+    // and keep the reopen instruction for when it fails.
     return (
       <div className="rl-lost">
         <h1>React Lens disconnected</h1>
         <p>
-          The extension was reloaded or updated, which invalidates this panel. Close and reopen
-          DevTools to reconnect.
+          The extension was reloaded or updated, which invalidates this panel. Try reconnecting; if
+          that fails, close and reopen DevTools.
         </p>
+        <button
+          type="button"
+          onClick={() => {
+            setConnectionLost(false);
+            reconnectRef.current?.();
+          }}
+        >
+          Reconnect
+        </button>
         <button type="button" onClick={() => location.reload()}>
           Reload panel
         </button>
@@ -392,23 +613,31 @@ function ExtensionPanel() {
     );
   }
 
+  // The port effect lives above this boundary on purpose: when the UI throws,
+  // ingest keeps running and the store keeps filling, so "Retry" renders
+  // everything that arrived in the meantime instead of a truncated trace.
   return (
-    <Panel
-      store={store}
-      causality={causality}
-      recording
-      edit={edit}
-      inspecting={inspecting}
-      onToggleInspect={onToggleInspect}
-      selectComponent={pickedId}
-      onSelectConsumed={() => setPickedId(null)}
-      onRequestSnapshot={(renderId) => send({ kind: "snapshot-request", renderId })}
-      onHighlight={(componentId, opts) =>
-        send({ kind: "highlight", componentId, ...(opts?.reveal ? { reveal: true } : {}) })
-      }
-      onReplayCommit={(componentIds) => send({ kind: "replay", componentIds })}
-      timeTravel={timeTravel}
-    />
+    <TraceProvider client={client}>
+      <ErrorBoundary scope="panel">
+        <Panel
+          store={store}
+          causality={causality}
+          traceClient={client}
+          recording
+          edit={edit}
+          inspecting={inspecting}
+          onToggleInspect={onToggleInspect}
+          selectComponent={pickedId}
+          onSelectConsumed={() => setPickedId(null)}
+          onRequestSnapshot={(renderId) => send({ kind: "snapshot-request", renderId })}
+          onHighlight={(componentId, opts) =>
+            send({ kind: "highlight", componentId, ...(opts?.reveal ? { reveal: true } : {}) })
+          }
+          onReplayCommit={(componentIds) => send({ kind: "replay", componentIds })}
+          timeTravel={timeTravel}
+        />
+      </ErrorBoundary>
+    </TraceProvider>
   );
 }
 

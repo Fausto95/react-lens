@@ -5,6 +5,7 @@ import type { Causality } from "@reactlens/causality";
 import type { ComponentId, RenderId, RenderSnapshot } from "@reactlens/protocol";
 import { diff, type DiffResult } from "@reactlens/diff-engine";
 import { useTraceVersion } from "./useLens.js";
+import { readFresh } from "./traceFresh.js";
 import type { TimeCursor, ABMarks } from "./timeCursor.js";
 import { WhySection } from "./tabs/OverviewTab.js";
 import { PropsTab } from "./tabs/PropsTab.js";
@@ -80,25 +81,33 @@ export function Inspector({
   /** Trailing control in the column heading — the shell's collapse toggle. */
   headAction?: ReactNode;
 }) {
-  useTraceVersion(store, { kind: "component", id: componentId });
-  const inst = store.instance(componentId);
-  const renders = store.rendersOf(componentId);
-  const [selectedRender, setSelectedRender] = useState<RenderId | null>(null);
-
+  // Every read below goes through the version: the store mutates in place, so a
+  // read memoized on its identity alone would freeze this inspector on whatever
+  // the component looked like when it was first selected.
+  const version = useTraceVersion(store, { kind: "component", id: componentId });
+  const inst = readFresh(version, () => store.instance(componentId));
+  const renders = readFresh(version, () => store.rendersOf(componentId));
   const latest = renders.at(-1);
-  useEffect(() => {
-    if (latest) setSelectedRender(latest.renderId);
-  }, [latest?.renderId]);
+  const latestId = latest?.renderId ?? null;
+  const [selectedRender, setSelectedRender] = useState<RenderId | null>(null);
+  const [syncedLatestId, setSyncedLatestId] = useState(latestId);
+  if (syncedLatestId !== latestId) {
+    setSyncedLatestId(latestId);
+    if (latestId != null) setSelectedRender(latestId);
+  }
 
   const historical = cursor?.mode === "historical";
-  const historicalRenderId = historical
-    ? (store.renderAtOrBefore(componentId, cursor.t)?.renderId ?? null)
-    : null;
+  const historicalRenderId = readFresh(version, () =>
+    historical ? (store.renderAtOrBefore(componentId, cursor.t)?.renderId ?? null) : null,
+  );
   const activeRenderId = historical
     ? historicalRenderId
     : (selectedRender ?? latest?.renderId ?? null);
 
-  const hasSnapshot = activeRenderId !== null && store.snapshot(activeRenderId) !== undefined;
+  const hasSnapshot = readFresh(
+    version,
+    () => activeRenderId !== null && store.snapshot(activeRenderId) !== undefined,
+  );
   useEffect(() => {
     if (onRequestSnapshot && activeRenderId !== null && !hasSnapshot) {
       onRequestSnapshot(activeRenderId);
@@ -320,7 +329,11 @@ export function Inspector({
           <span className="n">{next()}</span>Context
           {contextCount > 0 && <span className="right">{contextCount}</span>}
         </div>
-        {contextCount > 0 ? <ContextTab ctx={ctx} /> : <SectionEmpty>No context reads</SectionEmpty>}
+        {contextCount > 0 ? (
+          <ContextTab ctx={ctx} />
+        ) : (
+          <SectionEmpty>No context reads</SectionEmpty>
+        )}
       </div>
 
       <div className="isect">

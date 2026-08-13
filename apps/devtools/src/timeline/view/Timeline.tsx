@@ -1,15 +1,38 @@
-import { useCallback, useEffect, useMemo, useRef } from "react";
+/* oxlint-disable react/react-compiler -- imperative canvas/gesture/derivation caches; not Compiler-safe by design */
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ComponentId } from "@reactlens/protocol";
 import type { LaneControls } from "../../laneFilter.js";
 import type { TimeCursor } from "../../timeCursor.js";
 import { buildAxis, clamp, compactGap, easeOut, type TimeAxis } from "../model/axis.js";
-import { loupeAt, LOUPE_H, LOUPE_HALF_MS, LOUPE_W, loupeX } from "../model/loupe.js";
-import { clampView, fitWallRange, fitWallRangeAround, lerpView, reanchorAfterAxisChange } from "../model/viewport.js";
-import { advancePlayhead, cursorModeAtStop, playStartAxis, stepCommitTime } from "../model/transport.js";
+import {
+  loupeAnchor,
+  loupeAt,
+  loupeBarSpan,
+  loupeX,
+  loupeZoomHalf,
+  LOUPE_H,
+  LOUPE_HALF_MS,
+  LOUPE_W,
+} from "../model/loupe.js";
+import {
+  clampView,
+  fitWallRange,
+  fitWallRangeAround,
+  padClipRange,
+  lerpView,
+  reanchorAfterAxisChange,
+} from "../model/viewport.js";
+import {
+  advancePlayhead,
+  cursorModeAtStop,
+  playStartAxis,
+  stepCommitTime,
+} from "../model/transport.js";
 import { timelineKeyAction } from "../keymap.js";
 import { clipAtTime, clipCauseColor, type Clip } from "../model/lanes.js";
 import type { Timeline as TimelineModel } from "../useTimeline.js";
 import { drawBase, drawOverlay, ensureHatchPattern, type ClipRect } from "./draw.js";
+import { createTimelineRenderer, type TimelineRendererClient } from "../timelineRendererClient.js";
 import { WallStrip } from "./WallStrip.js";
 import { Navigator } from "./Navigator.js";
 import { Shelf } from "./Shelf.js";
@@ -69,12 +92,28 @@ export function Timeline({
   onHighlight?: (id: ComponentId | null) => void;
   transport?: React.ReactNode;
 }) {
-  const { state, dispatch, acts, gapProgRef, layout, bounds, markers, arrows, lanes, axis, commits } =
-    model;
+  const {
+    state,
+    dispatch,
+    acts,
+    gapProgRef,
+    layout,
+    bounds,
+    markers,
+    arrows,
+    lanes,
+    axis,
+    commits,
+  } = model;
 
   const wrapRef = useRef<HTMLDivElement>(null);
   const baseRef = useRef<HTMLCanvasElement>(null);
   const overRef = useRef<HTMLCanvasElement>(null);
+  /** OffscreenCanvas base painter; null ⇒ main-thread drawBase fallback. */
+  const rendererRef = useRef<TimelineRendererClient | null>(null);
+  /** Bump to replace canvas DOM nodes after a failed/reclaimed transfer. */
+  const [surfaceGen, setSurfaceGen] = useState(0);
+  const preferMainPaint = useRef(false);
   const loupeCvRef = useRef<HTMLCanvasElement>(null);
   const tipElRef = useRef<HTMLDivElement>(null);
   const tipNameRef = useRef<HTMLDivElement>(null);
@@ -206,9 +245,7 @@ export function Timeline({
         }
         if (tipMetaRef.current) {
           const self =
-            tip.clip.self < tip.clip.total * 0.95
-              ? ` · ${tip.clip.self.toFixed(1)} ms self`
-              : "";
+            tip.clip.self < tip.clip.total * 0.95 ? ` · ${tip.clip.self.toFixed(1)} ms self` : "";
           tipMetaRef.current.textContent = `${fmtMs(tip.clip.t0)}–${fmtMs(tip.clip.t1)} ms · ${tip.clip.total.toFixed(1)} ms total${self} · row ${(tip.clip.row ?? 0) + 1}`;
         }
       }
@@ -226,7 +263,7 @@ export function Timeline({
         const win = loupeAt(loupe.laneKey, loupe.wallT, LOUPE_HALF_MS, axisLiveRef.current);
         loupeEl.style.display = "block";
         loupeEl.style.left = `${loupe.x}px`;
-        loupeEl.style.top = `${Math.max(loupe.y, 2)}px`;
+        loupeEl.style.top = `${loupe.y}px`;
         loupeEl.dataset.t0 = String(win.t0);
         loupeEl.dataset.t1 = String(win.t1);
         loupeEl.dataset.wallT = String(win.wallT);
@@ -269,15 +306,18 @@ export function Timeline({
     if (!lp || !cv) return;
     const ctx = cv.getContext("2d");
     if (!ctx) return;
+    ctx.clearRect(0, 0, LOUPE_W, LOUPE_H);
     const lane = lanes.find((l) => l.key === lp.laneKey);
     if (!lane) return;
     const theme = themeRef.current;
     const win = loupeAt(lp.laneKey, lp.wallT, LOUPE_HALF_MS, axisLiveRef.current);
-    ctx.clearRect(0, 0, LOUPE_W, LOUPE_H);
     for (const c of lane.clips) {
-      if (c.t1 < win.t0 || c.t0 > win.t1) continue;
-      const x0 = Math.max(loupeX(c.t0, win), 0);
-      const x1 = Math.min(loupeX(c.t1, win), LOUPE_W);
+      // Paint the exclusive self span the wave histogram paints — inclusive
+      // spans drew wide bars where the wave shows a thin column.
+      const bar = loupeBarSpan(c);
+      if (bar.t1 < win.t0 || bar.t0 > win.t1) continue;
+      const x0 = Math.max(loupeX(bar.t0, win), 0);
+      const x1 = Math.min(loupeX(bar.t1, win), LOUPE_W);
       const y = 5 + ((c.row ?? 0) % 2) * 21;
       const col = causeColor(theme, clipCauseColor(c.cause));
       ctx.fillStyle = c.wasted ? "rgba(150,150,160,.28)" : col + "55";
@@ -303,11 +343,15 @@ export function Timeline({
       const bc = baseRef.current;
       const oc = overRef.current;
       if (!bc || !oc) return;
-      const bctx = bc.getContext("2d");
       const octx = oc.getContext("2d");
-      if (!bctx || !octx) return;
+      if (!octx) return;
 
-      if (!patternRef.current) patternRef.current = ensureHatchPattern(bctx);
+      const renderer = rendererRef.current;
+      // After transferControlToOffscreen, getContext on the base canvas is null.
+      const bctx = renderer ? null : bc.getContext("2d");
+      if (!renderer && !bctx) return;
+
+      if (bctx && !patternRef.current) patternRef.current = ensureHatchPattern(bctx);
 
       themeRef.current = readTimelineTheme(wrapRef.current?.closest(".rl-redesign") ?? null);
       const theme = themeRef.current;
@@ -322,21 +366,49 @@ export function Timeline({
       };
 
       if (base) {
-        const { clipRects, snapEdges } = drawBase({
-          ctx: bctx,
-          axis: axisLiveRef.current,
-          view: state.view,
-          layout,
-          region: state.region,
-          markers,
-          selectedRender: state.selectedRender,
-          proj,
-          pattern: patternRef.current,
-          tOrigin: bounds.t0,
-          theme,
-        });
-        clipRectsRef.current = clipRects;
-        snapEdgesRef.current = snapEdges;
+        const axis = axisLiveRef.current;
+        if (renderer) {
+          renderer.paint(
+            {
+              axis: {
+                segs: axis.segs,
+                total: axis.total,
+                w0: axis.w0,
+                w1: axis.w1,
+              },
+              view: state.view,
+              layout,
+              region: state.region,
+              markers,
+              selectedRender: state.selectedRender,
+              nameW: nw,
+              stageW: sizeRef.current.w,
+              pxPerMs: model.pxPerMs,
+              tOrigin: bounds.t0,
+              theme,
+            },
+            (clipRects, snapEdges) => {
+              clipRectsRef.current = clipRects;
+              snapEdgesRef.current = snapEdges;
+            },
+          );
+        } else if (bctx) {
+          const { clipRects, snapEdges } = drawBase({
+            ctx: bctx,
+            axis,
+            view: state.view,
+            layout,
+            region: state.region,
+            markers,
+            selectedRender: state.selectedRender,
+            proj,
+            pattern: patternRef.current,
+            tOrigin: bounds.t0,
+            theme,
+          });
+          clipRectsRef.current = clipRects;
+          snapEdgesRef.current = snapEdges;
+        }
       }
 
       drawOverlay({
@@ -371,8 +443,6 @@ export function Timeline({
       model.pxPerMs,
       drawLoupe,
       syncChrome,
-      acts,
-      state.expandedGaps,
     ],
   );
 
@@ -408,6 +478,22 @@ export function Timeline({
     scheduleDraw(false);
   };
 
+  // OffscreenCanvas transfer is one-shot per canvas element. The client caches
+  // by canvas identity so StrictMode remounts reuse the live worker instead of
+  // transferring twice. Never dispose on effect cleanup for that reason.
+  useEffect(() => {
+    if (preferMainPaint.current) return;
+    const base = baseRef.current;
+    if (!base) return;
+    const client = createTimelineRenderer(base);
+    if (!client) {
+      preferMainPaint.current = true;
+      setSurfaceGen((g) => g + 1);
+      return;
+    }
+    rendererRef.current = client;
+  }, [surfaceGen]);
+
   useEffect(() => {
     const el = wrapRef.current;
     if (!el) return;
@@ -418,10 +504,29 @@ export function Timeline({
       dispatch({ type: "measure", width: w });
       const h = layout.totalH;
       const dpr = window.devicePixelRatio || 1;
-      for (const cv of [baseRef.current, overRef.current]) {
+      const renderer = rendererRef.current;
+      if (renderer) {
+        renderer.resize(w, h, dpr);
+        const baseCv = baseRef.current;
+        if (baseCv) {
+          baseCv.style.width = `${w}px`;
+          baseCv.style.height = `${h}px`;
+        }
+      }
+      for (const cv of renderer ? [overRef.current] : [baseRef.current, overRef.current]) {
         if (!cv) continue;
-        cv.width = w * dpr;
-        cv.height = h * dpr;
+        // Offscreen-transferred canvases throw on width/height writes; skip them
+        // (the worker owns their buffer). A remount can race resize before the
+        // renderer client is reattached to rendererRef.
+        if (cv === baseRef.current && renderer == null && cv.getContext("2d") == null) {
+          continue;
+        }
+        try {
+          cv.width = w * dpr;
+          cv.height = h * dpr;
+        } catch {
+          continue;
+        }
         cv.style.width = `${w}px`;
         cv.style.height = `${h}px`;
         cv.getContext("2d")?.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -488,15 +593,22 @@ export function Timeline({
     else setView(v.a0, v.a1 - v.a0);
   };
 
-  const doFitLoupe = (w0: number, w1: number, centerW: number) => {
+  const doFitWallAround = (w0: number, w1: number, centerW: number) => {
     const v = fitWallRangeAround(axisLiveRef.current, w0, w1, centerW);
     animateView(v.a0, v.a1 - v.a0, 180);
   };
 
+  const zoomToClip = (c: { t0: number; t1: number }) => {
+    const r = padClipRange(axisLiveRef.current, c.t0, c.t1);
+    doFitWallAround(r.w0, r.w1, r.centerW);
+  };
+
   /** Zoom the timeline to a loupe wall window, keeping `centerW` centered. */
   const applyLoupeZoom = (laneKey: string, wallT: number) => {
-    const win = loupeAt(laneKey, wallT, LOUPE_HALF_MS, axisLiveRef.current);
-    doFitLoupe(win.t0, win.t1, win.wallT);
+    // Shrink the window once the view is tighter than ±HALF — never zoom out.
+    const half = loupeZoomHalf(state.view.a1 - state.view.a0);
+    const win = loupeAt(laneKey, wallT, half, axisLiveRef.current);
+    doFitWallAround(win.t0, win.t1, win.wallT);
     loupeRef.current = null;
     tipRef.current = null;
     syncChrome();
@@ -557,6 +669,9 @@ export function Timeline({
   };
 
   const goLive = () => {
+    // Stop the transport first — a still-running play tick re-seeks the cursor
+    // historical on the next frame and swallows the go-live.
+    if (state.playing) dispatch({ type: "pause" });
     playheadRef.current = bounds.t1;
     onCursor({ mode: "live", t: bounds.t1 });
     scheduleDraw(false);
@@ -670,7 +785,11 @@ export function Timeline({
           return;
         }
       }
-      const hit = clipUnderPointer(x, y);
+      // Wave rows zoom first — the loupe promises "click to zoom", and taps on
+      // sub-pixel bars randomly inspected instead. Zooming flips the lane to
+      // stacked clips, which are then clickable.
+      const waveRow = layout.rows.find((r) => y >= r.y && y <= r.y + r.h && r.mode === "wave");
+      const hit = waveRow ? null : clipUnderPointer(x, y);
       if (hit) {
         inspectClip(hit);
         // Tap = inspect (stays live). Drag past the threshold still scrubs.
@@ -678,10 +797,7 @@ export function Timeline({
         e.currentTarget.setPointerCapture(e.pointerId);
         return;
       }
-      // Empty wave: tap zooms the loupe window; drag still scrubs.
-      const waveRow = layout.rows.find(
-        (r) => y >= r.y && y <= r.y + r.h && r.mode === "wave",
-      );
+      // Wave: tap zooms the loupe window; drag still scrubs.
       if (waveRow && x > nameW()) {
         dragRef.current = {
           type: "waveTap",
@@ -729,7 +845,10 @@ export function Timeline({
     const { x, y, viewY } = localXY(e);
     const d = dragRef.current;
     if (!d) {
-      const soft = clipUnderPointer(x, y);
+      // Wave rows are the loupe's surface: no soft clip hits there — the
+      // sub-pixel bars made hover flicker between tip and loupe.
+      const waveRow = layout.rows.find((r) => y >= r.y && y <= r.y + r.h && r.mode === "wave");
+      const soft = waveRow ? null : clipUnderPointer(x, y);
       const id = soft ? String(soft.renderId) : null;
       if (id !== hoverRef.current) {
         hoverRef.current = id;
@@ -744,15 +863,15 @@ export function Timeline({
           }
         : null;
       ghostRef.current = x > nameW() ? xToW(x) : null;
-      // Loupe is a wave-only empty-track preview — never over clips, stack
-      // rows, the ruler, or while a tip is showing.
-      const row = layout.rows.find((r) => y >= r.y && y <= r.y + r.h && r.mode === "wave");
-      if (row && x > nameW() && !soft) {
+      if (waveRow && x > nameW()) {
+        // Anchor in scrolled content coordinates — that is where absolutely
+        // positioned stage children live.
+        const anchor = loupeAnchor(x, waveRow.y, scrollTop, nameW(), sizeRef.current.w);
         loupeRef.current = {
-          laneKey: row.key,
+          laneKey: waveRow.key,
           wallT: xToW(x),
-          x: clamp(x - 145, nameW() + 4, sizeRef.current.w - 296),
-          y: row.y - scrollTop - 52,
+          x: anchor.x,
+          y: anchor.top,
         };
       } else loupeRef.current = null;
       scheduleDraw(false);
@@ -849,9 +968,7 @@ export function Timeline({
     const { x } = localXY(e);
     const hit = hitClip(x, localXY(e).y);
     if (hit) {
-      const c = hit.clip;
-      const pad = (c.t1 - c.t0) * 2;
-      doFitWall(c.t0 - pad, c.t1 + pad);
+      zoomToClip(hit.clip);
       return;
     }
     const rg = state.region;
@@ -918,7 +1035,7 @@ export function Timeline({
     };
     raf = requestAnimationFrame(step);
     return () => cancelAnimationFrame(raf);
-  }, [state.playing]);
+  }, [state.playing, dispatch]);
 
   useEffect(() => {
     const down = (e: KeyboardEvent) => {
@@ -985,10 +1102,7 @@ export function Timeline({
           break;
         case "fit-selection": {
           const c = lanes.flatMap((l) => l.clips).find((x) => x.renderId === state.selectedRender);
-          if (c) {
-            const pad = (c.t1 - c.t0) * 2;
-            doFitWall(c.t0 - pad, c.t1 + pad);
-          }
+          if (c) zoomToClip(c);
           break;
         }
         case "fit":
@@ -1197,8 +1311,12 @@ export function Timeline({
           scheduleDraw(false);
         }}
       >
-        <canvas ref={baseRef} style={{ display: "block" }} />
-        <canvas ref={overRef} style={{ position: "absolute", inset: 0, pointerEvents: "none" }} />
+        <canvas key={`base-${surfaceGen}`} ref={baseRef} style={{ display: "block" }} />
+        <canvas
+          key={`over-${surfaceGen}`}
+          ref={overRef}
+          style={{ position: "absolute", inset: 0, pointerEvents: "none" }}
+        />
 
         {layout.rows.map((r) => (
           <div
@@ -1257,20 +1375,22 @@ export function Timeline({
         ))}
 
         {gapChips.map((s) => {
-          const chipW = Math.max(s.x1 - s.x0 - 4, 56);
-          const left = clamp(
-            (s.x0 + s.x1) / 2 - chipW / 2,
-            nameW() + 2,
-            sizeRef.current.w - chipW - 2,
-          );
+          // Clip to the visible stage so a zoomed-wide idle region doesn't
+          // push the chip (and "collapse") past the gutter / off-screen.
+          const stageL = nameW() + 2;
+          const stageR = sizeRef.current.w - 2;
+          const left = Math.max(s.x0 + 2, stageL);
+          const right = Math.min(s.x1 - 2, stageR);
+          const width = right - left;
+          if (width < 28) return null;
           return (
             <div
               key={s.id}
               className="tl-gap"
               style={{
                 left,
-                top: RULER_H + 5,
-                width: chipW,
+                top: RULER_H + 4,
+                width,
               }}
               onPointerDown={(e) => e.stopPropagation()}
               onClick={() => toggleGap(s.id)}
@@ -1304,10 +1424,7 @@ export function Timeline({
           style={{ display: "none", width: 292, pointerEvents: "none" }}
         >
           <div ref={loupeHeadRef} className="tl-loupe-head" />
-          <canvas
-            ref={loupeCvRef}
-            style={{ display: "block", width: LOUPE_W, height: LOUPE_H }}
-          />
+          <canvas ref={loupeCvRef} style={{ display: "block", width: LOUPE_W, height: LOUPE_H }} />
         </div>
 
         {state.showHelp && (

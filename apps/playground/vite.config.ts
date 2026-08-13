@@ -1,27 +1,27 @@
 import { defineConfig, lazyPlugins } from "vite-plus";
 import react from "@vitejs/plugin-react";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+const here = path.dirname(fileURLToPath(import.meta.url));
+const oxcStub = path.resolve(here, "src/oxc-stub.ts");
+const nodeModuleStub = path.resolve(here, "src/node-module-stub.ts");
 
 export default defineConfig({
   resolve: {
     alias: [
-      // oxc-parser WASM isn't browser-bundleable (worker or main). Stub it so
-      // analyzeSourceSmart falls back to regex — including in doctorWorker.
-      {
-        find: "oxc-parser",
-        replacement: new URL("./src/oxc-stub.ts", import.meta.url).pathname,
-      },
+      { find: "oxc-parser", replacement: oxcStub },
+      { find: "@oxc-parser/binding-wasm32-wasi", replacement: oxcStub },
+      { find: "node:module", replacement: nodeModuleStub },
     ],
   },
   plugins: lazyPlugins(() => [
     react({
-      // React Compiler on for the playground's own source AND the panel, which
-      // now matches how the real extension builds it.
-      //
-      // The panel used to be excluded because compiling its external-store
-      // reads froze the UI. That hazard is real but narrow: it only affects
-      // files whose memos key on the trace version counter without reading it.
-      // Those files opt out individually with `"use no memo"`, so the rest of
-      // the panel gets compiled here exactly as it does in the extension.
+      // The React Compiler runs over every workspace source, matching how the
+      // real extension builds the panel. No file opts out, including the
+      // scenarios: their waste has to be waste the Compiler cannot remove, or
+      // the demo is showing a problem that no longer exists.
+      // oxc-parser is stubbed; Doctor falls back to regex when unavailable.
       babel: {
         plugins: [
           [
@@ -29,12 +29,15 @@ export default defineConfig({
             {
               target: "19",
               sources: (filename: string) =>
-                filename.includes("/apps/playground/") || filename.includes("/apps/devtools/"),
+                filename.includes("/apps/") || filename.includes("/packages/"),
             },
           ],
         ],
       },
     }),
   ]),
+  optimizeDeps: {
+    exclude: ["oxc-parser", "@oxc-parser/binding-wasm32-wasi"],
+  },
   server: { port: 5178, host: true },
 });

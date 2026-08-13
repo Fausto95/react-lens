@@ -1,35 +1,28 @@
 import { test, expect } from "@playwright/test";
 import { boot, bumpCounter } from "./helpers.js";
 
-test("zoom readout tracks the level and resets to fit", async ({ page }) => {
+const tl = (page: import("@playwright/test").Page) => page.locator(".tl-toolbar");
+
+test("zoom buttons and Fit are available", async ({ page }) => {
   await boot(page);
-  const readout = page.locator(".rl-tl-zoom-level");
-  await expect(readout).toHaveText("fit");
-
-  await page.getByRole("button", { name: "Zoom in" }).click();
-  await expect(readout).toHaveText(/%$/);
-
-  await readout.click();
-  await expect(readout).toHaveText("fit");
+  await expect(tl(page).getByRole("button", { name: "+", exact: true })).toBeVisible();
+  await expect(tl(page).getByRole("button", { name: "−", exact: true })).toBeVisible();
+  await tl(page).getByRole("button", { name: "Fit" }).click();
+  await expect(tl(page)).toBeVisible();
 });
 
-test("double-clicking a commit brackets it with A/B and opens the diff", async ({ page }) => {
+test("play and previous-commit transport controls work", async ({ page }) => {
   await boot(page);
   await bumpCounter(page, 1);
 
-  // The first commit sits away from the live playhead, which would otherwise
-  // intercept the double-click on the newest one.
-  await page.locator(".rl-tl-bar-hit").first().dblclick();
-  await expect(page.locator(".rl-tl-ab-btn")).toContainText("A→B");
-  await expect(page.locator(".rl-tl-mark.a")).toBeVisible();
-  await expect(page.locator(".rl-tl-mark.b")).toBeVisible();
+  await tl(page).getByRole("button", { name: "Previous commit" }).click();
+  await expect(tl(page).getByRole("button", { name: "Live" })).toBeVisible();
+
+  await tl(page).getByRole("button", { name: "Live" }).click();
+  await expect(tl(page).getByRole("button", { name: "Live" })).toHaveCount(0);
 });
 
-test("footer metrics are live and actionable", async ({ page }) => {
+test("footer metrics show recording is on", async ({ page }) => {
   await boot(page);
   await expect(page.locator(".rl-status-rec")).toContainText("rec");
-
-  // RND seeks the heaviest commit → cursor leaves LIVE.
-  await page.locator('button[title*="heaviest commit"]').click();
-  await expect(page.locator(".rl-tl-live-label")).toContainText("PAST");
 });

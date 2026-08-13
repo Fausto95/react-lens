@@ -25,6 +25,8 @@ export type PageToContent =
       kind: "hello";
       reactVersion: string | null;
       sessionId: string;
+      /** Capture agent protocol; panel rejects a mismatch instead of corrupting. */
+      protocolVersion: number;
     }
   | { source: typeof PAGE_SOURCE; kind: "snapshot"; frame: EventsBatchMessage["payload"] }
   | {
@@ -139,10 +141,30 @@ export type ContentToPage =
  */
 export type PortMessage =
   | { kind: "frame"; frame: EventsBatchMessage["payload"]; sessionId: string; seq: number }
-  | { kind: "hello"; reactVersion: string | null; sessionId: string; seq: number }
+  | {
+      kind: "hello";
+      reactVersion: string | null;
+      sessionId: string;
+      seq: number;
+      protocolVersion: number;
+    }
   | { kind: "record"; recording: boolean }
   /** Panel → page: replay everything after `fromSeq` of `sessionId`. */
   | { kind: "panel-ready"; sessionId: string | null; fromSeq: number }
+  /**
+   * Panel → page: everything up to `seq` is durably kept, so the page-side
+   * buffer can forget it. This is what stops the buffer overflowing at all.
+   */
+  | { kind: "ack"; sessionId: string; seq: number }
+  /**
+   * Page → panel: this range could not be retained anywhere (memory full, then
+   * storage quota full). The panel says so rather than showing a gapless
+   * timeline with a hole in it.
+   */
+  | { kind: "compacted"; sessionId: string; fromSeq: number; toSeq: number; frames: number }
+  /** Liveness probe. Answered by the immediate peer, never relayed onward. */
+  | { kind: "ping"; id: number }
+  | { kind: "pong"; id: number }
   /** Background → panel: a page port is live again; ask it for a replay. */
   | { kind: "page-connected" }
   | { kind: "snapshot-request"; renderId: RenderId }

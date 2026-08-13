@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vite-plus/test";
-import { analyzeSourceAst } from "./ast.js";
+import { analyzeSourceAst } from "./ast-node.js";
 
 describe("analyzeSourceAst", () => {
   it("flags inline Provider value via JSX AST", () => {

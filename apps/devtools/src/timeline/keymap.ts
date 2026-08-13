@@ -67,7 +67,12 @@ const BINDINGS: Binding[] = [
     shift: true,
     action: { kind: "step-commit", dir: 1 },
   },
-  { keys: ["ArrowLeft"], codes: ["ArrowLeft"], shift: false, action: { kind: "nudge-playhead", dir: -1 } },
+  {
+    keys: ["ArrowLeft"],
+    codes: ["ArrowLeft"],
+    shift: false,
+    action: { kind: "nudge-playhead", dir: -1 },
+  },
   {
     keys: ["ArrowRight"],
     codes: ["ArrowRight"],

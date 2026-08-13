@@ -4513,3 +4513,102 @@
 .rl-lost button:hover {
   border-color: var(--rl-accent, #6e9bff);
 }
+
+/* Region-level recovery: one column failed and the rest of the panel — most
+   importantly ingest — is still running. Fills its column so the layout does
+   not collapse around the hole. */
+.rl-region-error {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: var(--rl-s3);
+  min-height: 0;
+  height: 100%;
+  padding: var(--rl-s5);
+  overflow: hidden;
+  font-family: var(--rl-font);
+  font-size: 12px;
+  color: var(--rl-text-dim);
+}
+.rl-region-error strong {
+  color: var(--rl-severe);
+  font-weight: 600;
+  text-transform: capitalize;
+}
+.rl-region-error p {
+  margin: 0;
+}
+.rl-region-error-message {
+  max-width: 46ch;
+  font-family: var(--rl-mono);
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--rl-text-faint);
+  overflow-wrap: anywhere;
+}
+.rl-region-error button {
+  padding: var(--rl-s2) var(--rl-s4);
+  border: 1px solid var(--rl-border-strong);
+  border-radius: 6px;
+  background: var(--rl-bg-raised);
+  color: var(--rl-text);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+.rl-region-error button:hover {
+  border-color: var(--rl-severe);
+}
+
+/* Everything the single error seam collected, as one unobtrusive chip. Silent
+   failures are what made the panel look frozen for no visible reason. */
+.rl-error-chip {
+  display: flex;
+  align-items: center;
+  gap: var(--rl-s2);
+  padding: 0 var(--rl-s3);
+  height: 22px;
+  border: 1px solid rgb(var(--rl-severe-rgb) / 0.4);
+  border-radius: 11px;
+  background: rgb(var(--rl-severe-rgb) / 0.12);
+  color: var(--rl-severe);
+  font-family: var(--rl-font);
+  font-size: 11px;
+  cursor: pointer;
+}
+.rl-error-chip:hover {
+  background: rgb(var(--rl-severe-rgb) / 0.2);
+}
+.rl-error-chip.notice {
+  border-color: rgb(var(--rl-warn-rgb) / 0.4);
+  background: rgb(var(--rl-warn-rgb) / 0.12);
+  color: var(--rl-warn);
+}
+.rl-error-chip.notice:hover {
+  background: rgb(var(--rl-warn-rgb) / 0.2);
+}
+.rl-error-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--rl-s3);
+  max-width: 60ch;
+  max-height: 40vh;
+  padding: var(--rl-s4);
+  overflow: auto;
+}
+.rl-error-list li {
+  list-style: none;
+  font-size: 11px;
+  color: var(--rl-text-dim);
+}
+.rl-error-list .scope {
+  color: var(--rl-severe);
+  font-weight: 600;
+}
+.rl-error-list li.notice .scope {
+  color: var(--rl-warn);
+}
+.rl-error-list .count {
+  color: var(--rl-text-faint);
+}

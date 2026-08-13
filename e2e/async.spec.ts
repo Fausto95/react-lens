@@ -1,10 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { boot, jumpTo } from "./helpers.js";
-
-/**
- * Suspense & transitions — assert suspend/resolve on the page and the
- * Suspense affordance in the inspector; transitions keep the selection live.
- */
+import { boot, clickInPage, jumpTo } from "./helpers.js";
 
 async function selectAsyncContent(page: import("@playwright/test").Page): Promise<void> {
   await page.locator(".rl-tree-search").fill("AsyncContent");
@@ -25,17 +20,15 @@ test("SuspenseDemo suspends then resolves, with Suspense chip in the inspector",
   await selectAsyncContent(page);
   await expect(page.locator(".rl-chip", { hasText: /Suspense|suspended/ })).toBeVisible();
 
-  await page.getByRole("button", { name: "Reload (suspend)" }).click();
+  await clickInPage(page, "Reload (suspend)");
   await expect(page.getByText("Loading…")).toBeVisible();
 
-  // Capture a suspended signal during the pending window when the fiber walk lands.
   await expect
     .poll(
       async () =>
         (await page.locator(".rl-chip.warn", { hasText: "suspended" }).count()) +
         (await page.locator(".rl-pip.suspended").count()) +
         (await page.locator('.rl-status-metric[title="Suspended"]').count()) +
-        // Fallback: still suspended on the page.
         ((await page.getByText("Loading…").count()) > 0 ? 1 : 0),
       { timeout: 2_500 },
     )
@@ -54,6 +47,6 @@ test("TransitionDemo surfaces pending work in the inspector", async ({ page }) =
   await input.fill("Item 12");
 
   await expect(page.locator(".rl-insp-head h2")).toHaveText("TransitionDemo");
-  await expect(page.locator(".rl-sec-head", { hasText: /State|Hooks/ }).first()).toBeVisible();
+  await expect(page.locator(".ihead", { hasText: "State" }).first()).toBeVisible();
   await expect(page.getByText("Item 12").first()).toBeVisible();
 });

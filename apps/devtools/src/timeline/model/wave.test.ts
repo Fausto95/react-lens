@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vite-plus/test";
-import { laneMode, waveBins, WAVE_AVG_PX, WAVE_LOD_MS, avgClipWidthPx } from "./wave.js";
+import {
+  avgClipWidthPx,
+  laneMode,
+  waveBins,
+  WAVE_AVG_PX,
+  WAVE_ENTER_PX,
+  WAVE_LOD_MS,
+} from "./wave.js";
 import { VIEW_SPAN_MIN } from "../view/metrics.js";
 
 describe("laneMode", () => {
@@ -22,6 +29,17 @@ describe("laneMode", () => {
   it("stays reachable at max zoom on a narrow panel plot", () => {
     const narrowPlotW = 360;
     expect(WAVE_LOD_MS * (narrowPlotW / VIEW_SPAN_MIN)).toBeGreaterThanOrEqual(WAVE_AVG_PX);
+  });
+
+  it("holds the previous mode inside the hysteresis band", () => {
+    const inBand = (WAVE_ENTER_PX + WAVE_AVG_PX) / 2;
+    expect(laneMode(12, 12, inBand, "stack")).toBe("stack");
+    expect(laneMode(12, 12, inBand, "wave")).toBe("wave");
+  });
+
+  it("switches decisively outside the band regardless of previous mode", () => {
+    expect(laneMode(12, 12, WAVE_ENTER_PX - 1, "stack")).toBe("wave");
+    expect(laneMode(12, 12, WAVE_AVG_PX + 1, "wave")).toBe("stack");
   });
 });
 

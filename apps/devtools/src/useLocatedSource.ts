@@ -13,14 +13,15 @@ export function useLocatedSource(
   existing: SourceLocation | undefined,
 ): LocatedSource | null {
   const [located, setLocated] = useState<LocatedSource | null>(null);
+  const [seenId, setSeenId] = useState(componentId);
+  if (seenId !== componentId) {
+    setSeenId(componentId);
+    setLocated(null);
+  }
 
   useEffect(() => {
-    if (existing) {
-      setLocated(null);
-      return;
-    }
+    if (existing) return;
     let alive = true;
-    setLocated(null);
     void locateComponentSource(componentId).then((result) => {
       if (alive) setLocated(result);
     });

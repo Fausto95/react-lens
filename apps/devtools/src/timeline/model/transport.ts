@@ -2,9 +2,7 @@
  * Playhead transport: one-shot play vs A/B region loop.
  */
 
-export type PlayStep =
-  | { kind: "continue"; a: number }
-  | { kind: "stop"; a: number };
+export type PlayStep = { kind: "continue"; a: number } | { kind: "stop"; a: number };
 
 /**
  * Advance the playhead in axis space.
@@ -41,10 +39,7 @@ export function advancePlayhead(opts: {
  * finished replay silently stops tracing. Playing back to the start, or looping
  * an A/B region, is an explicit request to sit in the past.
  */
-export function cursorModeAtStop(opts: {
-  dir: 1 | -1;
-  loop: boolean;
-}): "live" | "historical" {
+export function cursorModeAtStop(opts: { dir: 1 | -1; loop: boolean }): "live" | "historical" {
   return !opts.loop && opts.dir === 1 ? "live" : "historical";
 }
 

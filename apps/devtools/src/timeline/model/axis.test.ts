@@ -1,11 +1,5 @@
 import { describe, expect, it } from "vite-plus/test";
-import {
-  buildActivity,
-  buildAxis,
-  gapAxisLen,
-  niceStep,
-  compactGap,
-} from "./axis.js";
+import { buildActivity, buildAxis, gapAxisLen, niceStep, compactGap } from "./axis.js";
 
 describe("gapAxisLen", () => {
   it("fully compresses idle to zero axis width", () => {

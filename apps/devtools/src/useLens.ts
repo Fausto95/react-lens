@@ -22,7 +22,8 @@ export function useTraceVersion(store: TraceStore, selector: TraceSelector): num
       dispose();
       fire.dispose();
     };
-    // Re-subscribe only when the target changes.
+    // Re-subscribe only when the target changes (selector identity is keyed below).
+    // oxlint-disable-next-line react/exhaustive-deps -- selector.kind + selectorKey capture the target
   }, [store, selector.kind, selectorKey]);
 
   return version;

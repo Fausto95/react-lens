@@ -1,0 +1,317 @@
+/**
+ * Light product chrome for playground + e2e-fixture host apps.
+ * Deliberately separate from panel `--rl-*` tokens so Lens stays visually
+ * distinct as tooling on top of a normal page.
+ */
+
+@import url("https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,650&family=Sora:wght@400;500;600&display=swap");
+
+:root {
+  --demo-ink: #14201c;
+  --demo-muted: #5a6b63;
+  --demo-faint: #8a9a92;
+  --demo-paper: #f3f6f2;
+  --demo-surface: #ffffff;
+  --demo-line: #d5ddd7;
+  --demo-accent: #0f6e56;
+  --demo-accent-soft: #d8efe6;
+  --demo-warn: #b45309;
+  --demo-radius: 14px;
+  --demo-radius-sm: 10px;
+  --demo-shadow: 0 1px 2px rgba(20, 32, 28, 0.05), 0 12px 32px rgba(20, 32, 28, 0.06);
+  --demo-font: "Sora", ui-sans-serif, sans-serif;
+  --demo-display: "Fraunces", ui-serif, Georgia, serif;
+  --demo-space-1: 4px;
+  --demo-space-2: 8px;
+  --demo-space-3: 12px;
+  --demo-space-4: 16px;
+  --demo-space-5: 24px;
+  --demo-space-6: 40px;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+.demo-root {
+  min-height: 100vh;
+  margin: 0;
+  color: var(--demo-ink);
+  font-family: var(--demo-font);
+  font-size: 14px;
+  line-height: 1.5;
+  background:
+    radial-gradient(1200px 600px at 12% -10%, #dff3ea 0%, transparent 55%),
+    radial-gradient(900px 500px at 100% 0%, #e8efe4 0%, transparent 50%),
+    linear-gradient(180deg, #eef3ee 0%, var(--demo-paper) 42%, #e8eee9 100%);
+  background-attachment: fixed;
+}
+
+.demo-root h1,
+.demo-root h2,
+.demo-root h3 {
+  font-family: var(--demo-display);
+  font-weight: 650;
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+  margin: 0;
+}
+
+.demo-shell {
+  /* Left-biased so a bottom/side dock is less likely to cover first controls. */
+  width: min(760px, calc(100% - 48px));
+  margin: 0 0 0 24px;
+  padding: var(--demo-space-5) 0 320px;
+}
+
+.demo-hero {
+  margin-bottom: var(--demo-space-4);
+}
+
+.demo-hero h1 {
+  font-size: clamp(1.75rem, 3.5vw, 2.4rem);
+  margin-bottom: var(--demo-space-2);
+}
+
+.demo-hero p {
+  margin: 0;
+  max-width: 38rem;
+  color: var(--demo-muted);
+  font-size: 15px;
+}
+
+.demo-hero-note {
+  margin-top: var(--demo-space-3);
+  color: var(--demo-faint);
+  font-size: 12px;
+}
+
+.demo-stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--demo-space-4);
+}
+
+.demo-stack-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--demo-space-2);
+}
+
+.demo-section {
+  margin: 0;
+}
+
+.demo-section-head {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: var(--demo-space-3);
+}
+
+.demo-section-kicker {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--demo-accent);
+}
+
+.demo-section-title {
+  font-size: 1.35rem;
+}
+
+.demo-section-hint {
+  margin: 0;
+  color: var(--demo-muted);
+  font-size: 13px;
+}
+
+.demo-card {
+  background: var(--demo-surface);
+  border: 1px solid var(--demo-line);
+  border-radius: var(--demo-radius);
+  box-shadow: var(--demo-shadow);
+  padding: var(--demo-space-4);
+}
+
+.demo-card-flush {
+  padding: 0;
+  overflow: hidden;
+}
+
+.demo-btn {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border-radius: var(--demo-radius-sm);
+  border: 1px solid var(--demo-line);
+  background: var(--demo-surface);
+  color: var(--demo-ink);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition:
+    background 120ms ease,
+    border-color 120ms ease,
+    color 120ms ease,
+    transform 80ms ease;
+}
+
+.demo-btn:hover {
+  border-color: #b7c5bc;
+  background: #f7faf7;
+}
+
+.demo-btn:active {
+  transform: translateY(1px);
+}
+
+.demo-btn:disabled {
+  opacity: 0.55;
+  cursor: default;
+  transform: none;
+}
+
+.demo-btn-primary {
+  background: var(--demo-accent);
+  border-color: var(--demo-accent);
+  color: #f4fffa;
+}
+
+.demo-btn-primary:hover {
+  background: #0c5c48;
+  border-color: #0c5c48;
+  color: #f4fffa;
+}
+
+.demo-btn-ghost {
+  background: transparent;
+}
+
+.demo-btn-sm {
+  padding: 5px 10px;
+  font-size: 12px;
+}
+
+.demo-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.demo-field label {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--demo-muted);
+}
+
+.demo-input {
+  width: 100%;
+  padding: 9px 12px;
+  border-radius: var(--demo-radius-sm);
+  border: 1px solid var(--demo-line);
+  background: #fbfcfb;
+  color: var(--demo-ink);
+  font: inherit;
+  font-size: 13px;
+}
+
+.demo-input:focus {
+  outline: 2px solid var(--demo-accent-soft);
+  border-color: var(--demo-accent);
+}
+
+.demo-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: var(--demo-accent-soft);
+  color: var(--demo-accent);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.demo-badge-neutral {
+  background: #e8ece9;
+  color: var(--demo-muted);
+}
+
+.demo-meta {
+  color: var(--demo-muted);
+  font-size: 13px;
+}
+
+.demo-grid-products {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: var(--demo-space-3);
+}
+
+.demo-product {
+  display: flex;
+  flex-direction: column;
+  gap: var(--demo-space-2);
+  padding: var(--demo-space-3);
+  border: 1px solid var(--demo-line);
+  border-radius: var(--demo-radius-sm);
+  background: linear-gradient(180deg, #fcfdfc 0%, #f5f8f5 100%);
+}
+
+.demo-product-origin {
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--demo-faint);
+}
+
+.demo-product-name {
+  font-family: var(--demo-display);
+  font-size: 1.15rem;
+  font-weight: 650;
+}
+
+.demo-product-price {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.demo-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--demo-space-3);
+  margin-bottom: var(--demo-space-3);
+}
+
+.demo-list {
+  display: grid;
+  gap: 2px;
+  max-height: 160px;
+  overflow: auto;
+  margin-top: var(--demo-space-3);
+}
+
+.demo-list-row {
+  padding: 4px 8px;
+  font-size: 12px;
+  border-radius: 6px;
+  background: #f4f7f4;
+}
+
+.demo-pill-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}

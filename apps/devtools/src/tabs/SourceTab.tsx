@@ -21,16 +21,21 @@ export function SourceTab({ inst, ctx }: { inst: ComponentInstance; ctx: Inspect
   // this costs nothing extra when the header already asked).
   const located = useLocatedSource(ctx.componentId, inst.source);
   const compiled = inst.source ?? located?.compiled;
+  const compiledKey = compiled ? `${compiled.file}:${compiled.line}:${compiled.column}` : null;
   const [original, setOriginal] = useState<SourceLocation | null>(null);
   const [defLine, setDefLine] = useState<number | null>(null);
   const [state, setState] = useState<"idle" | "resolving" | "done">("idle");
+  const [seenKey, setSeenKey] = useState(compiledKey);
+  if (seenKey !== compiledKey) {
+    setSeenKey(compiledKey);
+    setOriginal(null);
+    setDefLine(null);
+    setState(compiledKey ? "resolving" : "idle");
+  }
 
   useEffect(() => {
     if (!compiled) return;
     let alive = true;
-    setState("resolving");
-    setOriginal(null);
-    setDefLine(null);
     Promise.all([resolver.resolve(compiled), resolver.sourceContent(compiled.file)])
       .then(([loc, src]) => {
         if (!alive) return;
@@ -45,7 +50,7 @@ export function SourceTab({ inst, ctx }: { inst: ComponentInstance; ctx: Inspect
     return () => {
       alive = false;
     };
-  }, [compiled?.file, compiled?.line, compiled?.column, inst.name]);
+  }, [compiled, compiled?.file, compiled?.line, compiled?.column, inst.name]);
 
   if (!compiled) {
     return (

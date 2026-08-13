@@ -3,7 +3,7 @@
  * Match SynthesisTimelinePro so draw, DOM chrome, and hit-testing agree.
  */
 
-export const RULER_H = 30;
+export const RULER_H = 40;
 export const WALL_H = 15;
 export const NAV_H = 28;
 export const SHELF_H = 27;

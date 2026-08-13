@@ -82,6 +82,26 @@ export interface ClipPorts {
   y1: number;
 }
 
+/** Max outward bow a causal bezier can take (see causalBezierPoints handles). */
+const MAX_HANDLE_PX = 130;
+
+/**
+ * Whether an arrow's curve can intersect the stage. Tests the span between
+ * both ports padded by the max bezier handle — endpoint containment is wrong:
+ * an arrow with one port off-screen still crosses the viewport.
+ */
+export function arrowSpanVisible(
+  from: ClipPorts,
+  to: ClipPorts,
+  nameW: number,
+  stageW: number,
+  pad = MAX_HANDLE_PX,
+): boolean {
+  const lo = Math.min(from.x0, to.x0) - pad;
+  const hi = Math.max(from.x1, to.x1) + pad;
+  return hi >= nameW && lo <= stageW;
+}
+
 export interface ArrowRoute {
   side: ArrowSide;
   x1: number;
@@ -240,8 +260,7 @@ export function planCausalArrows(
 
   for (const group of waveGroups.values()) {
     const first = group[0]!;
-    const midX =
-      group.reduce((s, g) => s + (g.to.x0 + g.to.x1) / 2, 0) / group.length;
+    const midX = group.reduce((s, g) => s + (g.to.x0 + g.to.x1) / 2, 0) / group.length;
     const y0 = Math.min(...group.map((g) => g.to.y0));
     const y1 = Math.max(...group.map((g) => g.to.y1));
     const sortT = Math.min(...group.map((g) => g.to.t0 ?? Number.POSITIVE_INFINITY));

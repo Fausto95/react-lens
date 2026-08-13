@@ -1,13 +1,14 @@
 /// <reference lib="webworker" />
 import { TraceStore } from "@reactlens/trace-engine";
 import { createCausality } from "@reactlens/causality";
-import type { EventsBatchMessage, ComponentId } from "@reactlens/protocol";
+import type { EventsBatchMessage, ComponentId, SourceLocation } from "@reactlens/protocol";
 import {
   analyzeSource,
   analyzeSourceSmart,
   mergeStaticAndRuntime,
   type Diagnostic,
 } from "@reactlens/diagnostics";
+import { createSourceResolver } from "@reactlens/source-maps";
 import { diagnoseAll, buildInput } from "./doctor.js";
 
 /**
@@ -15,8 +16,9 @@ import { diagnoseAll, buildInput } from "./doctor.js";
  * diagnostic pass off the main thread. Optional per-component source texts
  * enable static (OXC / regex) fusion with runtime evidence.
  *
- * Bundlers stub `oxc-parser` (WASM isn't browser-bundleable). Static analysis
- * still runs via `analyzeSourceSmart` → regex fallback.
+ * oxc-parser is dynamically imported; when native/WASM is unavailable,
+ * `analyzeSourceSmart` falls back to regex. Source-map resolution also lives
+ * here so the main thread never parses maps.
  */
 type FrameMessage = { type: "frame"; batch: EventsBatchMessage["payload"] };
 type SourceMessage = {
@@ -27,25 +29,35 @@ type SourceMessage = {
   file?: string;
 };
 type ClearSourcesMessage = { type: "clear-sources" };
-type InMessage = FrameMessage | SourceMessage | ClearSourcesMessage;
+type ResolveMessage = {
+  type: "resolve";
+  requestId: string;
+  compiled: SourceLocation;
+};
+type InMessage = FrameMessage | SourceMessage | ClearSourcesMessage | ResolveMessage;
 
 type DoctorResultMessage = {
   count: number;
   affected: ComponentId[];
-  /** Top diagnostics by impact — for the toolbar issues menu. */
   diagnostics: Diagnostic[];
-  /** Optional fused diagnostics for components that have source uploaded. */
   fused?: Diagnostic[];
+};
+
+type ResolveResultMessage = {
+  type: "resolve-result";
+  requestId: string;
+  location: SourceLocation | null;
 };
 
 const store = new TraceStore();
 const causality = createCausality(store);
 const sources = new Map<ComponentId, { name: string; sourceText: string; file?: string }>();
+const resolver = createSourceResolver();
 let timer: ReturnType<typeof setTimeout> | undefined;
 
 const ctx = self as unknown as {
   onmessage: ((e: MessageEvent<InMessage>) => void) | null;
-  postMessage: (msg: DoctorResultMessage) => void;
+  postMessage: (msg: DoctorResultMessage | ResolveResultMessage) => void;
 };
 
 ctx.onmessage = (e) => {
@@ -63,6 +75,21 @@ ctx.onmessage = (e) => {
   } else if (msg?.type === "clear-sources") {
     sources.clear();
     schedule();
+  } else if (msg?.type === "resolve") {
+    void resolver
+      .resolve(msg.compiled)
+      .then((location) => {
+        ctx.postMessage({
+          type: "resolve-result",
+          requestId: msg.requestId,
+          location: location
+            ? { file: location.file, line: location.line, column: location.column }
+            : null,
+        });
+      })
+      .catch(() => {
+        ctx.postMessage({ type: "resolve-result", requestId: msg.requestId, location: null });
+      });
   }
 };
 
@@ -99,7 +126,7 @@ async function recompute(): Promise<void> {
         affectedSet.add(d.componentId);
       }
     } catch {
-      /* ignore per-component failures */
+      /* Static analysis must never block the trace path. */
     }
   }
 

@@ -14,10 +14,7 @@ export function sessionSpanMs(store: TraceStore): number {
   for (const instance of store.allInstances()) {
     for (const render of store.rendersOf(instance.id)) {
       lo = Math.min(lo, render.timestamp);
-      hi = Math.max(
-        hi,
-        render.timestamp + Math.max(render.totalDuration, render.selfDuration, 0),
-      );
+      hi = Math.max(hi, render.timestamp + Math.max(render.totalDuration, render.selfDuration, 0));
     }
   }
   for (const commit of store.commits()) {

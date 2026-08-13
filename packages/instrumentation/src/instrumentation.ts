@@ -4,6 +4,7 @@ import type {
   EffectEvent,
   RenderReason,
   InteractionEvent,
+  AgentErrorEvent,
   ComponentId,
   ComponentInstance,
   ComponentType,
@@ -94,6 +95,15 @@ export function createInstrumentation(deps: {
   let pendingEvents: LensEvent[] = [];
   let pendingSnapshots: RenderSnapshot[] = [];
   let pendingInstances = new Map<ComponentId, ComponentInstance>();
+  /**
+   * What the consumer already knows, by identity signature.
+   *
+   * Instance records are static for a component's life, and both the
+   * content-script buffer and the panel's store keep them for the whole
+   * session. Re-sending one per render is the single largest avoidable cost on
+   * the capture path for a large app.
+   */
+  let announcedInstances = new Map<ComponentId, string>();
   let pendingCommitSnapshots: CommitSnapshot[] = [];
   let lastCommitDomAt = -Infinity;
   let flushScheduled = false;
@@ -127,6 +137,8 @@ export function createInstrumentation(deps: {
     if (recording) return;
     config = { ...DEFAULT_CONFIG, ...userConfig };
     recording = true;
+    // A fresh consumer has seen nothing, so nothing may be assumed announced.
+    announcedInstances = new Map();
     // Subscribe BEFORE install: install() may synchronously replay commits a
     // document_start stub buffered before the bridge loaded (the extension's
     // initial-mount tree). Installing first would fire that replay into no
@@ -161,18 +173,30 @@ export function createInstrumentation(deps: {
     // observes. While traveling, nothing enters the event log — neither the
     // synthetic restore commits nor interactions with the rewound UI.
     if (timeTravel.isActive()) return;
+    try {
+      handleCommitInner(commit);
+    } catch (err) {
+      emitAgentError("commit", err);
+    }
+  }
+
+  function handleCommitInner(commit: CommitObservation): void {
     const t0 = now();
     const renderedSet = new Set(commit.rendered);
     const interactionId = activeInteractionId();
 
     captureCommitDom(commit);
-    if (config.captureStateHistory !== false) timeTravel.captureStores(commit.timestamp);
+    if (config!.captureStateHistory !== false) timeTravel.captureStores(commit.timestamp);
     for (const id of commit.rendered) {
       const detail = commit.details.get(id);
       const instance = fiber.getInstance(id);
       if (!detail || !instance) continue;
 
-      pendingInstances.set(id, instance);
+      const signature = instanceSignature(instance);
+      if (announcedInstances.get(id) !== signature) {
+        announcedInstances.set(id, signature);
+        pendingInstances.set(id, instance);
+      }
 
       const renderId = nextRenderId();
       const reasons = deriveReasons(detail, instance, renderedSet);
@@ -190,12 +214,12 @@ export function createInstrumentation(deps: {
         ...(interactionId !== null ? { interactionId } : {}),
       };
       pendingEvents.push(event);
-      if (config.streamSnapshots !== false) {
+      if (config!.streamSnapshots !== false) {
         pendingSnapshots.push(buildSnapshot(id, renderId, detail, commit.timestamp));
       } else {
         retain(renderId, id, detail, commit.timestamp);
       }
-      if (config.captureStateHistory !== false) {
+      if (config!.captureStateHistory !== false) {
         timeTravel.capture(renderId, id, detail.fiber);
       }
     }
@@ -294,22 +318,40 @@ export function createInstrumentation(deps: {
   }): void {
     if (!recording || !config) return;
     if (timeTravel.isActive()) return;
-    if (obs.effects.length === 0) return;
-    const interactionId = activeInteractionId();
-    for (const e of obs.effects) {
-      const event: EffectEvent = {
-        id: nextEventId(),
-        type: "effect",
-        timestamp: e.timestamp,
-        componentId: e.componentId,
-        effectId: nextEffectId(),
-        phase: e.phase,
-        duration: e.duration,
-        hookIndex: e.hookIndex,
-        ...(interactionId !== null ? { interactionId } : {}),
-      };
-      pendingEvents.push(event);
+    try {
+      if (obs.effects.length === 0) return;
+      const interactionId = activeInteractionId();
+      for (const e of obs.effects) {
+        const event: EffectEvent = {
+          id: nextEventId(),
+          type: "effect",
+          timestamp: e.timestamp,
+          componentId: e.componentId,
+          effectId: nextEffectId(),
+          phase: e.phase,
+          duration: e.duration,
+          hookIndex: e.hookIndex,
+          ...(interactionId !== null ? { interactionId } : {}),
+        };
+        pendingEvents.push(event);
+      }
+      scheduleFlush();
+    } catch (err) {
+      emitAgentError("post-commit", err);
     }
+  }
+
+  function emitAgentError(scope: string, err: unknown): void {
+    const message = err instanceof Error ? err.message : String(err);
+    const event: AgentErrorEvent = {
+      id: nextEventId(),
+      type: "agent-error",
+      timestamp: now(),
+      scope,
+      message,
+      ...(err instanceof Error && err.stack ? { stack: err.stack } : {}),
+    };
+    pendingEvents.push(event);
     scheduleFlush();
   }
 
@@ -445,7 +487,13 @@ export function createInstrumentation(deps: {
     pendingInstances = new Map();
     pendingCommitSnapshots = [];
 
-    config.onFrame(frame);
+    try {
+      config.onFrame(frame);
+    } catch {
+      // Consumer failure must not break the page. The panel recovers via seq
+      // gaps / reconnect; we deliberately do not re-enter emitAgentError here
+      // (that would schedule another flush from inside flush).
+    }
     maybeReportOverhead();
   }
 
@@ -465,6 +513,20 @@ export function createInstrumentation(deps: {
   }
 
   return { start, stop, isRecording, snapshot, timeTravel };
+}
+
+/**
+ * The whole record, so nothing that can change is missed.
+ *
+ * Most fields are fixed for a component's life, but `suspended` /
+ * `underSuspense` / `source` are not, and a hand-picked field list would leave
+ * the panel showing a stale description the next time one of them moved.
+ * Stringifying costs the same walk the structured clone would have cost — and
+ * we now skip that clone, plus the panel's ingest, on every repeat. The record
+ * is built by one place, so key order is stable.
+ */
+function instanceSignature(instance: ComponentInstance): string {
+  return JSON.stringify(instance);
 }
 
 function approxBytes(frame: EventsBatchMessage["payload"]): number {

@@ -1,17 +1,5 @@
-"use no memo";
-
-// The Compiler is off for this file deliberately.
-//
-// `useTraceVersion` returns a counter used purely to bust caches: the trace
-// store mutates in place, so its identity never changes and only the version
-// says the data moved on. The memos below therefore list `version` as a
-// dependency without reading it. The Compiler infers dependencies from actual
-// reads, so it would drop `version`, cache on the store's stable identity and
-// never recompute — the panel would freeze on its first frame.
-//
-// Everything that does not read the store this way is compiled normally.
-
-import { useEffect, useMemo, useRef, useState } from "react";
+/* oxlint-disable react/react-compiler -- redesign chrome caches selection/flash/timeline refs; not Compiler-safe by design */
+import { useEffect, useRef, useState } from "react";
 import type { TraceStore } from "@reactlens/trace-engine";
 import type { Causality } from "@reactlens/causality";
 import type { ComponentId, RenderId } from "@reactlens/protocol";
@@ -23,6 +11,7 @@ import {
   type SemanticNode,
 } from "@reactlens/tree";
 import { useTraceVersion } from "../useLens.js";
+import { readFresh, derivationCache } from "../traceFresh.js";
 import { loadPanelPrefs, savePanelPrefs } from "../panelPrefs.js";
 import { typeLaneKey, type LaneControls } from "../laneFilter.js";
 import type { TimeCursor } from "../timeCursor.js";
@@ -33,6 +22,7 @@ import { Inspector, type EditApi } from "../Inspector.js";
 import { TreeView, treeViewRows } from "./TreeView.js";
 import { InspectorView } from "./InspectorView.js";
 import { columnTemplate, nextColumnWidth, type CollapsedPanes } from "./columns.js";
+import { ErrorBoundary } from "../ErrorBoundary.js";
 
 /**
  * Panel layout: toolbar over three columns — Components · Timeline · Inspector.
@@ -101,10 +91,7 @@ export function RedesignShell({
   // ── Filter: structured tokens become chips, free text stays in the input ──
   const [filterChips, setFilterChips] = useState<string[]>([]);
   const [filterFree, setFilterFree] = useState("");
-  const query = useMemo(
-    () => [...filterChips, filterFree.trim()].filter(Boolean).join(" "),
-    [filterChips, filterFree],
-  );
+  const query = [...filterChips, filterFree.trim()].filter(Boolean).join(" ");
   const filterRef = useRef<HTMLInputElement>(null);
 
   const commitFilterTokens = (raw: string) => {
@@ -177,10 +164,16 @@ export function RedesignShell({
   // ── Tree ─────────────────────────────────────────────────────────────────
   const [collapsedNodes, setCollapsedNodes] = useState<ReadonlySet<string>>(new Set());
   const [openGroups, setOpenGroups] = useState<ReadonlySet<string>>(new Set());
-  const data = useMemo(() => buildData(store, causality), [store, causality, version]);
-  const parsed = useMemo(() => parseQuery(query), [query]);
-  const roots = useMemo(() => buildTree(data, { include: parsed.predicate }), [data, parsed]);
-  const expanded = useMemo(() => {
+  const treeCaches = useRef({
+    data: derivationCache<ReturnType<typeof buildData>>(),
+    watchlist:
+      derivationCache<Array<{ id: ComponentId; name: string; issues: number; renders: number }>>(),
+    story: derivationCache<ReturnType<typeof buildRenderStory> | null>(),
+  }).current;
+  const data = treeCaches.data.read([store, causality, version], () => buildData(store, causality));
+  const parsed = parseQuery(query);
+  const roots = buildTree(data, { include: parsed.predicate });
+  const expanded = (() => {
     const set = new Set<string>();
     const walk = (nodes: SemanticNode[]) => {
       for (const node of nodes) {
@@ -195,21 +188,14 @@ export function RedesignShell({
     };
     walk(roots);
     return set;
-  }, [roots, collapsedNodes, openGroups]);
-  const treeRows = useMemo(() => treeViewRows(flatten(roots, expanded)), [roots, expanded]);
-  const matchCount = useMemo(
-    () => (query.trim() ? data.filter(parsed.predicate).length : null),
-    [data, parsed, query],
-  );
-  const maxSelf = useMemo(
-    () =>
-      Math.max(
-        1,
-        ...treeRows.map(({ row }) =>
-          row.node.kind === "component" ? row.node.datum.selfTime : row.node.selfTime,
-        ),
-      ),
-    [treeRows],
+  })();
+  const treeRows = treeViewRows(flatten(roots, expanded));
+  const matchCount = query.trim() ? data.filter(parsed.predicate).length : null;
+  const maxSelf = Math.max(
+    1,
+    ...treeRows.map(({ row }) =>
+      row.node.kind === "component" ? row.node.datum.selfTime : row.node.selfTime,
+    ),
   );
   const toggleTree = (key: string) => {
     const setter = key.startsWith("g:") ? setOpenGroups : setCollapsedNodes;
@@ -221,7 +207,7 @@ export function RedesignShell({
   };
 
   /** Watchlist: Doctor-flagged components, heaviest first. */
-  const watchlist = useMemo(() => {
+  const watchlist = treeCaches.watchlist.read([doctor, store, version], () => {
     if (!doctor || doctor.size === 0) return [];
     return [...doctor]
       .map((id) => ({
@@ -232,15 +218,16 @@ export function RedesignShell({
       }))
       .sort((a, b) => b.renders - a.renders)
       .slice(0, 3);
-  }, [doctor, store, version]);
+  });
 
   // ── Inspector ────────────────────────────────────────────────────────────
   const selectedRender = timeline.state.selectedRender;
-  const story = useMemo(
-    () => (selectedRender === null ? null : buildRenderStory(store, causality, selectedRender)),
-    [store, causality, selectedRender, version],
+  const story = treeCaches.story.read([store, causality, selectedRender, version], () =>
+    selectedRender === null ? null : buildRenderStory(store, causality, selectedRender),
   );
-  const selectedRenderEvent = selectedRender !== null ? store.getRender(selectedRender) : undefined;
+  const selectedRenderEvent = readFresh(version, () =>
+    selectedRender !== null ? store.getRender(selectedRender) : undefined,
+  );
   /** Clip picks set this so a following `selected` change doesn't clear the clip. */
   const fromClipRef = useRef(false);
 
@@ -260,6 +247,8 @@ export function RedesignShell({
     if (timeline.state.selectedRender !== null) {
       timeline.dispatch({ type: "clearClip" });
     }
+    // Only when tree selection changes — timeline identity churns each derivation.
+    // oxlint-disable-next-line react/exhaustive-deps -- intentional: selected-only trigger
   }, [selected]);
 
   /** Picking in the tree highlights the matching lane and scrolls it into view. */
@@ -384,21 +373,23 @@ export function RedesignShell({
                 matchCount !== null && <span className="rl-tree-search-count">{matchCount}</span>
               )}
             </div>
-            <TreeView
-              rows={treeRows}
-              maxSelf={maxSelf}
-              selected={selected}
-              onSelect={selectTreeComponent}
-              onToggle={toggleTree}
-              watchlist={watchlist}
-              lanes={lanes}
-              regionHeat={timeline.statsRaw.byLane}
-              componentHeat={timeline.statsRaw.byComponent}
-              fixApplied={fixApplied}
-              flashId={flashId}
-              {...(doctor ? { doctor } : {})}
-              {...(onHighlight ? { onHover: onHighlight } : {})}
-            />
+            <ErrorBoundary scope="components">
+              <TreeView
+                rows={treeRows}
+                maxSelf={maxSelf}
+                selected={selected}
+                onSelect={selectTreeComponent}
+                onToggle={toggleTree}
+                watchlist={watchlist}
+                lanes={lanes}
+                regionHeat={timeline.statsRaw.byLane}
+                componentHeat={timeline.statsRaw.byComponent}
+                fixApplied={fixApplied}
+                flashId={flashId}
+                {...(doctor ? { doctor } : {})}
+                {...(onHighlight ? { onHover: onHighlight } : {})}
+              />
+            </ErrorBoundary>
           </div>
         )}
 
@@ -415,95 +406,108 @@ export function RedesignShell({
                 : `${timeline.stats.renders} renders in view`}
             </span>
           </div>
-          <Timeline
-            model={timeline}
-            cursor={cursor}
-            onCursor={onCursor}
-            lanes={lanes}
-            fixApplied={fixApplied}
-            onSelectComponent={(id) => {
-              fromClipRef.current = true;
-              onSelect(id);
-              setFlashId(id);
-            }}
-            {...(onHighlight ? { onHighlight } : {})}
-            {...(transport ? { transport } : {})}
-          />
+          <ErrorBoundary scope="timeline">
+            <Timeline
+              model={timeline}
+              cursor={cursor}
+              onCursor={onCursor}
+              lanes={lanes}
+              fixApplied={fixApplied}
+              onSelectComponent={(id) => {
+                fromClipRef.current = true;
+                onSelect(id);
+                setFlashId(id);
+              }}
+              {...(onHighlight ? { onHighlight } : {})}
+              {...(transport ? { transport } : {})}
+            />
+          </ErrorBoundary>
         </div>
 
         {collapsed.inspector ? (
           <PaneRail label="Inspector" side="right" onExpand={() => togglePane("inspector")} />
         ) : (
           <div className="col insp">
-            {selectedRender !== null ? (
-              <InspectorView
-                headAction={
-                  <PaneToggle
-                    label="Inspector"
-                    side="right"
-                    onClick={() => togglePane("inspector")}
-                  />
-                }
-                store={store}
-                componentId={selectedRenderEvent?.componentId ?? selected}
-                story={story}
-                t0={
-                  selectedRenderEvent ? selectedRenderEvent.timestamp - timeline.bounds.t0 : null
-                }
-                t1={
-                  selectedRenderEvent
-                    ? selectedRenderEvent.timestamp -
-                      timeline.bounds.t0 +
-                      selectedRenderEvent.selfDuration
-                    : null
-                }
-                fixApplied={fixApplied}
-                onToggleFix={() => setFixApplied((v) => !v)}
-                onSelectComponent={selectTreeComponent}
-                onHoverComponent={(id) => {
-                  onHighlight?.(id);
-                  if (id === null) return;
-                  const name = store.instance(id)?.name;
-                  if (name) timeline.dispatch({ type: "selectLane", laneKey: typeLaneKey(name) });
-                }}
-              />
-            ) : selected !== null ? (
-              <Inspector
-                store={store}
-                causality={causality}
-                componentId={selected}
-                cursor={cursor}
-                onSelectComponent={selectTreeComponent}
-                headAction={
-                  <PaneToggle
-                    label="Inspector"
-                    side="right"
-                    onClick={() => togglePane("inspector")}
-                  />
-                }
-                {...(edit ? { edit } : {})}
-                {...(onHighlight ? { highlight: onHighlight } : {})}
-                {...(onRequestSnapshot ? { onRequestSnapshot } : {})}
-                {...(onAskAI ? { onAskAI } : {})}
-              />
-            ) : (
-              <InspectorView
-                headAction={
-                  <PaneToggle
-                    label="Inspector"
-                    side="right"
-                    onClick={() => togglePane("inspector")}
-                  />
-                }
-                store={store}
-                componentId={null}
-                story={null}
-                t0={null}
-                t1={null}
-                fixApplied={fixApplied}
-                onToggleFix={() => setFixApplied((v) => !v)}
-              />
-            )}
+            <ErrorBoundary scope="inspector">
+              {selectedRender !== null ? (
+                <InspectorView
+                  headAction={
+                    <PaneToggle
+                      label="Inspector"
+                      side="right"
+                      onClick={() => togglePane("inspector")}
+                    />
+                  }
+                  store={store}
+                  componentId={selectedRenderEvent?.componentId ?? selected}
+                  story={story}
+                  t0={
+                    selectedRenderEvent ? selectedRenderEvent.timestamp - timeline.bounds.t0 : null
+                  }
+                  t1={
+                    selectedRenderEvent
+                      ? selectedRenderEvent.timestamp -
+                        timeline.bounds.t0 +
+                        selectedRenderEvent.selfDuration
+                      : null
+                  }
+                  fixApplied={fixApplied}
+                  onToggleFix={() => setFixApplied((v) => !v)}
+                  onSelectComponent={selectTreeComponent}
+                  onHoverComponent={(id) => {
+                    onHighlight?.(id);
+                    if (id === null) return;
+                    const name = store.instance(id)?.name;
+                    if (name) timeline.dispatch({ type: "selectLane", laneKey: typeLaneKey(name) });
+                  }}
+                  onSelectRender={(renderId, laneKey) => {
+                    const render = store.getRender(renderId);
+                    if (render) {
+                      // Keep clip mode: the selected effect drives tree sync too.
+                      fromClipRef.current = true;
+                      onSelect(render.componentId);
+                    }
+                    timeline.dispatch({ type: "selectClip", renderId, laneKey });
+                  }}
+                />
+              ) : selected !== null ? (
+                <Inspector
+                  store={store}
+                  causality={causality}
+                  componentId={selected}
+                  cursor={cursor}
+                  onSelectComponent={selectTreeComponent}
+                  headAction={
+                    <PaneToggle
+                      label="Inspector"
+                      side="right"
+                      onClick={() => togglePane("inspector")}
+                    />
+                  }
+                  {...(edit ? { edit } : {})}
+                  {...(onHighlight ? { highlight: onHighlight } : {})}
+                  {...(onRequestSnapshot ? { onRequestSnapshot } : {})}
+                  {...(onAskAI ? { onAskAI } : {})}
+                />
+              ) : (
+                <InspectorView
+                  headAction={
+                    <PaneToggle
+                      label="Inspector"
+                      side="right"
+                      onClick={() => togglePane("inspector")}
+                    />
+                  }
+                  store={store}
+                  componentId={null}
+                  story={null}
+                  t0={null}
+                  t1={null}
+                  fixApplied={fixApplied}
+                  onToggleFix={() => setFixApplied((v) => !v)}
+                />
+              )}
+            </ErrorBoundary>
           </div>
         )}
       </div>

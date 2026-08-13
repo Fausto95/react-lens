@@ -5,6 +5,7 @@ import {
   fitView,
   fitWallRange,
   fitWallRangeAround,
+  padClipRange,
   wallWindow,
   zoomView,
 } from "./viewport.js";
@@ -57,6 +58,38 @@ describe("fitWallRange / wallWindow", () => {
     const win = wallWindow(AXIS, v);
     expect(win.start).toBeLessThanOrEqual(100 + 1);
     expect(win.end).toBeGreaterThanOrEqual(400 - 1);
+  });
+});
+
+describe("fitWallRange on a sub-minimum range", () => {
+  it("centers the floored span on the range midpoint", () => {
+    // 0.5 ms clip: span floors to VIEW_SPAN_MIN — the clip must not end up
+    // hugging the left edge of the resulting window.
+    const v = fitWallRange(AXIS, 100, 100.5);
+    const midWall = AXIS.axisToWall((v.a0 + v.a1) / 2);
+    expect(midWall).toBeCloseTo(100.25, 0);
+  });
+});
+
+describe("padClipRange", () => {
+  it("pads by the clip duration on each side", () => {
+    const r = padClipRange(AXIS, 100, 110);
+    expect(r.w0).toBe(90);
+    expect(r.w1).toBe(120);
+    expect(r.centerW).toBe(105);
+  });
+
+  it("clamps padding to the containing activity segment", () => {
+    const r = padClipRange(AXIS, 495, 499);
+    expect(r.w1).toBe(500);
+    expect(r.w0).toBe(491);
+  });
+
+  it("never crosses into a gap from a later segment", () => {
+    const r = padClipRange(AXIS, 2001, 2004);
+    expect(r.w0).toBe(2000);
+    expect(r.w1).toBe(2007);
+    expect(r.centerW).toBe(2002.5);
   });
 });
 

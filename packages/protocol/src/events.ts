@@ -87,6 +87,18 @@ export interface DiagnosticEvent extends BaseEvent {
   message: string;
 }
 
+/**
+ * Capture-side failure that was caught rather than thrown into the host app.
+ * Travels the same seq/ack path as renders so agent crashes show up on the
+ * timeline.
+ */
+export interface AgentErrorEvent extends BaseEvent {
+  type: "agent-error";
+  scope: string;
+  message: string;
+  stack?: string;
+}
+
 export type LensEvent =
   | RenderEvent
   | InteractionEvent
@@ -94,6 +106,7 @@ export type LensEvent =
   | PropsChangeEvent
   | ContextChangeEvent
   | EffectEvent
-  | DiagnosticEvent;
+  | DiagnosticEvent
+  | AgentErrorEvent;
 
 export type LensEventType = LensEvent["type"];

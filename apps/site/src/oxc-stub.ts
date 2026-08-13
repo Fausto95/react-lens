@@ -1,10 +1,7 @@
 /**
- * `@reactlens/diagnostics` eagerly imports `oxc-parser` for AST-backed static
- * analysis, but oxc-parser's native/WASM binding isn't browser-bundleable. The
- * diagnostics layer already anticipates this: `analyzeSourceSmart` catches a
- * failing parse and falls back to its regex analyzer (the "browser without
- * WASM" path). We alias oxc-parser to this stub so the bundle resolves and that
- * intended fallback engages — without modifying the diagnostics package.
+ * `@reactlens/diagnostics` imports `oxc-parser` for AST static analysis, but
+ * oxc's WASM binding uses top-level await and cannot ship in a Vite worker
+ * IIFE. `analyzeSourceSmart` catches a failing parse and falls back to regex.
  */
 export function parseSync(): never {
   throw new Error("oxc-parser is unavailable in the browser; using the regex fallback");

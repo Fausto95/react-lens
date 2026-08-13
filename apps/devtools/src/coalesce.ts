@@ -48,8 +48,7 @@ export const frameScheduler: Scheduler = (() => {
         clear(id);
         fn();
       };
-      const raf =
-        typeof requestAnimationFrame === "function" ? requestAnimationFrame(run) : null;
+      const raf = typeof requestAnimationFrame === "function" ? requestAnimationFrame(run) : null;
       const timer = setTimeout(run, 32);
       pending.set(id, { raf, timer });
       return id;

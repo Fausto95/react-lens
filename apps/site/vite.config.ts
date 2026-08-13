@@ -1,15 +1,20 @@
 import { defineConfig, lazyPlugins } from "vite-plus";
 import react from "@vitejs/plugin-react";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+const here = path.dirname(fileURLToPath(import.meta.url));
+const oxcStub = path.resolve(here, "src/oxc-stub.ts");
+const nodeModuleStub = path.resolve(here, "src/node-module-stub.ts");
 
 export default defineConfig({
   resolve: {
     alias: [
-      // oxc-parser WASM isn't browser-bundleable (worker or main). Stub it so
-      // analyzeSourceSmart falls back to regex — including in doctorWorker.
-      {
-        find: "oxc-parser",
-        replacement: new URL("./src/oxc-stub.ts", import.meta.url).pathname,
-      },
+      // Doctor worker would otherwise bundle @oxc-parser/binding-wasm32-wasi
+      // (top-level await) into an IIFE and fail `vp build` on Vercel.
+      { find: "oxc-parser", replacement: oxcStub },
+      { find: "@oxc-parser/binding-wasm32-wasi", replacement: oxcStub },
+      { find: "node:module", replacement: nodeModuleStub },
     ],
   },
   plugins: lazyPlugins(() => [
@@ -28,6 +33,9 @@ export default defineConfig({
       },
     }),
   ]),
+  optimizeDeps: {
+    exclude: ["oxc-parser", "@oxc-parser/binding-wasm32-wasi"],
+  },
   // The site inspects ITSELF with the real panel, so it ships as a production
   // React build: names are minified and no _debugStack exists. Publishing maps
   // lets the panel resolve components to src/... with their original names —
