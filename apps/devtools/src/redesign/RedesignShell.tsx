@@ -460,6 +460,15 @@ export function RedesignShell({
                     const name = store.instance(id)?.name;
                     if (name) timeline.dispatch({ type: "selectLane", laneKey: typeLaneKey(name) });
                   }}
+                  onSelectRender={(renderId, laneKey) => {
+                    const render = store.getRender(renderId);
+                    if (render) {
+                      // Keep clip mode: the selected effect drives tree sync too.
+                      fromClipRef.current = true;
+                      onSelect(render.componentId);
+                    }
+                    timeline.dispatch({ type: "selectClip", renderId, laneKey });
+                  }}
                 />
               ) : selected !== null ? (
                 <Inspector

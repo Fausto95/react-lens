@@ -1,7 +1,8 @@
 import { useState, type ReactNode } from "react";
-import type { ComponentId } from "@reactlens/protocol";
+import type { ComponentId, RenderId } from "@reactlens/protocol";
 import type { TraceStore } from "@reactlens/trace-engine";
-import type { RenderStory } from "../inspector/renderStory.js";
+import type { LaneKey } from "../laneFilter.js";
+import type { RenderStory, TriggeredEntry } from "../inspector/renderStory.js";
 import { ChangeDiffRows } from "../tabs/RendersTab.js";
 
 /**
@@ -18,6 +19,7 @@ export function InspectorView({
   onToggleFix,
   onSelectComponent,
   onHoverComponent,
+  onSelectRender,
   headAction,
 }: {
   store: TraceStore;
@@ -29,6 +31,8 @@ export function InspectorView({
   onToggleFix: () => void;
   onSelectComponent?: (id: ComponentId) => void;
   onHoverComponent?: (id: ComponentId | null) => void;
+  /** Jump the timeline selection to a render this clip triggered. */
+  onSelectRender?: (renderId: RenderId, laneKey: LaneKey) => void;
   /** Trailing control in the column heading — the shell's collapse toggle. */
   headAction?: ReactNode;
 }) {
@@ -180,7 +184,7 @@ export function InspectorView({
         </div>
       </div>
 
-      <div className="isect" style={{ borderBottom: "none" }}>
+      <div className="isect">
         <div className="ihead">
           <span className="n">4</span>Fix
         </div>
@@ -213,6 +217,56 @@ export function InspectorView({
             {fixApplied ? "Reset replay" : "Replay with fix →"}
           </div>
         )}
+      </div>
+
+      <div className="isect" style={{ borderBottom: "none" }}>
+        <div className="ihead">
+          <span className="n">5</span>Triggered
+        </div>
+        <TriggeredList triggered={story.triggered} onSelectRender={onSelectRender} />
+      </div>
+    </>
+  );
+}
+
+/**
+ * Renders this clip directly triggered. Module-level on purpose — an inline
+ * component definition remounts on every ingest and drops in-flight clicks
+ * (see the note in tabs/RelationsTab).
+ */
+function TriggeredList({
+  triggered,
+  onSelectRender,
+}: {
+  triggered: RenderStory["triggered"];
+  onSelectRender?: (renderId: RenderId, laneKey: LaneKey) => void;
+}) {
+  if (triggered.entries.length === 0) {
+    return <div className="why">No downstream renders.</div>;
+  }
+  const pick = (e: TriggeredEntry) => onSelectRender?.(e.renderId, e.laneKey);
+  const overflow = triggered.triggeredTotal - triggered.entries.length;
+  return (
+    <>
+      <div className="trig">
+        {triggered.entries.map((e) => (
+          <div
+            key={e.renderId}
+            className={`trow ${e.cause}`}
+            role="button"
+            tabIndex={0}
+            onClick={() => pick(e)}
+            onKeyDown={(ev) => ev.key === "Enter" && pick(e)}
+          >
+            <span className="tname">{e.name}</span>
+            <span className="tcause">{e.cause}</span>
+            <span className="tms">{formatPhaseMs(e.selfMs)} ms</span>
+          </div>
+        ))}
+      </div>
+      <div className="tfoot">
+        {overflow > 0 && <span>+{overflow} more · </span>}
+        <span>cascade: {triggered.cascadeTotal} downstream</span>
       </div>
     </>
   );

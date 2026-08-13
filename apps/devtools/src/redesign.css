@@ -880,6 +880,58 @@
   background: var(--line-strong);
   margin-left: 4.5px;
 }
+.rl-redesign .trig {
+  display: flex;
+  flex-direction: column;
+  font-family: var(--mono);
+  font-size: 10.5px;
+}
+.rl-redesign .trig .trow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+  color: var(--text-2);
+  cursor: pointer;
+}
+.rl-redesign .trig .trow:hover .tname {
+  color: var(--text);
+}
+.rl-redesign .trig .trow::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--cascade);
+  flex: none;
+  margin-left: 2px;
+}
+.rl-redesign .trig .trow.props::before {
+  background: var(--props);
+}
+.rl-redesign .trig .trow.state::before,
+.rl-redesign .trig .trow.mount::before {
+  background: var(--state);
+}
+.rl-redesign .trig .trow.context::before {
+  background: var(--ctx);
+}
+.rl-redesign .trig .tname {
+  color: var(--text-2);
+}
+.rl-redesign .trig .tcause {
+  color: var(--text-3);
+}
+.rl-redesign .trig .tms {
+  margin-left: auto;
+  color: var(--text-3);
+}
+.rl-redesign .tfoot {
+  margin-top: 8px;
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--text-3);
+}
 .rl-redesign .diff {
   font-family: var(--mono);
   font-size: 10.5px;
