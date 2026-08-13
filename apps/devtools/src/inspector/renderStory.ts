@@ -63,6 +63,8 @@ export interface TriggeredEntry {
   laneKey: LaneKey;
   cause: ClipCause;
   selfMs: number;
+  /** What changed in that child (its own diff vs its previous snapshot). */
+  changes: ChangeRow[];
 }
 
 export interface RenderStory {
@@ -418,6 +420,8 @@ export function buildRenderStory(
         laneKey: typeLaneKey(name),
         cause: causeOf(r),
         selfMs: r.selfDuration,
+        // Unchanged rows are noise here — the child's inspector has the rest.
+        changes: changesForRender(store, r.renderId).changes.filter((c) => c.kind !== "same"),
       };
     }),
     triggeredTotal: direct.length,

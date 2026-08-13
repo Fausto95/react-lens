@@ -894,6 +894,10 @@
   margin-left: auto;
   color: var(--text-3);
 }
+.rl-redesign .trig .row.sub {
+  padding-left: 24px;
+  font-size: 10px;
+}
 .rl-redesign .tfoot {
   margin-top: 8px;
   font-family: var(--mono);

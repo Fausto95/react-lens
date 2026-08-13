@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { Fragment, useState, type ReactNode } from "react";
 import type { ComponentId, RenderId } from "@reactlens/protocol";
 import type { TraceStore } from "@reactlens/trace-engine";
 import type { LaneKey } from "../laneFilter.js";
@@ -250,18 +250,24 @@ function TriggeredList({
     <>
       <div className="diff trig">
         {triggered.entries.map((e) => (
-          <div
-            key={e.renderId}
-            className="row add trow"
-            role="button"
-            tabIndex={0}
-            onClick={() => pick(e)}
-            onKeyDown={(ev) => ev.key === "Enter" && pick(e)}
-          >
-            <span className="tname">+ {e.name}</span>
-            <span className="tcause">{e.cause}</span>
-            <span className="tms">{formatPhaseMs(e.selfMs)} ms</span>
-          </div>
+          <Fragment key={e.renderId}>
+            <div
+              className="row add trow"
+              role="button"
+              tabIndex={0}
+              onClick={() => pick(e)}
+              onKeyDown={(ev) => ev.key === "Enter" && pick(e)}
+            >
+              <span className="tname">+ {e.name}</span>
+              <span className="tcause">{e.cause}</span>
+              <span className="tms">{formatPhaseMs(e.selfMs)} ms</span>
+            </div>
+            {e.changes.map((c, i) => (
+              <div key={i} className={`row sub ${c.kind === "removed" ? "del" : "add"}`}>
+                {c.text}
+              </div>
+            ))}
+          </Fragment>
         ))}
       </div>
       <div className="tfoot">
