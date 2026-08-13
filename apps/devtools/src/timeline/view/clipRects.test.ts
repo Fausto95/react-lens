@@ -25,7 +25,9 @@ function clip(id: number, t0: number, t1: number, row = 0, self = 1): Clip {
   };
 }
 
-function layoutWith(rows: Array<Partial<LayoutRow> & Pick<LayoutRow, "clips" | "mode">>): LaneLayout {
+function layoutWith(
+  rows: Array<Partial<LayoutRow> & Pick<LayoutRow, "clips" | "mode">>,
+): LaneLayout {
   let y = RULER_H;
   const built = rows.map((r) => {
     const h = r.mode === "wave" ? 44 : LANE_PAD + (r.depth ?? 1) * ROW_H;
@@ -114,9 +116,7 @@ describe("computeClipRects", () => {
   });
 
   it("collects snap edges for every clip, on-screen or not", () => {
-    const layout = layoutWith([
-      { mode: "stack", clips: [clip(5, -200, -150), clip(6, 50, 80)] },
-    ]);
+    const layout = layoutWith([{ mode: "stack", clips: [clip(5, -200, -150), clip(6, 50, 80)] }]);
     const { snapEdges } = computeClipRects(layout, proj);
     expect(snapEdges).toEqual([-200, -150, 50, 80]);
   });

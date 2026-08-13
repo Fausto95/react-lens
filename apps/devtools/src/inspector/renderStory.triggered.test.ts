@@ -102,7 +102,7 @@ describe("render story triggered", () => {
   });
 
   it("embeds the child's own changed rows, dropping unchanged ones", () => {
-    const prim = (value: unknown): SerializedValue => ({ k: "primitive", value } as never);
+    const prim = (value: unknown): SerializedValue => ({ k: "primitive", value }) as never;
     const objectValue = (entries: Array<[string, SerializedValue]>): SerializedValue =>
       ({ k: "object", entries }) as never;
     const snap = (
