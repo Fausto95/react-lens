@@ -108,4 +108,71 @@ describe("aggregates", () => {
     expect(result.rows).toHaveLength(1);
     expect(result.rows[0]!.name).toBe("A"); // firstT sort
   });
+
+  it("queryTimeline can skip unused activity and stats", () => {
+    const index = new TimelineIndex();
+    index.append({
+      timestamp: 1,
+      duration: 5,
+      selfDuration: 5,
+      renderId: 1,
+      componentId: 1,
+      commitId: 1,
+      cause: CauseCode.props,
+      name: "A",
+      laneKey: "A",
+    });
+
+    const result = queryTimeline(index, {
+      t0: 0,
+      t1: 10,
+      rowStart: 0,
+      rowEnd: 10,
+      pixelWidth: 1000,
+      includeStats: false,
+      includeActivity: false,
+    });
+
+    expect(result.stats).toEqual({ renders: 0, wasted: 0, selfMs: 0 });
+    expect(result.activity).toEqual([]);
+  });
+
+  it("queryTimeline can row-window nonquiet lanes", () => {
+    const index = new TimelineIndex();
+    index.append({
+      timestamp: 0,
+      duration: 1,
+      selfDuration: 1,
+      renderId: 1,
+      componentId: 1,
+      commitId: 1,
+      cause: CauseCode.props,
+      name: "Quiet",
+      laneKey: "Quiet",
+    });
+    index.append({
+      timestamp: 1,
+      duration: 20,
+      selfDuration: 1,
+      renderId: 2,
+      componentId: 2,
+      commitId: 1,
+      cause: CauseCode.props,
+      name: "Busy",
+      laneKey: "Busy",
+    });
+
+    const result = queryTimeline(index, {
+      t0: 0,
+      t1: 30,
+      rowStart: 0,
+      rowEnd: 10,
+      pixelWidth: 1000,
+      includeQuiet: false,
+    });
+
+    expect(result.rows.map((row) => row.name)).toEqual(["Busy"]);
+    expect(result.totalRows).toBe(1);
+    expect(result.quietSummary).toMatchObject({ lanes: 1, renders: 1 });
+  });
 });

@@ -29,6 +29,12 @@ export interface TimelineQuery {
     solo?: readonly string[];
     muted?: readonly string[];
   };
+  /** Include quiet lanes in row windows. Defaults to true. */
+  includeQuiet?: boolean;
+  /** Include stats in the query response. Defaults to true for compatibility. */
+  includeStats?: boolean;
+  /** Include busy activity intervals in the query response. Defaults to true. */
+  includeActivity?: boolean;
   /** Prefer buckets when avg event would be narrower than this (px). */
   lodEnterPx?: number;
 }
@@ -77,6 +83,12 @@ export interface RegionStats {
   selfMs: number;
 }
 
+export interface TimelineQuietSummary {
+  lanes: number;
+  renders: number;
+  selfMs: number;
+}
+
 export interface TimelineQueryResult {
   rows: TimelineRowMeta[];
   /** Rows after filtering, before rowStart/rowEnd slicing. */
@@ -86,6 +98,7 @@ export interface TimelineQueryResult {
   columns: TimelineColumns | null;
   buckets: TimelineBucketColumns | null;
   stats: RegionStats;
+  quietSummary: TimelineQuietSummary;
   /** Busy intervals for gap-axis activity (from SUMMARY LOD). */
   activity: Array<[number, number]>;
 }
@@ -143,26 +156,43 @@ function globalStats(
   };
 }
 
-function laneFilterPasses(
+interface CompiledLaneFilter {
+  muted: ReadonlySet<string>;
+  solo: readonly string[];
+  soloSet: ReadonlySet<string>;
+  soloChains: ReadonlyArray<ReadonlySet<string>>;
+}
+
+function compileLaneFilter(
   filter: TimelineQuery["laneFilter"] | undefined,
-  laneKey: string,
-): boolean {
-  if (!filter) return true;
-  const laneChain = (key: string): string[] => {
-    if (!key.startsWith("i:")) return [key];
-    const body = key.slice(2);
-    const cut = body.lastIndexOf("#");
-    if (cut < 0) return [key];
-    return [`t:${body.slice(0, cut)}`, key];
-  };
-  const chain = laneChain(laneKey);
-  const muted = new Set(filter.muted ?? []);
-  if (chain.some((key) => muted.has(key))) return false;
+): CompiledLaneFilter | null {
+  if (!filter) return null;
   const solo = filter.solo ?? [];
+  return {
+    muted: new Set(filter.muted ?? []),
+    solo,
+    soloSet: new Set(solo),
+    soloChains: solo.map((key) => new Set(laneChain(key))),
+  };
+}
+
+function laneChain(key: string): string[] {
+  if (!key.startsWith("i:")) return [key];
+  const body = key.slice(2);
+  const cut = body.lastIndexOf("#");
+  if (cut < 0) return [key];
+  return [`t:${body.slice(0, cut)}`, key];
+}
+
+function laneFilterPasses(filter: CompiledLaneFilter | null, laneKey: string): boolean {
+  if (!filter) return true;
+  const chain = laneChain(laneKey);
+  if (chain.some((key) => filter.muted.has(key))) return false;
+  const solo = filter.solo;
   if (solo.length === 0) return true;
-  if (chain.some((key) => solo.includes(key))) return true;
-  for (const soloed of solo) {
-    if (laneChain(soloed).includes(laneKey)) return true;
+  if (chain.some((key) => filter.soloSet.has(key))) return true;
+  for (const soloChain of filter.soloChains) {
+    if (soloChain.has(laneKey)) return true;
   }
   return false;
 }
@@ -170,9 +200,10 @@ function laneFilterPasses(
 function includePasses(
   q: Pick<TimelineQuery, "includeLane" | "laneFilter">,
   lane: LaneColumns,
+  compiledFilter: CompiledLaneFilter | null,
 ): boolean {
   if (q.includeLane && !q.includeLane(lane.laneKey, lane.name)) return false;
-  return laneFilterPasses(q.laneFilter, lane.laneKey);
+  return laneFilterPasses(compiledFilter, lane.laneKey);
 }
 
 /** O(log N) region stats across all (or filtered) lanes. */
@@ -287,12 +318,19 @@ function collectBuckets(lane: LaneColumns, level: LodLevel, t0: number, t1: numb
   const state = lane.lod[level];
   if (!state) return [];
   const out: LodBucket[] = [];
-  for (const b of state.buckets.values()) {
+  if (!state.startsSorted) {
+    state.starts.sort((a, b) => a - b);
+    state.startsSorted = true;
+  }
+  const lo = lowerBound(state.starts, state.starts.length, t0 - state.bucketMs);
+  const hi = upperBound(state.starts, state.starts.length, t1);
+  for (let i = lo; i < hi; i++) {
+    const b = state.buckets.get(state.starts[i]!);
+    if (!b) continue;
     const end = b.start + state.bucketMs;
     if (end < t0 || b.start > t1) continue;
     out.push(b);
   }
-  out.sort((a, b) => a.start - b.start);
   return out;
 }
 
@@ -325,7 +363,13 @@ export function queryTimeline(index: TimelineIndex, q: TimelineQuery): TimelineQ
   const t0 = Math.min(q.t0, q.t1);
   const t1 = Math.max(q.t0, q.t1);
   const enterPx = q.lodEnterPx ?? DEFAULT_LOD_ENTER_PX;
-  const ordered = index.orderedLanes().filter((lane) => includePasses(q, lane));
+  const includeQuiet = q.includeQuiet ?? true;
+  const compiledFilter = compileLaneFilter(q.laneFilter);
+  const hasLaneFilter = !!q.includeLane || !!compiledFilter;
+  const baseOrdered = index.orderedLanes({ includeQuiet, quietTotalMs: QUIET_TOTAL_MS });
+  const ordered = hasLaneFilter
+    ? baseOrdered.filter((lane) => includePasses(q, lane, compiledFilter))
+    : baseOrdered;
 
   const rowStart = Math.max(0, q.rowStart);
   const rowEnd = Math.min(ordered.length, Math.max(rowStart, q.rowEnd));
@@ -341,18 +385,37 @@ export function queryTimeline(index: TimelineIndex, q: TimelineQuery): TimelineQ
     wasted: lane.wastedCount,
     selfTotal: lane.selfTotal,
     depth: lane.maxRow + 1,
-    quiet: lane.selfTotal < QUIET_TOTAL_MS,
+    quiet: lane.totalDuration < QUIET_TOTAL_MS,
   }));
 
   const statsInclude =
     q.includeLane || q.laneFilter
       ? (laneKey: string, name: string) => {
           if (q.includeLane && !q.includeLane(laneKey, name)) return false;
-          return laneFilterPasses(q.laneFilter, laneKey);
+          return laneFilterPasses(compiledFilter, laneKey);
         }
       : undefined;
-  const stats = statsInRange(index, t0, t1, { includeLane: statsInclude });
-  const activity = activityIntervals(index);
+  const emptyStats = { renders: 0, wasted: 0, selfMs: 0 };
+  const stats =
+    q.includeStats === false
+      ? emptyStats
+      : statsInRange(index, t0, t1, { includeLane: statsInclude });
+  const quietSummary: TimelineQuietSummary = hasLaneFilter
+    ? (() => {
+        let lanes = 0;
+        let renders = 0;
+        let selfMs = 0;
+        for (const lane of index.orderedLanes()) {
+          if (!includePasses(q, lane, compiledFilter)) continue;
+          if (lane.totalDuration >= QUIET_TOTAL_MS) continue;
+          lanes++;
+          renders += lane.count;
+          selfMs += lane.selfTotal;
+        }
+        return { lanes, renders, selfMs };
+      })()
+    : index.quietSummary(QUIET_TOTAL_MS);
+  const activity = q.includeActivity === false ? [] : activityIntervals(index);
   const spanMs = Math.max(1, t1 - t0);
   const lodLevel = pickLodLevel(spanMs, q.pixelWidth, enterPx);
 
@@ -400,6 +463,7 @@ export function queryTimeline(index: TimelineIndex, q: TimelineQuery): TimelineQ
       columns: null,
       buckets: { count: k, rowIndex, start, end, renderCount, wastedCount, selfTime, maxDuration },
       stats,
+      quietSummary,
       activity,
     };
   }
@@ -476,6 +540,7 @@ export function queryTimeline(index: TimelineIndex, q: TimelineQuery): TimelineQ
     },
     buckets: null,
     stats,
+    quietSummary,
     activity,
   };
 }

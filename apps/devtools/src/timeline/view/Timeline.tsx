@@ -169,6 +169,7 @@ export function Timeline({
   const viewAnim = useRef(0);
   const gapAnim = useRef(0);
   const rafRef = useRef(0);
+  const scrollRafRef = useRef(0);
   const sizeRef = useRef({ w: state.width, nameW: NAME_W });
   const layoutHRef = useRef(layout.totalH);
   layoutHRef.current = layout.totalH;
@@ -282,6 +283,7 @@ export function Timeline({
       if (x > nw && x < sizeRef.current.w - 74) {
         ph.style.display = "block";
         ph.style.left = `${x + 8}px`;
+        ph.style.top = `${(wrapRef.current?.scrollTop ?? 0) + RULER_H + 4}px`;
         const speed = state.playing && state.speed !== 1 ? ` · ${state.speed}×` : "";
         ph.textContent = `t = ${fmtMs(playheadRef.current)} ms${speed}`;
       } else {
@@ -424,7 +426,7 @@ export function Timeline({
       drawOverlay({
         ctx: octx,
         stageW: sizeRef.current.w,
-        totalH: layout.totalH,
+        totalH: layout.paintH ?? layout.totalH,
         nameW: nw,
         clipRects: clipRectsRef.current,
         edges: arrows,
@@ -509,10 +511,11 @@ export function Timeline({
     if (!el) return;
     const resize = () => {
       const w = el.clientWidth;
+      const viewportHeight = el.clientHeight;
       sizeRef.current.w = w;
       sizeRef.current.nameW = nameWidthFor(w);
-      dispatch({ type: "measure", width: w });
-      const h = layout.totalH;
+      dispatch({ type: "measure", width: w, viewportHeight, scrollTop: el.scrollTop });
+      const h = layout.paintH ?? layout.totalH;
       const dpr = window.devicePixelRatio || 1;
       const renderer = rendererRef.current;
       if (renderer) {
@@ -553,7 +556,7 @@ export function Timeline({
     const ro = new ResizeObserver(resize);
     ro.observe(el);
     return () => ro.disconnect();
-  }, [dispatch, layout.totalH, paint]);
+  }, [dispatch, layout.paintH, layout.totalH, paint]);
 
   useEffect(() => {
     scheduleDraw(true);
@@ -743,7 +746,7 @@ export function Timeline({
     const viewY = e.clientY - r.top;
     return {
       x: e.clientX - r.left,
-      y: viewY + el.scrollTop,
+      y: viewY,
       viewY,
     };
   };
@@ -869,14 +872,14 @@ export function Timeline({
         ? {
             clip: soft,
             x: clamp(x + 14, nameW(), sizeRef.current.w - 190),
-            y: viewY + 16,
+            y: scrollTop + viewY + 16,
           }
         : null;
       ghostRef.current = x > nameW() ? xToW(x) : null;
       if (waveRow && x > nameW()) {
         // Anchor in scrolled content coordinates — that is where absolutely
         // positioned stage children live.
-        const anchor = loupeAnchor(x, waveRow.y, scrollTop, nameW(), sizeRef.current.w);
+        const anchor = loupeAnchor(x, scrollTop + waveRow.y, scrollTop, nameW(), sizeRef.current.w);
         loupeRef.current = {
           laneKey: waveRow.key,
           wallT: xToW(x),
@@ -988,6 +991,34 @@ export function Timeline({
     }
     fit();
   };
+
+  useEffect(() => {
+    const el = wrapRef.current;
+    if (!el) return;
+    const syncSurfaceTop = () => {
+      const top = `${el.scrollTop}px`;
+      if (baseRef.current) baseRef.current.style.top = top;
+      if (overRef.current) overRef.current.style.top = top;
+    };
+    const onScroll = () => {
+      syncSurfaceTop();
+      cancelAnimationFrame(scrollRafRef.current);
+      scrollRafRef.current = requestAnimationFrame(() => {
+        dispatch({
+          type: "setScroll",
+          scrollTop: el.scrollTop,
+          viewportHeight: el.clientHeight,
+        });
+        scheduleDraw(true);
+      });
+    };
+    syncSurfaceTop();
+    el.addEventListener("scroll", onScroll, { passive: true });
+    return () => {
+      el.removeEventListener("scroll", onScroll);
+      cancelAnimationFrame(scrollRafRef.current);
+    };
+  }, [dispatch, scheduleDraw]);
 
   useEffect(() => {
     const el = wrapRef.current;
@@ -1194,6 +1225,8 @@ export function Timeline({
           .find((c) => !c.aggregate && c.renderId === state.selectedRender) ?? null)
       : null;
   const narrow = sizeRef.current.w < 720;
+  const stageScrollTop = layout.scrollTop ?? state.scrollTop;
+  const paintH = layout.paintH ?? layout.totalH;
 
   return (
     <div className="tl tl-canvas-root">
@@ -1320,11 +1353,30 @@ export function Timeline({
           scheduleDraw(false);
         }}
       >
-        <canvas key={`base-${surfaceGen}`} ref={baseRef} style={{ display: "block" }} />
+        <div className="tl-stage-spacer" style={{ height: layout.totalH }} />
+        <canvas
+          key={`base-${surfaceGen}`}
+          ref={baseRef}
+          style={{
+            position: "absolute",
+            left: 0,
+            top: stageScrollTop,
+            display: "block",
+            width: sizeRef.current.w,
+            height: paintH,
+          }}
+        />
         <canvas
           key={`over-${surfaceGen}`}
           ref={overRef}
-          style={{ position: "absolute", inset: 0, pointerEvents: "none" }}
+          style={{
+            position: "absolute",
+            left: 0,
+            top: stageScrollTop,
+            pointerEvents: "none",
+            width: sizeRef.current.w,
+            height: paintH,
+          }}
         />
 
         {layout.rows.map((r) => (
@@ -1335,7 +1387,7 @@ export function Timeline({
             style={{
               position: "absolute",
               left: 0,
-              top: r.y,
+              top: stageScrollTop + r.y,
               width: sizeRef.current.nameW - 1,
               height: r.h,
               color: r.dim ? "var(--text-3)" : "var(--text-2)",
@@ -1375,7 +1427,7 @@ export function Timeline({
             key={s.id}
             type="button"
             className="tl-stitch"
-            style={{ left: s.x - 6 }}
+            style={{ left: s.x - 6, top: stageScrollTop }}
             title={`Expand idle +${compactGap(s.ms)}`}
             aria-label={`Expand idle +${compactGap(s.ms)}`}
             onPointerDown={(e) => e.stopPropagation()}
@@ -1398,7 +1450,7 @@ export function Timeline({
               className="tl-gap"
               style={{
                 left,
-                top: RULER_H + 4,
+                top: stageScrollTop + RULER_H + 4,
                 width,
               }}
               onPointerDown={(e) => e.stopPropagation()}
@@ -1412,7 +1464,7 @@ export function Timeline({
         <div
           ref={phChipRef}
           className="tl-ph-chip"
-          style={{ top: RULER_H + 4, pointerEvents: "none", display: "none" }}
+          style={{ top: stageScrollTop + RULER_H + 4, pointerEvents: "none", display: "none" }}
         />
 
         <div ref={tipElRef} className="tl-tip" style={{ display: "none" }}>
@@ -1437,7 +1489,11 @@ export function Timeline({
         </div>
 
         {state.showHelp && (
-          <div className="tl-help" onPointerDown={(e) => e.stopPropagation()}>
+          <div
+            className="tl-help"
+            style={{ top: stageScrollTop + 38 }}
+            onPointerDown={(e) => e.stopPropagation()}
+          >
             <div className="tl-help-title">SHORTCUTS</div>
             {HELP.map(([k, d]) => (
               <div key={k} className="tl-help-row">
@@ -1451,6 +1507,7 @@ export function Timeline({
 
       <Shelf
         quietLanes={layout.quietLanes}
+        quietSummary={layout.quietSummary}
         open={state.shelfOpen}
         narrow={narrow}
         onToggle={() => dispatch({ type: "toggleShelf" })}

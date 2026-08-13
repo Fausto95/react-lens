@@ -1896,6 +1896,10 @@
   overscroll-behavior: contain;
   position: relative;
 }
+.rl-redesign .tl-stage-spacer {
+  width: 1px;
+  pointer-events: none;
+}
 .rl-redesign .tl-lname {
   display: flex;
   align-items: center;

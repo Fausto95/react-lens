@@ -142,12 +142,20 @@ export function createTimelineRenderer(canvas: HTMLCanvasElement): TimelineRende
         if (buf instanceof ArrayBuffer) transfer.push(buf);
       }
       // Clips travel as columns — don't structured-clone Clip objects.
+      const stripLaneClips = <T extends { clips: unknown[] }>(lane: T): T => ({
+        ...lane,
+        clips: [] as unknown[] as T["clips"],
+      });
       const slim = {
         ...payload,
         layout: {
           ...payload.layout,
-          rows: payload.layout.rows.map((r) => ({ ...r, clips: [] as typeof r.clips })),
-          quietLanes: payload.layout.quietLanes.map((l) => ({ ...l, clips: [] as typeof l.clips })),
+          rows: payload.layout.rows.map((r) => ({
+            ...r,
+            lane: stripLaneClips(r.lane),
+            clips: [] as typeof r.clips,
+          })),
+          quietLanes: payload.layout.quietLanes.map(stripLaneClips),
         },
       };
       worker.postMessage({ type: "paint", payload: slim, wantHit: !!onHit }, transfer);

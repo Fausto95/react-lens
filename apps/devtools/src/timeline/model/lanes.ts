@@ -59,6 +59,8 @@ export interface Lane {
   name: string;
   instanceCount: number;
   clips: Clip[];
+  /** Ordered row index from the engine query after filtering/shelf rules. */
+  rowIndex?: number;
   renders: number;
   wasted: number;
   selfTotal: number;
@@ -86,6 +88,7 @@ function emptyLaneFromRow(
     name: row.name,
     instanceCount: row.instanceCount,
     clips: [],
+    rowIndex: row.yIndex,
     renders: row.renders,
     wasted: row.wasted,
     selfTotal: row.selfTotal,

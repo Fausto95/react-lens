@@ -17,7 +17,7 @@ import { chainFor, edgesForCommit, type CausalEdge } from "./model/edges.js";
 import { buildActivity, buildAxis, mergeActive, type TimeSpan } from "./model/axis.js";
 import { computeLayout } from "./model/rows.js";
 import type { LaneMode } from "./model/wave.js";
-import { nameWidthFor } from "./view/metrics.js";
+import { nameWidthFor, RULER_H, VIRTUAL_OVERSCAN_ROWS, VIRTUAL_ROW_H } from "./view/metrics.js";
 import { wallWindow } from "./model/viewport.js";
 import {
   initialTimelineState,
@@ -50,6 +50,9 @@ export function useTimeline({
   const caches = useRef({
     commits: derivationCache<CommitSummary[]>(),
     interactions: derivationCache<ReturnType<TraceStore["interactions"]>>(),
+    activity: derivationCache<ReturnType<typeof buildActivity>>(),
+    active: derivationCache<Array<[number, number]>>(),
+    markers: derivationCache<Array<{ t: number; label: string; warn: boolean }>>(),
     arrows: derivationCache<CausalEdge[]>(),
   }).current;
 
@@ -63,23 +66,23 @@ export function useTimeline({
   const laneModesRef = useRef(new Map<LaneKey, LaneMode>());
 
   // Activity from LOD summary — not every clip.
-  const acts = (() => {
+  const acts = caches.activity.read([store, version], () => {
     const fromIndex = store.activityIntervals(64);
     const iv: Array<[number, number]> = fromIndex.length > 0 ? [...fromIndex] : [];
     for (const c of commits) iv.push([c.timestamp, c.endTimestamp]);
     for (const it of interactions) iv.push([it.start, it.end]);
     if (iv.length === 0) iv.push([bounds.t0, bounds.t1]);
     return buildActivity(iv);
-  })();
+  });
 
-  const active = (() => {
+  const active = caches.active.read([store, version], () => {
     const spans: TimeSpan[] = [];
     for (const commit of commits) spans.push({ start: commit.timestamp, end: commit.endTimestamp });
     for (const it of interactions) spans.push({ start: it.start, end: it.end });
     return spans.length > 0
       ? mergeActive(spans)
       : ([[bounds.t0, bounds.t1]] as Array<[number, number]>);
-  })();
+  });
 
   const ctxRef = useRef<TimelineContext>({
     bounds,
@@ -112,12 +115,21 @@ export function useTimeline({
   // Materialize only the visible time window (+ pad) from columnar lanes.
   // Wastedness is a stored flag — no causality.why() sweep.
   const pad = Math.max(50, (visible.end - visible.start) * 0.1);
+  const scrollTop = Math.max(0, state.scrollTop);
+  const viewportHeight = Math.max(RULER_H + 40, state.viewportHeight);
+  const firstRow = Math.floor(Math.max(0, scrollTop - RULER_H) / VIRTUAL_ROW_H);
+  const lastRow = Math.ceil(Math.max(0, scrollTop + viewportHeight - RULER_H) / VIRTUAL_ROW_H);
+  const rowStart = Math.max(0, firstRow - VIRTUAL_OVERSCAN_ROWS);
+  const rowEnd = Math.max(rowStart + 1, lastRow + VIRTUAL_OVERSCAN_ROWS);
   const timelineResult = store.queryTimeline({
     t0: visible.start - pad,
     t1: visible.end + pad,
-    rowStart: 0,
-    rowEnd: Number.MAX_SAFE_INTEGER,
+    rowStart,
+    rowEnd,
     pixelWidth: plotW,
+    includeQuiet: state.shelfOpen,
+    includeStats: false,
+    includeActivity: false,
     ...(filterActive
       ? {
           laneFilter: {
@@ -139,12 +151,22 @@ export function useTimeline({
     pxPerMs,
     visible: { t0: visible.start, t1: visible.end },
     prevModes: laneModesRef.current,
+    quietSummary: timelineResult.quietSummary,
+    virtual: {
+      rowStart,
+      totalRows: timelineResult.totalRows,
+      rowHeight: VIRTUAL_ROW_H,
+      scrollTop,
+      viewportHeight,
+    },
     isDim: (key) => {
       const v = laneVisibility(laneFilter, key);
       return v === "muted" || v === "unsoloed";
     },
   });
-  laneModesRef.current = new Map(layout.rows.map((r) => [r.key, r.mode]));
+  const nextLaneModes = new Map(laneModesRef.current);
+  for (const row of layout.rows) nextLaneModes.set(row.key, row.mode);
+  laneModesRef.current = nextLaneModes;
 
   const arrows = caches.arrows.read([store, version, state.selectedRender], () =>
     state.selectedRender === null
@@ -166,7 +188,7 @@ export function useTimeline({
 
   const playhead = cursor.mode === "live" ? bounds.t1 : cursor.t;
 
-  const markers = (() => {
+  const markers = caches.markers.read([store, version], () => {
     const out: Array<{ t: number; label: string; warn: boolean }> = [];
     for (const it of interactions) {
       out.push({ t: it.start, label: it.label || "interaction", warn: false });
@@ -179,7 +201,7 @@ export function useTimeline({
     }
     out.sort((a, b) => a.t - b.t);
     return out;
-  })();
+  });
 
   return {
     state,

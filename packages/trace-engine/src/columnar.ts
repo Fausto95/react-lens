@@ -120,6 +120,9 @@ interface LodLevelState {
   bucketMs: number;
   /** Sparse map: bucketStart → bucket (mutated on append). */
   buckets: Map<number, LodBucket>;
+  /** Bucket starts for O(log B + visible B) viewport reads. */
+  starts: number[];
+  startsSorted: boolean;
 }
 
 export interface AppendRenderInput {
@@ -161,6 +164,7 @@ export interface LaneColumns {
   instanceIds: Set<number>;
   firstT: number;
   selfTotal: number;
+  totalDuration: number;
   wastedCount: number;
   lod: LodLevelState[];
 }
@@ -188,8 +192,14 @@ function emptyLane(laneKey: string, name: string): LaneColumns {
     instanceIds: new Set(),
     firstT: Number.POSITIVE_INFINITY,
     selfTotal: 0,
+    totalDuration: 0,
     wastedCount: 0,
-    lod: LOD_BUCKET_MS.map((bucketMs) => ({ bucketMs, buckets: new Map() })),
+    lod: LOD_BUCKET_MS.map((bucketMs) => ({
+      bucketMs,
+      buckets: new Map(),
+      starts: [],
+      startsSorted: true,
+    })),
   };
 }
 
@@ -246,6 +256,9 @@ function updateLod(lane: LaneColumns, input: AppendRenderInput, wasted: boolean)
         contextCount: 0,
       };
       level.buckets.set(start, b);
+      const last = level.starts[level.starts.length - 1];
+      if (last !== undefined && start < last) level.startsSorted = false;
+      level.starts.push(start);
     }
     b.renderCount++;
     if (wasted) b.wastedCount++;
@@ -290,6 +303,13 @@ export class TimelineIndex {
   /** renderId → { laneKey, localIndex }. */
   private renderToLane = new Map<number, { laneKey: string; index: number }>();
   private orderedCache: LaneColumns[] | null = null;
+  private orderedNonQuietCache: { quietTotalMs: number; lanes: LaneColumns[] } | null = null;
+  private quietSummaryCache: {
+    quietTotalMs: number;
+    lanes: number;
+    renders: number;
+    selfMs: number;
+  } | null = null;
 
   t0 = Number.POSITIVE_INFINITY;
   t1 = Number.NEGATIVE_INFINITY;
@@ -344,10 +364,15 @@ export class TimelineIndex {
 
     // Per-lane columns
     let lane = this.lanes.get(input.laneKey);
+    let previousTotalDuration = 0;
     if (!lane) {
       lane = emptyLane(input.laneKey, input.name);
       this.lanes.set(input.laneKey, lane);
       this.orderedCache = null;
+      this.orderedNonQuietCache = null;
+      this.quietSummaryCache = null;
+    } else {
+      previousTotalDuration = lane.totalDuration;
     }
     const i = lane.count;
     ensureCapacity(lane, i + 1);
@@ -372,8 +397,22 @@ export class TimelineIndex {
     lane.instanceIds.add(input.componentId);
     lane.firstT = Math.min(lane.firstT, input.timestamp);
     lane.selfTotal += input.selfDuration;
+    lane.totalDuration += input.duration;
     if (wasted) lane.wastedCount++;
     lane.count = i + 1;
+    if (
+      this.orderedNonQuietCache &&
+      previousTotalDuration < this.orderedNonQuietCache.quietTotalMs &&
+      lane.totalDuration >= this.orderedNonQuietCache.quietTotalMs
+    ) {
+      this.orderedNonQuietCache = null;
+    }
+    if (this.quietSummaryCache) {
+      const threshold = this.quietSummaryCache.quietTotalMs;
+      if (previousTotalDuration < threshold || lane.totalDuration < threshold) {
+        this.quietSummaryCache = null;
+      }
+    }
 
     this.renderToLane.set(input.renderId, { laneKey: input.laneKey, index: i });
     updateLod(lane, input, wasted);
@@ -455,18 +494,46 @@ export class TimelineIndex {
     this.renderToIndex.clear();
     this.renderToLane.clear();
     this.orderedCache = null;
+    this.orderedNonQuietCache = null;
+    this.quietSummaryCache = null;
     this.t0 = Number.POSITIVE_INFINITY;
     this.t1 = Number.NEGATIVE_INFINITY;
   }
 
   /** Ordered lanes by firstT then name (stable for UI). */
-  orderedLanes(): LaneColumns[] {
+  orderedLanes(options: { includeQuiet?: boolean; quietTotalMs?: number } = {}): LaneColumns[] {
     if (!this.orderedCache) {
       this.orderedCache = [...this.lanes.values()].sort(
         (a, b) => a.firstT - b.firstT || a.name.localeCompare(b.name),
       );
     }
-    return this.orderedCache;
+    if (options.includeQuiet !== false) return this.orderedCache;
+
+    const quietTotalMs = options.quietTotalMs ?? 8;
+    if (!this.orderedNonQuietCache || this.orderedNonQuietCache.quietTotalMs !== quietTotalMs) {
+      this.orderedNonQuietCache = {
+        quietTotalMs,
+        lanes: this.orderedCache.filter((lane) => lane.totalDuration >= quietTotalMs),
+      };
+    }
+    return this.orderedNonQuietCache.lanes;
+  }
+
+  quietSummary(quietTotalMs = 8): { lanes: number; renders: number; selfMs: number } {
+    if (!this.quietSummaryCache || this.quietSummaryCache.quietTotalMs !== quietTotalMs) {
+      let lanes = 0;
+      let renders = 0;
+      let selfMs = 0;
+      for (const lane of this.lanes.values()) {
+        if (lane.totalDuration >= quietTotalMs) continue;
+        lanes++;
+        renders += lane.count;
+        selfMs += lane.selfTotal;
+      }
+      this.quietSummaryCache = { quietTotalMs, lanes, renders, selfMs };
+    }
+    const { lanes, renders, selfMs } = this.quietSummaryCache;
+    return { lanes, renders, selfMs };
   }
 }
 

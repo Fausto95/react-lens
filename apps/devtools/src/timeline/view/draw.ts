@@ -66,7 +66,7 @@ export function drawBase(args: DrawBaseArgs): {
 } {
   const { ctx, axis, layout, region, markers, selectedRender, proj, tOrigin, theme } = args;
   const { nameW: NW, stageW: W, wToX, aToX, pxPerMs } = proj;
-  const H = layout.totalH;
+  const H = layout.paintH ?? layout.totalH;
   const pattern = args.pattern;
   const MONO = theme.mono;
 

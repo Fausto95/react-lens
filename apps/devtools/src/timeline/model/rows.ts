@@ -5,7 +5,15 @@
 import type { LaneKey } from "../../laneFilter.js";
 import type { Clip, Lane } from "./lanes.js";
 import { avgClipWidthPx, laneMode, type LaneMode } from "./wave.js";
-import { LANE_PAD, QUIET_MAX, QUIET_TOTAL_MS, ROW_H, RULER_H, WAVE_H } from "../view/metrics.js";
+import {
+  LANE_PAD,
+  QUIET_MAX,
+  QUIET_TOTAL_MS,
+  ROW_H,
+  RULER_H,
+  VIRTUAL_ROW_H,
+  WAVE_H,
+} from "../view/metrics.js";
 
 export interface LayoutRow {
   lane: Lane;
@@ -21,8 +29,14 @@ export interface LayoutRow {
 
 export interface LaneLayout {
   rows: LayoutRow[];
+  /** Full scrollable stage height. */
   totalH: number;
+  /** Canvas paint height; when omitted, paint the full layout height. */
+  paintH?: number;
+  /** Native scrollTop used to position virtual canvas/DOM chrome. */
+  scrollTop?: number;
   quietLanes: Lane[];
+  quietSummary: { lanes: number; renders: number; selfMs: number };
 }
 
 /**
@@ -61,17 +75,39 @@ export function computeLayout(
     prevModes?: ReadonlyMap<LaneKey, LaneMode>;
     quietMax?: number;
     quietTotalMs?: number;
+    quietSummary?: { lanes: number; renders: number; selfMs: number };
+    virtual?: {
+      rowStart: number;
+      totalRows: number;
+      rowHeight?: number;
+      scrollTop: number;
+      viewportHeight: number;
+    };
   },
 ): LaneLayout {
   const quietMax = opts.quietMax ?? QUIET_MAX;
   const quietTotalMs = opts.quietTotalMs ?? QUIET_TOTAL_MS;
-  const quietLanes = lanes.filter((l) => isQuietLane(l, quietMax, quietTotalMs));
+  const quietLanes = opts.quietSummary
+    ? []
+    : lanes.filter((l) => isQuietLane(l, quietMax, quietTotalMs));
+  const quietSummary =
+    opts.quietSummary ??
+    quietLanes.reduce(
+      (summary, lane) => ({
+        lanes: summary.lanes + 1,
+        renders: summary.renders + lane.renders,
+        selfMs: summary.selfMs + lane.selfTotal,
+      }),
+      { lanes: 0, renders: 0, selfMs: 0 },
+    );
   const rows: LayoutRow[] = [];
   let y = RULER_H;
+  const virtual = opts.virtual;
+  const rowHeight = virtual?.rowHeight ?? VIRTUAL_ROW_H;
 
   for (const lane of lanes) {
     const quiet = isQuietLane(lane, quietMax, quietTotalMs);
-    if (quiet && !opts.shelfOpen) continue;
+    if (!virtual && quiet && !opts.shelfOpen) continue;
 
     const clips = lane.clips;
     const depth = Math.max(1, laneDepth.get(lane.key) ?? 1);
@@ -83,15 +119,21 @@ export function computeLayout(
     // Painted inclusive width × pxPerMs — grows with zoom so heavy lanes
     // progressively leave wave and show stacked clips.
     const avgPx = avgClipWidthPx(scoped, opts.pxPerMs);
-    const mode =
+    let mode =
       lane.lod === "buckets"
         ? "wave"
         : laneMode(depth, scoped.length, avgPx, opts.prevModes?.get(lane.key));
-    const h = mode === "wave" ? WAVE_H : LANE_PAD + depth * ROW_H;
+    const stackH = LANE_PAD + depth * ROW_H;
+    if (virtual && stackH > rowHeight) mode = "wave";
+    const h = virtual ? rowHeight : mode === "wave" ? WAVE_H : stackH;
+    const rowY = virtual
+      ? RULER_H +
+        ((lane.rowIndex ?? virtual.rowStart + rows.length) * rowHeight - virtual.scrollTop)
+      : y;
     rows.push({
       lane,
       key: lane.key,
-      y,
+      y: rowY,
       h,
       mode,
       depth,
@@ -99,8 +141,24 @@ export function computeLayout(
       quiet,
       dim: opts.isDim(lane.key),
     });
-    y += h;
+    if (!virtual) y += h;
   }
 
-  return { rows, totalH: Math.max(y, RULER_H + 40), quietLanes };
+  if (virtual) {
+    const scrollH = Math.max(
+      RULER_H + virtual.totalRows * rowHeight,
+      virtual.viewportHeight,
+      RULER_H + 40,
+    );
+    return {
+      rows,
+      totalH: scrollH,
+      paintH: Math.max(virtual.viewportHeight, RULER_H + 40),
+      scrollTop: virtual.scrollTop,
+      quietLanes,
+      quietSummary,
+    };
+  }
+
+  return { rows, totalH: Math.max(y, RULER_H + 40), quietLanes, quietSummary };
 }

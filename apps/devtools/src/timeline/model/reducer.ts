@@ -21,6 +21,10 @@ export interface TimelineState {
   view: ViewWindow;
   /** Measured stage width (full, including name gutter). */
   width: number;
+  /** Measured stage viewport height. */
+  viewportHeight: number;
+  /** Native stage scrollTop, used to query only visible rows. */
+  scrollTop: number;
   selectedRender: RenderId | null;
   selectedLane: LaneKey | null;
   /** In/out points that scope stats and bound transport. */
@@ -41,7 +45,8 @@ export interface TimelineContext {
 }
 
 export type TimelineAction =
-  | { type: "measure"; width: number }
+  | { type: "measure"; width: number; viewportHeight?: number; scrollTop?: number }
+  | { type: "setScroll"; scrollTop: number; viewportHeight?: number }
   | { type: "setView"; a0: number; span: number }
   | { type: "zoomBy"; factor: number; anchorA: number }
   | { type: "fit" }
@@ -64,6 +69,8 @@ export function initialTimelineState(over: Partial<TimelineState> = {}): Timelin
   return {
     view: { a0: 0, a1: 1000 },
     width: 900,
+    viewportHeight: 480,
+    scrollTop: 0,
     selectedRender: null,
     selectedLane: null,
     region: null,
@@ -90,8 +97,24 @@ export function timelineReducer(
 
   switch (action.type) {
     case "measure": {
-      if (action.width <= 0 || action.width === state.width) return state;
-      return { ...state, width: action.width };
+      const viewportHeight = action.viewportHeight ?? state.viewportHeight;
+      const scrollTop = action.scrollTop ?? state.scrollTop;
+      if (
+        action.width <= 0 ||
+        (action.width === state.width &&
+          viewportHeight === state.viewportHeight &&
+          scrollTop === state.scrollTop)
+      ) {
+        return state;
+      }
+      return { ...state, width: action.width, viewportHeight, scrollTop };
+    }
+
+    case "setScroll": {
+      const viewportHeight = action.viewportHeight ?? state.viewportHeight;
+      const scrollTop = Math.max(0, action.scrollTop);
+      if (scrollTop === state.scrollTop && viewportHeight === state.viewportHeight) return state;
+      return { ...state, scrollTop, viewportHeight };
     }
 
     case "setView":
