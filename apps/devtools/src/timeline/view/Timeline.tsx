@@ -782,10 +782,11 @@ export function Timeline({
           return;
         }
       }
-      // Wave rows zoom first: soft hits on sub-pixel bars made taps randomly
-      // inspect instead of zooming. Hard port hits still inspect.
+      // Wave rows zoom first — the loupe promises "click to zoom", and taps on
+      // sub-pixel bars randomly inspected instead. Zooming flips the lane to
+      // stacked clips, which are then clickable.
       const waveRow = layout.rows.find((r) => y >= r.y && y <= r.y + r.h && r.mode === "wave");
-      const hit = waveRow ? (hitClip(x, y)?.clip ?? null) : clipUnderPointer(x, y);
+      const hit = waveRow ? null : clipUnderPointer(x, y);
       if (hit) {
         inspectClip(hit);
         // Tap = inspect (stays live). Drag past the threshold still scrubs.
