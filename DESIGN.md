@@ -78,9 +78,11 @@ apps/
   extension/        MV3 shell: background relay, content script, devtools page
   devtools/         panel UI (React 19 + Compiler)
   playground/       React 19 + Compiler app engineered to misbehave
+  site/             product site (inspects itself)
+  e2e-fixture/      Playwright / CI fixture app
 
 packages/
-  protocol/         [zero deps] message types, versioning, SerializedValue, IDs
+  protocol/         [zero deps] message types, versioning, SerializedValue, IDs, sessions
   serializer/       [protocol] safe value serialization + stable identity table
   fiber/            [protocol] page-side DOM↔Fiber↔Component, OWNED hook
   instrumentation/  [protocol, fiber, serializer] capture → LensEvent
@@ -89,8 +91,17 @@ packages/
   causality/        [protocol, trace-engine, diff-engine] why-did-this-render
   diagnostics/      [protocol] Doctor rules (pure; OXC-based static analysis)
   source-maps/      [protocol] runtime component ↔ source location
+  explain/          [protocol, …] deterministic interaction narratives
+  agent/            BYOK tool loop (panel)
+  agent-tools/      shared tool handlers (panel, CLI, MCP)
+  cli/              analyze · mcp · ci
+  mcp/              stdio MCP server + AGENTS.md playbook
+  playwright/       named-interaction helpers for the verify loop
+  dev-channel/      live WebSocket frame sink + Vite plugin
+  tree/ graph/      semantic tree + graph projections
   ui/               [icons] design system, keyboard-first primitives
   icons/            [zero deps]
+  demo-ui/          shared demo primitives (playground / e2e)
 ```
 
 ### The two-half split

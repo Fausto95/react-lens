@@ -42,11 +42,11 @@ export function WhySection() {
       <div className="sec-kicker">
         <span className="dot" /> WHY · cause, then fix
       </div>
-      <h2>Then ask why — and get a cited answer.</h2>
+      <h2>Trace a render to its cause.</h2>
       <p className="sec-lead">
-        Cycle the context and select a <code>Consumer</code> in the panel: “Why this render” names
-        the exact cause and the fanout across every consumer, so you fix the source instead of each
-        leaf.
+        Cycle the context and select a <code>Consumer</code> in the panel: the cause chain names the
+        exact reason and the fanout across every consumer — then source maps and Doctor findings
+        land on <code>file:line</code>. Receipts, not guesses.
       </p>
 
       <div className="card">
@@ -63,7 +63,7 @@ export function WhySection() {
           <p>
             Every render gets a ranked cause with diff evidence and a confidence level — including a
             “no observable change” verdict when it was avoidable. Compiler bailouts count as
-            evidence; Lens never tells you to hand-roll <code>useMemo</code>.
+            evidence; recommendations stay evidence-backed.
           </p>
         </article>
         <article className="change">
@@ -72,7 +72,7 @@ export function WhySection() {
           <p>
             <kbd>⌘I</kbd> opens an assistant that answers through typed tools over the live trace
             (OpenAI / Anthropic / Z.AI — your key stays in the browser). Claims cite clickable Lens
-            IDs, and fixes are proposed against your real source, stamped <code>file:line</code>.
+            IDs; the agent can propose fixes citing <code>file:line</code> against your source.
           </p>
         </article>
       </div>

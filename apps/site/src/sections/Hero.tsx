@@ -9,21 +9,33 @@ export function Hero() {
         <IconLens size={18} /> React Lens
       </div>
       <h1>
-        Rewind any render. Then ask <span className="accent">why</span>.
+        React debugging with <span className="accent">receipts</span>.
       </h1>
       <p className="hero-sub">
-        React Lens replays your app’s real state at any commit — then a trace-grounded AI agent
-        answers, citing the exact render, component, and line. This site is inspecting itself:
-        everything on the right is this page’s real component tree.
+        Time travel through real state. Trace a render to its cause. Preview waste before you change
+        code. Diff two moments — or two sessions in CI. Human or AI agent — every answer cites the
+        exact render, component, and line.
       </p>
       <div className="cta-row">
-        <a className="btn primary" href="#features">
+        <a
+          className="btn primary"
+          href="https://github.com/Fausto95/react-lens/blob/main/docs/getting-started.md"
+          target="_blank"
+          rel="noreferrer"
+        >
+          Install
+        </a>
+        <a className="btn" href="#features">
           Features
         </a>
         <a className="btn" href={REPO} target="_blank" rel="noreferrer">
           GitHub ↗
         </a>
       </div>
+      <p className="hero-meta">
+        <span className="live" />
+        Live — this page is inspecting itself
+      </p>
     </section>
   );
 }
