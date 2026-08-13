@@ -1,7 +1,7 @@
 const REPO = "https://github.com/Fausto95/react-lens";
 const DOCS = `${REPO}/blob/main/docs`;
 
-interface Card {
+interface Row {
   title: string;
   body: string;
   cmd: string;
@@ -9,7 +9,7 @@ interface Card {
   linkLabel: string;
 }
 
-const CARDS: Card[] = [
+const ROWS: Row[] = [
   {
     title: "Analyze",
     body: "Turn an exported session into a markdown report — summary, waste, slowness — without opening the panel.",
@@ -44,17 +44,17 @@ export function AgentsSection() {
         Export a session from the panel, then analyze it headlessly, hand it to an MCP host, or gate
         regressions in CI. The tools are the ones ⌘I already uses.
       </p>
-      <div className="feats">
-        {CARDS.map((c) => (
-          <article className="feat" key={c.title}>
-            <h3>{c.title}</h3>
-            <p>{c.body}</p>
-            <pre className="code">{c.cmd}</pre>
-            <p>
-              <a href={c.href} target="_blank" rel="noreferrer">
-                {c.linkLabel} ↗
+      <div className="cmd-list">
+        {ROWS.map((r) => (
+          <article className="cmd-row" key={r.title}>
+            <div className="cmd-row-head">
+              <h3>{r.title}</h3>
+              <a href={r.href} target="_blank" rel="noreferrer">
+                {r.linkLabel} ↗
               </a>
-            </p>
+            </div>
+            <p>{r.body}</p>
+            <pre className="code">{r.cmd}</pre>
           </article>
         ))}
       </div>

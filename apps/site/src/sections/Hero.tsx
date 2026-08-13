@@ -14,11 +14,15 @@ export function Hero() {
       <p className="hero-sub">
         Time travel through real state. Trace any value to its source. Simulate the fix before you
         make it. Bisect the commit that broke perf. Human or AI agent — every answer cites the exact
-        render, component, and line. This site is inspecting itself: everything on the right is this
-        page’s real component tree.
+        render, component, and line.
       </p>
       <div className="cta-row">
-        <a className="btn primary" href="#install">
+        <a
+          className="btn primary"
+          href="https://github.com/Fausto95/react-lens/blob/main/docs/getting-started.md"
+          target="_blank"
+          rel="noreferrer"
+        >
           Install
         </a>
         <a className="btn" href="#features">
@@ -28,6 +32,10 @@ export function Hero() {
           GitHub ↗
         </a>
       </div>
+      <p className="hero-meta">
+        <span className="live" />
+        Live — this page is inspecting itself
+      </p>
     </section>
   );
 }

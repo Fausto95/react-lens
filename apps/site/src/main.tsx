@@ -1,5 +1,6 @@
 // boot MUST be first — installs the React Lens hook before react-dom evaluates.
 import { runtime } from "./boot.js";
+import "./bootTheme.js";
 
 import { createRoot } from "react-dom/client";
 import { mountEmbedded } from "@reactlens/devtools/embed";
