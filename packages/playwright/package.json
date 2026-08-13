@@ -7,7 +7,9 @@
     "url": "git+https://github.com/Fausto95/react-lens.git",
     "directory": "packages/playwright"
   },
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "type": "module",
   "exports": {
     ".": "./src/index.ts"
@@ -27,11 +29,11 @@
     "typecheck": "tsc --noEmit",
     "build": "tsup src/index.ts --format esm --dts --sourcemap --clean --tsconfig tsconfig.build.json"
   },
-  "peerDependencies": {
-    "@playwright/test": ">=1.40.0"
-  },
   "devDependencies": {
     "@playwright/test": "1.60.0",
     "tsup": "^8.5.1"
+  },
+  "peerDependencies": {
+    "@playwright/test": ">=1.40.0"
   }
 }

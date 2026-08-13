@@ -353,7 +353,10 @@ export const TOOL_DEFINITIONS: Array<{
         type: "object",
         required: ["before", "after"],
         properties: {
-          before: { type: "object", description: "Before session payload (events/snapshots/instances)." },
+          before: {
+            type: "object",
+            description: "Before session payload (events/snapshots/instances).",
+          },
           after: { type: "object", description: "After session payload." },
         },
       },

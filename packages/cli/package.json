@@ -7,11 +7,13 @@
     "url": "git+https://github.com/Fausto95/react-lens.git",
     "directory": "packages/cli"
   },
-  "files": ["dist"],
-  "type": "module",
   "bin": {
     "react-lens": "./dist/cli.js"
   },
+  "files": [
+    "dist"
+  ],
+  "type": "module",
   "exports": {
     ".": "./src/index.ts"
   },

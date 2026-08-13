@@ -21,7 +21,10 @@ export function runCi(opts: CiOptions): { ok: boolean; report: string } {
     for (const file of listLensFiles(actualDir)) {
       cpSync(join(actualDir, file), join(baselineDir, file));
     }
-    return { ok: true, report: `Updated baseline: copied ${listLensFiles(actualDir).length} file(s).` };
+    return {
+      ok: true,
+      report: `Updated baseline: copied ${listLensFiles(actualDir).length} file(s).`,
+    };
   }
 
   const baselineFiles = new Set(listLensFiles(baselineDir));

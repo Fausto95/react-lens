@@ -523,7 +523,9 @@ export function createToolHandlers(deps: {
             id: i.id,
             label: i.label,
           })),
-          ...evidence.topComponents.slice(0, 3).map((c) => componentRef(c.componentId as ComponentId)),
+          ...evidence.topComponents
+            .slice(0, 3)
+            .map((c) => componentRef(c.componentId as ComponentId)),
         ],
       };
     },
@@ -589,7 +591,9 @@ export function createToolHandlers(deps: {
       const before = commits.find((c) => (c.commitId as number) === beforeCommitId);
       const after = commits.find((c) => (c.commitId as number) === afterCommitId);
       if (!before || !after) {
-        return { error: "unknown commit id — use get_session_summary / query_trace to find commits" };
+        return {
+          error: "unknown commit id — use get_session_summary / query_trace to find commits",
+        };
       }
       const beforeSet = new Set(before.componentIds);
       const afterSet = new Set(after.componentIds);
@@ -616,7 +620,9 @@ export function createToolHandlers(deps: {
       let events = store.allEvents();
       if (type) events = events.filter((e) => e.type === type);
       if (componentId != null) {
-        events = events.filter((e) => "componentId" in e && (e as { componentId?: number }).componentId === componentId);
+        events = events.filter(
+          (e) => "componentId" in e && (e as { componentId?: number }).componentId === componentId,
+        );
       }
       if (interactionId) {
         const num = interactionId.startsWith("i")
@@ -654,7 +660,9 @@ export function createToolHandlers(deps: {
       const trimmed = lensId.trim().replace(/^\[|\]$/g, "");
       const m = /^(component|render|interaction):(.+)$/.exec(trimmed);
       if (!m) {
-        return { error: `unrecognized lensId "${lensId}" — expected component:N, render:N, or interaction:iN` };
+        return {
+          error: `unrecognized lensId "${lensId}" — expected component:N, render:N, or interaction:iN`,
+        };
       }
       const kind = m[1] as "component" | "render" | "interaction";
       const raw = m[2]!;
@@ -714,8 +722,7 @@ export function createToolHandlers(deps: {
         .interactions()
         .slice()
         .sort((a, b) => b.metrics.reactDuration - a.metrics.reactDuration);
-      const it =
-        (interactionId ? ranked.find((i) => i.id === interactionId) : null) ?? ranked[0];
+      const it = (interactionId ? ranked.find((i) => i.id === interactionId) : null) ?? ranked[0];
       if (!it) {
         return { error: "no interaction recorded yet — interact with the page first" };
       }
@@ -803,10 +810,12 @@ export function createToolHandlers(deps: {
           nextStep: `why({ renderId: ${w.renderId} })`,
         })),
         citations: top.slice(0, 5).map((w) => componentRef(w.componentId)),
-        nextSteps: top.slice(0, 2).flatMap((w) => [
-          `why({ renderId: ${w.renderId} })`,
-          `read_component_source({ componentId: ${w.componentId} })`,
-        ]),
+        nextSteps: top
+          .slice(0, 2)
+          .flatMap((w) => [
+            `why({ renderId: ${w.renderId} })`,
+            `read_component_source({ componentId: ${w.componentId} })`,
+          ]),
       };
     },
 

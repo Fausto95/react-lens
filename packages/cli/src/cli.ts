@@ -10,6 +10,7 @@ function usage(): never {
   react-lens ci --baseline <dir> --actual <dir>
   react-lens ci --update-baseline --baseline <dir> --actual <dir>`);
   process.exit(1);
+  throw new Error("unreachable");
 }
 
 function parseArgs(argv: string[]): {
@@ -55,8 +56,7 @@ async function main(): Promise<void> {
     }
     case "mcp": {
       const sessionPath =
-        (typeof flags.session === "string" ? flags.session : undefined) ??
-        process.env.LENS_SESSION;
+        (typeof flags.session === "string" ? flags.session : undefined) ?? process.env.LENS_SESSION;
       const { runMcpServer } = await import("@reactlens/mcp");
       await runMcpServer({
         sessionPath,

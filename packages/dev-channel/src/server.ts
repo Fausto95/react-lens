@@ -28,7 +28,15 @@ export function createDevChannelServer(opts: { port: number }): Promise<DevChann
     const queue: DevChannelFrame[] = [];
     ws.on("message", (data) => {
       try {
-        const msg = JSON.parse(String(data)) as { type: string; seq?: number };
+        const text =
+          typeof data === "string"
+            ? data
+            : Buffer.isBuffer(data)
+              ? data.toString("utf8")
+              : Array.isArray(data)
+                ? Buffer.concat(data).toString("utf8")
+                : Buffer.from(data).toString("utf8");
+        const msg = JSON.parse(text) as { type: string; seq?: number };
         if (msg.type === "ack" && typeof msg.seq === "number") {
           /* ack is independent — server does not block on it */
           return;

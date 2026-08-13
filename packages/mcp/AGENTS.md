@@ -11,13 +11,13 @@ Symptoms → tool sequences for agents using React Lens session tools.
 
 ## Symptom → sequence
 
-| Symptom | Tool sequence |
-|---------|---------------|
-| "Why is it slow?" | `diagnose_slowness` → `explain_interaction` → `why` |
-| "Too many re-renders" | `get_waste_report` → `why` → `graph_neighbors` |
-| "This component" | `find_component` → `component_runtime` → `why_did_component_render` |
-| "Before vs after fix" | `compare_sessions` with before/after payloads |
-| "Effect loop?" | `find_component` → `effects_summary` |
+| Symptom               | Tool sequence                                                       |
+| --------------------- | ------------------------------------------------------------------- |
+| "Why is it slow?"     | `diagnose_slowness` → `explain_interaction` → `why`                 |
+| "Too many re-renders" | `get_waste_report` → `why` → `graph_neighbors`                      |
+| "This component"      | `find_component` → `component_runtime` → `why_did_component_render` |
+| "Before vs after fix" | `compare_sessions` with before/after payloads                       |
+| "Effect loop?"        | `find_component` → `effects_summary`                                |
 
 ## Anti-patterns
 

@@ -7,7 +7,9 @@
     "url": "git+https://github.com/Fausto95/react-lens.git",
     "directory": "packages/dev-channel"
   },
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "type": "module",
   "exports": {
     ".": "./src/index.ts",

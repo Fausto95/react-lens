@@ -82,7 +82,7 @@ export function createEmbeddedRuntime(): LensRuntime {
       goLive: () => capture.instrumentation.timeTravel.goLive(),
       registerStore: (adapter) => capture.instrumentation.timeTravel.registerStore(adapter),
     },
-    start: capture.start,
-    stop: capture.stop,
+    start: () => capture.start(),
+    stop: () => capture.stop(),
   };
 }

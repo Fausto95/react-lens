@@ -9,7 +9,10 @@ import { createSourceResolver } from "@reactlens/source-maps";
 import { createToolHandlers } from "@reactlens/agent-tools";
 import { analyzeSessionMarkdown } from "./analyze.js";
 
-const FIXTURE = join(dirname(fileURLToPath(import.meta.url)), "../../../e2e/fixtures/minimal.lens.json");
+const FIXTURE = join(
+  dirname(fileURLToPath(import.meta.url)),
+  "../../../e2e/fixtures/minimal.lens.json",
+);
 
 describe("cli analyze golden", () => {
   it("produces stable summary stats from minimal.lens.json", async () => {
