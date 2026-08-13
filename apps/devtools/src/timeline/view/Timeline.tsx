@@ -9,6 +9,7 @@ import {
   clampView,
   fitWallRange,
   fitWallRangeAround,
+  padClipRange,
   lerpView,
   reanchorAfterAxisChange,
 } from "../model/viewport.js";
@@ -580,15 +581,20 @@ export function Timeline({
     else setView(v.a0, v.a1 - v.a0);
   };
 
-  const doFitLoupe = (w0: number, w1: number, centerW: number) => {
+  const doFitWallAround = (w0: number, w1: number, centerW: number) => {
     const v = fitWallRangeAround(axisLiveRef.current, w0, w1, centerW);
     animateView(v.a0, v.a1 - v.a0, 180);
+  };
+
+  const zoomToClip = (c: { t0: number; t1: number }) => {
+    const r = padClipRange(axisLiveRef.current, c.t0, c.t1);
+    doFitWallAround(r.w0, r.w1, r.centerW);
   };
 
   /** Zoom the timeline to a loupe wall window, keeping `centerW` centered. */
   const applyLoupeZoom = (laneKey: string, wallT: number) => {
     const win = loupeAt(laneKey, wallT, LOUPE_HALF_MS, axisLiveRef.current);
-    doFitLoupe(win.t0, win.t1, win.wallT);
+    doFitWallAround(win.t0, win.t1, win.wallT);
     loupeRef.current = null;
     tipRef.current = null;
     syncChrome();
@@ -939,9 +945,7 @@ export function Timeline({
     const { x } = localXY(e);
     const hit = hitClip(x, localXY(e).y);
     if (hit) {
-      const c = hit.clip;
-      const pad = (c.t1 - c.t0) * 2;
-      doFitWall(c.t0 - pad, c.t1 + pad);
+      zoomToClip(hit.clip);
       return;
     }
     const rg = state.region;
@@ -1075,10 +1079,7 @@ export function Timeline({
           break;
         case "fit-selection": {
           const c = lanes.flatMap((l) => l.clips).find((x) => x.renderId === state.selectedRender);
-          if (c) {
-            const pad = (c.t1 - c.t0) * 2;
-            doFitWall(c.t0 - pad, c.t1 + pad);
-          }
+          if (c) zoomToClip(c);
           break;
         }
         case "fit":
