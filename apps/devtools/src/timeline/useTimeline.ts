@@ -5,12 +5,14 @@ import type { Causality } from "@reactlens/causality";
 import type { RenderId } from "@reactlens/protocol";
 import { useTraceVersion } from "../useLens.js";
 import { derivationCache } from "../traceFresh.js";
-import { isLaneVisible, laneVisibility, type LaneFilter } from "../laneFilter.js";
+import { isLaneVisible, laneVisibility, type LaneFilter, type LaneKey } from "../laneFilter.js";
 import type { TimeCursor } from "../timeCursor.js";
 import { buildLanes, statsInRegion, type Lane } from "./model/lanes.js";
 import { chainFor, edgesForCommit, type CausalEdge } from "./model/edges.js";
 import { buildActivity, buildAxis, mergeActive, type TimeSpan } from "./model/axis.js";
 import { computeLayout } from "./model/rows.js";
+import type { LaneMode } from "./model/wave.js";
+import { nameWidthFor } from "./view/metrics.js";
 import { assignStacks } from "./model/stacks.js";
 import { wallWindow } from "./model/viewport.js";
 import {
@@ -127,6 +129,7 @@ export function useTimeline({
   })();
 
   const gapProgRef = useRef(new Map<string, number>());
+  const laneModesRef = useRef(new Map<LaneKey, LaneMode>());
   const ctxRef = useRef<TimelineContext>({
     bounds,
     axis: buildAxis(acts, gapProgRef.current),
@@ -152,17 +155,22 @@ export function useTimeline({
 
   const visible = wallWindow(liveAxis, state.view);
 
-  const plotW = Math.max(1, state.width * 0.86);
+  // Real plot width — must match the projector's stageW - nameW, or the LOD
+  // threshold disagrees with what gets painted.
+  const plotW = Math.max(1, state.width - nameWidthFor(state.width));
   const pxPerMs = plotW / Math.max(1, state.view.a1 - state.view.a0);
 
   const layout = computeLayout(lanes, laneDepth, {
     shelfOpen: state.shelfOpen,
     pxPerMs,
+    visible: { t0: visible.start, t1: visible.end },
+    prevModes: laneModesRef.current,
     isDim: (key) => {
       const v = laneVisibility(laneFilter, key);
       return v === "muted" || v === "unsoloed";
     },
   });
+  laneModesRef.current = new Map(layout.rows.map((r) => [r.key, r.mode]));
 
   const arrows = caches.arrows.read([store, version, state.selectedRender], () =>
     state.selectedRender === null

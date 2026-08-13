@@ -50,6 +50,10 @@ export function computeLayout(
     shelfOpen: boolean;
     pxPerMs: number;
     isDim: (key: LaneKey) => boolean;
+    /** Visible wall window — the stack/wave choice weighs only these clips. */
+    visible?: { t0: number; t1: number };
+    /** Previous per-lane modes, held inside the hysteresis band. */
+    prevModes?: ReadonlyMap<LaneKey, LaneMode>;
     quietMax?: number;
     quietTotalMs?: number;
   },
@@ -66,10 +70,15 @@ export function computeLayout(
 
     const clips = lane.clips;
     const depth = Math.max(1, laneDepth.get(lane.key) ?? 1);
+    // The mode weighs only clips in view: a lane dense elsewhere must still
+    // resolve to stacked clips where the user actually zoomed in.
+    const win = opts.visible;
+    const inView = win ? clips.filter((c) => c.t1 >= win.t0 && c.t0 <= win.t1) : clips;
+    const scoped = inView.length > 0 ? inView : clips;
     // Painted inclusive width × pxPerMs — grows with zoom so heavy lanes
     // progressively leave wave and show stacked clips.
-    const avgPx = avgClipWidthPx(clips, opts.pxPerMs);
-    const mode = laneMode(depth, clips.length, avgPx);
+    const avgPx = avgClipWidthPx(scoped, opts.pxPerMs);
+    const mode = laneMode(depth, scoped.length, avgPx, opts.prevModes?.get(lane.key));
     const h = mode === "wave" ? WAVE_H : LANE_PAD + depth * ROW_H;
     rows.push({
       lane,
