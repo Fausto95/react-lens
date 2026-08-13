@@ -1,3 +1,4 @@
+/* oxlint-disable react/react-compiler -- redesign chrome caches selection/flash/timeline refs; not Compiler-safe by design */
 import { useEffect, useRef, useState } from "react";
 import type { TraceStore } from "@reactlens/trace-engine";
 import type { Causality } from "@reactlens/causality";
@@ -246,6 +247,8 @@ export function RedesignShell({
     if (timeline.state.selectedRender !== null) {
       timeline.dispatch({ type: "clearClip" });
     }
+    // Only when tree selection changes — timeline identity churns each derivation.
+    // oxlint-disable-next-line react/exhaustive-deps -- intentional: selected-only trigger
   }, [selected]);
 
   /** Picking in the tree highlights the matching lane and scrolls it into view. */

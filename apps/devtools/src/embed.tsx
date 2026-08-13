@@ -1,4 +1,4 @@
-import { StrictMode, useState, useMemo, useEffect, useRef } from "react";
+import { StrictMode, useState, useMemo, useEffect, useRef, useCallback } from "react";
 import { createRoot } from "react-dom/client";
 import type { ComponentId } from "@reactlens/protocol";
 import { Panel } from "./Panel.js";
@@ -45,11 +45,11 @@ function EmbeddedPanel({ runtime, host }: { runtime: LensRuntime; host: HTMLElem
   useEffect(() => () => overlay.dispose(), [overlay]);
   useEffect(() => () => inspect.dispose(), [inspect]);
 
-  const cancelWave = () => {
+  const cancelWave = useCallback(() => {
     for (const t of waveTimers.current) clearTimeout(t);
     waveTimers.current = [];
     highlighter.hide();
-  };
+  }, [highlighter]);
   const replayWave = (ids: ComponentId[]) => {
     cancelWave();
     const capped = ids.slice(0, WAVE_MAX_GROUPS);
@@ -71,7 +71,7 @@ function EmbeddedPanel({ runtime, host }: { runtime: LensRuntime; host: HTMLElem
     });
     waveTimers.current.push(setTimeout(cancelWave, groups.length * step + 800));
   };
-  useEffect(() => () => cancelWave(), []);
+  useEffect(() => () => cancelWave(), [cancelWave]);
 
   const edit = useMemo(
     () =>

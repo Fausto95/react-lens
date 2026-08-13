@@ -110,7 +110,7 @@ describe("planCausalArrows", () => {
       ports,
     );
     expect(planned).toHaveLength(2);
-    expect(planned.map((p) => p.slot).sort()).toEqual([1, 2]);
+    expect(planned.map((p) => p.slot).sort((a, b) => a - b)).toEqual([1, 2]);
     expect(planned.every((p) => p.slotCount === 2)).toBe(true);
   });
 
@@ -160,7 +160,7 @@ describe("planCausalArrows", () => {
       ports,
     );
     expect(planned).toHaveLength(2);
-    expect(planned.map((p) => p.slot).sort()).toEqual([1, 2]);
+    expect(planned.map((p) => p.slot).sort((a, b) => a - b)).toEqual([1, 2]);
     expect(planned.every((p) => p.slotCount === 2)).toBe(true);
     expect(planned.find((p) => p.waveCount != null)?.waveCount).toBe(2);
     expect(planned.find((p) => p.to.t0 === 20)?.order).toBe(1);

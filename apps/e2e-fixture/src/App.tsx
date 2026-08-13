@@ -1,3 +1,4 @@
+import { Hero, Shell, Stack } from "@reactlens/demo-ui";
 import { Showcase } from "./specimens/Showcase.js";
 import { CartBadge } from "./specimens/CartBadge.js";
 import { SuspenseDemo } from "./specimens/SuspenseDemo.js";
@@ -7,36 +8,31 @@ import { Expensive } from "./specimens/Expensive.js";
 import { BigList } from "./specimens/BigList.js";
 
 /**
- * Dedicated e2e fixture: specimens for every panel feature, not the Storefront demo.
+ * Atlas Shop — realistic multi-section host for Playwright.
+ * Keeps frozen e2e displayNames and button labels under a coherent product shell.
  */
 export function App() {
   return (
-    <main
-      style={{
-        maxWidth: 640,
-        margin: "0 auto",
-        padding: "24px 16px 120px",
-        color: "#16181d",
-      }}
-    >
-      <header style={{ marginBottom: 20 }}>
-        <h1 style={{ fontSize: 22, margin: "0 0 6px", letterSpacing: "-0.02em" }}>
-          React Lens · E2E Fixture
-        </h1>
-        <p style={{ color: "#5f6878", margin: 0, lineHeight: 1.45, fontSize: 13 }}>
-          Specimens for Playwright — hooks, props, cart, suspense, transitions, waste, and a big
-          list for tree virtualization.
-        </p>
-      </header>
-
-      <Showcase />
-      <CartBadge />
-      <SuspenseDemo />
-      <TransitionDemo />
-      <WasteDemo />
-      <Expensive />
-      <BigList />
-    </main>
+    <div className="demo-root">
+      <Shell>
+        {/* `main` is the e2e scope for page-only locators (propsLine, etc.). */}
+        <main>
+          <Hero
+            brand="Atlas Shop · E2E Fixture"
+            lead="Hooks, cart travel, suspense, transitions, waste, and a long catalog — one shop shell."
+          />
+          <Stack>
+            <Showcase />
+            <CartBadge />
+            <SuspenseDemo />
+            <TransitionDemo />
+            <WasteDemo />
+            <Expensive />
+            <BigList />
+          </Stack>
+        </main>
+      </Shell>
+    </div>
   );
 }
 App.displayName = "App";

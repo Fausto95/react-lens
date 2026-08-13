@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import type { SerializedValue } from "@reactlens/protocol";
 import { formatValue } from "./format.js";
 
@@ -73,8 +73,11 @@ function PrimitiveInput({
 }) {
   const isNumber = value.type === "number";
   const [buffer, setBuffer] = useState(String(value.value));
-  // Keep the input in sync when the app pushes a new value.
-  useEffect(() => setBuffer(String(value.value)), [value.value]);
+  const [prevValue, setPrevValue] = useState(value.value);
+  if (value.value !== prevValue) {
+    setPrevValue(value.value);
+    setBuffer(String(value.value));
+  }
 
   const commit = () => {
     if (isNumber) {

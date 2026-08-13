@@ -3,10 +3,10 @@ import { runtime } from "./boot.js";
 
 import { createRoot } from "react-dom/client";
 import { mountEmbedded } from "@reactlens/devtools/embed";
+import "@reactlens/demo-ui/styles.css";
 import { App } from "./App.js";
 
 // No StrictMode here so render counts in the panel reflect real commits only.
 createRoot(document.getElementById("app")!).render(<App />);
 
-// Mount the in-page React Lens panel (dev-only overlay).
 mountEmbedded(runtime);

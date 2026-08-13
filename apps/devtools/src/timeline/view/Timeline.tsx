@@ -1,3 +1,4 @@
+/* oxlint-disable react/react-compiler -- imperative canvas/gesture/derivation caches; not Compiler-safe by design */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ComponentId } from "@reactlens/protocol";
 import type { LaneControls } from "../../laneFilter.js";
@@ -429,8 +430,6 @@ export function Timeline({
       model.pxPerMs,
       drawLoupe,
       syncChrome,
-      acts,
-      state.expandedGaps,
     ],
   );
 
@@ -1009,7 +1008,7 @@ export function Timeline({
     };
     raf = requestAnimationFrame(step);
     return () => cancelAnimationFrame(raf);
-  }, [state.playing]);
+  }, [state.playing, dispatch]);
 
   useEffect(() => {
     const down = (e: KeyboardEvent) => {
@@ -1352,20 +1351,22 @@ export function Timeline({
         ))}
 
         {gapChips.map((s) => {
-          const chipW = Math.max(s.x1 - s.x0 - 4, 56);
-          const left = clamp(
-            (s.x0 + s.x1) / 2 - chipW / 2,
-            nameW() + 2,
-            sizeRef.current.w - chipW - 2,
-          );
+          // Clip to the visible stage so a zoomed-wide idle region doesn't
+          // push the chip (and "collapse") past the gutter / off-screen.
+          const stageL = nameW() + 2;
+          const stageR = sizeRef.current.w - 2;
+          const left = Math.max(s.x0 + 2, stageL);
+          const right = Math.min(s.x1 - 2, stageR);
+          const width = right - left;
+          if (width < 28) return null;
           return (
             <div
               key={s.id}
               className="tl-gap"
               style={{
                 left,
-                top: RULER_H + 5,
-                width: chipW,
+                top: RULER_H + 4,
+                width,
               }}
               onPointerDown={(e) => e.stopPropagation()}
               onClick={() => toggleGap(s.id)}

@@ -164,29 +164,56 @@ export function drawBase(args: DrawBaseArgs): {
       if (major && x - lastLabelX >= LABEL_MIN_PX) {
         ctx.fillStyle = theme.text3;
         ctx.font = `9.5px ${MONO}`;
-        ctx.fillText(fmt(t - tOrigin), x + 4, RULER_H - 11);
+        ctx.fillText(fmt(t - tOrigin), x + 4, RULER_H - 8);
         lastLabelX = x;
       }
     }
   }
 
+  // Diamonds always; labels only when they fit. Ruler ticks already cull —
+  // markers used to paint every string on one baseline and piled up on clicks.
+  // Long-task labels claim space first so dense "Click Button" spam yields to them.
+  const MARKER_LABEL_GAP = 10;
+  const markerLabelYs = [14, 26] as const;
+  const markerLabelSpans: Array<Array<{ left: number; right: number }>> = [[], []];
+  const visibleMarkers: Array<{ x: number; label: string; warn: boolean }> = [];
   for (const m of markers) {
     const x = wToX(m.t);
     if (x < NW || x > W) continue;
     ctx.fillStyle = m.warn ? theme.warn : theme.text2;
     ctx.beginPath();
-    ctx.moveTo(x, 5);
-    ctx.lineTo(x + 4, 9);
-    ctx.lineTo(x, 13);
-    ctx.lineTo(x - 4, 9);
+    ctx.moveTo(x, 6);
+    ctx.lineTo(x + 4.5, 11);
+    ctx.lineTo(x, 16);
+    ctx.lineTo(x - 4.5, 11);
     ctx.closePath();
     ctx.fill();
-    if (pxPerMs > 0.3) {
-      ctx.fillStyle = m.warn ? theme.warn : theme.text3;
-      ctx.font = `9px ${MONO}`;
-      ctx.fillText(m.label, x + 8, 12);
-    }
+    if (pxPerMs > 0.3) visibleMarkers.push({ x, label: m.label, warn: m.warn });
   }
+  const labelFits = (row: number, left: number, right: number) =>
+    markerLabelSpans[row]!.every(
+      (s) => right + MARKER_LABEL_GAP <= s.left || left >= s.right + MARKER_LABEL_GAP,
+    );
+  const placeMarkerLabels = (items: typeof visibleMarkers) => {
+    for (const m of items) {
+      ctx.font = `9px ${MONO}`;
+      const left = m.x + 8;
+      const right = left + ctx.measureText(m.label).width;
+      let row = -1;
+      for (let r = 0; r < markerLabelYs.length; r++) {
+        if (labelFits(r, left, right)) {
+          row = r;
+          break;
+        }
+      }
+      if (row < 0) continue;
+      ctx.fillStyle = m.warn ? theme.warn : theme.text3;
+      ctx.fillText(m.label, left, markerLabelYs[row]!);
+      markerLabelSpans[row]!.push({ left, right });
+    }
+  };
+  placeMarkerLabels(visibleMarkers.filter((m) => m.warn).sort((a, b) => a.x - b.x));
+  placeMarkerLabels(visibleMarkers.filter((m) => !m.warn).sort((a, b) => a.x - b.x));
 
   const clipRects = new Map<string, ClipRect>();
   const snapEdges: number[] = [];

@@ -12,7 +12,7 @@ import { EmptyTab } from "./shared.js";
  */
 export function RelationsTab({ ctx }: { ctx: InspectorContext }) {
   const { store, componentId, onSelectComponent } = ctx;
-  const graph = useMemo(() => buildGraphFromStore(store), [store, componentId]);
+  const graph = useMemo(() => buildGraphFromStore(store), [store]);
   const self = componentKey(componentId);
   const { incoming, outgoing } = neighbors(graph, self);
 

@@ -88,14 +88,17 @@ export function createHighlighter(
 
   function box(r: DOMRect): HTMLDivElement {
     const b = document.createElement("div");
-    Object.assign(b.style, {
-      position: "absolute",
-      left: `${r.left}px`,
-      top: `${r.top}px`,
-      width: `${r.width}px`,
-      height: `${r.height}px`,
-      ...boxStyle,
-    } satisfies Partial<CSSStyleDeclaration>);
+    Object.assign(
+      b.style,
+      {
+        position: "absolute",
+        left: `${r.left}px`,
+        top: `${r.top}px`,
+        width: `${r.width}px`,
+        height: `${r.height}px`,
+      } satisfies Partial<CSSStyleDeclaration>,
+      boxStyle,
+    );
     return b;
   }
 

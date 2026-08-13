@@ -4,6 +4,7 @@ import fs from "node:fs";
 import {
   boot,
   bumpCounter,
+  clickInPage,
   counterLine,
   ensureTravelOn,
   FIXTURES_DIR,
@@ -29,7 +30,7 @@ test("export → import round-trip disables travel until a live click", async ({
     await expect(travel).toBeDisabled();
     await expect(travel).toHaveAttribute("title", /Imported session/i);
 
-    await page.getByRole("button", { name: "count +1" }).click();
+    await clickInPage(page, "count +1");
     await page.waitForTimeout(350);
 
     await expect(travel).toBeEnabled();

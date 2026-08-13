@@ -87,12 +87,14 @@ export function Inspector({
   const version = useTraceVersion(store, { kind: "component", id: componentId });
   const inst = readFresh(version, () => store.instance(componentId));
   const renders = readFresh(version, () => store.rendersOf(componentId));
-  const [selectedRender, setSelectedRender] = useState<RenderId | null>(null);
-
   const latest = renders.at(-1);
-  useEffect(() => {
-    if (latest) setSelectedRender(latest.renderId);
-  }, [latest?.renderId]);
+  const latestId = latest?.renderId ?? null;
+  const [selectedRender, setSelectedRender] = useState<RenderId | null>(null);
+  const [syncedLatestId, setSyncedLatestId] = useState(latestId);
+  if (syncedLatestId !== latestId) {
+    setSyncedLatestId(latestId);
+    if (latestId != null) setSelectedRender(latestId);
+  }
 
   const historical = cursor?.mode === "historical";
   const historicalRenderId = readFresh(version, () =>

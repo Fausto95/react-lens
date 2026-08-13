@@ -1,3 +1,4 @@
+/* oxlint-disable react/react-compiler -- WAL client closes over session/port refs; factory is intentionally render-stable */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import type {

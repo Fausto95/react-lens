@@ -37,7 +37,7 @@
       try {
         queue.push(root);
         if (queue.length > MAX) queue.shift();
-      } catch (_err) {
+      } catch {
         // Never throw into React's commit path — a stub failure must not
         // take down the host app. Overflow beyond MAX is already silent.
       }

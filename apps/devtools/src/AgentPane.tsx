@@ -91,7 +91,9 @@ export function AgentPane({
   }, []);
 
   // New settings or a new store = a new conversation (the transcript embeds both).
-  useEffect(() => resetConversation(), [resetConversation, settingsVersion, store]);
+  useEffect(() => {
+    queueMicrotask(() => resetConversation());
+  }, [resetConversation, settingsVersion, store]);
   useEffect(() => {
     if (!open) abortRef.current?.abort();
   }, [open]);
@@ -170,8 +172,12 @@ export function AgentPane({
   useEffect(() => {
     if (!open || !askRequest || askRequest.token === consumedAsk.current) return;
     consumedAsk.current = askRequest.token;
-    if (running) setInput(askRequest.question);
-    else void ask(askRequest.question);
+    const question = askRequest.question;
+    if (running) {
+      queueMicrotask(() => setInput(question));
+    } else {
+      queueMicrotask(() => void ask(question));
+    }
   }, [open, askRequest, running, ask]);
 
   // Navigate to the cited evidence, then close the drawer: it overlays the

@@ -76,6 +76,22 @@ type SerovalNode = {
   f?: unknown;
 };
 
+/** Stringify seroval leaf fields without tripping no-base-to-string on `unknown`. */
+function leafString(value: unknown, fallback: string): string {
+  if (value == null) return fallback;
+  switch (typeof value) {
+    case "string":
+      return value;
+    case "number":
+    case "boolean":
+    case "bigint":
+    case "symbol":
+      return String(value);
+    default:
+      return fallback;
+  }
+}
+
 /**
  * Safe serialization for arbitrary application values, backed by seroval.
  *
@@ -94,28 +110,29 @@ export function createSerializer(): Serializer {
   const symbolIdentities = new Map<symbol, string>();
 
   const plugins = [
-    createPlugin<Unserializable, { reason: string }>({
+    // seroval's PluginInfo constrains values to SerovalNode; our plugins store plain JSON.
+    createPlugin<Unserializable, any>({
       tag: TAG_BAD,
       test: (v): v is Unserializable => v instanceof Unserializable,
       parse: { sync: (v) => ({ reason: v.reason }) },
       serialize: () => "null",
       deserialize: (n) => new Unserializable(n.reason),
     }),
-    createPlugin<Function, { name: string }>({
+    createPlugin<Function, any>({
       tag: TAG_FUNCTION,
       test: (v): v is Function => typeof v === "function",
       parse: { sync: (v) => ({ name: v.name || "" }) },
       serialize: () => "null",
       deserialize: () => function () {},
     }),
-    createPlugin<object, { nodeName: string }>({
+    createPlugin<object, any>({
       tag: TAG_DOM,
       test: (v): v is object => typeof Node !== "undefined" && v instanceof Node,
       parse: { sync: (v) => ({ nodeName: (v as Node).nodeName }) },
       serialize: () => "null",
       deserialize: () => null as never,
     }),
-    createPlugin<object, { typeName?: string }>({
+    createPlugin<object, any>({
       tag: TAG_REACT,
       test: (v): v is object =>
         typeof v === "object" &&
@@ -137,7 +154,7 @@ export function createSerializer(): Serializer {
       serialize: () => "null",
       deserialize: () => null as never,
     }),
-    createPlugin<symbol, { description?: string }>({
+    createPlugin<symbol, any>({
       tag: TAG_SYMBOL,
       test: (v): v is symbol => typeof v === "symbol",
       parse: {
@@ -216,14 +233,14 @@ export function createSerializer(): Serializer {
       case T.Number:
         return { k: "primitive", type: "number", value: node.s as number };
       case T.String: {
-        let v = String(node.s ?? "");
+        let v = leafString(node.s, "");
         if (v.length > opts.maxStringLength) v = v.slice(0, opts.maxStringLength) + "…";
         return { k: "primitive", type: "string", value: v };
       }
       case T.Constant:
         return projectConstant(node.s as number);
       case T.BigInt:
-        return { k: "bigint", value: String(node.s ?? "0") };
+        return { k: "bigint", value: leafString(node.s, "0") };
       case T.IndexedValue: {
         const i = node.i;
         if (i !== undefined && seen.has(i)) {
@@ -233,9 +250,9 @@ export function createSerializer(): Serializer {
         return { k: "ref", identity: identityForIndex(i, byIndex, "obj") };
       }
       case T.Date:
-        return { k: "date", iso: String(node.s ?? "Invalid Date") };
+        return { k: "date", iso: leafString(node.s, "Invalid Date") };
       case T.RegExp:
-        return { k: "regexp", source: String(node.c ?? ""), flags: String(node.m ?? "") };
+        return { k: "regexp", source: leafString(node.c, ""), flags: leafString(node.m, "") };
       case T.Array: {
         const i = node.i;
         if (i !== undefined) {
@@ -320,7 +337,7 @@ export function createSerializer(): Serializer {
       case T.Error: {
         const i = node.i;
         const identity = identityForIndex(i, byIndex, "obj");
-        const message = String(node.m ?? "");
+        const message = leafString(node.m, "");
         return {
           k: "object",
           identity,
@@ -334,7 +351,7 @@ export function createSerializer(): Serializer {
         return {
           k: "symbol",
           description: undefined,
-          identity: `sym_wk_${String(node.s ?? 0)}`,
+          identity: `sym_wk_${leafString(node.s, "0")}`,
         };
       default:
         return { k: "unserializable", reason: `unsupported seroval node ${node.t}` };
@@ -342,7 +359,7 @@ export function createSerializer(): Serializer {
   }
 
   function projectPlugin(node: SerovalNode, byIndex: Map<number, object>): SerializedValue {
-    const tag = String(node.c ?? "");
+    const tag = leafString(node.c, "");
     const data = (node.s ?? {}) as Record<string, unknown>;
     const i = node.i;
     switch (tag) {
@@ -353,7 +370,7 @@ export function createSerializer(): Serializer {
       }
       case TAG_DOM: {
         const identity = identityForIndex(i, byIndex, "obj");
-        return { k: "dom", identity, nodeName: String(data.nodeName ?? "Unknown") };
+        return { k: "dom", identity, nodeName: leafString(data.nodeName, "Unknown") };
       }
       case TAG_REACT: {
         const identity = identityForIndex(i, byIndex, "obj");
@@ -372,7 +389,7 @@ export function createSerializer(): Serializer {
           : { k: "symbol", identity };
       }
       case TAG_BAD:
-        return { k: "unserializable", reason: String(data.reason ?? "unserializable") };
+        return { k: "unserializable", reason: leafString(data.reason, "unserializable") };
       default:
         return { k: "unserializable", reason: `unknown plugin ${tag}` };
     }

@@ -21,9 +21,8 @@ export async function boot(page: Page): Promise<void> {
  * lands as its own commit + interaction.
  */
 export async function bumpCounter(page: Page, n: number): Promise<void> {
-  const btn = page.getByRole("button", { name: "count +1" });
   for (let i = 0; i < n; i++) {
-    await btn.click();
+    await clickInPage(page, "count +1");
     await page.waitForTimeout(350);
   }
   await expect(page.locator("text=/count \\d+ · doubled/")).toContainText(`count ${n}`);

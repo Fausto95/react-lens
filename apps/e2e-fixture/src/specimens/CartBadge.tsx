@@ -1,5 +1,5 @@
 import { useSyncExternalStore } from "react";
-import { Section, btn } from "./ui.js";
+import { Button, Card, Section, Stack } from "@reactlens/demo-ui";
 import { runtime } from "../boot.js";
 
 interface CartState {
@@ -32,21 +32,27 @@ runtime.timeTravel.registerStore({
   applySnapshot: (s) => cartStore.setState(s as CartState),
 });
 
-/** External-store cart badge — name matters for tree/timeline selection. */
+/** External-store cart — name matters for tree/timeline selection. */
 export function CartBadge() {
   const cart = useSyncExternalStore(cartStore.subscribe, cartStore.getState);
   return (
-    <Section title="External store" hint="useSyncExternalStore cart registered for time travel.">
-      <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-        <button
-          type="button"
-          style={btn}
-          onClick={() => cartStore.setState({ count: cart.count + 1 })}
-        >
-          Add
-        </button>
-        <output>cart: {cart.count}</output>
-      </div>
+    <Section
+      kicker="Bag"
+      title="Quick add"
+      hint="useSyncExternalStore cart registered for time travel."
+    >
+      <Card>
+        <Stack row>
+          <Button
+            variant="primary"
+            size="sm"
+            onClick={() => cartStore.setState({ count: cart.count + 1 })}
+          >
+            Add
+          </Button>
+          <output>cart: {cart.count}</output>
+        </Stack>
+      </Card>
     </Section>
   );
 }

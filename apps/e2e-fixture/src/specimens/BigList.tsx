@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Section, btn } from "./ui.js";
+import { Input, Section } from "@reactlens/demo-ui";
 
 const BIG = 400;
 
@@ -14,14 +14,18 @@ export function BigList() {
     [q],
   );
   return (
-    <Section title={`Big List (${BIG})`} hint="Many Row components for virtualization / filter.">
-      <input
-        style={{ ...btn, cursor: "text", width: 200 }}
+    <Section
+      kicker="Catalog"
+      title={`Full listing (${BIG})`}
+      hint="Many Row components for virtualization / filter."
+    >
+      <Input
+        style={{ width: 220 }}
         placeholder="filter rows…"
         value={q}
         onChange={(e) => setQ(e.target.value)}
       />
-      <div style={{ maxHeight: 160, overflow: "auto", marginTop: 12, display: "grid", gap: 2 }}>
+      <div className="demo-list">
         {rows.map((r) => (
           <Row key={r.id} label={r.label} />
         ))}
@@ -32,10 +36,6 @@ export function BigList() {
 BigList.displayName = "BigList";
 
 function Row({ label }: { label: string }) {
-  return (
-    <div style={{ padding: "3px 8px", fontSize: 12, borderBottom: "1px solid #f2f3f5" }}>
-      {label}
-    </div>
-  );
+  return <div className="demo-list-row">{label}</div>;
 }
 Row.displayName = "Row";

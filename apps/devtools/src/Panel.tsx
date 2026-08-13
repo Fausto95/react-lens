@@ -277,8 +277,10 @@ export function Panel({
 
   useEffect(() => {
     if (selectComponent == null) return;
-    select(selectComponent);
-    onSelectConsumed?.();
+    queueMicrotask(() => {
+      select(selectComponent);
+      onSelectConsumed?.();
+    });
   }, [selectComponent, onSelectConsumed, select]);
 
   // Real time travel: while the cursor is historical (and the toggle is on),
@@ -417,10 +419,11 @@ export function Panel({
   // the offline flag in that gap re-enables travel on imported sessions.
   const empty = stats.events === 0;
   useEffect(() => {
-    if (empty) {
+    if (!empty) return;
+    queueMicrotask(() => {
       setCursor({ t: 0, mode: "live" });
       setSelected(null);
-    }
+    });
   }, [empty]);
 
   // The synchronous pass only runs where the worker could not be spawned, and

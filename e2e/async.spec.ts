@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { boot, jumpTo } from "./helpers.js";
+import { boot, clickInPage, jumpTo } from "./helpers.js";
 
 async function selectAsyncContent(page: import("@playwright/test").Page): Promise<void> {
   await page.locator(".rl-tree-search").fill("AsyncContent");
@@ -20,7 +20,7 @@ test("SuspenseDemo suspends then resolves, with Suspense chip in the inspector",
   await selectAsyncContent(page);
   await expect(page.locator(".rl-chip", { hasText: /Suspense|suspended/ })).toBeVisible();
 
-  await page.getByRole("button", { name: "Reload (suspend)" }).click();
+  await clickInPage(page, "Reload (suspend)");
   await expect(page.getByText("Loading…")).toBeVisible();
 
   await expect

@@ -1,4 +1,5 @@
 import { createContext, useContext, useState } from "react";
+import { Badge, Button, Card, Meta, Stack } from "@reactlens/demo-ui";
 
 /**
  * The panel's demo: one small storefront, deep enough to paint a waterfall.
@@ -16,18 +17,7 @@ import { createContext, useContext, useState } from "react";
  *     SortControl  state     state     its own lane; no props, so the cascade
  *                                      genuinely cannot reach it
  *
- * That gives `CartProvider → Catalog → ProductRow → PriceTag`: select the
- * middle of it and the arrows point both ways.
- *
- * "Refresh prices" is the wasted-render case, and it is the real one: a refetch
- * that returns equal values in new objects. Identity changed, so no compiler and
- * no `memo` can bail out; the screen is identical, so every one of those renders
- * was for nothing. The old scenario faked this with an object literal rebuilt
- * per render, which the Compiler correctly optimises away.
- *
- * Every render does real work. React's own renders are sub-millisecond, so
- * without it every clip collapses to the timeline's 4px legibility floor and
- * the waterfall has nothing to show.
+ * "Refresh prices" is the wasted-render case: equal values in new objects.
  */
 
 /** Real CPU work for `ms`, so a clip has an honest width. */
@@ -41,31 +31,28 @@ function spinFor(ms: number): number {
 interface Product {
   id: number;
   name: string;
+  origin: string;
   price: number;
 }
 
 const CATALOG: Product[] = [
-  { id: 1, name: "Kettle", price: 89 },
-  { id: 2, name: "Grinder", price: 145 },
-  { id: 3, name: "Cafetière", price: 34 },
-  { id: 4, name: "Scale", price: 62 },
-  { id: 5, name: "Dripper", price: 28 },
-  { id: 6, name: "Carafe", price: 41 },
-  { id: 7, name: "Tamper", price: 23 },
-  { id: 8, name: "Milk pitcher", price: 19 },
-  { id: 9, name: "Thermometer", price: 31 },
-  { id: 10, name: "Knock box", price: 47 },
-  { id: 11, name: "Filter papers", price: 9 },
-  { id: 12, name: "Shot glass", price: 14 },
+  { id: 1, name: "Kettle", origin: "Osaka", price: 89 },
+  { id: 2, name: "Grinder", origin: "Solingen", price: 145 },
+  { id: 3, name: "Cafetière", origin: "Lyon", price: 34 },
+  { id: 4, name: "Scale", origin: "Seoul", price: 62 },
+  { id: 5, name: "Dripper", origin: "Tokyo", price: 28 },
+  { id: 6, name: "Carafe", origin: "Prague", price: 41 },
+  { id: 7, name: "Tamper", origin: "Milan", price: 23 },
+  { id: 8, name: "Milk pitcher", origin: "Sheffield", price: 19 },
+  { id: 9, name: "Thermometer", origin: "Basel", price: 31 },
+  { id: 10, name: "Knock box", origin: "Melbourne", price: 47 },
+  { id: 11, name: "Filter papers", origin: "Hamamatsu", price: 9 },
+  { id: 12, name: "Shot glass", origin: "Murano", price: 14 },
 ];
 
 interface Cart {
   items: number[];
   totals: { count: number };
-  /**
-   * Re-fetched on "Refresh": new objects, identical values. Nothing on screen
-   * changes, and nothing can bail out either.
-   */
   products: Product[];
 }
 
@@ -75,31 +62,11 @@ const CartContext = createContext<{
 } | null>(null);
 CartContext.displayName = "CartContext";
 
-const card: React.CSSProperties = {
-  border: "1px solid #e6e8ec",
-  borderRadius: 14,
-  background: "#fff",
-  padding: 20,
-  maxWidth: 560,
-  boxShadow: "0 1px 2px rgba(16,18,22,.04)",
-};
-
-const ghostBtn: React.CSSProperties = {
-  padding: "5px 11px",
-  borderRadius: 8,
-  border: "1px solid #e2e5ea",
-  background: "#fff",
-  color: "#16181d",
-  cursor: "pointer",
-  font: "inherit",
-  fontSize: 12,
-};
-
 export function Storefront() {
   return (
-    <section style={card}>
+    <Card>
       <CartProvider />
-    </section>
+    </Card>
   );
 }
 
@@ -107,15 +74,12 @@ function CartProvider() {
   const [items, setItems] = useState<number[]>([]);
   const [products, setProducts] = useState<Product[]>(CATALOG);
 
-  /** Named so the origin clip reads `setCart`. */
   const setCart = (next: number[]) => setItems(next);
   const addToCart = (id: number) => {
     if (!items.includes(id)) setCart([...items, id]);
   };
-  /** The refetch: same prices, fresh objects — nothing can bail out. */
   const refreshPrices = () => setProducts((prev) => prev.map((p) => ({ ...p })));
 
-  // Recomputing cart totals from scratch on every render.
   spinFor(16);
 
   const value = {
@@ -133,70 +97,45 @@ function CartProvider() {
 }
 CartProvider.displayName = "CartProvider";
 
-/** Takes the count, so adding to the cart really does re-render it. */
 function Header({ count, onRefresh }: { count: number; onRefresh: () => void }) {
   spinFor(10);
   return (
-    <header
-      style={{
-        display: "flex",
-        alignItems: "center",
-        gap: 12,
-        paddingBottom: 14,
-        borderBottom: "1px solid #f0f2f5",
-      }}
+    <div
+      className="demo-toolbar"
+      style={{ borderBottom: "1px solid var(--demo-line)", paddingBottom: 14 }}
     >
-      <strong style={{ fontSize: 15, letterSpacing: "-0.01em" }}>
-        Roastery{count > 0 ? ` · ${count}` : ""}
-      </strong>
-      <CartBadge />
-      <span style={{ flex: 1 }} />
-      <button type="button" style={ghostBtn} onClick={onRefresh}>
+      <Stack row style={{ gap: 12 }}>
+        <strong style={{ fontFamily: "var(--demo-display)", fontSize: 18 }}>
+          Shop{count > 0 ? ` · ${count}` : ""}
+        </strong>
+        <CartBadge />
+      </Stack>
+      <Button size="sm" onClick={onRefresh}>
         Refresh prices
-      </button>
-    </header>
+      </Button>
+    </div>
   );
 }
 Header.displayName = "Header";
 
-/**
- * Subscribes to the whole context, renders only the count — so "Refresh
- * prices" re-renders it for nothing. Those are the hatched clips.
- */
 function CartBadge() {
   const { cart } = useContext(CartContext)!;
   spinFor(18);
   return (
-    <span
-      style={{
-        fontSize: 12,
-        padding: "3px 10px",
-        borderRadius: 99,
-        background: cart.totals.count > 0 ? "#eef4ff" : "#f2f4f7",
-        color: cart.totals.count > 0 ? "#2563eb" : "#5f6878",
-        fontVariantNumeric: "tabular-nums",
-      }}
-    >
-      {cart.totals.count} in cart
-    </span>
+    <Badge tone={cart.totals.count > 0 ? "accent" : "neutral"}>{cart.totals.count} in cart</Badge>
   );
 }
 CartBadge.displayName = "CartBadge";
 
-/** Its own state — a green lane the cascade never touches. */
 function SortControl() {
   const [dir, setDir] = useState<"name" | "price">("name");
   spinFor(6);
   return (
-    <div style={{ display: "flex", gap: 8, alignItems: "center", padding: "12px 0" }}>
-      <span style={{ fontSize: 11, color: "#8b93a1" }}>Sort</span>
-      <button
-        type="button"
-        style={ghostBtn}
-        onClick={() => setDir(dir === "name" ? "price" : "name")}
-      >
+    <div className="demo-toolbar" style={{ padding: "12px 0" }}>
+      <Meta>Sort by</Meta>
+      <Button size="sm" variant="ghost" onClick={() => setDir(dir === "name" ? "price" : "name")}>
         {dir}
-      </button>
+      </Button>
     </div>
   );
 }
@@ -207,12 +146,10 @@ function Catalog() {
   spinFor(12);
   const inCart = new Set(cart.items);
   return (
-    <div style={{ display: "grid", gap: 2 }}>
+    <div className="demo-grid-products">
       {cart.products.map((product) => (
         <ProductRow
           key={product.id}
-          // The whole object: a refetch hands over a new one per row, so every
-          // row re-renders for values that did not change.
           product={product}
           inCart={inCart.has(product.id)}
           onAdd={() => addToCart(product.id)}
@@ -232,44 +169,32 @@ function ProductRow({
   inCart: boolean;
   onAdd: () => void;
 }) {
-  const { name, price } = product;
+  const { name, origin, price } = product;
   spinFor(1.5);
   return (
-    <div
-      style={{
-        display: "flex",
-        alignItems: "center",
-        gap: 10,
-        padding: "7px 8px",
-        borderRadius: 8,
-        background: inCart ? "#f7faff" : "transparent",
-      }}
+    <article
+      className="demo-product"
+      style={
+        inCart
+          ? { borderColor: "var(--demo-accent)", background: "var(--demo-accent-soft)" }
+          : undefined
+      }
     >
-      <span style={{ fontSize: 13, flex: 1 }}>{name}</span>
-      <PriceTag amount={price} />
-      <button type="button" style={ghostBtn} onClick={onAdd} disabled={inCart}>
-        {inCart ? "Added" : "Add"}
-      </button>
-    </div>
+      <span className="demo-product-origin">{origin}</span>
+      <span className="demo-product-name">{name}</span>
+      <Stack row style={{ justifyContent: "space-between", marginTop: 4 }}>
+        <PriceTag amount={price} />
+        <Button size="sm" variant={inCart ? "ghost" : "primary"} onClick={onAdd} disabled={inCart}>
+          {inCart ? "Added" : "Add"}
+        </Button>
+      </Stack>
+    </article>
   );
 }
 ProductRow.displayName = "ProductRow";
 
-/** The tail of the chain — re-renders purely because its parent's props did. */
 function PriceTag({ amount }: { amount: number }) {
   spinFor(1.2);
-  return (
-    <span
-      style={{
-        fontSize: 12,
-        color: "#5f6878",
-        fontVariantNumeric: "tabular-nums",
-        minWidth: 44,
-        textAlign: "right",
-      }}
-    >
-      ${amount}
-    </span>
-  );
+  return <span className="demo-product-price">${amount}</span>;
 }
 PriceTag.displayName = "PriceTag";

@@ -490,8 +490,23 @@ function diffContexts(
     return diffSection("context", before?.context, after?.context);
   }
 
-  const keyOf = (c: { displayName?: string; contextType?: unknown }, i: number) =>
-    c.displayName ?? (c.contextType !== undefined ? String(c.contextType) : `context[${i}]`);
+  const keyOf = (c: { displayName?: string; contextType?: unknown }, i: number) => {
+    if (c.displayName) return c.displayName;
+    if (c.contextType === undefined) return `context[${i}]`;
+    if (typeof c.contextType === "string") return c.contextType;
+    if (typeof c.contextType === "function") {
+      return (c.contextType as { name?: string }).name || `context[${i}]`;
+    }
+    if (
+      typeof c.contextType === "object" &&
+      c.contextType !== null &&
+      "displayName" in c.contextType &&
+      typeof (c.contextType as { displayName?: unknown }).displayName === "string"
+    ) {
+      return (c.contextType as { displayName: string }).displayName;
+    }
+    return `context[${i}]`;
+  };
 
   const beforeMap = new Map(beforeList.map((c, i) => [keyOf(c, i), c.value]));
   const afterMap = new Map(afterList.map((c, i) => [keyOf(c, i), c.value]));

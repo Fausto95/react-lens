@@ -24,11 +24,15 @@ export function SettingsPopover({
   const [settings, setSettings] = useState<AgentSettings>(defaultAgentSettings);
   const [status, setStatus] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [wasOpen, setWasOpen] = useState(open);
+  if (wasOpen !== open) {
+    setWasOpen(open);
+    if (open) setStatus(null);
+  }
 
   useEffect(() => {
     if (!open) return;
     void loadAgentSettings().then(setSettings);
-    setStatus(null);
   }, [open]);
 
   if (!open) return null;

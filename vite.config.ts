@@ -2,7 +2,7 @@ import { defineConfig } from "vite-plus";
 
 export default defineConfig({
   lint: {
-    ignorePatterns: ["**/dist/**", "**/*.zip", "pnpm-lock.yaml"],
+    ignorePatterns: ["**/dist/**", "**/*.zip", "pnpm-lock.yaml", "packages/demo-ui/**"],
     plugins: ["typescript", "react"],
     jsPlugins: [{ name: "vite-plus", specifier: "vite-plus/oxlint-plugin" }],
     rules: {
@@ -12,10 +12,19 @@ export default defineConfig({
       "react/exhaustive-deps": "error",
       "react/react-compiler": "error",
     },
+    overrides: [
+      {
+        files: ["**/*.test.ts", "**/*.test.tsx"],
+        rules: {
+          // Test fixtures reassign outer setters / touch refs during render on purpose.
+          "react/react-compiler": "off",
+        },
+      },
+    ],
     options: { typeAware: true, typeCheck: true },
   },
   fmt: {
-    ignorePatterns: ["**/dist/**", "**/*.zip", "pnpm-lock.yaml"],
+    ignorePatterns: ["**/dist/**", "**/*.zip", "pnpm-lock.yaml", "packages/demo-ui/**"],
     singleQuote: false,
     semi: true,
   },

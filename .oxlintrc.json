@@ -7,7 +7,21 @@
   "rules": {
     "react/react-compiler": "error",
     "react/rules-of-hooks": "error",
-    "react/exhaustive-deps": "warn"
+    "react/exhaustive-deps": "error"
   },
-  "ignorePatterns": ["**/dist/**", "**/*.zip", "pnpm-lock.yaml", "test-results/**"]
+  "overrides": [
+    {
+      "files": ["**/*.test.ts", "**/*.test.tsx"],
+      "rules": {
+        "react/react-compiler": "off"
+      }
+    }
+  ],
+  "ignorePatterns": [
+    "**/dist/**",
+    "**/*.zip",
+    "pnpm-lock.yaml",
+    "test-results/**",
+    "packages/demo-ui/**"
+  ]
 }

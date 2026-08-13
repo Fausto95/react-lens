@@ -46,12 +46,14 @@ export function useDoctor(
   }, [store, causality, componentId]);
 
   const [staticFindings, setStaticFindings] = useState<StaticFinding[]>([]);
+  const [seenId, setSeenId] = useState(componentId);
+  if (seenId !== componentId) {
+    setSeenId(componentId);
+    setStaticFindings([]);
+  }
   useEffect(() => {
     const inst = store.instance(componentId);
-    if (!inst?.source) {
-      setStaticFindings([]);
-      return;
-    }
+    if (!inst?.source) return;
     let alive = true;
     const compiled = inst.source;
     Promise.all([sourceResolver.resolve(compiled), sourceResolver.sourceContent(compiled.file)])

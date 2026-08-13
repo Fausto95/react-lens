@@ -1,15 +1,15 @@
 import { Suspense, useState } from "react";
-import { Section, btn } from "./ui.js";
+import { Button, Card, Section } from "@reactlens/demo-ui";
 
 export function SuspenseDemo() {
   const [key, setKey] = useState(0);
   return (
-    <Section title="Suspense" hint="Reload to suspend the child, then resolve.">
-      <button type="button" style={btn} onClick={() => setKey((k) => k + 1)}>
+    <Section kicker="Deals" title="Limited offer" hint="Reload to suspend the child, then resolve.">
+      <Button size="sm" onClick={() => setKey((k) => k + 1)}>
         Reload (suspend)
-      </button>
+      </Button>
       <div style={{ marginTop: 12 }}>
-        <Suspense fallback={<div style={{ color: "#a0a6b2" }}>Loading…</div>}>
+        <Suspense fallback={<div className="demo-meta">Loading…</div>}>
           <AsyncContent key={key} nonce={key} />
         </Suspense>
       </div>
@@ -45,11 +45,9 @@ function AsyncContent({ nonce }: { nonce: number }) {
   const resource = getResource(nonce);
   if (resource.status === "pending") throw resource.promise;
   return (
-    <div
-      style={{ padding: 12, borderRadius: 8, background: "#eefaf0", border: "1px solid #cdeccf" }}
-    >
+    <Card style={{ background: "var(--demo-accent-soft)", borderColor: "#b7dccf" }}>
       Resolved content (load #{nonce})
-    </div>
+    </Card>
   );
 }
 AsyncContent.displayName = "AsyncContent";

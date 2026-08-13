@@ -182,21 +182,19 @@ function captureStacks(fn: ComponentLike, construct: boolean): [string | null, s
   };
 
   // V8 reads `name` when formatting frames; both stacks must show the same one.
-  const root = RunInRootFrame.DetermineComponentFrameRoot as unknown as {
+  const determineRoot = RunInRootFrame.DetermineComponentFrameRoot.bind(RunInRootFrame);
+  const root = determineRoot as unknown as {
     displayName?: string;
   };
   root.displayName = "DetermineComponentFrameRoot";
-  const nameDescriptor = Object.getOwnPropertyDescriptor(
-    RunInRootFrame.DetermineComponentFrameRoot,
-    "name",
-  );
+  const nameDescriptor = Object.getOwnPropertyDescriptor(determineRoot, "name");
   if (nameDescriptor?.configurable) {
-    Object.defineProperty(RunInRootFrame.DetermineComponentFrameRoot, "name", {
+    Object.defineProperty(determineRoot, "name", {
       value: "DetermineComponentFrameRoot",
     });
   }
 
-  return RunInRootFrame.DetermineComponentFrameRoot();
+  return determineRoot();
 }
 
 /** First frame present in `sample` but not in `control` — the component's own. */

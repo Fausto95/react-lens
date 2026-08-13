@@ -1,18 +1,18 @@
 import { useState } from "react";
-import { Section, btn } from "./ui.js";
+import { Button, Card, Section, Stack } from "@reactlens/demo-ui";
 
 /** Heavy synchronous render work — drives overlay flashes and Doctor self-time. */
 export function Expensive() {
   const [tick, setTick] = useState(0);
   return (
-    <Section title="Expensive" hint="Heavy render work for overlay + Doctor.">
-      <button type="button" style={btn} onClick={() => setTick((t) => t + 1)}>
+    <Section kicker="Perf" title="Heavy compute" hint="Self-time for overlay + Doctor.">
+      <Button size="sm" onClick={() => setTick((t) => t + 1)}>
         Re-render (×{tick})
-      </button>
-      <div style={{ display: "flex", gap: 10, marginTop: 12, flexWrap: "wrap" }}>
+      </Button>
+      <Stack row style={{ marginTop: 12 }}>
         <Heavy iterations={2_000_000} label="Heavy A" />
         <Heavy iterations={3_000_000} label="Heavy B" />
-      </div>
+      </Stack>
     </Section>
   );
 }
@@ -22,14 +22,12 @@ function Heavy({ iterations, label }: { iterations: number; label: string }) {
   let acc = 0;
   for (let i = 0; i < iterations; i++) acc += Math.sqrt(i) % 7;
   return (
-    <div
-      style={{ padding: 12, borderRadius: 8, background: "#fff3f0", border: "1px solid #f6d0c6" }}
-    >
+    <Card style={{ flex: 1, minWidth: 140 }}>
       <strong>{label}</strong>
-      <div style={{ color: "#5f6878", fontSize: 12 }}>
+      <div className="demo-meta">
         {iterations.toLocaleString()} ops → {acc.toFixed(1)}
       </div>
-    </div>
+    </Card>
   );
 }
 Heavy.displayName = "Heavy";

@@ -3,6 +3,7 @@ import { runtime } from "./boot.js";
 
 import { createRoot } from "react-dom/client";
 import { mountEmbedded } from "@reactlens/devtools/embed";
+import "@reactlens/demo-ui/styles.css";
 import { App } from "./App.js";
 
 // No StrictMode so render counts in the panel reflect real commits only.

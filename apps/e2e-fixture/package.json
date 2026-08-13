@@ -10,6 +10,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@reactlens/demo-ui": "workspace:*",
     "@reactlens/devtools": "workspace:*",
     "react": "^19",
     "react-dom": "^19"

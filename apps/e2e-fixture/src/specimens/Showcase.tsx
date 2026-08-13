@@ -1,3 +1,4 @@
+/* oxlint-disable react/react-compiler -- specimen counts renders via ref mutation during render */
 import {
   createContext,
   useCallback,
@@ -9,27 +10,28 @@ import {
   useRef,
   useState,
 } from "react";
-import { Section, btn, card } from "./ui.js";
+import { Button, Card, Meta, Section, Stack } from "@reactlens/demo-ui";
 
 const ThemeContext = createContext<"light" | "dark">("light");
 ThemeContext.displayName = "ThemeContext";
 
 const FIXED_DATE = new Date("2026-01-01T00:00:00.000Z");
 
+/** Account + product detail — HooksShowcase / PropsShowcase for the inspector. */
 export function Showcase() {
   const [theme, setTheme] = useState<"light" | "dark">("light");
   const stableFn = useCallback(() => {}, []);
   return (
     <ThemeContext.Provider value={theme}>
-      <Section title="Hooks & Props" hint="HooksShowcase + PropsShowcase for inspector sections.">
-        <button
-          type="button"
-          style={btn}
-          onClick={() => setTheme((t) => (t === "light" ? "dark" : "light"))}
-        >
-          Theme: {theme}
-        </button>
-        <div style={{ marginTop: 12 }}>
+      <Section
+        kicker="Account"
+        title="Member preferences"
+        hint="State, reducer, context, and editable props for the inspector."
+      >
+        <Stack>
+          <Button size="sm" onClick={() => setTheme((t) => (t === "light" ? "dark" : "light"))}>
+            Theme: {theme}
+          </Button>
           <HooksShowcase />
           <PropsShowcase
             text="hello world"
@@ -43,13 +45,14 @@ export function Showcase() {
             stableOnClick={stableFn}
             unstableOnClick={() => {}}
           />
-        </div>
+        </Stack>
       </Section>
     </ThemeContext.Provider>
   );
 }
 Showcase.displayName = "Showcase";
 
+/* oxlint-disable react/react-compiler -- intentional render counter for e2e specimen */
 function HooksShowcase() {
   const [count, setCount] = useState(0);
   const [items, dispatch] = useReducer(
@@ -65,17 +68,28 @@ function HooksShowcase() {
   useLayoutEffect(() => {}, []);
 
   return (
-    <div style={{ ...card, marginBottom: 12 }}>
-      <strong>HooksShowcase</strong> <span style={{ color: "#5f6878" }}>({theme})</span>
-      <div style={{ color: "#5f6878", fontSize: 13, margin: "6px 0" }}>
+    <div className="demo-card">
+      <strong>Session counter</strong> <span className="demo-meta">({theme})</span>
+      <div className="demo-meta">
         count {count} · doubled {doubled} · items {items.length} · renders {renders.current}
       </div>
-      <button type="button" style={btn} onClick={() => setCount((c) => c + 1)}>
-        count +1
-      </button>{" "}
-      <button type="button" style={btn} onClick={() => dispatch({ type: "add" })}>
-        add item
-      </button>
+      {/* No demo-ui composites here — inspect-mode must resolve to HooksShowcase. */}
+      <div className="demo-stack-row" style={{ marginTop: 10 }}>
+        <button
+          type="button"
+          className="demo-btn demo-btn-primary demo-btn-sm"
+          onClick={() => setCount((c) => c + 1)}
+        >
+          count +1
+        </button>
+        <button
+          type="button"
+          className="demo-btn demo-btn-sm"
+          onClick={() => dispatch({ type: "add" })}
+        >
+          add item
+        </button>
+      </div>
     </div>
   );
 }
@@ -94,12 +108,12 @@ function PropsShowcase(props: {
   unstableOnClick: () => void;
 }) {
   return (
-    <div style={card}>
-      <strong>PropsShowcase</strong>
-      <div style={{ color: "#5f6878", fontSize: 13, marginTop: 6 }}>
+    <Card>
+      <strong>Listed product</strong>
+      <Meta>
         text={props.text}, count={props.count}, enabled={String(props.enabled)}
-      </div>
-    </div>
+      </Meta>
+    </Card>
   );
 }
 PropsShowcase.displayName = "PropsShowcase";

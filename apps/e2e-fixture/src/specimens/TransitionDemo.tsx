@@ -1,5 +1,5 @@
 import { useMemo, useState, useTransition } from "react";
-import { Section, btn } from "./ui.js";
+import { Input, Meta, Section, Stack } from "@reactlens/demo-ui";
 
 export function TransitionDemo() {
   const [query, setQuery] = useState("");
@@ -12,16 +12,20 @@ export function TransitionDemo() {
   };
 
   return (
-    <Section title="Transition" hint="Typing updates urgently; the list updates in a transition.">
-      <input
-        style={{ ...btn, cursor: "text", width: 200 }}
-        placeholder="filter (transition)…"
-        value={query}
-        onChange={(e) => onChange(e.target.value)}
-      />
-      <span style={{ marginLeft: 8, color: isPending ? "#fb923c" : "#a0a6b2", fontSize: 12 }}>
-        {isPending ? "updating…" : "idle"}
-      </span>
+    <Section
+      kicker="Search"
+      title="Catalog filter"
+      hint="Typing updates urgently; the list updates in a transition."
+    >
+      <Stack row>
+        <Input
+          style={{ width: 220 }}
+          placeholder="filter (transition)…"
+          value={query}
+          onChange={(e) => onChange(e.target.value)}
+        />
+        <Meta>{isPending ? "updating…" : "idle"}</Meta>
+      </Stack>
       <SlowList filter={deferred} />
     </Section>
   );
@@ -37,7 +41,7 @@ function SlowList({ filter }: { filter: string }) {
     [filter],
   );
   return (
-    <div style={{ maxHeight: 140, overflow: "auto", marginTop: 12, display: "grid", gap: 2 }}>
+    <div className="demo-list">
       {items.map((label, i) => (
         <SlowRow key={i} label={label} />
       ))}
@@ -47,11 +51,10 @@ function SlowList({ filter }: { filter: string }) {
 SlowList.displayName = "SlowList";
 
 function SlowRow({ label }: { label: string }) {
-  // Enough work to keep transitions pending under test, not enough to freeze CI.
   let acc = 0;
   for (let i = 0; i < 400; i++) acc += i % 3;
   return (
-    <div style={{ padding: "2px 8px", fontSize: 12 }} data-acc={acc}>
+    <div className="demo-list-row" data-acc={acc}>
       {label}
     </div>
   );
