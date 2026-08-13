@@ -32,6 +32,10 @@ jobs:
 
       - run: vp check
 
+      # Every file must stay compiled: one `"use no memo"` silently drops a
+      # whole file, and the panel's files are the expensive ones.
+      - run: node scripts/check-compiled.mjs
+
       - run: vp test run
 
   e2e:

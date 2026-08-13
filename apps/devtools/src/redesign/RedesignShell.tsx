@@ -1,17 +1,4 @@
-"use no memo";
-
-// The Compiler is off for this file deliberately.
-//
-// `useTraceVersion` returns a counter used purely to bust caches: the trace
-// store mutates in place, so its identity never changes and only the version
-// says the data moved on. The memos below therefore list `version` as a
-// dependency without reading it. The Compiler infers dependencies from actual
-// reads, so it would drop `version`, cache on the store's stable identity and
-// never recompute — the panel would freeze on its first frame.
-//
-// Everything that does not read the store this way is compiled normally.
-
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { TraceStore } from "@reactlens/trace-engine";
 import type { Causality } from "@reactlens/causality";
 import type { ComponentId, RenderId } from "@reactlens/protocol";
@@ -23,6 +10,7 @@ import {
   type SemanticNode,
 } from "@reactlens/tree";
 import { useTraceVersion } from "../useLens.js";
+import { readFresh, useDerived } from "../useDerived.js";
 import { loadPanelPrefs, savePanelPrefs } from "../panelPrefs.js";
 import { typeLaneKey, type LaneControls } from "../laneFilter.js";
 import type { TimeCursor } from "../timeCursor.js";
@@ -102,10 +90,7 @@ export function RedesignShell({
   // ── Filter: structured tokens become chips, free text stays in the input ──
   const [filterChips, setFilterChips] = useState<string[]>([]);
   const [filterFree, setFilterFree] = useState("");
-  const query = useMemo(
-    () => [...filterChips, filterFree.trim()].filter(Boolean).join(" "),
-    [filterChips, filterFree],
-  );
+  const query = [...filterChips, filterFree.trim()].filter(Boolean).join(" ");
   const filterRef = useRef<HTMLInputElement>(null);
 
   const commitFilterTokens = (raw: string) => {
@@ -178,10 +163,10 @@ export function RedesignShell({
   // ── Tree ─────────────────────────────────────────────────────────────────
   const [collapsedNodes, setCollapsedNodes] = useState<ReadonlySet<string>>(new Set());
   const [openGroups, setOpenGroups] = useState<ReadonlySet<string>>(new Set());
-  const data = useMemo(() => buildData(store, causality), [store, causality, version]);
-  const parsed = useMemo(() => parseQuery(query), [query]);
-  const roots = useMemo(() => buildTree(data, { include: parsed.predicate }), [data, parsed]);
-  const expanded = useMemo(() => {
+  const data = useDerived([store, causality, version], () => buildData(store, causality));
+  const parsed = parseQuery(query);
+  const roots = buildTree(data, { include: parsed.predicate });
+  const expanded = (() => {
     const set = new Set<string>();
     const walk = (nodes: SemanticNode[]) => {
       for (const node of nodes) {
@@ -196,21 +181,14 @@ export function RedesignShell({
     };
     walk(roots);
     return set;
-  }, [roots, collapsedNodes, openGroups]);
-  const treeRows = useMemo(() => treeViewRows(flatten(roots, expanded)), [roots, expanded]);
-  const matchCount = useMemo(
-    () => (query.trim() ? data.filter(parsed.predicate).length : null),
-    [data, parsed, query],
-  );
-  const maxSelf = useMemo(
-    () =>
-      Math.max(
-        1,
-        ...treeRows.map(({ row }) =>
-          row.node.kind === "component" ? row.node.datum.selfTime : row.node.selfTime,
-        ),
-      ),
-    [treeRows],
+  })();
+  const treeRows = treeViewRows(flatten(roots, expanded));
+  const matchCount = query.trim() ? data.filter(parsed.predicate).length : null;
+  const maxSelf = Math.max(
+    1,
+    ...treeRows.map(({ row }) =>
+      row.node.kind === "component" ? row.node.datum.selfTime : row.node.selfTime,
+    ),
   );
   const toggleTree = (key: string) => {
     const setter = key.startsWith("g:") ? setOpenGroups : setCollapsedNodes;
@@ -222,7 +200,7 @@ export function RedesignShell({
   };
 
   /** Watchlist: Doctor-flagged components, heaviest first. */
-  const watchlist = useMemo(() => {
+  const watchlist = useDerived([doctor, store, version], () => {
     if (!doctor || doctor.size === 0) return [];
     return [...doctor]
       .map((id) => ({
@@ -233,15 +211,16 @@ export function RedesignShell({
       }))
       .sort((a, b) => b.renders - a.renders)
       .slice(0, 3);
-  }, [doctor, store, version]);
+  });
 
   // ── Inspector ────────────────────────────────────────────────────────────
   const selectedRender = timeline.state.selectedRender;
-  const story = useMemo(
-    () => (selectedRender === null ? null : buildRenderStory(store, causality, selectedRender)),
-    [store, causality, selectedRender, version],
+  const story = useDerived([store, causality, selectedRender, version], () =>
+    selectedRender === null ? null : buildRenderStory(store, causality, selectedRender),
   );
-  const selectedRenderEvent = selectedRender !== null ? store.getRender(selectedRender) : undefined;
+  const selectedRenderEvent = readFresh(version, () =>
+    selectedRender !== null ? store.getRender(selectedRender) : undefined,
+  );
   /** Clip picks set this so a following `selected` change doesn't clear the clip. */
   const fromClipRef = useRef(false);
 

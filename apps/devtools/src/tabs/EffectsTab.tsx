@@ -2,12 +2,13 @@ import type { InspectorContext } from "../Inspector.js";
 import { formatValue, ms } from "@reactlens/ui";
 import { EmptyTab } from "./shared.js";
 import { useTraceVersion } from "../useLens.js";
+import { readFresh } from "../useDerived.js";
 
 /**
  * Effect hooks with a mini run/cleanup sparkline and dependency summary.
  */
 export function EffectsTab({ ctx }: { ctx: InspectorContext }) {
-  useTraceVersion(ctx.store, { kind: "component", id: ctx.componentId });
+  const version = useTraceVersion(ctx.store, { kind: "component", id: ctx.componentId });
   const snapshot = ctx.snapshot;
   if (!snapshot) return <EmptyTab>No snapshot for this render.</EmptyTab>;
   const effects = (snapshot.hooks ?? []).filter(
@@ -15,16 +16,20 @@ export function EffectsTab({ ctx }: { ctx: InspectorContext }) {
   );
   if (effects.length === 0) return <EmptyTab>No effects on this component.</EmptyTab>;
 
-  const effectEvents = ctx.store
-    .allEvents()
-    .filter(
-      (e): e is Extract<typeof e, { type: "effect" }> =>
-        e.type === "effect" && e.componentId === ctx.componentId,
-    );
+  // Through the version, or the Compiler caches this on the store's identity and
+  // the sparkline stops moving after the first render it saw.
+  const effectEvents = readFresh(version, () =>
+    ctx.store
+      .allEvents()
+      .filter(
+        (e): e is Extract<typeof e, { type: "effect" }> =>
+          e.type === "effect" && e.componentId === ctx.componentId,
+      ),
+  );
   const runs = effectEvents.filter((e) => e.phase === "run");
   const cleanups = effectEvents.filter((e) => e.phase === "cleanup");
   const totalRunMs = runs.reduce((s, e) => s + e.duration, 0);
-  const renders = ctx.store.rendersOf(ctx.componentId);
+  const renders = readFresh(version, () => ctx.store.rendersOf(ctx.componentId));
   const recentRenders = renders.slice(-12);
   const runsEveryCommit = recentRenders.length >= 4 && runs.length >= recentRenders.length - 1;
   const maxDur = Math.max(1, ...runs.map((e) => e.duration), ...cleanups.map((e) => e.duration));

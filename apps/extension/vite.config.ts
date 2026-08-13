@@ -19,14 +19,15 @@ export default defineConfig({
   },
   plugins: lazyPlugins(() => [
     react({
-      // The panel is React 19 written for the Compiler — no hand-written
-      // `useCallback`/`memo` anywhere (see the repo's engineering rules), so
-      // without this every handler and child re-rendered with nothing
-      // collecting the debt. Compiling covers the extension shell and the
-      // devtools package it renders.
+      // The React Compiler runs over every workspace source. The panel is
+      // written for it — no hand-written `useCallback`/`memo` anywhere (see the
+      // repo's engineering rules) — so without this every handler and child
+      // re-rendered with nothing collecting the debt.
       //
-      // Files that key memos on the trace store's version counter opt out with
-      // `"use no memo"`, and say why at the top of each.
+      // No file opts out. Reads of the trace store go through `useDerived` /
+      // `readFresh`, which put the store's version counter in the dependency
+      // where the Compiler can see it; the `"use no memo"` directives those
+      // replaced left whole files uncompiled to work around exactly that.
       babel: {
         plugins: [
           [
@@ -34,7 +35,7 @@ export default defineConfig({
             {
               target: "19",
               sources: (filename: string) =>
-                filename.includes("/apps/extension/") || filename.includes("/apps/devtools/"),
+                filename.includes("/apps/") || filename.includes("/packages/"),
             },
           ],
         ],

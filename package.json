@@ -12,6 +12,8 @@
     "test": "vp test run",
     "test:watch": "vp test",
     "lint": "vp check",
+    "check:compiled": "node scripts/check-compiled.mjs",
+    "check:compiled:build": "pnpm build:extension && node scripts/check-compiled.mjs --bundle apps/extension/dist",
     "dev:playground": "pnpm --filter @reactlens/playground dev",
     "dev:devtools": "pnpm --filter @reactlens/devtools dev",
     "dev:site": "pnpm --filter @reactlens/site dev",

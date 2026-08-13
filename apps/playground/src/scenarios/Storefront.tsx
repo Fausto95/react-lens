@@ -1,23 +1,29 @@
-"use no memo";
-
 import { createContext, useContext, useState } from "react";
 
 /**
  * The panel's demo: one small storefront, deep enough to paint a waterfall.
  *
- * Seven components, chosen so a single click produces every cause the timeline
- * colours, and a chain long enough to walk arrow by arrow:
+ * Compiled by the React Compiler, like everything else in the repo. That is a
+ * constraint on the demo, not a detail: a scenario whose waste the Compiler
+ * removes is demonstrating a problem the panel's own users no longer have.
  *
  *   CartProvider   setCart   state     the origin (green)
- *     Header       casc      cascade   re-rendered only because its parent was
- *       CartBadge  ctx       context   reads the cart, and on "Refresh" is wasted
+ *     Header       props     props     takes the count, so Add re-renders it
+ *       CartBadge  ctx       context   reads the cart; on "Refresh" it is wasted
  *     Catalog      ctx       context
- *       ProductRow props     props     new onAdd identity per row
+ *       ProductRow props     props     takes the product object
  *         PriceTag props     props     ← the second hop
- *     SortControl  state     state     its own lane, untouched by the cascade
+ *     SortControl  state     state     its own lane; no props, so the cascade
+ *                                      genuinely cannot reach it
  *
  * That gives `CartProvider → Catalog → ProductRow → PriceTag`: select the
  * middle of it and the arrows point both ways.
+ *
+ * "Refresh prices" is the wasted-render case, and it is the real one: a refetch
+ * that returns equal values in new objects. Identity changed, so no compiler and
+ * no `memo` can bail out; the screen is identical, so every one of those renders
+ * was for nothing. The old scenario faked this with an object literal rebuilt
+ * per render, which the Compiler correctly optimises away.
  *
  * Every render does real work. React's own renders are sub-millisecond, so
  * without it every clip collapses to the timeline's 4px legibility floor and
@@ -32,7 +38,13 @@ function spinFor(ms: number): number {
   return acc;
 }
 
-const CATALOG = [
+interface Product {
+  id: number;
+  name: string;
+  price: number;
+}
+
+const CATALOG: Product[] = [
   { id: 1, name: "Kettle", price: 89 },
   { id: 2, name: "Grinder", price: 145 },
   { id: 3, name: "Cafetière", price: 34 },
@@ -50,8 +62,11 @@ const CATALOG = [
 interface Cart {
   items: number[];
   totals: { count: number };
-  /** "Refresh" bumps this. Nothing on screen depends on it. */
-  priceVersion: number;
+  /**
+   * Re-fetched on "Refresh": new objects, identical values. Nothing on screen
+   * changes, and nothing can bail out either.
+   */
+  products: Product[];
 }
 
 const CartContext = createContext<{
@@ -90,26 +105,27 @@ export function Storefront() {
 
 function CartProvider() {
   const [items, setItems] = useState<number[]>([]);
-  const [, setPriceVersion] = useState(0);
+  const [products, setProducts] = useState<Product[]>(CATALOG);
 
   /** Named so the origin clip reads `setCart`. */
   const setCart = (next: number[]) => setItems(next);
   const addToCart = (id: number) => {
     if (!items.includes(id)) setCart([...items, id]);
   };
+  /** The refetch: same prices, fresh objects — nothing can bail out. */
+  const refreshPrices = () => setProducts((prev) => prev.map((p) => ({ ...p })));
 
   // Recomputing cart totals from scratch on every render.
   spinFor(16);
 
-  // A new object every render, so no consumer can ever bail out.
   const value = {
-    cart: { items, totals: { count: items.length }, priceVersion: 0 },
+    cart: { items, totals: { count: items.length }, products },
     addToCart,
   };
 
   return (
     <CartContext.Provider value={value}>
-      <Header onRefresh={() => setPriceVersion((v) => v + 1)} />
+      <Header count={items.length} onRefresh={refreshPrices} />
       <SortControl />
       <Catalog />
     </CartContext.Provider>
@@ -117,8 +133,8 @@ function CartProvider() {
 }
 CartProvider.displayName = "CartProvider";
 
-/** Pure passthrough — it re-renders only because the provider did. */
-function Header({ onRefresh }: { onRefresh: () => void }) {
+/** Takes the count, so adding to the cart really does re-render it. */
+function Header({ count, onRefresh }: { count: number; onRefresh: () => void }) {
   spinFor(10);
   return (
     <header
@@ -130,7 +146,9 @@ function Header({ onRefresh }: { onRefresh: () => void }) {
         borderBottom: "1px solid #f0f2f5",
       }}
     >
-      <strong style={{ fontSize: 15, letterSpacing: "-0.01em" }}>Roastery</strong>
+      <strong style={{ fontSize: 15, letterSpacing: "-0.01em" }}>
+        Roastery{count > 0 ? ` · ${count}` : ""}
+      </strong>
       <CartBadge />
       <span style={{ flex: 1 }} />
       <button type="button" style={ghostBtn} onClick={onRefresh}>
@@ -190,13 +208,13 @@ function Catalog() {
   const inCart = new Set(cart.items);
   return (
     <div style={{ display: "grid", gap: 2 }}>
-      {CATALOG.map((product) => (
+      {cart.products.map((product) => (
         <ProductRow
           key={product.id}
-          name={product.name}
-          price={product.price}
+          // The whole object: a refetch hands over a new one per row, so every
+          // row re-renders for values that did not change.
+          product={product}
           inCart={inCart.has(product.id)}
-          // New identity per row, per render → the props cascade.
           onAdd={() => addToCart(product.id)}
         />
       ))}
@@ -206,16 +224,15 @@ function Catalog() {
 Catalog.displayName = "Catalog";
 
 function ProductRow({
-  name,
-  price,
+  product,
   inCart,
   onAdd,
 }: {
-  name: string;
-  price: number;
+  product: Product;
   inCart: boolean;
   onAdd: () => void;
 }) {
+  const { name, price } = product;
   spinFor(1.5);
   return (
     <div

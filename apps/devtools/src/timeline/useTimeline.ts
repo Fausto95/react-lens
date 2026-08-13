@@ -1,10 +1,9 @@
-"use no memo";
-
-import { useMemo, useReducer, useRef } from "react";
+import { useReducer, useRef } from "react";
 import type { TraceStore } from "@reactlens/trace-engine";
 import type { Causality } from "@reactlens/causality";
 import type { RenderId } from "@reactlens/protocol";
 import { useTraceVersion } from "../useLens.js";
+import { useDerived } from "../useDerived.js";
 import { isLaneVisible, laneVisibility, type LaneFilter } from "../laneFilter.js";
 import type { TimeCursor } from "../timeCursor.js";
 import { buildLanes, statsInRegion } from "./model/lanes.js";
@@ -40,10 +39,10 @@ export function useTimeline({
 }: UseTimelineArgs) {
   const version = useTraceVersion(store, { kind: "global" });
 
-  const commits = useMemo(() => store.commits(), [store, version]);
-  const interactions = useMemo(() => store.interactions(), [store, version]);
+  const commits = useDerived([store, version], () => store.commits());
+  const interactions = useDerived([store, version], () => store.interactions());
 
-  const bounds = useMemo(() => {
+  const bounds = useDerived([store, version, commits], () => {
     let lo = Number.POSITIVE_INFINITY;
     let hi = Number.NEGATIVE_INFINITY;
     for (const instance of store.allInstances()) {
@@ -61,9 +60,9 @@ export function useTimeline({
     }
     if (!Number.isFinite(lo) || !Number.isFinite(hi)) return { t0: 0, t1: 120 };
     return { t0: lo, t1: Math.max(hi, lo + 120) };
-  }, [store, commits, version]);
+  });
 
-  const wasted = useMemo(() => {
+  const wasted = useDerived([store, causality, version], () => {
     const set = new Set<RenderId>();
     let checked = 0;
     for (const instance of store.allInstances()) {
@@ -80,24 +79,22 @@ export function useTimeline({
       }
     }
     return set;
-  }, [store, causality, version]);
+  });
 
-  const lanes = useMemo(
-    () =>
-      buildLanes(store, {
-        include: (key) => isLaneVisible(laneFilter, key),
-        isWasted: (renderId) => wasted.has(renderId),
-      }),
-    [store, version, laneFilter, wasted],
+  const lanes = useDerived([store, version, laneFilter, wasted], () =>
+    buildLanes(store, {
+      include: (key) => isLaneVisible(laneFilter, key),
+      isWasted: (renderId) => wasted.has(renderId),
+    }),
   );
 
-  const laneDepth = useMemo(() => {
+  const laneDepth = (() => {
     const byLane = new Map<string, (typeof lanes)[0]["clips"]>();
     for (const lane of lanes) byLane.set(lane.key, lane.clips);
     return assignStacks(byLane);
-  }, [lanes]);
+  })();
 
-  const acts = useMemo(() => {
+  const acts = (() => {
     const iv: Array<[number, number]> = [];
     for (const lane of lanes) {
       for (const c of lane.clips) iv.push([c.t0, c.t1]);
@@ -106,16 +103,16 @@ export function useTimeline({
     for (const it of interactions) iv.push([it.start, it.end]);
     if (iv.length === 0) iv.push([bounds.t0, bounds.t1]);
     return buildActivity(iv);
-  }, [lanes, commits, interactions, bounds]);
+  })();
 
-  const active = useMemo(() => {
+  const active = (() => {
     const spans: TimeSpan[] = [];
     for (const commit of commits) spans.push({ start: commit.timestamp, end: commit.endTimestamp });
     for (const it of interactions) spans.push({ start: it.start, end: it.end });
     return spans.length > 0
       ? mergeActive(spans)
       : ([[bounds.t0, bounds.t1]] as Array<[number, number]>);
-  }, [commits, interactions, bounds]);
+  })();
 
   const gapProgRef = useRef(new Map<string, number>());
   const ctxRef = useRef<TimelineContext>({
@@ -132,54 +129,44 @@ export function useTimeline({
     },
   );
 
-  const liveAxis = useMemo(() => {
+  const liveAxis = (() => {
     // Remount / first paint: expanded gaps should already be at full progress.
     for (const id of state.expandedGaps) {
       if (!gapProgRef.current.has(id)) gapProgRef.current.set(id, 1);
     }
     return buildAxis(acts, gapProgRef.current);
-  }, [acts, state.expandedGaps]);
+  })();
   ctxRef.current = { bounds, axis: liveAxis };
 
-  const visible = useMemo(() => wallWindow(liveAxis, state.view), [liveAxis, state.view]);
+  const visible = wallWindow(liveAxis, state.view);
 
-  const pxPerMs = useMemo(() => {
-    const plotW = Math.max(1, state.width * 0.86);
-    const span = Math.max(1, state.view.a1 - state.view.a0);
-    return plotW / span;
-  }, [state.width, state.view]);
+  const plotW = Math.max(1, state.width * 0.86);
+  const pxPerMs = plotW / Math.max(1, state.view.a1 - state.view.a0);
 
-  const layout = useMemo(
-    () =>
-      computeLayout(lanes, laneDepth, {
-        shelfOpen: state.shelfOpen,
-        pxPerMs,
-        isDim: (key) => {
-          const v = laneVisibility(laneFilter, key);
-          return v === "muted" || v === "unsoloed";
-        },
-      }),
-    [lanes, laneDepth, state.shelfOpen, pxPerMs, laneFilter],
+  const layout = computeLayout(lanes, laneDepth, {
+    shelfOpen: state.shelfOpen,
+    pxPerMs,
+    isDim: (key) => {
+      const v = laneVisibility(laneFilter, key);
+      return v === "muted" || v === "unsoloed";
+    },
+  });
+
+  const arrows = useDerived([store, version, state.selectedRender], () =>
+    state.selectedRender === null
+      ? []
+      : chainFor(edgesForCommit(store, state.selectedRender), state.selectedRender),
   );
-
-  const arrows = useMemo(() => {
-    if (state.selectedRender === null) return [];
-    return chainFor(edgesForCommit(store, state.selectedRender), state.selectedRender);
-  }, [store, state.selectedRender, version]);
 
   const statsRange = state.region ?? { start: visible.start, end: visible.end };
-  const stats = useMemo(
-    () => statsInRegion(lanes, statsRange.start, statsRange.end, { excludeWasted: fixApplied }),
-    [lanes, statsRange.start, statsRange.end, fixApplied],
-  );
-  const statsRaw = useMemo(
-    () => statsInRegion(lanes, statsRange.start, statsRange.end),
-    [lanes, statsRange.start, statsRange.end],
-  );
+  const stats = statsInRegion(lanes, statsRange.start, statsRange.end, {
+    excludeWasted: fixApplied,
+  });
+  const statsRaw = statsInRegion(lanes, statsRange.start, statsRange.end);
 
   const playhead = cursor.mode === "live" ? bounds.t1 : cursor.t;
 
-  const markers = useMemo(() => {
+  const markers = (() => {
     const out: Array<{ t: number; label: string; warn: boolean }> = [];
     for (const it of interactions) {
       out.push({ t: it.start, label: it.label || "interaction", warn: false });
@@ -192,7 +179,7 @@ export function useTimeline({
     }
     out.sort((a, b) => a.t - b.t);
     return out;
-  }, [interactions, commits]);
+  })();
 
   return {
     state,

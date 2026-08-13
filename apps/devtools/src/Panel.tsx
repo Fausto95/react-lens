@@ -1,10 +1,9 @@
-"use no memo";
-
 import { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import type { TraceStore } from "@reactlens/trace-engine";
 import type { Causality } from "@reactlens/causality";
 import type { ComponentId, RenderId } from "@reactlens/protocol";
 import { useTraceVersion } from "./useLens.js";
+import { readFresh, useDerived } from "./useDerived.js";
 import { diagnoseAll } from "./doctor.js";
 import { createDoctorClient, type DoctorResult } from "./doctorClient.js";
 import { CommandPalette, type Command } from "./CommandPalette.js";
@@ -120,14 +119,11 @@ export function Panel({
   edit,
   onRequestSnapshot,
 }: PanelProps) {
-  // Re-render on every ingest. The reads below (`store.stats()`,
-  // `sessionSpanMs(store)`, `diagnoseAll`) take their freshness from that
-  // re-render alone — hence `"use no memo"` at the top of this file: the store's
-  // identity never changes, so the compiler would treat them as constant and
-  // serve the mount's answer for the rest of the session, making every later
-  // event look lost. Listing the version in a dep array does not help; the
-  // compiler infers deps from what the callback actually reads.
-  useTraceVersion(store, { kind: "global" });
+  // Re-render on every ingest, and take every store read below through the
+  // version. The store mutates in place, so its identity never moves: a read
+  // the Compiler memoizes on `store` alone would serve the mount's answer for
+  // the rest of the session and make every later event look lost.
+  const version = useTraceVersion(store, { kind: "global" });
   const [selected, setSelected] = useState<ComponentId | null>(null);
   // Scroll the inspected page to a newly selected component (off-screen only).
   // Persisted so a user who finds it intrusive turns it off once.
@@ -232,9 +228,9 @@ export function Panel({
   }, [settingsVersion]);
   const [agentAsk] = useState<{ token: number; question: string } | null>(null);
   const { dockWidth, onDockResize } = useDockResize(embedded);
-  const stats = store.stats();
+  const stats = readFresh(version, () => store.stats());
   /** Session length so far — first activity to last activity+duration. */
-  const sessionMs = sessionSpanMs(store);
+  const sessionMs = useDerived([store, version], () => sessionSpanMs(store));
 
   /**
    * Say when retention has eaten into the session. A timeline that begins
@@ -242,7 +238,7 @@ export function Panel({
    * are tunable in Settings — but only if the user knows they were hit.
    */
   const reportedDrop = useRef(0);
-  const { droppedEvents } = store.retention();
+  const { droppedEvents } = readFresh(version, () => store.retention());
   useEffect(() => {
     if (droppedEvents === 0) {
       reportedDrop.current = 0;
@@ -377,7 +373,11 @@ export function Panel({
     }
   }, [empty]);
 
-  const fallback = !doctorClient && stats.components <= 2000 ? diagnoseAll(store, causality) : null;
+  // The synchronous pass only runs where the worker could not be spawned, and
+  // only for small apps; it is still the most expensive read on this path.
+  const fallback = useDerived([doctorClient, store, causality, version, stats.components], () =>
+    !doctorClient && stats.components <= 2000 ? diagnoseAll(store, causality) : null,
+  );
   const affected = workerDoctor?.affected ?? fallback?.affected ?? new Set<ComponentId>();
   const issueCount = workerDoctor?.count ?? fallback?.diagnostics.length ?? 0;
   const diagnostics = workerDoctor?.diagnostics ?? fallback?.diagnostics?.slice(0, 50) ?? [];
@@ -431,8 +431,9 @@ export function Panel({
   }, [paletteOpen]);
 
   const goLive = useCallback(() => {
-    const commits = store.commits();
-    const t = commits.at(-1)?.timestamp ?? 0;
+    // Read at click time, not render time: the handler needs the newest commit,
+    // not whichever one existed when this closure was created.
+    const t = store.commits().at(-1)?.timestamp ?? 0;
     setCursor({ t, mode: "live" });
   }, [store]);
 
