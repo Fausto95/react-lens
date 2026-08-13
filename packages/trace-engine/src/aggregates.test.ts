@@ -53,6 +53,36 @@ describe("aggregates", () => {
     expect(onlyA.renders).toBe(1);
   });
 
+  it("queryTimeline honors serializable lane filters", () => {
+    const index = new TimelineIndex();
+    for (const name of ["A", "B"]) {
+      index.append({
+        timestamp: name === "A" ? 1 : 2,
+        duration: 1,
+        selfDuration: 1,
+        renderId: name.charCodeAt(0),
+        componentId: name.charCodeAt(0),
+        commitId: 1,
+        cause: CauseCode.props,
+        name,
+        laneKey: `t:${name}`,
+      });
+    }
+
+    const result = queryTimeline(index, {
+      t0: 0,
+      t1: 10,
+      rowStart: 0,
+      rowEnd: 10,
+      pixelWidth: 1000,
+      laneFilter: { solo: ["t:A"], muted: [] },
+    });
+
+    expect(result.rows.map((row) => row.laneKey)).toEqual(["t:A"]);
+    expect(result.totalRows).toBe(1);
+    expect(result.stats.renders).toBe(1);
+  });
+
   it("row window slices ordered lanes", () => {
     const index = new TimelineIndex();
     for (const name of ["Z", "A", "M"]) {

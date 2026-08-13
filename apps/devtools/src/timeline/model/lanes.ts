@@ -4,6 +4,7 @@ import {
   causeCodeToName,
   type HitTestResult,
   type TimelineIndex,
+  type TimelineQueryResult,
 } from "@reactlens/trace-engine";
 import type { ComponentId, RenderEvent, RenderId } from "@reactlens/protocol";
 import { typeLaneKey, type LaneKey } from "../../laneFilter.js";
@@ -47,6 +48,10 @@ export interface Clip {
   wasted: boolean;
   /** Stack row within the lane (0-based). */
   row: number;
+  /** Synthetic mark from a LOD bucket, not a selectable render. */
+  aggregate?: boolean;
+  renderCount?: number;
+  wastedCount?: number;
 }
 
 export interface Lane {
@@ -60,6 +65,8 @@ export interface Lane {
   firstT: number;
   /** Max stack depth from incremental assignment. */
   depth?: number;
+  lod?: "raw" | "buckets";
+  quiet?: boolean;
 }
 
 export interface BuildLanesOptions {
@@ -69,6 +76,88 @@ export interface BuildLanesOptions {
 }
 
 export const MIN_CLIP_MS = 0.05;
+
+function emptyLaneFromRow(
+  row: TimelineQueryResult["rows"][number],
+  lod: TimelineQueryResult["lod"],
+): Lane {
+  return {
+    key: row.laneKey as LaneKey,
+    name: row.name,
+    instanceCount: row.instanceCount,
+    clips: [],
+    renders: row.renders,
+    wasted: row.wasted,
+    selfTotal: row.selfTotal,
+    firstT: row.firstT,
+    depth: row.depth,
+    lod,
+    quiet: row.quiet,
+  };
+}
+
+/**
+ * Build legacy Lane adapters from a viewport query. The expensive part of the
+ * pipeline has already happened in typed arrays; this materializes at most the
+ * query cap (~10k marks), not one object per session render.
+ */
+export function lanesFromQueryResult(result: TimelineQueryResult): Lane[] {
+  const lanes = result.rows.map((row) => emptyLaneFromRow(row, result.lod));
+
+  if (result.lod === "raw" && result.columns) {
+    const cols = result.columns;
+    for (let i = 0; i < cols.count; i++) {
+      const lane = lanes[cols.rowIndex[i]!];
+      if (!lane) continue;
+      const t0 = cols.x0[i]!;
+      const t1 = cols.x1[i]!;
+      lane.clips.push({
+        renderId: cols.renderId[i]! as RenderId,
+        componentId: cols.componentId[i]! as ComponentId,
+        laneKey: lane.key,
+        name: lane.name,
+        t0,
+        t1,
+        self: cols.self[i]!,
+        total: t1 - t0,
+        cause: causeCodeToName(cols.cause[i]!),
+        wasted: (cols.flags[i]! & RenderFlags.Wasted) !== 0,
+        row: cols.stackRow[i]!,
+      });
+    }
+    return lanes;
+  }
+
+  if (result.lod === "buckets" && result.buckets) {
+    const buckets = result.buckets;
+    for (let i = 0; i < buckets.count; i++) {
+      const lane = lanes[buckets.rowIndex[i]!];
+      if (!lane) continue;
+      const renderCount = buckets.renderCount[i]!;
+      const wastedCount = buckets.wastedCount[i]!;
+      const t0 = buckets.start[i]!;
+      const t1 = buckets.end[i]!;
+      lane.clips.push({
+        renderId: 0 as RenderId,
+        componentId: 0 as ComponentId,
+        laneKey: lane.key,
+        name: lane.name,
+        t0,
+        t1,
+        self: Math.max(buckets.selfTime[i]!, MIN_CLIP_MS),
+        total: Math.max(t1 - t0, buckets.maxDuration[i]!, MIN_CLIP_MS),
+        cause: "other",
+        wasted: wastedCount > renderCount / 2,
+        row: 0,
+        aggregate: true,
+        renderCount,
+        wastedCount,
+      });
+    }
+  }
+
+  return lanes;
+}
 
 export function causeOf(render: RenderEvent): ClipCause {
   const reason = render.reasons[0];
@@ -93,10 +182,7 @@ export function causeOf(render: RenderEvent): ClipCause {
  * Materialize Lane[] adapters from the columnar index.
  * Prefer `window` so cost scales with the viewport, not the session.
  */
-export function lanesFromIndex(
-  index: TimelineIndex,
-  options: BuildLanesOptions = {},
-): Lane[] {
+export function lanesFromIndex(index: TimelineIndex, options: BuildLanesOptions = {}): Lane[] {
   const { window: win, include } = options;
   const lanes: Lane[] = [];
 
@@ -344,6 +430,7 @@ export function clipAtTime(
     const end = Math.min(clips.length, lo + 8);
     for (let i = start; i < end; i++) {
       const clip = clips[i]!;
+      if (clip.aggregate) continue;
       const containing = clip.t0 <= t && t <= clip.t1;
       const mid = (clip.t0 + clip.t1) / 2;
       let score = Math.abs(mid - t);

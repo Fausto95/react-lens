@@ -231,6 +231,7 @@ export function drawBase(args: DrawBaseArgs): {
     }
 
     for (const c of row.clips) {
+      if (c.aggregate) continue;
       const x0 = wToX(c.t0);
       const x1 = wToX(c.t1);
       if (x1 < NW || x0 > W) continue;

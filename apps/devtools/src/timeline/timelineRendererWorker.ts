@@ -9,7 +9,10 @@
 
 import { hydrateAxis } from "./model/axis.js";
 import { drawBase, ensureHatchPattern, type ClipRect } from "./view/draw.js";
-import type { TimelineBasePaintPayload, TimelineGeometryPayload } from "./timelineRendererClient.js";
+import type {
+  TimelineBasePaintPayload,
+  TimelineGeometryPayload,
+} from "./timelineRendererClient.js";
 import type { Clip } from "./model/lanes.js";
 import type { LayoutRow } from "./model/rows.js";
 import { causeCodeToName, RenderFlags } from "@reactlens/trace-engine";
@@ -43,7 +46,7 @@ function hydrateLayoutFromGeometry(
     const row = payload.layout.rows[ri]!;
     byRow[ri]!.push({
       renderId: geo.renderId[i]! as RenderId,
-      componentId: 0 as ComponentId,
+      componentId: geo.componentId[i]! as ComponentId,
       laneKey: row.key,
       name: row.lane.name,
       t0: geo.x0[i]!,

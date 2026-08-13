@@ -24,6 +24,11 @@ export interface TimelineQuery {
   pixelWidth: number;
   /** Optional lane filter — return false to skip. */
   includeLane?: (laneKey: string, name: string) => boolean;
+  /** Serializable view-only lane filter for worker queries. */
+  laneFilter?: {
+    solo?: readonly string[];
+    muted?: readonly string[];
+  };
   /** Prefer buckets when avg event would be narrower than this (px). */
   lodEnterPx?: number;
 }
@@ -32,6 +37,7 @@ export interface TimelineRowMeta {
   laneKey: string;
   name: string;
   yIndex: number;
+  firstT: number;
   instanceCount: number;
   renders: number;
   wasted: number;
@@ -43,7 +49,7 @@ export interface TimelineRowMeta {
 export interface TimelineColumns {
   count: number;
   /** Lane index into rows[]. */
-  rowIndex: Uint16Array;
+  rowIndex: Uint32Array;
   x0: Float64Array;
   x1: Float64Array;
   self: Float32Array;
@@ -56,7 +62,7 @@ export interface TimelineColumns {
 
 export interface TimelineBucketColumns {
   count: number;
-  rowIndex: Uint16Array;
+  rowIndex: Uint32Array;
   start: Float64Array;
   end: Float64Array;
   renderCount: Uint32Array;
@@ -73,6 +79,8 @@ export interface RegionStats {
 
 export interface TimelineQueryResult {
   rows: TimelineRowMeta[];
+  /** Rows after filtering, before rowStart/rowEnd slicing. */
+  totalRows: number;
   lod: "raw" | "buckets";
   lodBucketMs: number | null;
   columns: TimelineColumns | null;
@@ -101,18 +109,70 @@ function pickLodLevel(spanMs: number, pixelWidth: number, enterPx: number): LodL
   return best;
 }
 
-function sliceStats(lane: LaneColumns, t0: number, t1: number): RegionStats {
-  if (lane.count === 0) return { renders: 0, wasted: 0, selfMs: 0 };
+function sliceStatsWithWastedSelf(
+  lane: LaneColumns,
+  t0: number,
+  t1: number,
+): RegionStats & { wastedSelfMs: number } {
+  if (lane.count === 0) return { renders: 0, wasted: 0, selfMs: 0, wastedSelfMs: 0 };
   const lo = lowerBound(lane.timestamps, lane.count, t0);
-  // Include events that start before t1 (overlap: event may extend past).
-  // For prefix sums we use events with timestamp in [t0, t1].
   const hi = upperBound(lane.timestamps, lane.count, t1);
-  if (lo >= hi) return { renders: 0, wasted: 0, selfMs: 0 };
+  if (lo >= hi) return { renders: 0, wasted: 0, selfMs: 0, wastedSelfMs: 0 };
   return {
     renders: lane.countPrefix[hi]! - lane.countPrefix[lo]!,
     wasted: lane.wastedPrefix[hi]! - lane.wastedPrefix[lo]!,
     selfMs: lane.selfPrefix[hi]! - lane.selfPrefix[lo]!,
+    wastedSelfMs: lane.wastedSelfPrefix[hi]! - lane.wastedSelfPrefix[lo]!,
   };
+}
+
+function globalStats(
+  index: TimelineIndex,
+  t0: number,
+  t1: number,
+): RegionStats & { wastedSelfMs: number } {
+  if (index.count === 0) return { renders: 0, wasted: 0, selfMs: 0, wastedSelfMs: 0 };
+  const lo = lowerBound(index.timestamps, index.count, t0);
+  const hi = upperBound(index.timestamps, index.count, t1);
+  if (lo >= hi) return { renders: 0, wasted: 0, selfMs: 0, wastedSelfMs: 0 };
+  return {
+    renders: index.countPrefix[hi]! - index.countPrefix[lo]!,
+    wasted: index.wastedPrefix[hi]! - index.wastedPrefix[lo]!,
+    selfMs: index.selfPrefix[hi]! - index.selfPrefix[lo]!,
+    wastedSelfMs: index.wastedSelfPrefix[hi]! - index.wastedSelfPrefix[lo]!,
+  };
+}
+
+function laneFilterPasses(
+  filter: TimelineQuery["laneFilter"] | undefined,
+  laneKey: string,
+): boolean {
+  if (!filter) return true;
+  const laneChain = (key: string): string[] => {
+    if (!key.startsWith("i:")) return [key];
+    const body = key.slice(2);
+    const cut = body.lastIndexOf("#");
+    if (cut < 0) return [key];
+    return [`t:${body.slice(0, cut)}`, key];
+  };
+  const chain = laneChain(laneKey);
+  const muted = new Set(filter.muted ?? []);
+  if (chain.some((key) => muted.has(key))) return false;
+  const solo = filter.solo ?? [];
+  if (solo.length === 0) return true;
+  if (chain.some((key) => solo.includes(key))) return true;
+  for (const soloed of solo) {
+    if (laneChain(soloed).includes(laneKey)) return true;
+  }
+  return false;
+}
+
+function includePasses(
+  q: Pick<TimelineQuery, "includeLane" | "laneFilter">,
+  lane: LaneColumns,
+): boolean {
+  if (q.includeLane && !q.includeLane(lane.laneKey, lane.name)) return false;
+  return laneFilterPasses(q.laneFilter, lane.laneKey);
 }
 
 /** O(log N) region stats across all (or filtered) lanes. */
@@ -127,16 +187,25 @@ export function statsInRange(
 ): RegionStats {
   const lo = Math.min(t0, t1);
   const hi = Math.max(t0, t1);
+  if (!options.includeLane) {
+    const s = globalStats(index, lo, hi);
+    if (!options.excludeWasted) return { renders: s.renders, wasted: s.wasted, selfMs: s.selfMs };
+    return {
+      renders: s.renders - s.wasted,
+      wasted: 0,
+      selfMs: s.selfMs - s.wastedSelfMs,
+    };
+  }
+
   let renders = 0;
   let wasted = 0;
   let selfMs = 0;
   for (const lane of index.lanes.values()) {
     if (options.includeLane && !options.includeLane(lane.laneKey, lane.name)) continue;
-    const s = sliceStats(lane, lo, hi);
+    const s = sliceStatsWithWastedSelf(lane, lo, hi);
     if (options.excludeWasted) {
       renders += s.renders - s.wasted;
-      selfMs += s.selfMs; // approximate: don't re-scan for non-wasted self
-      // For exact non-wasted self we'd need a separate prefix; close enough for UI.
+      selfMs += s.selfMs - s.wastedSelfMs;
     } else {
       renders += s.renders;
       wasted += s.wasted;
@@ -214,12 +283,7 @@ export function hitTest(
   return best;
 }
 
-function collectBuckets(
-  lane: LaneColumns,
-  level: LodLevel,
-  t0: number,
-  t1: number,
-): LodBucket[] {
+function collectBuckets(lane: LaneColumns, level: LodLevel, t0: number, t1: number): LodBucket[] {
   const state = lane.lod[level];
   if (!state) return [];
   const out: LodBucket[] = [];
@@ -233,10 +297,7 @@ function collectBuckets(
 }
 
 /** Busy intervals from the coarsest LOD that still has signal (for gap axis). */
-export function activityIntervals(
-  index: TimelineIndex,
-  bucketMs = 64,
-): Array<[number, number]> {
+export function activityIntervals(index: TimelineIndex, bucketMs = 64): Array<[number, number]> {
   const levelIdx = LOD_BUCKET_MS.indexOf(bucketMs as (typeof LOD_BUCKET_MS)[number]);
   const level: LodLevel = (levelIdx >= 0 ? levelIdx : 3) as LodLevel;
   const starts = new Map<number, number>(); // start → end
@@ -264,10 +325,7 @@ export function queryTimeline(index: TimelineIndex, q: TimelineQuery): TimelineQ
   const t0 = Math.min(q.t0, q.t1);
   const t1 = Math.max(q.t0, q.t1);
   const enterPx = q.lodEnterPx ?? DEFAULT_LOD_ENTER_PX;
-  const ordered = index.orderedLanes().filter((lane) => {
-    if (q.includeLane && !q.includeLane(lane.laneKey, lane.name)) return false;
-    return true;
-  });
+  const ordered = index.orderedLanes().filter((lane) => includePasses(q, lane));
 
   const rowStart = Math.max(0, q.rowStart);
   const rowEnd = Math.min(ordered.length, Math.max(rowStart, q.rowEnd));
@@ -277,6 +335,7 @@ export function queryTimeline(index: TimelineIndex, q: TimelineQuery): TimelineQ
     laneKey: lane.laneKey,
     name: lane.name,
     yIndex: rowStart + i,
+    firstT: Number.isFinite(lane.firstT) ? lane.firstT : 0,
     instanceCount: lane.instanceIds.size,
     renders: lane.count,
     wasted: lane.wastedCount,
@@ -285,7 +344,14 @@ export function queryTimeline(index: TimelineIndex, q: TimelineQuery): TimelineQ
     quiet: lane.selfTotal < QUIET_TOTAL_MS,
   }));
 
-  const stats = statsInRange(index, t0, t1, { includeLane: q.includeLane });
+  const statsInclude =
+    q.includeLane || q.laneFilter
+      ? (laneKey: string, name: string) => {
+          if (q.includeLane && !q.includeLane(laneKey, name)) return false;
+          return laneFilterPasses(q.laneFilter, laneKey);
+        }
+      : undefined;
+  const stats = statsInRange(index, t0, t1, { includeLane: statsInclude });
   const activity = activityIntervals(index);
   const spanMs = Math.max(1, t1 - t0);
   const lodLevel = pickLodLevel(spanMs, q.pixelWidth, enterPx);
@@ -304,7 +370,7 @@ export function queryTimeline(index: TimelineIndex, q: TimelineQuery): TimelineQ
     const stride = estimate > cap ? Math.ceil(estimate / cap) : 1;
     let count = 0;
     for (const bs of perLane) count += Math.ceil(bs.length / stride);
-    const rowIndex = new Uint16Array(count);
+    const rowIndex = new Uint32Array(count);
     const start = new Float64Array(count);
     const end = new Float64Array(count);
     const renderCount = new Uint32Array(count);
@@ -328,6 +394,7 @@ export function queryTimeline(index: TimelineIndex, q: TimelineQuery): TimelineQ
     }
     return {
       rows,
+      totalRows: ordered.length,
       lod: "buckets",
       lodBucketMs: bucketMs,
       columns: null,
@@ -361,7 +428,7 @@ export function queryTimeline(index: TimelineIndex, q: TimelineQuery): TimelineQ
   let count = 0;
   for (const r of ranges) count += Math.ceil(Math.max(0, r.hi - r.lo) / stride);
 
-  const rowIndex = new Uint16Array(count);
+  const rowIndex = new Uint32Array(count);
   const x0 = new Float64Array(count);
   const x1 = new Float64Array(count);
   const self = new Float32Array(count);
@@ -392,6 +459,7 @@ export function queryTimeline(index: TimelineIndex, q: TimelineQuery): TimelineQ
 
   return {
     rows,
+    totalRows: ordered.length,
     lod: "raw",
     lodBucketMs: null,
     columns: {

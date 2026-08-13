@@ -34,6 +34,7 @@ export function isQuietLane(
   _quietMax = QUIET_MAX,
   quietTotalMs = QUIET_TOTAL_MS,
 ): boolean {
+  if (lane.quiet !== undefined && lane.clips.length === 0) return lane.quiet;
   // Inclusive clip work in the current materialization (viewport window).
   // Lifetime selfTotal alone must not override a cascade root whose bar is wide.
   if (lane.clips.length === 0) {
@@ -82,7 +83,10 @@ export function computeLayout(
     // Painted inclusive width × pxPerMs — grows with zoom so heavy lanes
     // progressively leave wave and show stacked clips.
     const avgPx = avgClipWidthPx(scoped, opts.pxPerMs);
-    const mode = laneMode(depth, scoped.length, avgPx, opts.prevModes?.get(lane.key));
+    const mode =
+      lane.lod === "buckets"
+        ? "wave"
+        : laneMode(depth, scoped.length, avgPx, opts.prevModes?.get(lane.key));
     const h = mode === "wave" ? WAVE_H : LANE_PAD + depth * ROW_H;
     rows.push({
       lane,

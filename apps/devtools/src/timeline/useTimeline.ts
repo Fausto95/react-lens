@@ -4,9 +4,15 @@ import type { TraceStore, CommitSummary } from "@reactlens/trace-engine";
 import type { Causality } from "@reactlens/causality";
 import { useTraceVersion } from "../useLens.js";
 import { derivationCache } from "../traceFresh.js";
-import { isLaneVisible, laneVisibility, type LaneFilter, type LaneKey } from "../laneFilter.js";
+import {
+  isLaneVisible,
+  laneFilterActive,
+  laneVisibility,
+  type LaneFilter,
+  type LaneKey,
+} from "../laneFilter.js";
 import type { TimeCursor } from "../timeCursor.js";
-import { lanesFromIndex, statsFromStore, type Lane } from "./model/lanes.js";
+import { lanesFromQueryResult, statsFromStore, type Lane } from "./model/lanes.js";
 import { chainFor, edgesForCommit, type CausalEdge } from "./model/edges.js";
 import { buildActivity, buildAxis, mergeActive, type TimeSpan } from "./model/axis.js";
 import { computeLayout } from "./model/rows.js";
@@ -101,14 +107,27 @@ export function useTimeline({
 
   const plotW = Math.max(1, state.width - nameWidthFor(state.width));
   const pxPerMs = plotW / Math.max(1, state.view.a1 - state.view.a0);
+  const filterActive = laneFilterActive(laneFilter);
 
   // Materialize only the visible time window (+ pad) from columnar lanes.
   // Wastedness is a stored flag — no causality.why() sweep.
   const pad = Math.max(50, (visible.end - visible.start) * 0.1);
-  const lanes: Lane[] = lanesFromIndex(store.timelineIndex, {
-    window: { t0: visible.start - pad, t1: visible.end + pad },
-    include: (key) => isLaneVisible(laneFilter, key),
+  const timelineResult = store.queryTimeline({
+    t0: visible.start - pad,
+    t1: visible.end + pad,
+    rowStart: 0,
+    rowEnd: Number.MAX_SAFE_INTEGER,
+    pixelWidth: plotW,
+    ...(filterActive
+      ? {
+          laneFilter: {
+            solo: [...laneFilter.solo],
+            muted: [...laneFilter.muted],
+          },
+        }
+      : {}),
   });
+  const lanes: Lane[] = lanesFromQueryResult(timelineResult);
 
   const laneDepth = new Map<string, number>();
   for (const lane of lanes) {
@@ -134,12 +153,16 @@ export function useTimeline({
   );
 
   const statsRange = state.region ?? { start: visible.start, end: visible.end };
-  const includeLane = (key: string) => isLaneVisible(laneFilter, key as LaneKey);
+  const includeLane = filterActive
+    ? (key: string) => isLaneVisible(laneFilter, key as LaneKey)
+    : undefined;
   const stats = statsFromStore(store, statsRange.start, statsRange.end, {
-    includeLane,
+    ...(includeLane ? { includeLane } : {}),
     excludeWasted: fixApplied,
   });
-  const statsRaw = statsFromStore(store, statsRange.start, statsRange.end, { includeLane });
+  const statsRaw = statsFromStore(store, statsRange.start, statsRange.end, {
+    ...(includeLane ? { includeLane } : {}),
+  });
 
   const playhead = cursor.mode === "live" ? bounds.t1 : cursor.t;
 

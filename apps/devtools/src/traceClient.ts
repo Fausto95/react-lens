@@ -540,7 +540,14 @@ export function createTraceClient(options: TraceClientOptions = {}): TraceClient
         case "render":
           return { kind: "render", result: store.getRender(q.id) };
         case "component-renders":
-          return { kind: "component-renders", result: store.rendersOf(q.componentId) };
+          return {
+            kind: "component-renders",
+            result: store.rendersOf(q.componentId).filter((render) => {
+              if (q.t0 !== undefined && render.timestamp < q.t0) return false;
+              if (q.t1 !== undefined && render.timestamp > q.t1) return false;
+              return true;
+            }),
+          };
         case "tree-window": {
           const result = store.flatTree.queryWindow({
             expanded: new Set(q.expanded),

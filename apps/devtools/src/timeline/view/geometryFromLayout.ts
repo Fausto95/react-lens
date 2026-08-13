@@ -19,11 +19,12 @@ export function geometryFromLayout(layout: LaneLayout, cap = 10_000): TimelineGe
   let count = 0;
   for (const row of layout.rows) count += Math.ceil(row.clips.length / stride);
 
-  const rowIndex = new Uint16Array(count);
+  const rowIndex = new Uint32Array(count);
   const x0 = new Float64Array(count);
   const x1 = new Float64Array(count);
   const self = new Float32Array(count);
   const renderId = new Uint32Array(count);
+  const componentId = new Uint32Array(count);
   const cause = new Uint8Array(count);
   const flags = new Uint8Array(count);
   const stackRow = new Uint16Array(count);
@@ -33,11 +34,13 @@ export function geometryFromLayout(layout: LaneLayout, cap = 10_000): TimelineGe
     const clips = layout.rows[ri]!.clips;
     for (let i = 0; i < clips.length; i += stride) {
       const c = clips[i]!;
+      if (c.aggregate) continue;
       rowIndex[k] = ri;
       x0[k] = c.t0;
       x1[k] = c.t1;
       self[k] = c.self;
       renderId[k] = c.renderId as number;
+      componentId[k] = c.componentId as number;
       cause[k] = CAUSE_TO_CODE[c.cause] ?? CauseCode.other;
       flags[k] = c.wasted ? RenderFlags.Wasted : RenderFlags.None;
       stackRow[k] = c.row;
@@ -45,5 +48,5 @@ export function geometryFromLayout(layout: LaneLayout, cap = 10_000): TimelineGe
     }
   }
 
-  return { count: k, rowIndex, x0, x1, self, renderId, cause, flags, stackRow };
+  return { count: k, rowIndex, x0, x1, self, renderId, componentId, cause, flags, stackRow };
 }

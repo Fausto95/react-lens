@@ -1111,7 +1111,9 @@ export function Timeline({
           scheduleDraw(true);
           break;
         case "fit-selection": {
-          const c = lanes.flatMap((l) => l.clips).find((x) => x.renderId === state.selectedRender);
+          const c = lanes
+            .flatMap((l) => l.clips)
+            .find((x) => !x.aggregate && x.renderId === state.selectedRender);
           if (c) zoomToClip(c);
           break;
         }
@@ -1161,7 +1163,7 @@ export function Timeline({
   }, [state.playing, lanes, state.selectedLane, state.selectedRender]);
 
   const navBlips = useMemo(() => {
-    const all = lanes.flatMap((l) => l.clips);
+    const all = lanes.flatMap((l) => l.clips).filter((c) => !c.aggregate);
     return all.filter((_, i) => i % 6 === 0);
   }, [lanes]);
 
@@ -1180,19 +1182,16 @@ export function Timeline({
 
   const liveAxis = axisLiveRef.current;
   const rg = state.region;
-  const inScope = lanes
-    .flatMap((l) => l.clips)
-    .filter((c) => {
-      if (rg && (c.t1 < rg.start || c.t0 > rg.end)) return false;
-      return true;
-    });
-  const wastedN = inScope.filter((c) => c.wasted).length;
+  const inScopeN = model.stats.renders;
+  const wastedN = model.stats.wasted;
   const idleTotal = liveAxis.segs
     .filter((s) => s.type === "gap" && s.p < 0.5)
     .reduce((a, s) => a + (s.w1 - s.w0), 0);
   const sel =
     state.selectedRender != null
-      ? (lanes.flatMap((l) => l.clips).find((c) => c.renderId === state.selectedRender) ?? null)
+      ? (lanes
+          .flatMap((l) => l.clips)
+          .find((c) => !c.aggregate && c.renderId === state.selectedRender) ?? null)
       : null;
   const narrow = sizeRef.current.w < 720;
 
@@ -1467,7 +1466,7 @@ export function Timeline({
 
       <Footer
         selection={sel}
-        inScope={inScope.length}
+        inScope={inScopeN}
         wastedN={wastedN}
         idleCollapsedMs={idleTotal}
         regionActive={rg != null}

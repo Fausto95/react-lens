@@ -29,7 +29,10 @@ export type LodLevel = 0 | 1 | 2 | 3 | 4 | 5;
 
 const INITIAL_CAP = 64;
 
-function growFloat64(arr: Float64Array<ArrayBufferLike>, need: number): Float64Array<ArrayBufferLike> {
+function growFloat64(
+  arr: Float64Array<ArrayBufferLike>,
+  need: number,
+): Float64Array<ArrayBufferLike> {
   if (need <= arr.length) return arr;
   let n = arr.length || INITIAL_CAP;
   while (n < need) n *= 2;
@@ -38,7 +41,10 @@ function growFloat64(arr: Float64Array<ArrayBufferLike>, need: number): Float64A
   return next;
 }
 
-function growFloat32(arr: Float32Array<ArrayBufferLike>, need: number): Float32Array<ArrayBufferLike> {
+function growFloat32(
+  arr: Float32Array<ArrayBufferLike>,
+  need: number,
+): Float32Array<ArrayBufferLike> {
   if (need <= arr.length) return arr;
   let n = arr.length || INITIAL_CAP;
   while (n < need) n *= 2;
@@ -75,11 +81,7 @@ function growInt32(arr: Int32Array<ArrayBufferLike>, need: number): Int32Array<A
 }
 
 /** First index with timestamps[i] >= target. */
-export function lowerBound(
-  timestamps: ArrayLike<number>,
-  count: number,
-  target: number,
-): number {
+export function lowerBound(timestamps: ArrayLike<number>, count: number, target: number): number {
   let lo = 0;
   let hi = count;
   while (lo < hi) {
@@ -91,11 +93,7 @@ export function lowerBound(
 }
 
 /** First index with timestamps[i] > target. */
-export function upperBound(
-  timestamps: ArrayLike<number>,
-  count: number,
-  target: number,
-): number {
+export function upperBound(timestamps: ArrayLike<number>, count: number, target: number): number {
   let lo = 0;
   let hi = count;
   while (lo < hi) {
@@ -156,6 +154,7 @@ export interface LaneColumns {
   selfPrefix: Float64Array<ArrayBufferLike>;
   countPrefix: Uint32Array<ArrayBufferLike>;
   wastedPrefix: Uint32Array<ArrayBufferLike>;
+  wastedSelfPrefix: Float64Array<ArrayBufferLike>;
   /** Live row-end times for incremental stack assignment. */
   rowEnds: number[];
   maxRow: number;
@@ -183,6 +182,7 @@ function emptyLane(laneKey: string, name: string): LaneColumns {
     selfPrefix: new Float64Array(INITIAL_CAP + 1),
     countPrefix: new Uint32Array(INITIAL_CAP + 1),
     wastedPrefix: new Uint32Array(INITIAL_CAP + 1),
+    wastedSelfPrefix: new Float64Array(INITIAL_CAP + 1),
     rowEnds: [],
     maxRow: 0,
     instanceIds: new Set(),
@@ -202,17 +202,18 @@ function ensureCapacity(lane: LaneColumns, need: number): void {
   lane.commitIds = growUint32(lane.commitIds, need);
   lane.causes = growUint8(lane.causes, need);
   lane.flags = growUint8(lane.flags, need);
-    if (need > lane.rows.length) {
-      let n = lane.rows.length || INITIAL_CAP;
-      while (n < need) n *= 2;
-      const next = new Uint16Array(n);
-      next.set(lane.rows);
-      lane.rows = next;
-    }
+  if (need > lane.rows.length) {
+    let n = lane.rows.length || INITIAL_CAP;
+    while (n < need) n *= 2;
+    const next = new Uint16Array(n);
+    next.set(lane.rows);
+    lane.rows = next;
+  }
   const prefixNeed = need + 1;
   lane.selfPrefix = growFloat64(lane.selfPrefix, prefixNeed);
   lane.countPrefix = growUint32(lane.countPrefix, prefixNeed);
   lane.wastedPrefix = growUint32(lane.wastedPrefix, prefixNeed);
+  lane.wastedSelfPrefix = growFloat64(lane.wastedSelfPrefix, prefixNeed);
 }
 
 function assignStackRow(lane: LaneColumns, t0: number, t1: number): number {
@@ -275,6 +276,11 @@ export class TimelineIndex {
   commitIds: Uint32Array<ArrayBufferLike> = new Uint32Array(INITIAL_CAP);
   causes: Uint8Array<ArrayBufferLike> = new Uint8Array(INITIAL_CAP);
   flags: Uint8Array<ArrayBufferLike> = new Uint8Array(INITIAL_CAP);
+  /** Global prefix sums: prefix[i] = sum of [0..i). Length = count+1. */
+  selfPrefix: Float64Array<ArrayBufferLike> = new Float64Array(INITIAL_CAP + 1);
+  countPrefix: Uint32Array<ArrayBufferLike> = new Uint32Array(INITIAL_CAP + 1);
+  wastedPrefix: Uint32Array<ArrayBufferLike> = new Uint32Array(INITIAL_CAP + 1);
+  wastedSelfPrefix: Float64Array<ArrayBufferLike> = new Float64Array(INITIAL_CAP + 1);
   /** Lane key string index into laneOrder. */
   laneIndices: Int32Array<ArrayBufferLike> = new Int32Array(INITIAL_CAP);
   laneOrder: string[] = [];
@@ -283,6 +289,7 @@ export class TimelineIndex {
   private renderToIndex = new Map<number, number>();
   /** renderId → { laneKey, localIndex }. */
   private renderToLane = new Map<number, { laneKey: string; index: number }>();
+  private orderedCache: LaneColumns[] | null = null;
 
   t0 = Number.POSITIVE_INFINITY;
   t1 = Number.NEGATIVE_INFINITY;
@@ -305,6 +312,11 @@ export class TimelineIndex {
     this.causes = growUint8(this.causes, gNeed);
     this.flags = growUint8(this.flags, gNeed);
     this.laneIndices = growInt32(this.laneIndices, gNeed);
+    const prefixNeed = gNeed + 1;
+    this.selfPrefix = growFloat64(this.selfPrefix, prefixNeed);
+    this.countPrefix = growUint32(this.countPrefix, prefixNeed);
+    this.wastedPrefix = growUint32(this.wastedPrefix, prefixNeed);
+    this.wastedSelfPrefix = growFloat64(this.wastedSelfPrefix, prefixNeed);
 
     this.timestamps[g] = input.timestamp;
     this.durations[g] = input.duration;
@@ -314,12 +326,17 @@ export class TimelineIndex {
     this.commitIds[g] = input.commitId;
     this.causes[g] = input.cause;
     this.flags[g] = flags;
+    this.selfPrefix[g + 1] = this.selfPrefix[g]! + input.selfDuration;
+    this.countPrefix[g + 1] = this.countPrefix[g]! + 1;
+    this.wastedPrefix[g + 1] = this.wastedPrefix[g]! + (wasted ? 1 : 0);
+    this.wastedSelfPrefix[g + 1] = this.wastedSelfPrefix[g]! + (wasted ? input.selfDuration : 0);
 
     let laneOrd = this.laneKeyToOrder.get(input.laneKey);
     if (laneOrd === undefined) {
       laneOrd = this.laneOrder.length;
       this.laneOrder.push(input.laneKey);
       this.laneKeyToOrder.set(input.laneKey, laneOrd);
+      this.orderedCache = null;
     }
     this.laneIndices[g] = laneOrd;
     this.renderToIndex.set(input.renderId, g);
@@ -330,6 +347,7 @@ export class TimelineIndex {
     if (!lane) {
       lane = emptyLane(input.laneKey, input.name);
       this.lanes.set(input.laneKey, lane);
+      this.orderedCache = null;
     }
     const i = lane.count;
     ensureCapacity(lane, i + 1);
@@ -349,6 +367,7 @@ export class TimelineIndex {
     lane.selfPrefix[i + 1] = lane.selfPrefix[i]! + input.selfDuration;
     lane.countPrefix[i + 1] = lane.countPrefix[i]! + 1;
     lane.wastedPrefix[i + 1] = lane.wastedPrefix[i]! + (wasted ? 1 : 0);
+    lane.wastedSelfPrefix[i + 1] = lane.wastedSelfPrefix[i]! + (wasted ? input.selfDuration : 0);
 
     lane.instanceIds.add(input.componentId);
     lane.firstT = Math.min(lane.firstT, input.timestamp);
@@ -371,6 +390,13 @@ export class TimelineIndex {
     const next = on ? prev | flag : prev & ~flag;
     if (next === prev) return;
     this.flags[g] = next;
+    if (flag === RenderFlags.Wasted) {
+      for (let j = g; j < this.count; j++) {
+        const w = (this.flags[j]! & RenderFlags.Wasted) !== 0 ? 1 : 0;
+        this.wastedPrefix[j + 1] = this.wastedPrefix[j]! + w;
+        this.wastedSelfPrefix[j + 1] = this.wastedSelfPrefix[j]! + (w ? this.selfDurations[j]! : 0);
+      }
+    }
 
     const loc = this.renderToLane.get(renderId);
     if (!loc) return;
@@ -388,6 +414,7 @@ export class TimelineIndex {
     for (let j = i; j < lane.count; j++) {
       const w = (lane.flags[j]! & RenderFlags.Wasted) !== 0 ? 1 : 0;
       lane.wastedPrefix[j + 1] = lane.wastedPrefix[j]! + w;
+      lane.wastedSelfPrefix[j + 1] = lane.wastedSelfPrefix[j]! + (w ? lane.selfDurations[j]! : 0);
     }
     // Update LOD wasted counts for the bucket containing this render.
     const t = lane.timestamps[i]!;
@@ -418,26 +445,32 @@ export class TimelineIndex {
     this.commitIds = new Uint32Array(INITIAL_CAP);
     this.causes = new Uint8Array(INITIAL_CAP);
     this.flags = new Uint8Array(INITIAL_CAP);
+    this.selfPrefix = new Float64Array(INITIAL_CAP + 1);
+    this.countPrefix = new Uint32Array(INITIAL_CAP + 1);
+    this.wastedPrefix = new Uint32Array(INITIAL_CAP + 1);
+    this.wastedSelfPrefix = new Float64Array(INITIAL_CAP + 1);
     this.laneIndices = new Int32Array(INITIAL_CAP);
     this.laneOrder = [];
     this.laneKeyToOrder.clear();
     this.renderToIndex.clear();
     this.renderToLane.clear();
+    this.orderedCache = null;
     this.t0 = Number.POSITIVE_INFINITY;
     this.t1 = Number.NEGATIVE_INFINITY;
   }
 
   /** Ordered lanes by firstT then name (stable for UI). */
   orderedLanes(): LaneColumns[] {
-    return [...this.lanes.values()].sort(
-      (a, b) => a.firstT - b.firstT || a.name.localeCompare(b.name),
-    );
+    if (!this.orderedCache) {
+      this.orderedCache = [...this.lanes.values()].sort(
+        (a, b) => a.firstT - b.firstT || a.name.localeCompare(b.name),
+      );
+    }
+    return this.orderedCache;
   }
 }
 
-export function causeFromReasons(
-  reasons: ReadonlyArray<{ type: string }>,
-): CauseCodeValue {
+export function causeFromReasons(reasons: ReadonlyArray<{ type: string }>): CauseCodeValue {
   const reason = reasons[0];
   if (!reason) return CauseCode.other;
   switch (reason.type) {

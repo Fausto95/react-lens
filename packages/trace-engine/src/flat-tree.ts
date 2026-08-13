@@ -202,29 +202,29 @@ export class FlatTreeIndex {
     include?: (index: number) => boolean;
   }): { rows: VisibleTreeRow[]; totalRows: number; totalHeight: number } {
     const overscan = args.overscan ?? 10;
-    const all: number[] = [];
-    const walk = (i: number) => {
-      if (args.include && !this.shouldKeep(i, args.include)) return;
-      all.push(i);
-      const id = this.ids[i]!;
-      const key = `c:${id}`;
-      const expandable = (this.flags[i]! & TreeFlags.Expandable) !== 0;
-      if (expandable && args.expanded.has(key)) {
-        for (const c of this.children[i] ?? []) walk(c);
-      }
-    };
-    for (const r of this.roots) walk(r);
-
-    const totalRows = all.length;
-    const totalHeight = totalRows * args.rowHeight;
-    const start = Math.max(0, Math.floor(args.scrollTop / args.rowHeight) - overscan);
-    const end = Math.min(
-      totalRows,
-      Math.ceil((args.scrollTop + args.viewH) / args.rowHeight) + overscan,
-    );
+    const rowHeight = args.rowHeight;
+    const start = Math.max(0, Math.floor(args.scrollTop / rowHeight) - overscan);
+    const end = Math.max(start, Math.ceil((args.scrollTop + args.viewH) / rowHeight) + overscan);
     const rows: VisibleTreeRow[] = [];
-    for (let r = start; r < end; r++) {
-      const i = all[r]!;
+    const keepMemo = new Map<number, boolean>();
+    const shouldKeep = (i: number): boolean => {
+      if (!args.include) return true;
+      const cached = keepMemo.get(i);
+      if (cached !== undefined) return cached;
+      let keep = args.include(i);
+      if (!keep) {
+        for (const c of this.children[i] ?? []) {
+          if (shouldKeep(c)) {
+            keep = true;
+            break;
+          }
+        }
+      }
+      keepMemo.set(i, keep);
+      return keep;
+    };
+    let totalRows = 0;
+    const pushRow = (i: number, index: number): void => {
       const id = this.ids[i]!;
       const key = `c:${id}`;
       const f = this.flags[i]!;
@@ -232,7 +232,7 @@ export class FlatTreeIndex {
       if (f & TreeFlags.WastedLast) observableChange = false;
       else if (f & TreeFlags.ChangedLast) observableChange = true;
       rows.push({
-        index: r,
+        index,
         id,
         key,
         depth: this.depth[i]!,
@@ -245,15 +245,20 @@ export class FlatTreeIndex {
         observableChange,
         childCount: this.children[i]?.length ?? 0,
       });
-    }
-    return { rows, totalRows, totalHeight };
-  }
+    };
+    const walk = (i: number) => {
+      if (!shouldKeep(i)) return;
+      const index = totalRows++;
+      if (index >= start && index < end) pushRow(i, index);
+      const id = this.ids[i]!;
+      const key = `c:${id}`;
+      const expandable = (this.flags[i]! & TreeFlags.Expandable) !== 0;
+      if (expandable && args.expanded.has(key)) {
+        for (const c of this.children[i] ?? []) walk(c);
+      }
+    };
+    for (const r of this.roots) walk(r);
 
-  private shouldKeep(i: number, include: (index: number) => boolean): boolean {
-    if (include(i)) return true;
-    for (const c of this.children[i] ?? []) {
-      if (this.shouldKeep(c, include)) return true;
-    }
-    return false;
+    return { rows, totalRows, totalHeight: totalRows * rowHeight };
   }
 }

@@ -1,11 +1,5 @@
 import { describe, it, expect } from "vite-plus/test";
-import {
-  CauseCode,
-  RenderFlags,
-  TimelineIndex,
-  lowerBound,
-  upperBound,
-} from "./columnar.js";
+import { CauseCode, RenderFlags, TimelineIndex, lowerBound, upperBound } from "./columnar.js";
 import { hitTest, queryTimeline, statsInRange } from "./aggregates.js";
 
 function appendMany(index: TimelineIndex, n: number, lane = "App", start = 0): void {
@@ -94,6 +88,38 @@ describe("columnar TimelineIndex", () => {
     index.setFlag(42, RenderFlags.Wasted, true);
     expect(statsInRange(index, 0, 100).wasted).toBe(1);
     expect(index.flags[0]! & RenderFlags.Wasted).toBeTruthy();
+  });
+
+  it("subtracts wasted self time exactly when excluded", () => {
+    const index = new TimelineIndex();
+    index.append({
+      timestamp: 0,
+      duration: 5,
+      selfDuration: 2,
+      renderId: 1,
+      componentId: 1,
+      commitId: 1,
+      cause: CauseCode.props,
+      flags: RenderFlags.Wasted,
+      name: "A",
+      laneKey: "A",
+    });
+    index.append({
+      timestamp: 10,
+      duration: 5,
+      selfDuration: 7,
+      renderId: 2,
+      componentId: 1,
+      commitId: 2,
+      cause: CauseCode.state,
+      name: "A",
+      laneKey: "A",
+    });
+
+    const stats = statsInRange(index, 0, 20, { excludeWasted: true });
+    expect(stats.renders).toBe(1);
+    expect(stats.wasted).toBe(0);
+    expect(stats.selfMs).toBe(7);
   });
 
   it("hitTest finds a containing clip via binary search neighborhood", () => {

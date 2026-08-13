@@ -14,11 +14,12 @@ import type { ClipRect } from "./view/draw.js";
 export type TimelineGeometryPayload = {
   count: number;
   /** Row index into layout.rows */
-  rowIndex: Uint16Array;
+  rowIndex: Uint32Array;
   x0: Float64Array;
   x1: Float64Array;
   self: Float32Array;
   renderId: Uint32Array;
+  componentId: Uint32Array;
   cause: Uint8Array;
   flags: Uint8Array;
   stackRow: Uint16Array;
@@ -133,6 +134,7 @@ export function createTimelineRenderer(canvas: HTMLCanvasElement): TimelineRende
         geo.x1.buffer,
         geo.self.buffer,
         geo.renderId.buffer,
+        geo.componentId.buffer,
         geo.cause.buffer,
         geo.flags.buffer,
         geo.stackRow.buffer,
