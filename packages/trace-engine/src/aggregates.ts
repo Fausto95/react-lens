@@ -83,6 +83,11 @@ export interface RegionStats {
   selfMs: number;
 }
 
+export interface RegionStatsPair {
+  raw: RegionStats;
+  excludeWasted: RegionStats;
+}
+
 export interface TimelineQuietSummary {
   lanes: number;
   renders: number;
@@ -247,6 +252,49 @@ export function statsInRange(
   return { renders, wasted, selfMs };
 }
 
+/** Compute raw + exclude-wasted stats in one pass. */
+export function statsPairInRange(
+  index: TimelineIndex,
+  t0: number,
+  t1: number,
+  options: {
+    includeLane?: (laneKey: string, name: string) => boolean;
+  } = {},
+): RegionStatsPair {
+  const lo = Math.min(t0, t1);
+  const hi = Math.max(t0, t1);
+  if (!options.includeLane) {
+    const s = globalStats(index, lo, hi);
+    return {
+      raw: { renders: s.renders, wasted: s.wasted, selfMs: s.selfMs },
+      excludeWasted: {
+        renders: s.renders - s.wasted,
+        wasted: 0,
+        selfMs: s.selfMs - s.wastedSelfMs,
+      },
+    };
+  }
+
+  let renders = 0;
+  let wasted = 0;
+  let selfMs = 0;
+  let keptRenders = 0;
+  let keptSelfMs = 0;
+  for (const lane of index.lanes.values()) {
+    if (!options.includeLane(lane.laneKey, lane.name)) continue;
+    const s = sliceStatsWithWastedSelf(lane, lo, hi);
+    renders += s.renders;
+    wasted += s.wasted;
+    selfMs += s.selfMs;
+    keptRenders += s.renders - s.wasted;
+    keptSelfMs += s.selfMs - s.wastedSelfMs;
+  }
+  return {
+    raw: { renders, wasted, selfMs },
+    excludeWasted: { renders: keptRenders, wasted: 0, selfMs: keptSelfMs },
+  };
+}
+
 export interface HitTestResult {
   renderId: number;
   componentId: number;
@@ -259,6 +307,14 @@ export interface HitTestResult {
   stackRow: number;
 }
 
+export interface HitTestOptions {
+  includeLane?: (laneKey: string, name: string) => boolean;
+  laneFilter?: TimelineQuery["laneFilter"];
+  includeQuiet?: boolean;
+  rowStart?: number;
+  rowEnd?: number;
+}
+
 /**
  * Nearest clip at time `t`. Prefer `preferLane` when set.
  * O(log N) per lane for the containing / nearest candidate.
@@ -267,9 +323,17 @@ export function hitTest(
   index: TimelineIndex,
   t: number,
   preferLane: string | null = null,
+  options: HitTestOptions = {},
 ): HitTestResult | null {
   let best: HitTestResult | null = null;
   let bestScore = Number.POSITIVE_INFINITY;
+  const compiledFilter = compileLaneFilter(options.laneFilter);
+  const hasLaneWindow =
+    options.includeLane ||
+    compiledFilter ||
+    options.includeQuiet === false ||
+    options.rowStart !== undefined ||
+    options.rowEnd !== undefined;
 
   const consider = (lane: LaneColumns) => {
     if (lane.count === 0) return;
@@ -305,9 +369,42 @@ export function hitTest(
 
   if (preferLane) {
     const lane = index.lanes.get(preferLane);
-    if (lane) consider(lane);
+    if (
+      lane &&
+      includePasses(
+        { includeLane: options.includeLane, laneFilter: options.laneFilter },
+        lane,
+        compiledFilter,
+      )
+    ) {
+      consider(lane);
+    }
   }
-  for (const lane of index.lanes.values()) {
+  const lanes = hasLaneWindow
+    ? (() => {
+        const base = index.orderedLanes({
+          includeQuiet: options.includeQuiet,
+          quietTotalMs: QUIET_TOTAL_MS,
+        });
+        const filtered =
+          options.includeLane || compiledFilter
+            ? base.filter((lane) =>
+                includePasses(
+                  { includeLane: options.includeLane, laneFilter: options.laneFilter },
+                  lane,
+                  compiledFilter,
+                ),
+              )
+            : base;
+        const rowStart = Math.max(0, options.rowStart ?? 0);
+        const rowEnd = Math.min(
+          filtered.length,
+          Math.max(rowStart, options.rowEnd ?? filtered.length),
+        );
+        return filtered.slice(rowStart, rowEnd);
+      })()
+    : index.lanes.values();
+  for (const lane of lanes) {
     if (preferLane && lane.laneKey === preferLane) continue;
     consider(lane);
   }
@@ -338,20 +435,17 @@ function collectBuckets(lane: LaneColumns, level: LodLevel, t0: number, t1: numb
 export function activityIntervals(index: TimelineIndex, bucketMs = 64): Array<[number, number]> {
   const levelIdx = LOD_BUCKET_MS.indexOf(bucketMs as (typeof LOD_BUCKET_MS)[number]);
   const level: LodLevel = (levelIdx >= 0 ? levelIdx : 3) as LodLevel;
-  const starts = new Map<number, number>(); // start → end
-  for (const lane of index.lanes.values()) {
-    const state = lane.lod[level];
-    if (!state) continue;
-    for (const b of state.buckets.values()) {
-      if (b.renderCount === 0) continue;
-      const end = b.start + state.bucketMs;
-      const prev = starts.get(b.start);
-      starts.set(b.start, prev === undefined ? end : Math.max(prev, end));
-    }
+  const state = index.activityLod[level];
+  if (!state) return [];
+  if (!state.startsSorted) {
+    state.starts.sort((a, b) => a - b);
+    state.startsSorted = true;
   }
-  const sorted = [...starts.entries()].sort((a, b) => a[0] - b[0]);
   const merged: Array<[number, number]> = [];
-  for (const [s, e] of sorted) {
+  for (const s of state.starts) {
+    const b = state.buckets.get(s);
+    if (!b || b.renderCount === 0) continue;
+    const e = b.start + state.bucketMs;
     const last = merged[merged.length - 1];
     if (last && s <= last[1] + bucketMs * 0.25) last[1] = Math.max(last[1], e);
     else merged.push([s, e]);

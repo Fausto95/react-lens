@@ -34,6 +34,7 @@ export type {
 
 export {
   queryTimeline,
+  statsPairInRange,
   statsInRange,
   hitTest,
   activityIntervals,
@@ -46,7 +47,9 @@ export type {
   TimelineColumns,
   TimelineBucketColumns,
   RegionStats,
+  RegionStatsPair,
   HitTestResult,
+  HitTestOptions,
 } from "./aggregates.js";
 
 export { FlatTreeIndex, TreeFlags } from "./flat-tree.js";

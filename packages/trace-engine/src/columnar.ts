@@ -125,6 +125,15 @@ interface LodLevelState {
   startsSorted: boolean;
 }
 
+function emptyLodStates(): LodLevelState[] {
+  return LOD_BUCKET_MS.map((bucketMs) => ({
+    bucketMs,
+    buckets: new Map(),
+    starts: [],
+    startsSorted: true,
+  }));
+}
+
 export interface AppendRenderInput {
   timestamp: number;
   duration: number;
@@ -137,6 +146,11 @@ export interface AppendRenderInput {
   /** Component display name for the lane. */
   name: string;
   laneKey: string;
+}
+
+export interface WastedFlagUpdate {
+  renderId: number;
+  wasted: boolean;
 }
 
 export interface LaneColumns {
@@ -194,12 +208,7 @@ function emptyLane(laneKey: string, name: string): LaneColumns {
     selfTotal: 0,
     totalDuration: 0,
     wastedCount: 0,
-    lod: LOD_BUCKET_MS.map((bucketMs) => ({
-      bucketMs,
-      buckets: new Map(),
-      starts: [],
-      startsSorted: true,
-    })),
+    lod: emptyLodStates(),
   };
 }
 
@@ -239,8 +248,8 @@ function assignStackRow(lane: LaneColumns, t0: number, t1: number): number {
   return r;
 }
 
-function updateLod(lane: LaneColumns, input: AppendRenderInput, wasted: boolean): void {
-  for (const level of lane.lod) {
+function updateLodStates(states: LodLevelState[], input: AppendRenderInput, wasted: boolean): void {
+  for (const level of states) {
     const start = Math.floor(input.timestamp / level.bucketMs) * level.bucketMs;
     let b = level.buckets.get(start);
     if (!b) {
@@ -268,6 +277,20 @@ function updateLod(lane: LaneColumns, input: AppendRenderInput, wasted: boolean)
     if (input.cause === CauseCode.props) b.propsCount++;
     else if (input.cause === CauseCode.state || input.cause === CauseCode.mount) b.stateCount++;
     else if (input.cause === CauseCode.context) b.contextCount++;
+  }
+}
+
+function updateLod(lane: LaneColumns, input: AppendRenderInput, wasted: boolean): void {
+  updateLodStates(lane.lod, input, wasted);
+}
+
+function setLodWastedAt(states: LodLevelState[], t: number, wasted: boolean): void {
+  for (const level of states) {
+    const start = Math.floor(t / level.bucketMs) * level.bucketMs;
+    const b = level.buckets.get(start);
+    if (!b) continue;
+    if (wasted) b.wastedCount++;
+    else b.wastedCount = Math.max(0, b.wastedCount - 1);
   }
 }
 
@@ -310,6 +333,7 @@ export class TimelineIndex {
     renders: number;
     selfMs: number;
   } | null = null;
+  activityLod: LodLevelState[] = emptyLodStates();
 
   t0 = Number.POSITIVE_INFINITY;
   t1 = Number.NEGATIVE_INFINITY;
@@ -416,6 +440,7 @@ export class TimelineIndex {
 
     this.renderToLane.set(input.renderId, { laneKey: input.laneKey, index: i });
     updateLod(lane, input, wasted);
+    updateLodStates(this.activityLod, input, wasted);
 
     this.t0 = Math.min(this.t0, input.timestamp);
     this.t1 = Math.max(this.t1, t1);
@@ -423,6 +448,10 @@ export class TimelineIndex {
 
   /** Set or clear the wasted flag after causality analysis. */
   setFlag(renderId: number, flag: RenderFlag, on: boolean): void {
+    if (flag === RenderFlags.Wasted) {
+      this.setWastedFlags([{ renderId, wasted: on }]);
+      return;
+    }
     const g = this.renderToIndex.get(renderId);
     if (g === undefined) return;
     const prev = this.flags[g]!;
@@ -466,6 +495,57 @@ export class TimelineIndex {
     }
   }
 
+  /** Batch wasted flag changes so prefix sums rebuild once per touched range. */
+  setWastedFlags(updates: ReadonlyArray<WastedFlagUpdate>): void {
+    let minGlobal = Number.POSITIVE_INFINITY;
+    const laneStarts = new Map<string, number>();
+
+    for (const update of updates) {
+      const g = this.renderToIndex.get(update.renderId);
+      if (g === undefined) continue;
+      const prev = this.flags[g]!;
+      const next = update.wasted ? prev | RenderFlags.Wasted : prev & ~RenderFlags.Wasted;
+      if (next === prev) continue;
+      this.flags[g] = next;
+      minGlobal = Math.min(minGlobal, g);
+
+      const loc = this.renderToLane.get(update.renderId);
+      if (!loc) continue;
+      const lane = this.lanes.get(loc.laneKey);
+      if (!lane) continue;
+      const i = loc.index;
+      const wasWasted = (lane.flags[i]! & RenderFlags.Wasted) !== 0;
+      lane.flags[i] = next;
+      const isWasted = (next & RenderFlags.Wasted) !== 0;
+      if (wasWasted === isWasted) continue;
+      if (isWasted) lane.wastedCount++;
+      else lane.wastedCount = Math.max(0, lane.wastedCount - 1);
+      laneStarts.set(loc.laneKey, Math.min(laneStarts.get(loc.laneKey) ?? i, i));
+
+      const t = lane.timestamps[i]!;
+      setLodWastedAt(lane.lod, t, isWasted);
+      setLodWastedAt(this.activityLod, t, isWasted);
+    }
+
+    if (Number.isFinite(minGlobal)) {
+      for (let j = minGlobal; j < this.count; j++) {
+        const w = (this.flags[j]! & RenderFlags.Wasted) !== 0 ? 1 : 0;
+        this.wastedPrefix[j + 1] = this.wastedPrefix[j]! + w;
+        this.wastedSelfPrefix[j + 1] = this.wastedSelfPrefix[j]! + (w ? this.selfDurations[j]! : 0);
+      }
+    }
+
+    for (const [laneKey, start] of laneStarts) {
+      const lane = this.lanes.get(laneKey);
+      if (!lane) continue;
+      for (let j = start; j < lane.count; j++) {
+        const w = (lane.flags[j]! & RenderFlags.Wasted) !== 0 ? 1 : 0;
+        lane.wastedPrefix[j + 1] = lane.wastedPrefix[j]! + w;
+        lane.wastedSelfPrefix[j + 1] = lane.wastedSelfPrefix[j]! + (w ? lane.selfDurations[j]! : 0);
+      }
+    }
+  }
+
   bounds(): { t0: number; t1: number } {
     if (!Number.isFinite(this.t0) || !Number.isFinite(this.t1)) {
       return { t0: 0, t1: 120 };
@@ -496,6 +576,7 @@ export class TimelineIndex {
     this.orderedCache = null;
     this.orderedNonQuietCache = null;
     this.quietSummaryCache = null;
+    this.activityLod = emptyLodStates();
     this.t0 = Number.POSITIVE_INFINITY;
     this.t1 = Number.NEGATIVE_INFINITY;
   }

@@ -168,16 +168,19 @@ export function createTraceClient(options: TraceClientOptions = {}): TraceClient
   }
 
   function markWastedLocal(batch: EventsBatchMessage["payload"]): void {
+    const wasted: RenderId[] = [];
+    const expected: RenderId[] = [];
     for (const event of batch.events) {
       if (event.type !== "render") continue;
       try {
         const verdict = causality.why(event.renderId).verdict;
-        if (verdict === "no-observable-change") store.markWasted(event.renderId, true);
-        else if (verdict === "expected") store.markWasted(event.renderId, false);
+        if (verdict === "no-observable-change") wasted.push(event.renderId);
+        else if (verdict === "expected") expected.push(event.renderId);
       } catch {
         /* no verdict */
       }
     }
+    store.markWastedMany(wasted, expected);
   }
 
   function mirrorIngest(batch: EventsBatchMessage["payload"]): void {
@@ -233,7 +236,7 @@ export function createTraceClient(options: TraceClientOptions = {}): TraceClient
         // Sync mirror for UI point reads — Doctor already teed via onFrame.
         mirrorIngest(msg.batch);
         if (msg.wasted) {
-          for (const id of msg.wasted) store.markWasted(id, true);
+          store.markWastedMany(msg.wasted);
         }
         break;
       case "cleared":
@@ -242,8 +245,7 @@ export function createTraceClient(options: TraceClientOptions = {}): TraceClient
         break;
       case "flags":
         generation = msg.generation;
-        for (const id of msg.wasted) store.markWasted(id, true);
-        for (const id of msg.expected) store.markWasted(id, false);
+        store.markWastedMany(msg.wasted, msg.expected);
         break;
       case "query-result": {
         const pending = pendingQueries.get(msg.requestId);
@@ -536,7 +538,15 @@ export function createTraceClient(options: TraceClientOptions = {}): TraceClient
         case "timeline-range":
           return { kind: "timeline-range", result: store.queryTimeline(q) };
         case "hit-test":
-          return { kind: "hit-test", result: store.hitTest(q.t, q.laneKey ?? null) };
+          return {
+            kind: "hit-test",
+            result: store.hitTest(q.t, q.laneKey ?? null, {
+              rowStart: q.rowStart,
+              rowEnd: q.rowEnd,
+              includeQuiet: q.includeQuiet,
+              laneFilter: q.laneFilter,
+            }),
+          };
         case "render":
           return { kind: "render", result: store.getRender(q.id) };
         case "component-renders":

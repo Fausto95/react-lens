@@ -33,7 +33,7 @@ import { clipAtTime, clipCauseColor, type Clip } from "../model/lanes.js";
 import type { Timeline as TimelineModel } from "../useTimeline.js";
 import { drawBase, drawOverlay, ensureHatchPattern, type ClipRect } from "./draw.js";
 import { createTimelineRenderer, type TimelineRendererClient } from "../timelineRendererClient.js";
-import { geometryFromLayout } from "./geometryFromLayout.js";
+import { geometryFromQueryResult } from "./geometryFromLayout.js";
 import { preferWorkerPaint } from "../gpuGate.js";
 import { WallStrip } from "./WallStrip.js";
 import { Navigator } from "./Navigator.js";
@@ -75,6 +75,21 @@ const HELP: Array<[string, string]> = [
   ["esc", "clear A/B region"],
   ["?", "toggle this panel"],
 ];
+
+type AxisSeg = TimeAxis["segs"][number];
+type GapSeg = Extract<AxisSeg, { type: "gap" }>;
+
+function findClipByRenderId(
+  lanes: readonly { clips: readonly Clip[] }[],
+  renderId: unknown,
+): Clip | null {
+  for (const lane of lanes) {
+    for (const clip of lane.clips) {
+      if (!clip.aggregate && clip.renderId === renderId) return clip;
+    }
+  }
+  return null;
+}
 
 export function Timeline({
   model,
@@ -129,6 +144,8 @@ export function Timeline({
   /** Live axis for drawing (tracks gapProg animation frames). */
   const axisLiveRef = useRef<TimeAxis>(axis);
   axisLiveRef.current = buildAxis(acts, gapProgRef.current);
+  const viewRef = useRef(state.view);
+  viewRef.current = state.view;
 
   const playheadRef = useRef(model.playhead);
   // While playing, the transport owns the playhead. A stale live cursor (parent
@@ -170,6 +187,7 @@ export function Timeline({
   const gapAnim = useRef(0);
   const rafRef = useRef(0);
   const scrollRafRef = useRef(0);
+  const wheelPanRef = useRef({ deltaPx: 0, raf: 0 });
   const sizeRef = useRef({ w: state.width, nameW: NAME_W });
   const layoutHRef = useRef(layout.totalH);
   layoutHRef.current = layout.totalH;
@@ -371,9 +389,9 @@ export function Timeline({
 
       if (base) {
         const axis = axisLiveRef.current;
+        const geometry = geometryFromQueryResult(model.timelineResult);
         if (renderer) {
-          const clipEstimate = layout.rows.reduce((n, r) => n + r.clips.length, 0);
-          const geometry = geometryFromLayout(layout);
+          const clipEstimate = geometry.count;
           const useGeo = preferWorkerPaint({
             clipEstimate,
             hasGeometry: geometry.count > 0,
@@ -410,6 +428,7 @@ export function Timeline({
             axis,
             view: state.view,
             layout,
+            ...(geometry.count > 0 ? { geometry } : {}),
             region: state.region,
             markers,
             selectedRender: state.selectedRender,
@@ -453,6 +472,7 @@ export function Timeline({
       bounds.t0,
       arrows,
       model.pxPerMs,
+      model.timelineResult,
       drawLoupe,
       syncChrome,
     ],
@@ -1023,6 +1043,7 @@ export function Timeline({
   useEffect(() => {
     const el = wrapRef.current;
     if (!el) return;
+    const wheelPan = wheelPanRef.current;
     const onWheel = (e: WheelEvent) => {
       e.preventDefault();
       const rect = el.getBoundingClientRect();
@@ -1039,11 +1060,24 @@ export function Timeline({
         );
         return;
       }
-      const span = state.view.a1 - state.view.a0;
-      setView(state.view.a0 + ((e.deltaY + e.deltaX) * span) / 900, span);
+      wheelPan.deltaPx += e.deltaY + e.deltaX;
+      if (wheelPan.raf) return;
+      wheelPan.raf = requestAnimationFrame(() => {
+        const deltaPx = wheelPan.deltaPx;
+        wheelPan.deltaPx = 0;
+        wheelPan.raf = 0;
+        const v = viewRef.current;
+        const span = v.a1 - v.a0;
+        setView(v.a0 + (deltaPx * span) / 900, span);
+      });
     };
     el.addEventListener("wheel", onWheel, { passive: false });
-    return () => el.removeEventListener("wheel", onWheel);
+    return () => {
+      el.removeEventListener("wheel", onWheel);
+      cancelAnimationFrame(wheelPan.raf);
+      wheelPan.raf = 0;
+      wheelPan.deltaPx = 0;
+    };
   });
 
   // Transport: axis-uniform JKL / space. Loops only when an A/B region is set.
@@ -1142,9 +1176,7 @@ export function Timeline({
           scheduleDraw(true);
           break;
         case "fit-selection": {
-          const c = lanes
-            .flatMap((l) => l.clips)
-            .find((x) => !x.aggregate && x.renderId === state.selectedRender);
+          const c = findClipByRenderId(lanes, state.selectedRender);
           if (c) zoomToClip(c);
           break;
         }
@@ -1194,36 +1226,43 @@ export function Timeline({
   }, [state.playing, lanes, state.selectedLane, state.selectedRender]);
 
   const navBlips = useMemo(() => {
-    const all = lanes.flatMap((l) => l.clips).filter((c) => !c.aggregate);
-    return all.filter((_, i) => i % 6 === 0);
+    const out: Clip[] = [];
+    let seen = 0;
+    for (const lane of lanes) {
+      for (const clip of lane.clips) {
+        if (clip.aggregate) continue;
+        if (seen % 6 === 0) out.push(clip);
+        seen++;
+      }
+    }
+    return out;
   }, [lanes]);
 
-  const gapChips = axisLiveRef.current.segs
-    .filter((s): s is Extract<typeof s, { type: "gap" }> => s.type === "gap")
-    // Only expanded gaps are visible; collapsed idle is fully compressed away.
-    .filter((s) => s.a1 - s.a0 > 1e-6)
-    .map((s) => ({ ...s, x0: aToX(s.a0), x1: aToX(s.a1) }))
-    .filter((s) => s.x1 > nameW() + 3 && s.x0 < sizeRef.current.w);
-
-  const stitches = axisLiveRef.current.segs
-    .filter((s): s is Extract<typeof s, { type: "gap" }> => s.type === "gap")
-    .filter((s) => s.a1 - s.a0 < 1e-6)
-    .map((s) => ({ id: s.id, x: aToX(s.a0), ms: s.w1 - s.w0 }))
-    .filter((s) => s.x > nameW() + 2 && s.x < sizeRef.current.w - 2);
-
   const liveAxis = axisLiveRef.current;
+  const gapChips: Array<GapSeg & { x0: number; x1: number }> = [];
+  const stitches: Array<{ id: string; x: number; ms: number }> = [];
+  const overviewGaps: GapSeg[] = [];
+  let idleTotal = 0;
+  for (const s of liveAxis.segs) {
+    if (s.type !== "gap") continue;
+    if (s.p < 0.5) idleTotal += s.w1 - s.w0;
+    const width = s.a1 - s.a0;
+    if (width > 1e-6) {
+      overviewGaps.push(s);
+      const x0 = aToX(s.a0);
+      const x1 = aToX(s.a1);
+      if (x1 > nameW() + 3 && x0 < sizeRef.current.w) gapChips.push({ ...s, x0, x1 });
+    } else {
+      const x = aToX(s.a0);
+      if (x > nameW() + 2 && x < sizeRef.current.w - 2) {
+        stitches.push({ id: s.id, x, ms: s.w1 - s.w0 });
+      }
+    }
+  }
   const rg = state.region;
   const inScopeN = model.stats.renders;
   const wastedN = model.stats.wasted;
-  const idleTotal = liveAxis.segs
-    .filter((s) => s.type === "gap" && s.p < 0.5)
-    .reduce((a, s) => a + (s.w1 - s.w0), 0);
-  const sel =
-    state.selectedRender != null
-      ? (lanes
-          .flatMap((l) => l.clips)
-          .find((c) => !c.aggregate && c.renderId === state.selectedRender) ?? null)
-      : null;
+  const sel = state.selectedRender != null ? findClipByRenderId(lanes, state.selectedRender) : null;
   const narrow = sizeRef.current.w < 720;
   const stageScrollTop = layout.scrollTop ?? state.scrollTop;
   const paintH = layout.paintH ?? layout.totalH;
@@ -1334,7 +1373,13 @@ export function Timeline({
         </div>
       </div>
 
-      <WallStrip nameW={sizeRef.current.nameW} axis={liveAxis} view={state.view} blips={navBlips} />
+      <WallStrip
+        nameW={sizeRef.current.nameW}
+        axis={liveAxis}
+        view={state.view}
+        blips={navBlips}
+        gaps={overviewGaps}
+      />
 
       <div
         ref={wrapRef}
@@ -1518,6 +1563,7 @@ export function Timeline({
         axis={liveAxis}
         view={state.view}
         blips={navBlips}
+        gaps={overviewGaps}
         onView={(a0, span, animate) => (animate ? animateView(a0, span) : setView(a0, span))}
       />
 

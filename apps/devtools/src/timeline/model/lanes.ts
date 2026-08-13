@@ -396,6 +396,42 @@ export function statsFromStore(
   };
 }
 
+/** Prefix-sum raw + exclude-wasted stats from the store's columnar index. */
+export function statsPairFromStore(
+  store: TraceStore,
+  t0: number,
+  t1: number,
+  options: {
+    includeLane?: (laneKey: LaneKey, name: string) => boolean;
+  } = {},
+): {
+  raw: Omit<RegionStats, "byLane" | "byComponent"> & {
+    byLane: Map<LaneKey, { renders: number; wasted: number; selfMs: number }>;
+    byComponent: Map<ComponentId, { renders: number; wasted: number; selfMs: number }>;
+  };
+  excludeWasted: Omit<RegionStats, "byLane" | "byComponent"> & {
+    byLane: Map<LaneKey, { renders: number; wasted: number; selfMs: number }>;
+    byComponent: Map<ComponentId, { renders: number; wasted: number; selfMs: number }>;
+  };
+} {
+  const pair = store.statsPairInRange(t0, t1, {
+    includeLane: options.includeLane,
+  });
+  const emptyLane = new Map<LaneKey, { renders: number; wasted: number; selfMs: number }>();
+  const emptyComponent = new Map<
+    ComponentId,
+    { renders: number; wasted: number; selfMs: number }
+  >();
+  return {
+    raw: { ...pair.raw, byLane: emptyLane, byComponent: emptyComponent },
+    excludeWasted: {
+      ...pair.excludeWasted,
+      byLane: new Map(),
+      byComponent: new Map(),
+    },
+  };
+}
+
 function hitToClip(hit: HitTestResult): Clip {
   return {
     renderId: hit.renderId as RenderId,

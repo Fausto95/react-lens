@@ -90,6 +90,20 @@ describe("columnar TimelineIndex", () => {
     expect(index.flags[0]! & RenderFlags.Wasted).toBeTruthy();
   });
 
+  it("setWastedFlags batches wasted prefix updates", () => {
+    const index = new TimelineIndex();
+    appendMany(index, 5);
+    index.setWastedFlags([
+      { renderId: 2, wasted: true },
+      { renderId: 4, wasted: true },
+    ]);
+
+    expect(statsInRange(index, 0, 10).wasted).toBe(2);
+
+    index.setWastedFlags([{ renderId: 2, wasted: false }]);
+    expect(statsInRange(index, 0, 10).wasted).toBe(1);
+  });
+
   it("subtracts wasted self time exactly when excluded", () => {
     const index = new TimelineIndex();
     index.append({

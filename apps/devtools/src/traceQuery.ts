@@ -16,10 +16,25 @@ import type { ComponentInstance, RenderEvent, RenderSnapshot } from "@reactlens/
 
 export type TraceQuery =
   | ({ kind: "timeline-range" } & TimelineQuery)
-  | { kind: "hit-test"; t: number; laneKey?: string | null }
+  | {
+      kind: "hit-test";
+      t: number;
+      laneKey?: string | null;
+      rowStart?: number;
+      rowEnd?: number;
+      includeQuiet?: boolean;
+      laneFilter?: TimelineQuery["laneFilter"];
+    }
   | { kind: "render"; id: RenderId }
   | { kind: "component-renders"; componentId: ComponentId; t0?: number; t1?: number }
-  | { kind: "tree-window"; scrollTop: number; viewH: number; expanded: string[]; projection?: "all" | "changed" | "waste"; rowHeight?: number }
+  | {
+      kind: "tree-window";
+      scrollTop: number;
+      viewH: number;
+      expanded: string[];
+      projection?: "all" | "changed" | "waste";
+      rowHeight?: number;
+    }
   | { kind: "apply-set-delta"; t: number; prevT?: number }
   | { kind: "time-bounds" }
   | { kind: "stats-range"; t0: number; t1: number; excludeWasted?: boolean }
@@ -62,13 +77,12 @@ export type TraceQueryReplyMessage = {
 };
 
 /** Diff worker on-demand request. */
-export type DiffQuery =
-  | {
-      kind: "commit-diff";
-      componentId: ComponentId;
-      renderA: RenderId;
-      renderB: RenderId;
-    };
+export type DiffQuery = {
+  kind: "commit-diff";
+  componentId: ComponentId;
+  renderA: RenderId;
+  renderB: RenderId;
+};
 
 export type CausalityJob = {
   type: "analyze-renders";

@@ -23,6 +23,9 @@ export type TimelineGeometryPayload = {
   cause: Uint8Array;
   flags: Uint8Array;
   stackRow: Uint16Array;
+  aggregate: Uint8Array;
+  renderCount: Uint32Array;
+  wastedCount: Uint32Array;
 };
 
 export type TimelineBasePaintPayload = {
@@ -138,6 +141,9 @@ export function createTimelineRenderer(canvas: HTMLCanvasElement): TimelineRende
         geo.cause.buffer,
         geo.flags.buffer,
         geo.stackRow.buffer,
+        geo.aggregate.buffer,
+        geo.renderCount.buffer,
+        geo.wastedCount.buffer,
       ]) {
         if (buf instanceof ArrayBuffer) transfer.push(buf);
       }

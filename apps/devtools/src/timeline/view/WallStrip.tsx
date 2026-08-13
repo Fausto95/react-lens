@@ -13,11 +13,13 @@ export function WallStrip({
   axis,
   view,
   blips,
+  gaps,
 }: {
   nameW: number;
   axis: TimeAxis;
   view: ViewWindow;
   blips: readonly Clip[];
+  gaps?: readonly Extract<TimeAxis["segs"][number], { type: "gap" }>[];
 }) {
   const total = Math.max(1, axis.total);
   const pct = (a: number) => (a / total) * 100;
@@ -31,20 +33,21 @@ export function WallStrip({
         AXIS
       </div>
       <div className="tl-wall-track">
-        {axis.segs
-          .filter((s): s is Extract<(typeof axis.segs)[number], { type: "gap" }> => {
+        {(
+          gaps ??
+          axis.segs.filter((s): s is Extract<(typeof axis.segs)[number], { type: "gap" }> => {
             return s.type === "gap" && s.a1 - s.a0 > 1e-6;
           })
-          .map((s) => (
-            <div
-              key={s.id}
-              className="tl-wall-gap"
-              style={{
-                left: `${pct(s.a0)}%`,
-                width: `${Math.max(pct(s.a1) - pct(s.a0), 0.15)}%`,
-              }}
-            />
-          ))}
+        ).map((s) => (
+          <div
+            key={s.id}
+            className="tl-wall-gap"
+            style={{
+              left: `${pct(s.a0)}%`,
+              width: `${Math.max(pct(s.a1) - pct(s.a0), 0.15)}%`,
+            }}
+          />
+        ))}
         <div
           className="tl-wall-view"
           style={{

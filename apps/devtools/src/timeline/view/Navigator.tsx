@@ -14,12 +14,14 @@ export function Navigator({
   axis,
   view,
   blips,
+  gaps,
   onView,
 }: {
   nameW: number;
   axis: TimeAxis;
   view: ViewWindow;
   blips: readonly Clip[];
+  gaps?: readonly Extract<TimeAxis["segs"][number], { type: "gap" }>[];
   onView: (a0: number, span: number, animate?: boolean) => void;
 }) {
   const navRef = useRef<HTMLDivElement>(null);
@@ -81,20 +83,21 @@ export function Navigator({
           onView(a - span / 2, span, true);
         }}
       >
-        {axis.segs
-          .filter((s): s is Extract<(typeof axis.segs)[number], { type: "gap" }> => {
+        {(
+          gaps ??
+          axis.segs.filter((s): s is Extract<(typeof axis.segs)[number], { type: "gap" }> => {
             return s.type === "gap" && s.a1 - s.a0 > 1e-6;
           })
-          .map((s) => (
-            <div
-              key={s.id}
-              className="tl-nav-gap"
-              style={{
-                left: `${pct(s.a0)}%`,
-                width: `${Math.max(pct(s.a1) - pct(s.a0), 0.15)}%`,
-              }}
-            />
-          ))}
+        ).map((s) => (
+          <div
+            key={s.id}
+            className="tl-nav-gap"
+            style={{
+              left: `${pct(s.a0)}%`,
+              width: `${Math.max(pct(s.a1) - pct(s.a0), 0.15)}%`,
+            }}
+          />
+        ))}
         {blips.map((c) => (
           <i
             key={String(c.renderId)}

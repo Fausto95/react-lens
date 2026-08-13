@@ -1,6 +1,12 @@
 import { describe, it, expect } from "vite-plus/test";
-import { CauseCode, TimelineIndex } from "./columnar.js";
-import { activityIntervals, queryTimeline, statsInRange } from "./aggregates.js";
+import { CauseCode, RenderFlags, TimelineIndex } from "./columnar.js";
+import {
+  activityIntervals,
+  hitTest,
+  queryTimeline,
+  statsInRange,
+  statsPairInRange,
+} from "./aggregates.js";
 
 describe("aggregates", () => {
   it("activityIntervals merges busy LOD buckets", () => {
@@ -51,6 +57,37 @@ describe("aggregates", () => {
       includeLane: (k) => k === "A",
     });
     expect(onlyA.renders).toBe(1);
+  });
+
+  it("statsPairInRange computes raw and exclude-wasted in one result", () => {
+    const index = new TimelineIndex();
+    index.append({
+      timestamp: 1,
+      duration: 1,
+      selfDuration: 2,
+      renderId: 1,
+      componentId: 1,
+      commitId: 1,
+      cause: CauseCode.props,
+      flags: RenderFlags.Wasted,
+      name: "A",
+      laneKey: "A",
+    });
+    index.append({
+      timestamp: 2,
+      duration: 1,
+      selfDuration: 3,
+      renderId: 2,
+      componentId: 2,
+      commitId: 1,
+      cause: CauseCode.props,
+      name: "B",
+      laneKey: "B",
+    });
+
+    const pair = statsPairInRange(index, 0, 10);
+    expect(pair.raw).toEqual({ renders: 2, wasted: 1, selfMs: 5 });
+    expect(pair.excludeWasted).toEqual({ renders: 1, wasted: 0, selfMs: 3 });
   });
 
   it("queryTimeline honors serializable lane filters", () => {
@@ -107,6 +144,26 @@ describe("aggregates", () => {
     });
     expect(result.rows).toHaveLength(1);
     expect(result.rows[0]!.name).toBe("A"); // firstT sort
+  });
+
+  it("hitTest can stay inside a row window", () => {
+    const index = new TimelineIndex();
+    for (const name of ["A", "B"]) {
+      index.append({
+        timestamp: name === "A" ? 0 : 1,
+        duration: 20,
+        selfDuration: 1,
+        renderId: name.charCodeAt(0),
+        componentId: name.charCodeAt(0),
+        commitId: 1,
+        cause: CauseCode.props,
+        name,
+        laneKey: name,
+      });
+    }
+
+    const hit = hitTest(index, 10, null, { rowStart: 1, rowEnd: 2 });
+    expect(hit?.laneKey).toBe("B");
   });
 
   it("queryTimeline can skip unused activity and stats", () => {

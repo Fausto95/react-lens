@@ -13,19 +13,17 @@ import type {
 } from "@reactlens/protocol";
 import { RingBuffer } from "./ring-buffer.js";
 import { buildInteractions, type Interaction } from "./interactions.js";
-import {
-  RenderFlags,
-  TimelineIndex,
-  causeFromReasons,
-  type RenderFlag,
-} from "./columnar.js";
+import { TimelineIndex, causeFromReasons, type RenderFlag } from "./columnar.js";
 import { FlatTreeIndex } from "./flat-tree.js";
 import {
   activityIntervals,
   hitTest,
   queryTimeline,
+  statsPairInRange,
   statsInRange,
   type HitTestResult,
+  type HitTestOptions,
+  type RegionStatsPair,
   type TimelineQuery,
   type TimelineQueryResult,
 } from "./aggregates.js";
@@ -631,8 +629,22 @@ export class TraceStore {
     return statsInRange(this.timelineIndex, t0, t1, options);
   }
 
-  hitTest(t: number, preferLane: string | null = null): HitTestResult | null {
-    return hitTest(this.timelineIndex, t, preferLane);
+  statsPairInRange(
+    t0: number,
+    t1: number,
+    options?: {
+      includeLane?: (laneKey: string, name: string) => boolean;
+    },
+  ): RegionStatsPair {
+    return statsPairInRange(this.timelineIndex, t0, t1, options);
+  }
+
+  hitTest(
+    t: number,
+    preferLane: string | null = null,
+    options: HitTestOptions = {},
+  ): HitTestResult | null {
+    return hitTest(this.timelineIndex, t, preferLane, options);
   }
 
   activityIntervals(bucketMs?: number): Array<[number, number]> {
@@ -648,11 +660,27 @@ export class TraceStore {
   }
 
   markWasted(renderId: RenderId, wasted: boolean): void {
-    this.setRenderFlag(renderId, RenderFlags.Wasted, wasted);
-    const render = this.rendersById.get(renderId);
-    if (render) {
-      this.flatTree.setLastObservable(render.componentId as number, wasted ? false : true);
+    this.markWastedMany(wasted ? [renderId] : [], wasted ? [] : [renderId]);
+  }
+
+  markWastedMany(wasted: readonly RenderId[], expected: readonly RenderId[] = []): void {
+    this.timelineIndex.setWastedFlags([
+      ...wasted.map((renderId) => ({ renderId: renderId as number, wasted: true })),
+      ...expected.map((renderId) => ({ renderId: renderId as number, wasted: false })),
+    ]);
+    for (const renderId of wasted) {
+      const render = this.rendersById.get(renderId);
+      if (render) this.flatTree.setLastObservable(render.componentId as number, false);
     }
+    for (const renderId of expected) {
+      const render = this.rendersById.get(renderId);
+      if (render) this.flatTree.setLastObservable(render.componentId as number, true);
+    }
+  }
+
+  markRenderObservable(renderId: RenderId, observable: boolean): void {
+    const render = this.rendersById.get(renderId);
+    if (render) this.flatTree.setLastObservable(render.componentId as number, observable);
   }
 
   configureRetention(config: Partial<RetentionConfig>): void {

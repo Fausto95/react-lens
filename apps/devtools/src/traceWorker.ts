@@ -166,8 +166,7 @@ try {
   causalityWorker.onmessage = (e: MessageEvent<CausalityResult>) => {
     const msg = e.data;
     if (!msg || msg.type !== "flags") return;
-    for (const id of msg.wasted) store.markWasted(id, true);
-    for (const id of msg.expected) store.markWasted(id, false);
+    store.markWastedMany(msg.wasted, msg.expected);
     generation++;
     post({
       type: "flags",
@@ -252,15 +251,18 @@ function analyzeRendersAsync(batch: EventsBatchMessage["payload"]): void {
   }
 
   // Fallback: analyze on this worker after ingest (still O(new), not O(session)).
+  const wasted: typeof renderIds = [];
+  const expected: typeof renderIds = [];
   for (const id of renderIds) {
     try {
       const verdict = causality.why(id).verdict;
-      if (verdict === "no-observable-change") store.markWasted(id, true);
-      else if (verdict === "expected") store.markWasted(id, false);
+      if (verdict === "no-observable-change") wasted.push(id);
+      else if (verdict === "expected") expected.push(id);
     } catch {
       /* no verdict */
     }
   }
+  store.markWastedMany(wasted, expected);
 }
 
 function ingestBatch(batch: EventsBatchMessage["payload"]): void {
@@ -293,7 +295,15 @@ function runQuery(q: TraceQuery): TraceQueryResult {
     case "timeline-range":
       return { kind: "timeline-range", result: store.queryTimeline(q) };
     case "hit-test":
-      return { kind: "hit-test", result: store.hitTest(q.t, q.laneKey ?? null) };
+      return {
+        kind: "hit-test",
+        result: store.hitTest(q.t, q.laneKey ?? null, {
+          rowStart: q.rowStart,
+          rowEnd: q.rowEnd,
+          includeQuiet: q.includeQuiet,
+          laneFilter: q.laneFilter,
+        }),
+      };
     case "render":
       return { kind: "render", result: store.getRender(q.id) };
     case "component-renders": {

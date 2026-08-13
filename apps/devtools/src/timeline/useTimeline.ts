@@ -12,7 +12,7 @@ import {
   type LaneKey,
 } from "../laneFilter.js";
 import type { TimeCursor } from "../timeCursor.js";
-import { lanesFromQueryResult, statsFromStore, type Lane } from "./model/lanes.js";
+import { lanesFromQueryResult, statsPairFromStore, type Lane } from "./model/lanes.js";
 import { chainFor, edgesForCommit, type CausalEdge } from "./model/edges.js";
 import { buildActivity, buildAxis, mergeActive, type TimeSpan } from "./model/axis.js";
 import { computeLayout } from "./model/rows.js";
@@ -178,13 +178,11 @@ export function useTimeline({
   const includeLane = filterActive
     ? (key: string) => isLaneVisible(laneFilter, key as LaneKey)
     : undefined;
-  const stats = statsFromStore(store, statsRange.start, statsRange.end, {
-    ...(includeLane ? { includeLane } : {}),
-    excludeWasted: fixApplied,
-  });
-  const statsRaw = statsFromStore(store, statsRange.start, statsRange.end, {
+  const statsPair = statsPairFromStore(store, statsRange.start, statsRange.end, {
     ...(includeLane ? { includeLane } : {}),
   });
+  const statsRaw = statsPair.raw;
+  const stats = fixApplied ? statsPair.excludeWasted : statsRaw;
 
   const playhead = cursor.mode === "live" ? bounds.t1 : cursor.t;
 
@@ -216,6 +214,7 @@ export function useTimeline({
     markers,
     visible,
     lanes,
+    timelineResult,
     laneDepth,
     layout,
     arrows,
