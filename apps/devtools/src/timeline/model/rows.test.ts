@@ -163,6 +163,58 @@ describe("computeLayout", () => {
     expect(layout.rows.find((r) => r.lane.name === "Consumer")!.mode).toBe("wave");
   });
 
+  it("re-weights the mode toward clips in the visible window", () => {
+    // 90 tiny clips early, 10 wide clips later: the session-wide average is
+    // pinned near WAVE_LOD_MS, but zooming into the wide region must flip
+    // the lane to stacked clips.
+    const tiny = lane("Mixed", 90, { heavy: true, total: 0.05, self: 0 }).clips;
+    const wide = lane("Mixed", 10, { total: 2, self: 0.2 }).clips.map((c, i) => ({
+      ...c,
+      t0: 100 + i * 3,
+      t1: 100 + i * 3 + 2,
+    }));
+    const mixed: Lane = { ...lane("Mixed", 0), clips: [...tiny, ...wide], renders: 100 };
+    const depth = new Map([[mixed.key, 5]]);
+    const opts = { shelfOpen: true, pxPerMs: 10, isDim: () => false };
+
+    const whole = computeLayout([mixed], depth, opts);
+    expect(whole.rows[0]!.mode).toBe("wave");
+
+    const zoomed = computeLayout([mixed], depth, { ...opts, visible: { t0: 99, t1: 131 } });
+    expect(zoomed.rows[0]!.mode).toBe("stack");
+  });
+
+  it("falls back to the whole lane when nothing intersects the window", () => {
+    const heavy = lane("List", 80, { heavy: true });
+    const depth = new Map([[heavy.key, 5]]);
+    const layout = computeLayout([heavy], depth, {
+      shelfOpen: true,
+      pxPerMs: 1,
+      isDim: () => false,
+      visible: { t0: 5000, t1: 5100 },
+    });
+    expect(layout.rows[0]!.mode).toBe("wave");
+  });
+
+  it("keeps the previous mode inside the hysteresis band", () => {
+    // total 1 ms × pxPerMs 10 → 10 px: inside the 9–12 dead band.
+    const busy = lane("Feed", 80, { heavy: true, total: 1, self: 0.2 });
+    const depth = new Map([[busy.key, 5]]);
+    const opts = { shelfOpen: true, pxPerMs: 10, isDim: () => false };
+
+    const fromStack = computeLayout([busy], depth, {
+      ...opts,
+      prevModes: new Map([[busy.key, "stack" as const]]),
+    });
+    expect(fromStack.rows[0]!.mode).toBe("stack");
+
+    const fromWave = computeLayout([busy], depth, {
+      ...opts,
+      prevModes: new Map([[busy.key, "wave" as const]]),
+    });
+    expect(fromWave.rows[0]!.mode).toBe("wave");
+  });
+
   it("histograms ×12 lanes while still zoomed out", () => {
     const busy = lane("Product", 12, { heavy: true, total: 0.05, self: 0 });
     const depth = new Map([[busy.key, 12]]);
