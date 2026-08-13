@@ -613,6 +613,73 @@ model `glm-5v-turbo`); direct browser calls to Anthropic send the
 
 ---
 
+## agent-tools + session + MCP (A1–A6)
+
+### `@reactlens/protocol` — session file
+
+```ts
+interface LensSessionFile {
+  protocolVersion: number;
+  exportedAt: string;
+  payload: EventsBatchMessage["payload"];
+  meta?: { title?: string; pageUrl?: string; redacted?: boolean };
+}
+
+function parseSessionFile(raw: string): LensSessionFile;
+function loadSession(raw: string): LensSessionFile; // v1 identity adapter
+function exportSessionPayload(export: EventsBatchMessage["payload"], meta?): LensSessionFile;
+```
+
+JSON Schema: `packages/protocol/schemas/session.v1.json`.
+
+### `@reactlens/agent-tools`
+
+Headless tool surface (22 tools including symptom tools + `compare_sessions`). Same
+handlers the panel agent uses:
+
+```ts
+function createToolHandlers(deps: {
+  store: TraceStore;
+  causality: Causality;
+  diagnose?: (id: ComponentId) => Diagnostic[];
+  sourceResolver: SourceResolver;
+}): ToolHandlers;
+
+function compareSessions(beforePayload, afterPayload): CompareSessionsResult;
+```
+
+### `@reactlens/cli`
+
+```bash
+react-lens analyze session.json    # markdown report
+react-lens mcp --session file.json # stdio MCP (env LENS_SESSION)
+react-lens ci --baseline dir --actual dir
+react-lens ci --update-baseline --baseline dir --actual dir
+```
+
+### `@reactlens/mcp`
+
+Stdio MCP server registering all `TOOL_DEFINITIONS`. Host policy: redact string
+previews unless `--include-values`. Bundles `AGENTS.md` playbook.
+
+### `@reactlens/dev-channel` (A4 MVP)
+
+```ts
+function createDevChannelServer({ port }): Promise<DevChannelServer>;
+function createDevChannelClient(url): DevChannelClient;
+function attachDevChannelSink(onFrame, client): onFrame; // non-blocking copy
+function reactLensDevChannel(): VitePlugin; // from @reactlens/dev-channel/vite
+```
+
+### `@reactlens/playwright`
+
+```ts
+function lens(page): { interaction(name, fn): Promise<T> };
+// page.evaluate → window.__REACT_LENS__.markInteraction(name)
+```
+
+---
+
 ## Cross-cutting invariants
 
 - `protocol` imports nothing; the dependency arrows in DESIGN §3 are enforced by

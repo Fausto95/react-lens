@@ -1,0 +1,49 @@
+{
+  "name": "@reactlens/cli",
+  "version": "0.0.0",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Fausto95/react-lens.git",
+    "directory": "packages/cli"
+  },
+  "bin": {
+    "react-lens": "./dist/cli.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "publishConfig": {
+    "main": "./dist/index.js",
+    "types": "./dist/index.d.ts",
+    "exports": {
+      ".": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      }
+    },
+    "access": "public"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "build": "tsup src/cli.ts src/index.ts --format esm --dts --sourcemap --clean --tsconfig tsconfig.build.json",
+    "start": "node --import tsx src/cli.ts"
+  },
+  "dependencies": {
+    "@reactlens/agent-tools": "workspace:*",
+    "@reactlens/causality": "workspace:*",
+    "@reactlens/mcp": "workspace:*",
+    "@reactlens/protocol": "workspace:*",
+    "@reactlens/source-maps": "workspace:*",
+    "@reactlens/trace-engine": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^22",
+    "tsup": "^8.5.1",
+    "tsx": "^4.19.3"
+  }
+}

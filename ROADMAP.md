@@ -150,3 +150,14 @@ with multiple **projections** rather than a raw fiber tree.
 ## North star
 
 Time To Explanation (TTE) < 10s for common React rendering problems.
+
+---
+
+## AI-Friendliness (agent / CLI / MCP)
+
+- ✅ **A1 — `@reactlens/agent-tools`** — typed tool handlers + budgets; panel wired
+- ✅ **A2 — Session schema + CLI** — `protocol/session`, JSON Schema, `react-lens analyze`
+- ✅ **A3 — MCP over session files** — `@reactlens/mcp` stdio server, `react-lens mcp`, AGENTS.md playbook
+- ✅ **A4 — Live dev channel (MVP)** — `@reactlens/dev-channel` WebSocket + Vite stub + `attachDevChannelSink`
+- ✅ **A5 — Verify loop** — `InteractionEvent.name`, `markInteraction`, `@reactlens/playwright`, `compare_sessions`
+- ✅ **A6 — CI + evals** — `react-lens ci`, `--update-baseline`, `eval-smoke.mjs`

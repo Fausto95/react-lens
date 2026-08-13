@@ -1,17 +1,12 @@
 /**
- * Char-based budgeting for tool results. What the model sees is capped —
- * silently blowing the context on one query_trace over a big session is worse
- * than a truncation the model can react to. The same budgeted string feeds the
- * UI step, so there is one source of truth.
+ * Char-based budgeting for tool results sent to an LLM host. Structured
+ * truncation lives in execute.enforceBudget; these helpers remain for the
+ * BYOK transcript path that strings JSON into the provider chat.
  */
 
-/** Default per-tool-result cap (~1.5K tokens). */
 export const PER_RESULT_CAP = 6_000;
-/** Source snippets are the payload for fixes — allow more. */
 export const SOURCE_RESULT_CAP = 10_000;
-/** Once a conversation has accumulated this much tool output, tighten caps. */
 export const TRANSCRIPT_TOOL_BUDGET = 60_000;
-/** Cap applied after the transcript budget is exhausted. */
 export const TIGHT_RESULT_CAP = 1_500;
 
 export function budgetToolResult(

@@ -9,3 +9,4 @@ apps/extension/dist/
 test-results/
 playwright-report/
 e2e/fixtures/_tmp-*
+.pnpm-store/

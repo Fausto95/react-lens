@@ -1,12 +1,7 @@
-import { createSerializer } from "@reactlens/serializer";
-import { createFiberBridge, type CommitObservation, type Dispose } from "@reactlens/fiber";
-import {
-  createInstrumentation,
-  type Instrumentation,
-  type TimeTravelStoreAdapter,
-} from "@reactlens/instrumentation";
-import { TraceStore } from "@reactlens/trace-engine";
-import { createCausality, type Causality } from "@reactlens/causality";
+import type { CommitObservation, Dispose } from "@reactlens/fiber";
+import type { Instrumentation, TimeTravelStoreAdapter } from "@reactlens/instrumentation";
+import type { TraceStore } from "@reactlens/trace-engine";
+import type { Causality } from "@reactlens/causality";
 import type {
   ComponentId,
   ComponentInstance,
@@ -14,6 +9,7 @@ import type {
   TimeTravelResult,
   SourceLocation,
 } from "@reactlens/protocol";
+import { createCaptureRuntime } from "./captureRuntime.js";
 
 export interface LensRuntime {
   store: TraceStore;
@@ -53,6 +49,8 @@ export interface LensRuntime {
   stop(): void;
 }
 
+export { createCaptureRuntime, type CaptureRuntime } from "./captureRuntime.js";
+
 /**
  * Embedded runtime: instrumentation and the trace store live in the same page
  * (playground dev mode), so frames flow straight into the store. In the
@@ -63,16 +61,13 @@ export interface LensRuntime {
  * hook is installed before react-dom registers its renderer.
  */
 export function createEmbeddedRuntime(): LensRuntime {
-  const store = new TraceStore();
-  const causality = createCausality(store);
-  const serializer = createSerializer();
-  const fiber = createFiberBridge(globalThis);
-  const instrumentation = createInstrumentation({ fiber, serializer });
+  const capture = createCaptureRuntime();
+  const { fiber } = capture;
 
   return {
-    store,
-    causality,
-    instrumentation,
+    store: capture.store,
+    causality: capture.causality,
+    instrumentation: capture.instrumentation,
     ignoreContainer: (node) => fiber.ignoreContainer(node),
     domNodesOf: (id) => fiber.domNodesOf(id),
     resolveComponent: (node) => fiber.resolveComponent(node),
@@ -82,20 +77,12 @@ export function createEmbeddedRuntime(): LensRuntime {
     setProp: (id, path, value) => fiber.setProp(id, path, value),
     setHookState: (id, hookIndex, path, value) => fiber.setHookState(id, hookIndex, path, value),
     timeTravel: {
-      supported: () => instrumentation.timeTravel.supported(),
-      apply: (entries, atT) => instrumentation.timeTravel.apply(entries, atT),
-      goLive: () => instrumentation.timeTravel.goLive(),
-      registerStore: (adapter) => instrumentation.timeTravel.registerStore(adapter),
+      supported: () => capture.instrumentation.timeTravel.supported(),
+      apply: (entries, atT) => capture.instrumentation.timeTravel.apply(entries, atT),
+      goLive: () => capture.instrumentation.timeTravel.goLive(),
+      registerStore: (adapter) => capture.instrumentation.timeTravel.registerStore(adapter),
     },
-    start() {
-      instrumentation.start({
-        captureDOM: true,
-        interactionWindowMs: 200,
-        onFrame: (frame) => store.ingest(frame),
-      });
-    },
-    stop() {
-      instrumentation.stop();
-    },
+    start: () => capture.start(),
+    stop: () => capture.stop(),
   };
 }

@@ -1,9 +1,8 @@
 import { describe, it, expect, vi, afterEach } from "vite-plus/test";
 import { createAgentSession } from "./session.js";
-import { budgetToolResult } from "./budget.js";
+import { budgetToolResult, type EvidencePack, type ToolHandlers } from "@reactlens/agent-tools";
 import { defaultSettingsFor } from "./providers.js";
-import type { AgentEvent, ToolHandlers } from "./types.js";
-import type { EvidencePack } from "./evidence.js";
+import type { AgentEvent } from "./types.js";
 
 const settings = { ...defaultSettingsFor("openai"), apiKey: "sk-test" };
 
@@ -48,8 +47,19 @@ function stubHandlers(overrides: Partial<ToolHandlers> = {}): ToolHandlers {
     read_component_source: () => err,
     effects_summary: () => err,
     graph_neighbors: () => err,
+    list_interactions: () => err,
+    get_session_summary: () => err,
+    list_components: () => err,
+    get_waste_report: () => err,
+    diff_commits: () => err,
+    query_events: () => err,
+    get_source_location: () => err,
+    diagnose_slowness: () => err,
+    find_wasted_renders: () => err,
+    why_did_component_render: () => err,
+    compare_sessions: () => err,
     ...overrides,
-  } as ToolHandlers;
+  };
 }
 
 const emptyEvidence: EvidencePack = {

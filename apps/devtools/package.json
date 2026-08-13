@@ -19,6 +19,7 @@
   },
   "dependencies": {
     "@reactlens/agent": "workspace:*",
+    "@reactlens/agent-tools": "workspace:*",
     "@reactlens/causality": "workspace:*",
     "@reactlens/diagnostics": "workspace:*",
     "@reactlens/diff-engine": "workspace:*",

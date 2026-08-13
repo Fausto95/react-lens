@@ -1,16 +1,13 @@
 import type { TraceStore } from "@reactlens/trace-engine";
-import { PROTOCOL_VERSION, type EventsBatchMessage } from "@reactlens/protocol";
+import {
+  exportSessionPayload,
+  loadSession,
+  parseSessionFile,
+  type LensSessionFile,
+} from "@reactlens/protocol";
 
-/** On-disk / IDB session format — TraceStore export plus protocol version. */
-export interface LensSessionFile {
-  protocolVersion: typeof PROTOCOL_VERSION;
-  exportedAt: string;
-  payload: EventsBatchMessage["payload"];
-  meta?: {
-    title?: string;
-    pageUrl?: string;
-  };
-}
+export type { LensSessionFile };
+export { parseSessionFile, loadSession, exportSessionPayload };
 
 export interface SessionListEntry {
   id: string;
@@ -31,12 +28,7 @@ const STORE = "sessions";
 const MAX_RECENT = 20;
 
 export function exportSession(store: TraceStore, meta?: LensSessionFile["meta"]): LensSessionFile {
-  return {
-    protocolVersion: PROTOCOL_VERSION,
-    exportedAt: new Date().toISOString(),
-    payload: store.export(),
-    ...(meta ? { meta } : {}),
-  };
+  return exportSessionPayload(store.export(), meta);
 }
 
 export function downloadSession(store: TraceStore, filename = "react-lens-session.json"): void {
@@ -57,19 +49,6 @@ export function downloadSession(store: TraceStore, filename = "react-lens-sessio
   });
 }
 
-export function parseSessionFile(raw: string): LensSessionFile {
-  const data = JSON.parse(raw) as LensSessionFile;
-  if (
-    !data ||
-    data.protocolVersion !== PROTOCOL_VERSION ||
-    !data.payload ||
-    !Array.isArray(data.payload.events)
-  ) {
-    throw new Error("Invalid React Lens session file");
-  }
-  return data;
-}
-
 export function importSession(store: TraceStore, session: LensSessionFile): void {
   store.clear();
   store.ingest(session.payload);
@@ -80,7 +59,7 @@ export async function importSessionFromFile(
   file: File,
 ): Promise<LensSessionFile> {
   const text = await file.text();
-  const session = parseSessionFile(text);
+  const session = loadSession(text);
   importSession(store, session);
   await saveSessionToIdb(session).catch(() => {
     /* ignore */

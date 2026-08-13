@@ -1,0 +1,39 @@
+{
+  "name": "@reactlens/playwright",
+  "version": "0.0.0",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Fausto95/react-lens.git",
+    "directory": "packages/playwright"
+  },
+  "files": [
+    "dist"
+  ],
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "publishConfig": {
+    "main": "./dist/index.js",
+    "types": "./dist/index.d.ts",
+    "exports": {
+      ".": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      }
+    },
+    "access": "public"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "build": "tsup src/index.ts --format esm --dts --sourcemap --clean --tsconfig tsconfig.build.json"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.60.0",
+    "tsup": "^8.5.1"
+  },
+  "peerDependencies": {
+    "@playwright/test": ">=1.40.0"
+  }
+}

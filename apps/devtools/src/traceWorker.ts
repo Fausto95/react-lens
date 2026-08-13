@@ -15,10 +15,12 @@ import { TraceStore, type CommitSummary, type TraceSelector } from "@reactlens/t
 import { createCausality } from "@reactlens/causality";
 import type { Cause, WhyResult } from "@reactlens/causality";
 import {
-  PROTOCOL_VERSION,
+  exportSessionPayload,
+  loadSession,
   type ComponentId,
   type ComponentInstance,
   type EventsBatchMessage,
+  type LensSessionFile,
   type RenderEvent,
   type RenderId,
   type RenderSnapshot,
@@ -81,16 +83,8 @@ export interface TraceWorkerStats {
   components: number;
 }
 
-/** Mirrors `LensSessionFile` in session.ts without pulling IDB into the worker graph. */
-export interface TraceSessionExport {
-  protocolVersion: typeof PROTOCOL_VERSION;
-  exportedAt: string;
-  payload: EventsBatchMessage["payload"];
-  meta?: {
-    title?: string;
-    pageUrl?: string;
-  };
-}
+/** Session file shape for download / IDB recents — from @reactlens/protocol. */
+export type TraceSessionExport = LensSessionFile;
 
 /** One navigation document archived before the store was cleared for the next. */
 export interface TraceSegment {
@@ -168,12 +162,7 @@ function toSession(
   payload: EventsBatchMessage["payload"],
   meta?: TraceSessionExport["meta"],
 ): TraceSessionExport {
-  return {
-    protocolVersion: PROTOCOL_VERSION,
-    exportedAt: new Date().toISOString(),
-    payload,
-    ...(meta ? { meta } : {}),
-  };
+  return exportSessionPayload(payload, meta);
 }
 
 function post(msg: TraceOutMessage): void {
@@ -242,18 +231,11 @@ const api: TraceWorkerApi = {
     return toSession(store.export(), meta);
   },
   importSession(session) {
-    if (
-      !session ||
-      session.protocolVersion !== PROTOCOL_VERSION ||
-      !session.payload ||
-      !Array.isArray(session.payload.events)
-    ) {
-      throw new Error("Invalid React Lens session file");
-    }
+    const loaded = loadSession(JSON.stringify(session)) as LensSessionFile;
     store.clear();
-    store.ingest(session.payload);
+    store.ingest(loaded.payload);
     post({ type: "cleared" });
-    post({ type: "ingested", batch: session.payload });
+    post({ type: "ingested", batch: loaded.payload });
   },
   beginSegment(previousSessionId, nextSessionId) {
     const archiveId = previousSessionId ?? activeSessionId;

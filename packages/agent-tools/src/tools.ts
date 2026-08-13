@@ -1,44 +1,31 @@
 import type { ToolName } from "./types.js";
 
-export const SYSTEM_PROMPT = `You are React Lens Agent. You analyze a React app's RECORDED session and answer five kinds of question: what is this element, why did it render, why is it slow, what changed, and how do I fix it.
-
-Grounding (non-negotiable):
-- Never invent component names, ids, timings, causes, or code. Call tools first; a SESSION EVIDENCE block in the first message lists interactions, top components, and anomalies so you don't rediscover basics.
-- Cite every claim with Lens ID tokens exactly as: [component:12], [render:412], [interaction:i3], [doctor:rule-id@12]. The UI turns these into clickable chips.
-- If tools lack evidence, say so plainly instead of guessing. Never dump raw tool JSON into the answer — translate it.
-- NEVER ask the user to paste code or provide files — read_component_source fetches their real source (it follows imports to the defining module). If it returns no snippet, state its reason and work from the structural evidence you have.
-
-Routing (question kind → tool sequence):
-- Optimize or explain a named component: find_component → component_runtime → why (on the worst render) → read_component_source (on the CAUSE site — often the parent) → fix.
-- "why is it slow / what happened": explain_interaction → component_runtime on the top-cost component.
-- "what changed": diff_snapshots between consecutive renderIds (component_renders picks the ids).
-- Effects suspicion (loops, every-render runs): effects_summary. Blast radius / who re-renders whom: graph_neighbors.
-- component_runtime IS the component overview; call component_renders only to pick renderIds.
-
-Reading component_runtime evidence:
-- stats.wastedRenders > 0 — renders whose output provably did not change; why on one of them names the churn source.
-- stats.functionPropChurn — a parent passes a fresh function identity each render; the fix belongs at the PARENT, not here.
-- reasons histogram — dominated by "parent" means this component is a bystander (fix upstream); by "state" means it owns the trigger (fix here).
-- latest.props/hooks values are real runtime shapes: a size-5000 array prop argues for virtualization; identity strings that differ between renders prove reference churn.
-
-React Compiler invariant:
-- This app is assumed to run the React Compiler. NEVER recommend manual useMemo/useCallback/React.memo for a component whose compiler.compiled is true. When compiled is false, read compiler.bailoutReason first — fixing the bailout beats layering memoization on top of it.
-
-Fix playbook (ranked; choose by evidence, not habit):
-1. State colocation — reasons show "parent"/"context" but only a subtree reads the value: move the state down to where it is used.
-2. Split the component — one expensive component mixing a hot and a cold part: isolate the hot part so the compiler can memoize the rest.
-3. Lift content — a stateful parent re-renders children that never read its state: accept them as children/props from above.
-4. Stable identities at the parent — functionPropChurn or reference-only diffs: create the value once where it originates (module scope, state, or derived in the owner).
-5. Virtualize or paginate — latest.props carries a large array rendered as per-item children: render only the visible window.
-6. Effect hygiene — effects_summary shows every-render runs or a possible loop: fix the dependency that churns, or move the logic out of the effect.
-
-Proposing fixes ("how do I fix it"):
-- You MUST call why (for diff evidence) and read_component_source (on the CAUSE site) before proposing code.
-- Show concrete code in a fenced block whose info string is "lang file:line" (e.g. \`\`\`tsx src/File.tsx:42) containing the actual lines and your exact edit. file:line comes from the tool results.
-- State the expected impact in this session's terms: which renders disappear, roughly how many ms of self time are saved.
-- If source is unavailable, say so and give the most specific structural fix the evidence supports.
-
-Format: markdown. Lead with a one-line verdict; then evidence with citations; then the fix; end with one ranked next step.`;
+/** Declared max JSON char budget per tool (structured truncation, not mid-JSON cut). */
+export const TOOL_BUDGETS: Record<ToolName, number> = {
+  explain_interaction: 8_000,
+  query_trace: 6_000,
+  why: 6_000,
+  diff_snapshots: 6_000,
+  diagnose: 6_000,
+  resolve_source: 4_000,
+  find_component: 4_000,
+  component_renders: 6_000,
+  component_runtime: 8_000,
+  read_component_source: 10_000,
+  effects_summary: 4_000,
+  graph_neighbors: 4_000,
+  list_interactions: 4_000,
+  get_session_summary: 4_000,
+  list_components: 6_000,
+  get_waste_report: 6_000,
+  diff_commits: 4_000,
+  query_events: 4_000,
+  get_source_location: 2_000,
+  diagnose_slowness: 8_000,
+  find_wasted_renders: 6_000,
+  why_did_component_render: 8_000,
+  compare_sessions: 6_000,
+};
 
 export const TOOL_DEFINITIONS: Array<{
   type: "function";
@@ -220,6 +207,157 @@ export const TOOL_DEFINITIONS: Array<{
           file: { type: "string" },
           line: { type: "number" },
           column: { type: "number" },
+        },
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "list_interactions",
+      description:
+        "List interactions ranked by React cost (reactMs desc). Prefer this over query_events for navigation.",
+      parameters: {
+        type: "object",
+        properties: { limit: { type: "number" } },
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "get_session_summary",
+      description:
+        "Session digest: stats, recent interactions, top components by self time, commit anomalies, compiler coverage. Call first to orient.",
+      parameters: { type: "object", properties: {} },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "list_components",
+      description:
+        "List components (optional name filter) with render counts and total self time, ranked by cost.",
+      parameters: {
+        type: "object",
+        properties: {
+          name: { type: "string", description: "Optional partial name filter." },
+          limit: { type: "number" },
+        },
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "get_waste_report",
+      description:
+        "Ranked no-observable-change (wasted) renders across the session. Prefer over query_events for waste hunts.",
+      parameters: {
+        type: "object",
+        properties: { limit: { type: "number" } },
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "diff_commits",
+      description:
+        "Compare two commits: self-time delta and component-set add/remove. Read-only — does not restore page state.",
+      parameters: {
+        type: "object",
+        required: ["beforeCommitId", "afterCommitId"],
+        properties: {
+          beforeCommitId: { type: "number" },
+          afterCommitId: { type: "number" },
+        },
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "query_events",
+      description:
+        "LAST RESORT paginated raw event access. Prefer list_interactions / explain_interaction / get_waste_report first.",
+      parameters: {
+        type: "object",
+        properties: {
+          type: { type: "string" },
+          componentId: { type: "number" },
+          interactionId: { type: "string" },
+          cursor: { type: "string" },
+          limit: { type: "number" },
+        },
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "get_source_location",
+      description:
+        "Resolve a Lens ID (component:12, render:412, interaction:i3) to file:line when known.",
+      parameters: {
+        type: "object",
+        required: ["lensId"],
+        properties: { lensId: { type: "string" } },
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "diagnose_slowness",
+      description:
+        "Symptom tool: rank the costliest interaction, explain it, and hint next steps (why / read_component_source).",
+      parameters: {
+        type: "object",
+        properties: { interactionId: { type: "string" } },
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "find_wasted_renders",
+      description:
+        "Symptom tool: top wasted renders with next-step hints. Composes get_waste_report.",
+      parameters: {
+        type: "object",
+        properties: { limit: { type: "number" } },
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "why_did_component_render",
+      description:
+        "Symptom tool: runtime profile + why on the costliest retained render for a component.",
+      parameters: {
+        type: "object",
+        required: ["componentId"],
+        properties: { componentId: { type: "number" } },
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "compare_sessions",
+      description:
+        "Compare before/after session payloads keyed by interaction name. Returns render and waste deltas plus a regression verdict.",
+      parameters: {
+        type: "object",
+        required: ["before", "after"],
+        properties: {
+          before: {
+            type: "object",
+            description: "Before session payload (events/snapshots/instances).",
+          },
+          after: { type: "object", description: "After session payload." },
         },
       },
     },

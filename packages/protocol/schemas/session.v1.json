@@ -1,0 +1,54 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://reactlens.dev/schemas/session.v1.json",
+  "title": "React Lens Session File v1",
+  "type": "object",
+  "required": ["protocolVersion", "exportedAt", "payload"],
+  "additionalProperties": false,
+  "properties": {
+    "protocolVersion": {
+      "type": "integer",
+      "const": 1,
+      "description": "Session format version; must match PROTOCOL_VERSION."
+    },
+    "exportedAt": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO-8601 timestamp when the session was exported."
+    },
+    "payload": {
+      "type": "object",
+      "required": ["events", "snapshots", "instances"],
+      "properties": {
+        "events": {
+          "type": "array",
+          "description": "Normalized LensEvent log."
+        },
+        "snapshots": {
+          "type": "array",
+          "description": "RenderSnapshot records retained at export time."
+        },
+        "instances": {
+          "type": "array",
+          "description": "ComponentInstance metadata."
+        },
+        "commitSnapshots": {
+          "type": "array",
+          "description": "Optional throttled whole-page DOM per commit."
+        }
+      }
+    },
+    "meta": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "title": { "type": "string" },
+        "pageUrl": { "type": "string" },
+        "redacted": {
+          "type": "boolean",
+          "description": "True when string previews were redacted for agent/MCP hosts."
+        }
+      }
+    }
+  }
+}

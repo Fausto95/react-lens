@@ -253,20 +253,20 @@ describe("find_component / component_renders", () => {
   it("finds components by case-insensitive substring with render stats", async () => {
     const handlers = makeHandlers(shopStore());
     const out = (await handlers.find_component({ name: "product" })) as {
-      matches: Array<{ componentId: number; name: string; renders: number; totalSelf: number }>;
+      matches: Array<{ componentId: number; name: string; renders: number; totalSelfMs: number }>;
     };
     expect(out.matches.map((m) => m.name).sort()).toEqual(["ProductCard", "ProductList"]);
     const card = out.matches.find((m) => m.name === "ProductCard");
-    expect(card).toMatchObject({ renders: 2, totalSelf: 11 });
+    expect(card).toMatchObject({ renders: 2, totalSelfMs: 11 });
   });
 
   it("lists a component's renders sorted by self time with reasons", async () => {
     const handlers = makeHandlers(shopStore());
     const out = (await handlers.component_renders({ componentId: 1 })) as {
-      renders: Array<{ renderId: number; self: number; reasons: string[] }>;
+      renders: Array<{ renderId: number; selfMs: number; reasons: string[] }>;
     };
-    expect(out.renders[0]).toMatchObject({ renderId: 2, self: 9 });
-    expect(out.renders[1]).toMatchObject({ renderId: 1, self: 2 });
+    expect(out.renders[0]).toMatchObject({ renderId: 2, selfMs: 9 });
+    expect(out.renders[1]).toMatchObject({ renderId: 1, selfMs: 2 });
     expect(out.renders[0]!.reasons).toContain("mount");
   });
 });

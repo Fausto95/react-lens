@@ -1,4 +1,4 @@
-import { TOOL_DEFINITIONS } from "./tools.js";
+import { TOOL_DEFINITIONS } from "@reactlens/agent-tools";
 import { usesAnthropicApi } from "./providers.js";
 import type { AgentSettings, ProviderTurn, ToolCall, ToolName } from "./types.js";
 
