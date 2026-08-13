@@ -45,6 +45,8 @@ export interface InteractionEvent extends BaseEvent {
   type: "interaction";
   interactionId: InteractionId;
   kind: "click" | "keypress" | "submit" | "navigation" | "hover" | "drag" | "transition";
+  /** Optional human label (Playwright marks, manual instrumentation). */
+  name?: string;
   target?: { selector: string; componentId?: ComponentId };
 }
 

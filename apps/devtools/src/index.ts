@@ -1,6 +1,7 @@
 export { Panel } from "./Panel.js";
 export type { PanelProps } from "./Panel.js";
 export { Inspector } from "./Inspector.js";
+export { createCaptureRuntime, type CaptureRuntime } from "./captureRuntime.js";
 export { createEmbeddedRuntime } from "./runtime.js";
 export type { LensRuntime } from "./runtime.js";
 export { mountEmbedded } from "./embed.js";

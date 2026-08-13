@@ -64,6 +64,11 @@ export interface Instrumentation {
   stop(): void;
   isRecording(): boolean;
   /**
+   * Mark the start of a named interaction (Playwright, verify loops).
+   * Emits an interaction event with `name` set and opens the attribution window.
+   */
+  markInteraction(name: string, untilMs?: number): void;
+  /**
    * Build a snapshot on demand for a render still retained in the ring buffer.
    * Used when snapshots aren't streamed inline (large apps): the panel requests
    * the selected render's detail lazily. Returns undefined once evicted.
@@ -512,7 +517,24 @@ export function createInstrumentation(deps: {
     windowStart = now();
   }
 
-  return { start, stop, isRecording, snapshot, timeTravel };
+  function markInteraction(name: string, untilMs?: number): void {
+    if (!recording || !config) return;
+    const id = nextInteractionId();
+    const windowMs = untilMs ?? config.interactionWindowMs;
+    currentInteraction = { id, until: now() + windowMs };
+    const interaction: InteractionEvent = {
+      id: nextEventId(),
+      type: "interaction",
+      timestamp: now(),
+      interactionId: id,
+      kind: "navigation",
+      name,
+    };
+    pendingEvents.push(interaction);
+    scheduleFlush();
+  }
+
+  return { start, stop, isRecording, markInteraction, snapshot, timeTravel };
 }
 
 /**

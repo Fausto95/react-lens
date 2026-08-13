@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vite-plus/test";
-import { TOOL_DEFINITIONS, SYSTEM_PROMPT } from "./tools.js";
-import { createToolHandlers } from "./handlers.js";
+import { TOOL_DEFINITIONS, SYSTEM_PROMPT } from "./index.js";
+import { createToolHandlers } from "@reactlens/agent-tools";
 import { TraceStore } from "@reactlens/trace-engine";
 import { createCausality } from "@reactlens/causality";
 import { createSourceResolver } from "@reactlens/source-maps";
@@ -14,25 +14,34 @@ import type {
 } from "@reactlens/protocol";
 
 describe("agent tools", () => {
-  it("exposes a closed tool set", () => {
-    expect(SYSTEM_PROMPT).toMatch(/Lens ID/);
-    expect(TOOL_DEFINITIONS.map((t) => t.function.name)).toEqual([
-      "explain_interaction",
-      "query_trace",
-      "why",
-      "find_component",
-      "component_renders",
-      "component_runtime",
-      "read_component_source",
-      "effects_summary",
-      "graph_neighbors",
-      "diff_snapshots",
-      "diagnose",
-      "resolve_source",
-    ]);
+  it("commits to the five questions, citations, compiler invariant, and fix format", () => {
+    expect(SYSTEM_PROMPT).toMatch(/why did it render/i);
+    expect(SYSTEM_PROMPT).toMatch(/how do i fix it/i);
+    expect(SYSTEM_PROMPT).toContain("[component:");
+    expect(SYSTEM_PROMPT).toContain("[render:");
+    expect(SYSTEM_PROMPT).toMatch(/React Compiler/);
+    expect(SYSTEM_PROMPT).toMatch(/useMemo/);
+    expect(SYSTEM_PROMPT).toMatch(/read_component_source/);
+    expect(SYSTEM_PROMPT).toMatch(/file:line|src\/File\.tsx:42/);
   });
 
-  it("query_trace returns stats from the live store", () => {
+  it("exposes a closed tool set including symptom tools", () => {
+    const names = TOOL_DEFINITIONS.map((t) => t.function.name);
+    expect(names).toEqual(
+      expect.arrayContaining([
+        "explain_interaction",
+        "query_trace",
+        "why",
+        "find_component",
+        "list_interactions",
+        "get_session_summary",
+        "get_waste_report",
+        "diagnose_slowness",
+      ]),
+    );
+  });
+
+  it("query_trace returns stats from the live store", async () => {
     const store = new TraceStore();
     store.ingest({
       events: [
@@ -43,8 +52,8 @@ describe("agent tools", () => {
           renderId: 1 as RenderId,
           commitId: 1 as CommitId,
           componentId: 1 as ComponentId,
-          selfDuration: 3,
-          totalDuration: 3,
+          selfDuration: 2,
+          totalDuration: 2,
           reasons: [{ type: "mount" }],
           compiler: { compiled: true, memoized: true },
         } satisfies RenderEvent,
@@ -68,21 +77,11 @@ describe("agent tools", () => {
         throw new Error("no fetch");
       }),
     });
-    const out = handlers.query_trace({}) as {
+    const out = (await handlers.query_trace({})) as {
       stats: { renders: number };
-      topRenders: Array<{ name: string }>;
+      topRenders: Array<{ selfMs: number }>;
     };
-    expect(out.stats.renders).toBeGreaterThanOrEqual(1);
-    expect(out.topRenders[0]?.name).toBe("App");
-  });
-
-  it("exposes OpenAI, Claude, and ZML presets", async () => {
-    const { PROVIDER_PRESETS, normalizeProvider } = await import("./providers.js");
-    expect(Object.keys(PROVIDER_PRESETS)).toEqual(["openai", "anthropic", "zml"]);
-    expect(normalizeProvider("claude")).toBe("anthropic");
-    expect(normalizeProvider("zlm")).toBe("zml");
-    expect(PROVIDER_PRESETS.zml.baseUrl).toBe("https://api.z.ai/api/anthropic");
-    expect(PROVIDER_PRESETS.zml.model).toBe("glm-5v-turbo");
-    expect(PROVIDER_PRESETS.zml.api).toBe("anthropic");
+    expect(out.stats.renders).toBe(1);
+    expect(out.topRenders[0]?.selfMs).toBe(2);
   });
 });

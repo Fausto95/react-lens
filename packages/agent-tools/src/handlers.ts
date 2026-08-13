@@ -13,7 +13,12 @@ import { explainInteraction, type LensRef } from "@reactlens/explain";
 import type { SourceResolver } from "@reactlens/source-maps";
 import { buildGraph, neighbors, componentKey } from "@reactlens/graph";
 import type { CauseSummary, HooksDiffRow, ToolHandlers } from "./types.js";
+import { TOOL_SCHEMA_VERSION } from "./types.js";
 import { summarizeValue } from "./summarize.js";
+import { compareSessions } from "./compare.js";
+import { buildEvidencePack } from "./evidence.js";
+import type { EventsBatchMessage } from "@reactlens/protocol";
+import { createDefaultDiagnose } from "./doctor.js";
 
 const SNIPPET_MAX_LINES = 200;
 const SNIPPET_MAX_CHARS = 8_000;
@@ -22,10 +27,15 @@ const FILE_HEAD_LINES = 120;
 export function createToolHandlers(deps: {
   store: TraceStore;
   causality: Causality;
-  diagnose: (id: ComponentId) => Diagnostic[];
+  diagnose?: (id: ComponentId) => Diagnostic[];
   sourceResolver: SourceResolver;
 }): ToolHandlers {
-  const { store, causality, diagnose, sourceResolver } = deps;
+  const {
+    store,
+    causality,
+    diagnose = createDefaultDiagnose(store, causality),
+    sourceResolver,
+  } = deps;
 
   const componentRef = (id: ComponentId): LensRef => ({
     kind: "component",
@@ -40,7 +50,10 @@ export function createToolHandlers(deps: {
         (interactionId ? interactions.find((i) => i.id === interactionId) : null) ??
         interactions.at(-1);
       if (!it) return { error: "no interaction recorded yet — interact with the page first" };
-      return explainInteraction(store, causality, it, { diagnose });
+      return {
+        schemaVersion: TOOL_SCHEMA_VERSION,
+        ...explainInteraction(store, causality, it, { diagnose }),
+      };
     },
 
     query_trace: ({ interactionId, limit = 8 }) => {
@@ -58,9 +71,10 @@ export function createToolHandlers(deps: {
           renderId: r.renderId,
           componentId: r.componentId,
           name: store.instance(r.componentId)?.name ?? `#${r.componentId}`,
-          self: r.selfDuration,
+          selfMs: round(r.selfDuration),
         }));
       return {
+        schemaVersion: TOOL_SCHEMA_VERSION,
         stats,
         interaction: it ? { id: it.id, label: it.label, kind: it.kind, metrics: it.metrics } : null,
         topRenders: renders,
@@ -83,6 +97,7 @@ export function createToolHandlers(deps: {
       const why = causality.why(renderId as RenderId);
       const instance = store.instance(why.render.componentId);
       return {
+        schemaVersion: TOOL_SCHEMA_VERSION,
         renderId,
         componentId: why.render.componentId,
         componentName: instance?.name ?? `#${why.render.componentId}`,
@@ -116,6 +131,7 @@ export function createToolHandlers(deps: {
         if (!before.hooks || !after.hooks) return { error: "snapshot missing hooks" };
         const hooks = diffHooks(before.hooks, after.hooks);
         return {
+          schemaVersion: TOOL_SCHEMA_VERSION,
           kind,
           beforeRenderId,
           afterRenderId,
@@ -130,6 +146,7 @@ export function createToolHandlers(deps: {
       }
       const result = diff({ kind, before: left as never, after: right as never });
       return {
+        schemaVersion: TOOL_SCHEMA_VERSION,
         kind,
         beforeRenderId,
         afterRenderId,
@@ -143,6 +160,7 @@ export function createToolHandlers(deps: {
       const id = componentId as ComponentId;
       const list = diagnose(id);
       return {
+        schemaVersion: TOOL_SCHEMA_VERSION,
         componentId: id,
         name: store.instance(id)?.name ?? `#${id}`,
         diagnostics: list,
@@ -162,6 +180,7 @@ export function createToolHandlers(deps: {
       const original = await sourceResolver.resolve({ file, line, column });
       const content = await sourceResolver.sourceContent(file, original?.file);
       return {
+        schemaVersion: TOOL_SCHEMA_VERSION,
         compiled: { file, line, column },
         original,
         path: content?.path ?? original?.file ?? null,
@@ -179,12 +198,13 @@ export function createToolHandlers(deps: {
           componentId: i.id,
           name: i.name,
           renders: store.renderCount(i.id),
-          totalSelf: round(store.selfTimeTotal(i.id)),
+          totalSelfMs: round(store.selfTimeTotal(i.id)),
           ...(i.source ? { source: i.source } : {}),
         }))
-        .sort((a, b) => b.totalSelf - a.totalSelf)
+        .sort((a, b) => b.totalSelfMs - a.totalSelfMs)
         .slice(0, 10);
       return {
+        schemaVersion: TOOL_SCHEMA_VERSION,
         matches,
         citations: matches.slice(0, 3).map((m) => componentRef(m.componentId)),
       };
@@ -203,12 +223,13 @@ export function createToolHandlers(deps: {
         .slice(0, limit)
         .map((r) => ({
           renderId: r.renderId,
-          timestamp: round(r.timestamp),
-          self: round(r.selfDuration),
+          timestampMs: round(r.timestamp),
+          selfMs: round(r.selfDuration),
           commitId: r.commitId as number,
           reasons: r.reasons.map((reason) => reason.type),
         }));
       return {
+        schemaVersion: TOOL_SCHEMA_VERSION,
         componentId: id,
         componentName: instance.name,
         renders,
@@ -241,8 +262,6 @@ export function createToolHandlers(deps: {
       const totalSelf = store.selfTimeTotal(id);
       const lastRender = retained.at(-1);
 
-      // Latest render whose snapshot is still retained panel-side. In extension
-      // mode snapshots are fetched on demand, so none may exist yet.
       let latest: {
         renderId: RenderId;
         props: ReturnType<typeof summarizeValue> | null;
@@ -274,6 +293,7 @@ export function createToolHandlers(deps: {
       }
 
       return {
+        schemaVersion: TOOL_SCHEMA_VERSION,
         componentId: id,
         componentName: instance.name,
         kind: instance.kind ?? "component",
@@ -319,6 +339,7 @@ export function createToolHandlers(deps: {
         return { error: `Unknown componentId ${componentId} — use find_component to look it up.` };
       }
       const base = {
+        schemaVersion: TOOL_SCHEMA_VERSION,
         componentId: id,
         name: instance.name,
         citations: [componentRef(id)],
@@ -388,6 +409,7 @@ export function createToolHandlers(deps: {
       if (!span && !truncated && endLine < lines.length) truncated = true;
       return {
         ...base,
+        schemaVersion: TOOL_SCHEMA_VERSION,
         file: content.path ?? original?.file ?? null,
         ...(span ? { span } : {}),
         snippet,
@@ -408,7 +430,6 @@ export function createToolHandlers(deps: {
       const runs = effects.filter((e) => e.phase === "run");
       const cleanups = effects.filter((e) => e.phase === "cleanup");
       const recentRenders = store.rendersOf(id).slice(-12);
-      // Same heuristic the Effects tab shows as "possible loop".
       const possibleLoop = recentRenders.length >= 4 && runs.length >= recentRenders.length - 1;
       const byHook = new Map<number, { runs: number; totalMs: number }>();
       for (const e of runs) {
@@ -419,6 +440,7 @@ export function createToolHandlers(deps: {
         byHook.set(key, slot);
       }
       return {
+        schemaVersion: TOOL_SCHEMA_VERSION,
         componentId: id,
         componentName: instance.name,
         runs: runs.length,
@@ -446,7 +468,6 @@ export function createToolHandlers(deps: {
           ? { componentId: node.ref as ComponentId, name: node.label }
           : null;
       };
-      // Ownership edges point child → parent.
       const parents = around.outgoing
         .filter((e) => e.kind === "parent")
         .map((e) => toEntry(e.to))
@@ -456,6 +477,7 @@ export function createToolHandlers(deps: {
         .map((e) => toEntry(e.from))
         .filter((x): x is { componentId: ComponentId; name: string } => x !== null);
       return {
+        schemaVersion: TOOL_SCHEMA_VERSION,
         componentId: id,
         componentName: instance.name,
         parents,
@@ -464,6 +486,409 @@ export function createToolHandlers(deps: {
           componentRef(id),
           ...parents.slice(0, 2).map((p) => componentRef(p.componentId)),
         ],
+      };
+    },
+
+    list_interactions: ({ limit = 20 }) => {
+      const interactions = store
+        .interactions()
+        .slice()
+        .sort((a, b) => b.metrics.reactDuration - a.metrics.reactDuration)
+        .slice(0, limit)
+        .map((i) => ({
+          id: i.id,
+          label: i.label,
+          kind: i.kind,
+          durationMs: round(i.metrics.totalDuration),
+          reactMs: round(i.metrics.reactDuration),
+          renderCount: i.metrics.renderCount,
+        }));
+      return {
+        schemaVersion: TOOL_SCHEMA_VERSION,
+        interactions,
+        citations: interactions
+          .slice(0, 5)
+          .map((i) => ({ kind: "interaction" as const, id: i.id, label: i.label })),
+      };
+    },
+
+    get_session_summary: () => {
+      const evidence = buildEvidencePack(store);
+      return {
+        schemaVersion: TOOL_SCHEMA_VERSION,
+        evidence,
+        citations: [
+          ...evidence.interactions.slice(0, 3).map((i) => ({
+            kind: "interaction" as const,
+            id: i.id,
+            label: i.label,
+          })),
+          ...evidence.topComponents.slice(0, 3).map((c) => componentRef(c.componentId as ComponentId)),
+        ],
+      };
+    },
+
+    list_components: ({ name, limit = 20 }) => {
+      const q = name?.trim().toLowerCase();
+      const components = store
+        .allInstances()
+        .filter((i) => store.renderCount(i.id) > 0)
+        .filter((i) => !q || i.name.toLowerCase().includes(q))
+        .map((i) => ({
+          componentId: i.id,
+          name: i.name,
+          renders: store.renderCount(i.id),
+          totalSelfMs: round(store.selfTimeTotal(i.id)),
+          compiled: i.compiler.compiled,
+          ...(i.source ? { source: i.source } : {}),
+        }))
+        .sort((a, b) => b.totalSelfMs - a.totalSelfMs)
+        .slice(0, limit);
+      return {
+        schemaVersion: TOOL_SCHEMA_VERSION,
+        components,
+        citations: components.slice(0, 5).map((c) => componentRef(c.componentId)),
+      };
+    },
+
+    get_waste_report: ({ limit = 15 }) => {
+      const waste: Array<{
+        componentId: ComponentId;
+        name: string;
+        renderId: RenderId;
+        selfMs: number;
+        source?: { file: string; line: number; column: number };
+      }> = [];
+      for (const inst of store.allInstances()) {
+        for (const r of store.rendersOf(inst.id)) {
+          try {
+            if (causality.why(r.renderId).verdict !== "no-observable-change") continue;
+            waste.push({
+              componentId: inst.id,
+              name: inst.name,
+              renderId: r.renderId,
+              selfMs: round(r.selfDuration),
+              ...(inst.source ? { source: inst.source } : {}),
+            });
+          } catch {
+            /* skip */
+          }
+        }
+      }
+      waste.sort((a, b) => b.selfMs - a.selfMs);
+      const top = waste.slice(0, limit);
+      return {
+        schemaVersion: TOOL_SCHEMA_VERSION,
+        waste: top,
+        citations: top.slice(0, 5).map((w) => componentRef(w.componentId)),
+      };
+    },
+
+    diff_commits: ({ beforeCommitId, afterCommitId }) => {
+      const commits = store.commits();
+      const before = commits.find((c) => (c.commitId as number) === beforeCommitId);
+      const after = commits.find((c) => (c.commitId as number) === afterCommitId);
+      if (!before || !after) {
+        return { error: "unknown commit id — use get_session_summary / query_trace to find commits" };
+      }
+      const beforeSet = new Set(before.componentIds);
+      const afterSet = new Set(after.componentIds);
+      const added = [...afterSet].filter((id) => !beforeSet.has(id));
+      const removed = [...beforeSet].filter((id) => !afterSet.has(id));
+      const shared = [...afterSet].filter((id) => beforeSet.has(id));
+      return {
+        schemaVersion: TOOL_SCHEMA_VERSION,
+        beforeCommitId,
+        afterCommitId,
+        beforeSelfMs: round(before.totalSelfTime),
+        afterSelfMs: round(after.totalSelfTime),
+        deltaSelfMs: round(after.totalSelfTime - before.totalSelfTime),
+        addedComponentIds: added,
+        removedComponentIds: removed,
+        sharedComponentIds: shared,
+        citations: [...added, ...removed].slice(0, 5).map((id) => componentRef(id)),
+      };
+    },
+
+    query_events: ({ type, componentId, interactionId, cursor, limit = 25 }) => {
+      const capped = Math.min(Math.max(limit, 1), 50);
+      const offset = cursor ? Number.parseInt(cursor, 10) || 0 : 0;
+      let events = store.allEvents();
+      if (type) events = events.filter((e) => e.type === type);
+      if (componentId != null) {
+        events = events.filter((e) => "componentId" in e && (e as { componentId?: number }).componentId === componentId);
+      }
+      if (interactionId) {
+        const num = interactionId.startsWith("i")
+          ? Number(interactionId.slice(1))
+          : Number(interactionId);
+        events = events.filter(
+          (e) => e.interactionId != null && (e.interactionId as unknown as number) === num,
+        );
+      }
+      const page = events.slice(offset, offset + capped).map((e) => ({
+        id: e.id as number,
+        type: e.type,
+        timestampMs: round(e.timestamp),
+        ...("componentId" in e && e.componentId != null
+          ? { componentId: e.componentId as number }
+          : {}),
+        ...(e.interactionId != null ? { interactionId: e.interactionId as unknown as number } : {}),
+      }));
+      const next = offset + capped < events.length ? String(offset + capped) : null;
+      return {
+        schemaVersion: TOOL_SCHEMA_VERSION,
+        events: page,
+        nextCursor: next,
+        truncated: next != null,
+        ...(next
+          ? {
+              budgetNote: `Showing ${page.length} of ${events.length} events; pass cursor="${next}" for more.`,
+            }
+          : {}),
+        citations: [],
+      };
+    },
+
+    get_source_location: ({ lensId }) => {
+      const trimmed = lensId.trim().replace(/^\[|\]$/g, "");
+      const m = /^(component|render|interaction):(.+)$/.exec(trimmed);
+      if (!m) {
+        return { error: `unrecognized lensId "${lensId}" — expected component:N, render:N, or interaction:iN` };
+      }
+      const kind = m[1] as "component" | "render" | "interaction";
+      const raw = m[2]!;
+      if (kind === "component") {
+        const id = Number(raw) as ComponentId;
+        const inst = store.instance(id);
+        if (!inst) return { error: `Unknown componentId ${raw}` };
+        return {
+          schemaVersion: TOOL_SCHEMA_VERSION,
+          lensId: trimmed,
+          kind,
+          file: inst.source?.file ?? null,
+          line: inst.source?.line ?? null,
+          column: inst.source?.column ?? null,
+          componentId: id,
+          citations: [componentRef(id)],
+        };
+      }
+      if (kind === "render") {
+        const render = store.getRender(Number(raw) as RenderId);
+        if (!render) return { error: `Unknown renderId ${raw}` };
+        const inst = store.instance(render.componentId);
+        return {
+          schemaVersion: TOOL_SCHEMA_VERSION,
+          lensId: trimmed,
+          kind,
+          file: inst?.source?.file ?? null,
+          line: inst?.source?.line ?? null,
+          column: inst?.source?.column ?? null,
+          componentId: render.componentId,
+          citations: [
+            {
+              kind: "render" as const,
+              id: render.renderId,
+              label: `render ${render.renderId}`,
+              componentId: render.componentId,
+            },
+            componentRef(render.componentId),
+          ],
+        };
+      }
+      const it = store.interactions().find((i) => i.id === raw || i.id === `i${raw}`);
+      if (!it) return { error: `Unknown interaction ${raw}` };
+      return {
+        schemaVersion: TOOL_SCHEMA_VERSION,
+        lensId: trimmed,
+        kind,
+        file: null,
+        line: null,
+        column: null,
+        citations: [{ kind: "interaction" as const, id: it.id, label: it.label }],
+      };
+    },
+
+    diagnose_slowness: ({ interactionId }) => {
+      const ranked = store
+        .interactions()
+        .slice()
+        .sort((a, b) => b.metrics.reactDuration - a.metrics.reactDuration);
+      const it =
+        (interactionId ? ranked.find((i) => i.id === interactionId) : null) ?? ranked[0];
+      if (!it) {
+        return { error: "no interaction recorded yet — interact with the page first" };
+      }
+      const narrative = explainInteraction(store, causality, it, { diagnose });
+      const top = narrative.topCost[0];
+      const findings = [
+        {
+          kind: "interaction-cost",
+          label: it.label,
+          detail: `${round(it.metrics.reactDuration)}ms React / ${it.metrics.renderCount} renders`,
+          lensId: `interaction:${it.id}`,
+          nextStep: "explain_interaction",
+        },
+        ...(top
+          ? [
+              {
+                kind: "top-cost-component",
+                label: top.name,
+                detail: `${round(top.self)}ms self${top.wasted ? " (wasted)" : ""}`,
+                lensId: `component:${top.componentId}`,
+                nextStep: "why / read_component_source",
+              },
+            ]
+          : []),
+        ...narrative.waste.slice(0, 3).map((w) => ({
+          kind: "waste",
+          label: w.name,
+          detail: `${round(w.self)}ms no-observable-change`,
+          lensId: `render:${w.renderId}`,
+          nextStep: "why",
+        })),
+      ];
+      return {
+        schemaVersion: TOOL_SCHEMA_VERSION,
+        verdict: narrative.headline,
+        findings,
+        citations: narrative.citations,
+        nextSteps: [
+          `explain_interaction({ interactionId: "${it.id}" })`,
+          ...(top
+            ? [
+                `why({ renderId: ${top.renderId} })`,
+                `read_component_source({ componentId: ${top.componentId} })`,
+              ]
+            : []),
+        ],
+      };
+    },
+
+    find_wasted_renders: ({ limit = 10 }) => {
+      const waste: Array<{
+        componentId: ComponentId;
+        name: string;
+        renderId: RenderId;
+        selfMs: number;
+      }> = [];
+      for (const inst of store.allInstances()) {
+        for (const r of store.rendersOf(inst.id)) {
+          try {
+            if (causality.why(r.renderId).verdict !== "no-observable-change") continue;
+            waste.push({
+              componentId: inst.id,
+              name: inst.name,
+              renderId: r.renderId,
+              selfMs: round(r.selfDuration),
+            });
+          } catch {
+            /* skip */
+          }
+        }
+      }
+      waste.sort((a, b) => b.selfMs - a.selfMs);
+      const top = waste.slice(0, limit);
+      return {
+        schemaVersion: TOOL_SCHEMA_VERSION,
+        verdict:
+          top.length === 0
+            ? "No wasted (no-observable-change) renders in retained history."
+            : `${top.length} wasted renders; top is ${top[0]!.name} at ${top[0]!.selfMs}ms.`,
+        findings: top.map((w) => ({
+          kind: "waste",
+          label: w.name,
+          detail: `${w.selfMs}ms`,
+          lensId: `render:${w.renderId}`,
+          nextStep: `why({ renderId: ${w.renderId} })`,
+        })),
+        citations: top.slice(0, 5).map((w) => componentRef(w.componentId)),
+        nextSteps: top.slice(0, 2).flatMap((w) => [
+          `why({ renderId: ${w.renderId} })`,
+          `read_component_source({ componentId: ${w.componentId} })`,
+        ]),
+      };
+    },
+
+    why_did_component_render: ({ componentId }) => {
+      const id = componentId as ComponentId;
+      const instance = store.instance(id);
+      if (!instance) {
+        return { error: `Unknown componentId ${componentId} — use find_component to look it up.` };
+      }
+      const retained = store
+        .rendersOf(id)
+        .slice()
+        .sort((a, b) => b.selfDuration - a.selfDuration);
+      const worst = retained[0];
+      if (!worst) {
+        return { error: `No retained renders for component ${instance.name}` };
+      }
+      const why = causality.why(worst.renderId);
+      return {
+        schemaVersion: TOOL_SCHEMA_VERSION,
+        verdict: `${instance.name}: ${why.verdict} on render ${worst.renderId} (${round(worst.selfDuration)}ms)`,
+        findings: [
+          {
+            kind: "verdict",
+            label: why.verdict,
+            detail: why.observableOutputChanged
+              ? "observable output changed"
+              : "no observable output change",
+            lensId: `render:${worst.renderId}`,
+            nextStep: "read_component_source on cause site",
+          },
+          ...why.causes.slice(0, 3).map((c) => ({
+            kind: `cause-L${c.level}`,
+            label: c.explanation,
+            detail: `confidence ${c.confidence}`,
+            nextStep: c.sourceLocation
+              ? `${c.sourceLocation.file}:${c.sourceLocation.line}`
+              : "read_component_source",
+          })),
+        ],
+        citations: [
+          componentRef(id),
+          {
+            kind: "render" as const,
+            id: worst.renderId,
+            label: `render ${worst.renderId}`,
+            componentId: id,
+          },
+        ],
+        nextSteps: [
+          `why({ renderId: ${worst.renderId} })`,
+          `read_component_source({ componentId: ${id} })`,
+          `component_runtime({ componentId: ${id} })`,
+        ],
+      };
+    },
+
+    compare_sessions: ({ before, after }) => {
+      const beforePayload = before as EventsBatchMessage["payload"];
+      const afterPayload = after as EventsBatchMessage["payload"];
+      if (!beforePayload?.events || !afterPayload?.events) {
+        return { error: "before and after must be session payloads with events[]" };
+      }
+      const result = compareSessions(beforePayload, afterPayload);
+      return {
+        schemaVersion: TOOL_SCHEMA_VERSION,
+        verdict: result.verdict,
+        regressions: result.regressions.map((r) => ({
+          name: r.name,
+          beforeRenderCount: r.beforeRenderCount,
+          afterRenderCount: r.afterRenderCount,
+          renderDeltaPct: r.renderDeltaPct,
+          wasteDelta: r.wasteDelta,
+        })),
+        improvements: result.improvements.map((r) => ({
+          name: r.name,
+          renderDelta: r.renderDelta,
+          wasteDelta: r.wasteDelta,
+        })),
+        onlyBefore: result.onlyBefore,
+        onlyAfter: result.onlyAfter,
+        citations: [],
       };
     },
   };

@@ -4,7 +4,7 @@ import { createCausality } from "@reactlens/causality";
 import { createSourceResolver } from "@reactlens/source-maps";
 import { buildEvidencePack, formatEvidencePack } from "./evidence.js";
 import { createToolHandlers } from "./handlers.js";
-import { SYSTEM_PROMPT, TOOL_DEFINITIONS } from "./tools.js";
+import { TOOL_DEFINITIONS } from "./tools.js";
 import type {
   RenderEvent,
   ComponentId,
@@ -85,22 +85,7 @@ describe("evidence pack", () => {
   });
 });
 
-describe("prompt contract", () => {
-  it("commits to the five questions, citations, compiler invariant, and fix format", () => {
-    expect(SYSTEM_PROMPT).toMatch(/why did it render/i);
-    expect(SYSTEM_PROMPT).toMatch(/how do i fix it/i);
-    // Exact citation token syntax the panel UI parses out of prose.
-    expect(SYSTEM_PROMPT).toContain("[component:");
-    expect(SYSTEM_PROMPT).toContain("[render:");
-    // React Compiler invariant (DESIGN §1.4): no manual memoization advice
-    // for compiled components.
-    expect(SYSTEM_PROMPT).toMatch(/React Compiler/);
-    expect(SYSTEM_PROMPT).toMatch(/useMemo/);
-    // Fix contract: source first, fenced code with file:line info string.
-    expect(SYSTEM_PROMPT).toMatch(/read_component_source/);
-    expect(SYSTEM_PROMPT).toMatch(/file:line|src\/File\.tsx:42/);
-  });
-
+describe("tool surface", () => {
   it("tool definitions and handlers expose the same closed set", () => {
     const store = new TraceStore();
     const handlers = createToolHandlers({

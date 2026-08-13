@@ -64,7 +64,7 @@ export function buildInteractions(
     const bucket: MutableBucket = {
       id: `i${ev.interactionId}`,
       kind: ev.kind,
-      label: labelFor(ev.kind, targetName),
+      label: labelFor(ev, targetName),
       start: ev.timestamp,
       end: ev.timestamp,
       renders: [],
@@ -173,8 +173,9 @@ function finalize(b: MutableBucket): Interaction {
   };
 }
 
-function labelFor(kind: InteractionEvent["kind"], targetName: string | undefined): string {
-  const verb = KIND_VERB[kind];
+function labelFor(ev: InteractionEvent, targetName: string | undefined): string {
+  if (ev.name) return ev.name;
+  const verb = KIND_VERB[ev.kind];
   return targetName ? `${verb} ${targetName}` : verb;
 }
 

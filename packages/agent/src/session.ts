@@ -1,5 +1,15 @@
 import type { LensRef } from "@reactlens/explain";
-import { SYSTEM_PROMPT } from "./tools.js";
+import {
+  executeTool,
+  collectCitations,
+  dedupeCitations,
+  budgetToolResult,
+  capFor,
+  formatEvidencePack,
+  type EvidencePack,
+  type ToolHandlers,
+} from "@reactlens/agent-tools";
+import { SYSTEM_PROMPT } from "./prompt.js";
 import {
   appendAssistant,
   appendToolResults,
@@ -9,9 +19,6 @@ import {
   type ProviderTranscript,
 } from "./chat.js";
 import { PROVIDER_PRESETS } from "./providers.js";
-import { executeTool, collectCitations, dedupeCitations } from "./loop.js";
-import { budgetToolResult, capFor } from "./budget.js";
-import { formatEvidencePack, type EvidencePack } from "./evidence.js";
 import type {
   AgentAnswer,
   AgentEvent,
@@ -19,7 +26,6 @@ import type {
   AgentSettings,
   AgentStep,
   ChatMessage,
-  ToolHandlers,
 } from "./types.js";
 
 const MAX_STEPS = 12;
@@ -38,7 +44,6 @@ export function createAgentSession(opts: {
   const { settings, handlers, evidence } = opts;
   const messages: ChatMessage[] = [];
   let transcript: ProviderTranscript | null = null;
-  /** Chars of tool output already sent to the model this conversation. */
   let toolCharsSpent = 0;
 
   async function send(
@@ -52,7 +57,6 @@ export function createAgentSession(opts: {
     }
 
     if (!transcript) {
-      // Evidence rides in the first user turn so it is sent (and cached) once.
       const first = evidence ? `${formatEvidencePack(evidence)}\n\n${question}` : question;
       transcript = startTranscript(SYSTEM_PROMPT, first, settings);
     } else {
@@ -90,8 +94,6 @@ export function createAgentSession(opts: {
 
         const toolResults: Array<{ id: string; name: string; content: string }> = [];
         for (const call of turn.toolCalls) {
-          // The assistant turn with tool_use is already in the transcript —
-          // every call needs *some* result or the next request is wire-invalid.
           const result = signal?.aborted
             ? { error: "aborted by user" }
             : (onEvent?.({ type: "tool_start", name: call.name, args: call.arguments }),

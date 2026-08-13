@@ -31,16 +31,14 @@
     "build": "tsup src/index.ts --format esm --dts --sourcemap --clean --tsconfig tsconfig.build.json"
   },
   "dependencies": {
-    "@reactlens/causality": "workspace:*",
-    "@reactlens/diagnostics": "workspace:*",
-    "@reactlens/diff-engine": "workspace:*",
+    "@reactlens/agent-tools": "workspace:*",
     "@reactlens/explain": "workspace:*",
-    "@reactlens/graph": "workspace:*",
-    "@reactlens/protocol": "workspace:*",
-    "@reactlens/source-maps": "workspace:*",
-    "@reactlens/trace-engine": "workspace:*"
+    "@reactlens/protocol": "workspace:*"
   },
   "devDependencies": {
+    "@reactlens/causality": "workspace:*",
+    "@reactlens/source-maps": "workspace:*",
+    "@reactlens/trace-engine": "workspace:*",
     "tsup": "^8.5.1"
   }
 }

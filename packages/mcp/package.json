@@ -1,0 +1,42 @@
+{
+  "name": "@reactlens/mcp",
+  "version": "0.0.0",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Fausto95/react-lens.git",
+    "directory": "packages/mcp"
+  },
+  "files": ["dist", "AGENTS.md"],
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "publishConfig": {
+    "main": "./dist/index.js",
+    "types": "./dist/index.d.ts",
+    "exports": {
+      ".": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      }
+    },
+    "access": "public"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "build": "tsup src/index.ts --format esm --dts --sourcemap --clean --tsconfig tsconfig.build.json"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "@reactlens/agent-tools": "workspace:*",
+    "@reactlens/causality": "workspace:*",
+    "@reactlens/protocol": "workspace:*",
+    "@reactlens/source-maps": "workspace:*",
+    "@reactlens/trace-engine": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^22",
+    "tsup": "^8.5.1"
+  }
+}
