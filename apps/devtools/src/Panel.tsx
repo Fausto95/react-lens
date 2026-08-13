@@ -380,13 +380,17 @@ export function Panel({
     if (!client) return;
     const unsubscribe = client.subscribe(setWorkerDoctor);
     client.ingest(store.export()); // backfill history captured before we attached
-    const off = store.onIngest((batch) => client.ingest(batch));
+    // Tee from TraceClient frames (worker-authoritative) — not store.onIngest,
+    // which would double-fire when the sync mirror applies `ingested`.
+    const off = traceClient
+      ? traceClient.onFrame((batch) => client.ingest(batch))
+      : store.onIngest((batch) => client.ingest(batch));
     return () => {
       unsubscribe();
       off();
       client.dispose();
     };
-  }, [doctorClient, store]);
+  }, [doctorClient, store, traceClient]);
 
   // Push selected component source into the Doctor worker for static+runtime fusion.
   useEffect(() => {

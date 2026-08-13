@@ -13,6 +13,29 @@ import type {
 } from "@reactlens/protocol";
 import { RingBuffer } from "./ring-buffer.js";
 import { buildInteractions, type Interaction } from "./interactions.js";
+import {
+  RenderFlags,
+  TimelineIndex,
+  causeFromReasons,
+  type RenderFlag,
+} from "./columnar.js";
+import { FlatTreeIndex } from "./flat-tree.js";
+import {
+  activityIntervals,
+  hitTest,
+  queryTimeline,
+  statsInRange,
+  type HitTestResult,
+  type TimelineQuery,
+  type TimelineQueryResult,
+} from "./aggregates.js";
+import {
+  RetentionManager,
+  createMemoryColdStore,
+  sliceToChunk,
+  type ColdStore,
+  type RetentionConfig,
+} from "./retention.js";
 
 /** A single commit pass: which components rendered, when. */
 export interface CommitSummary {
@@ -42,13 +65,18 @@ export interface TraceStoreConfig {
 }
 
 const DEFAULTS: TraceStoreConfig = {
-  maxEvents: 10_000,
+  // Event ring is for export / interaction rebuild — columnar index is the
+  // timeline source of truth and is not capped by this (see retention tiers).
+  maxEvents: 100_000,
   maxRendersPerComponent: 100,
   maxSnapshots: 5_000,
   maxCommits: 1_000,
   maxCommitSnapshots: 300,
   maxAgeMs: null,
 };
+
+/** Minimum clip duration (ms) — matches timeline MIN_CLIP_MS. */
+const MIN_CLIP_MS = 0.05;
 
 /**
  * What the retention caps took. Every number here is loss the user cannot
@@ -118,17 +146,38 @@ export class TraceStore {
   private readonly subscriptions = new Set<Subscription>();
   private readonly ingestObservers = new Set<(batch: EventsBatchMessage["payload"]) => void>();
 
-  constructor(config?: Partial<TraceStoreConfig>) {
+  /**
+   * Columnar timeline index — authoritative for viewport queries. Survives
+   * beyond the event ring via HOT/WARM retention; not rebuilt on each query.
+   */
+  readonly timelineIndex = new TimelineIndex();
+  /** Flattened ownership tree for virtualized tree queries. */
+  readonly flatTree = new FlatTreeIndex();
+  /** Tiered spill manager (WARM→COLD). */
+  readonly retentionManager: RetentionManager;
+  private treeDirty = false;
+
+  constructor(config?: Partial<TraceStoreConfig>, coldStore?: ColdStore) {
     this.config = { ...DEFAULTS, ...config };
     this.events = new RingBuffer<LensEvent>(this.config.maxEvents);
     this.snapshotOrder = new RingBuffer<RenderId>(this.config.maxSnapshots);
     this.commitOrder = new RingBuffer<CommitId>(this.config.maxCommits);
     this.commitSnapshots = new RingBuffer<CommitSnapshot>(this.config.maxCommitSnapshots);
+    this.retentionManager = new RetentionManager(coldStore ?? createMemoryColdStore());
   }
 
   ingest(batch: EventsBatchMessage["payload"]): void {
     for (const instance of batch.instances) {
       this.instances.set(instance.id, instance);
+      this.flatTree.upsert({
+        id: instance.id as number,
+        ...(instance.parentId !== undefined ? { parentId: instance.parentId as number } : {}),
+        name: instance.name,
+        renders: this.renderTotals.get(instance.id) ?? 0,
+        selfTime: this.selfTimeTotals.get(instance.id) ?? 0,
+        compiled: instance.compiler.compiled,
+      });
+      this.treeDirty = true;
     }
     const touched = new Set<ComponentId>();
     const touchedInteractions = new Set<InteractionId>();
@@ -146,7 +195,25 @@ export class TraceStore {
       if (event.componentId !== undefined) touched.add(event.componentId);
       if (event.interactionId !== undefined) touchedInteractions.add(event.interactionId);
     }
+    if (this.treeDirty) {
+      // Refresh counters on touched instances then rebuild adjacency.
+      for (const id of touched) {
+        const inst = this.instances.get(id);
+        if (!inst) continue;
+        this.flatTree.upsert({
+          id: inst.id as number,
+          ...(inst.parentId !== undefined ? { parentId: inst.parentId as number } : {}),
+          name: inst.name,
+          renders: this.renderTotals.get(id) ?? 0,
+          selfTime: this.selfTimeTotals.get(id) ?? 0,
+          compiled: inst.compiler.compiled,
+        });
+      }
+      this.flatTree.rebuildOrder();
+      this.treeDirty = false;
+    }
     this.trimByAge();
+    this.maybeSpillWarm();
     if (this.commitsDirty) this.rebuildCommitsFromEvents();
     this.notify(touched, touchedInteractions);
     for (const observer of this.ingestObservers) observer(batch);
@@ -209,6 +276,8 @@ export class TraceStore {
         (this.selfTimeTotals.get(event.componentId) ?? 0) + event.selfDuration,
       );
       this.recordCommit(event);
+      this.appendTimeline(event);
+      this.treeDirty = true;
     }
     if (event.interactionId !== undefined) {
       const list = this.eventsByInteractionId.get(event.interactionId) ?? [];
@@ -540,6 +609,106 @@ export class TraceStore {
     };
   }
 
+  // ── Columnar / viewport queries ────────────────────────────────────────────
+
+  /** Running time bounds from the columnar index (O(1)). */
+  timeBounds(): { t0: number; t1: number } {
+    return this.timelineIndex.bounds();
+  }
+
+  queryTimeline(q: TimelineQuery): TimelineQueryResult {
+    return queryTimeline(this.timelineIndex, q);
+  }
+
+  statsInRange(
+    t0: number,
+    t1: number,
+    options?: {
+      includeLane?: (laneKey: string, name: string) => boolean;
+      excludeWasted?: boolean;
+    },
+  ) {
+    return statsInRange(this.timelineIndex, t0, t1, options);
+  }
+
+  hitTest(t: number, preferLane: string | null = null): HitTestResult | null {
+    return hitTest(this.timelineIndex, t, preferLane);
+  }
+
+  activityIntervals(bucketMs?: number): Array<[number, number]> {
+    return activityIntervals(this.timelineIndex, bucketMs);
+  }
+
+  /**
+   * Mark a render as wasted (no observable DOM change) after causality analysis.
+   * Timeline reads flags — it never recomputes why().
+   */
+  setRenderFlag(renderId: RenderId, flag: RenderFlag, on: boolean): void {
+    this.timelineIndex.setFlag(renderId as number, flag, on);
+  }
+
+  markWasted(renderId: RenderId, wasted: boolean): void {
+    this.setRenderFlag(renderId, RenderFlags.Wasted, wasted);
+    const render = this.rendersById.get(renderId);
+    if (render) {
+      this.flatTree.setLastObservable(render.componentId as number, wasted ? false : true);
+    }
+  }
+
+  configureRetention(config: Partial<RetentionConfig>): void {
+    Object.assign(this.retentionManager.config, config);
+  }
+
+  private appendTimeline(event: RenderEvent): void {
+    const inst = this.instances.get(event.componentId);
+    const name = inst?.name ?? `#${event.componentId}`;
+    const laneKey = `t:${name}`;
+    const total = Math.max(event.totalDuration, event.selfDuration, MIN_CLIP_MS);
+    this.timelineIndex.append({
+      timestamp: event.timestamp,
+      duration: total,
+      selfDuration: event.selfDuration,
+      renderId: event.renderId as number,
+      componentId: event.componentId as number,
+      commitId: event.commitId as number,
+      cause: causeFromReasons(event.reasons),
+      name,
+      laneKey,
+    });
+  }
+
+  /**
+   * Spill events older than the HOT window into WARM chunks (and eventually COLD).
+   * The live index retains HOT+WARM for queries; COLD is loaded on zoom-in.
+   */
+  private maybeSpillWarm(): void {
+    const newest = this.timelineIndex.t1;
+    if (!Number.isFinite(newest)) return;
+    const cutoff = this.retentionManager.hotCutoff(newest);
+    // Only spill when we have substantial history beyond HOT.
+    if (this.timelineIndex.t0 >= cutoff - 1) return;
+    if (this.timelineIndex.count < this.retentionManager.config.chunkEvents) return;
+    const chunk = sliceToChunk({
+      t0: this.timelineIndex.t0,
+      t1: cutoff,
+      count: this.timelineIndex.count,
+      timestamps: this.timelineIndex.timestamps,
+      durations: this.timelineIndex.durations,
+      selfDurations: this.timelineIndex.selfDurations,
+      renderIds: this.timelineIndex.renderIds,
+      componentIds: this.timelineIndex.componentIds,
+      commitIds: this.timelineIndex.commitIds,
+      causes: this.timelineIndex.causes,
+      flags: this.timelineIndex.flags,
+      laneIndices: this.timelineIndex.laneIndices,
+      laneOrder: this.timelineIndex.laneOrder,
+    });
+    if (chunk && chunk.count > 0) {
+      this.retentionManager.pushWarm(chunk);
+      void this.retentionManager.spillWarmToCold();
+    }
+  }
+
   // ── Subscriptions ───────────────────────────────────────────────────────────
 
   subscribe(selector: TraceSelector, callback: () => void): Dispose {
@@ -599,6 +768,10 @@ export class TraceStore {
     this.dropped = { events: 0, renders: 0, snapshots: 0 };
     this.commitsDirty = false;
     this.commitsCache = null;
+    this.timelineIndex.clear();
+    this.flatTree.clear();
+    this.retentionManager.clear();
+    this.treeDirty = false;
     // Wake subscribers (Tree/Inspector/Timeline) so they re-render to empty.
     this.notify(new Set(), new Set());
   }

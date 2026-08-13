@@ -2,18 +2,16 @@
 import { useReducer, useRef } from "react";
 import type { TraceStore, CommitSummary } from "@reactlens/trace-engine";
 import type { Causality } from "@reactlens/causality";
-import type { RenderId } from "@reactlens/protocol";
 import { useTraceVersion } from "../useLens.js";
 import { derivationCache } from "../traceFresh.js";
 import { isLaneVisible, laneVisibility, type LaneFilter, type LaneKey } from "../laneFilter.js";
 import type { TimeCursor } from "../timeCursor.js";
-import { buildLanes, statsInRegion, type Lane } from "./model/lanes.js";
+import { lanesFromIndex, statsFromStore, type Lane } from "./model/lanes.js";
 import { chainFor, edgesForCommit, type CausalEdge } from "./model/edges.js";
 import { buildActivity, buildAxis, mergeActive, type TimeSpan } from "./model/axis.js";
 import { computeLayout } from "./model/rows.js";
 import type { LaneMode } from "./model/wave.js";
 import { nameWidthFor } from "./view/metrics.js";
-import { assignStacks } from "./model/stacks.js";
 import { wallWindow } from "./model/viewport.js";
 import {
   initialTimelineState,
@@ -22,7 +20,6 @@ import {
   type TimelineContext,
 } from "./model/reducer.js";
 
-const WHY_CAP = 400;
 export const LONG_TASK_MS = 50;
 
 export interface UseTimelineArgs {
@@ -35,7 +32,7 @@ export interface UseTimelineArgs {
 
 export function useTimeline({
   store,
-  causality,
+  causality: _causality,
   cursor,
   laneFilter,
   fixApplied = false,
@@ -43,76 +40,26 @@ export function useTimeline({
   const version = useTraceVersion(store, { kind: "global" });
 
   // Version-keyed caches: the store mutates in place; pan/zoom re-renders must
-  // not redo the causality sweep. (Former useDerived call sites.)
+  // not redo lane materialization from the full session.
   const caches = useRef({
     commits: derivationCache<CommitSummary[]>(),
     interactions: derivationCache<ReturnType<TraceStore["interactions"]>>(),
-    bounds: derivationCache<{ t0: number; t1: number }>(),
-    wasted: derivationCache<Set<RenderId>>(),
-    lanes: derivationCache<Lane[]>(),
     arrows: derivationCache<CausalEdge[]>(),
   }).current;
 
   const commits = caches.commits.read([store, version], () => store.commits());
   const interactions = caches.interactions.read([store, version], () => store.interactions());
 
-  const bounds = caches.bounds.read([store, version, commits], () => {
-    let lo = Number.POSITIVE_INFINITY;
-    let hi = Number.NEGATIVE_INFINITY;
-    for (const instance of store.allInstances()) {
-      for (const render of store.rendersOf(instance.id)) {
-        lo = Math.min(lo, render.timestamp);
-        hi = Math.max(
-          hi,
-          render.timestamp + Math.max(render.totalDuration, render.selfDuration, 0),
-        );
-      }
-    }
-    for (const commit of commits) {
-      lo = Math.min(lo, commit.timestamp);
-      hi = Math.max(hi, commit.endTimestamp);
-    }
-    if (!Number.isFinite(lo) || !Number.isFinite(hi)) return { t0: 0, t1: 120 };
-    return { t0: lo, t1: Math.max(hi, lo + 120) };
-  });
+  // O(1) running bounds from the columnar index.
+  const bounds = store.timeBounds();
 
-  const wasted = caches.wasted.read([store, causality, version], () => {
-    const set = new Set<RenderId>();
-    let checked = 0;
-    for (const instance of store.allInstances()) {
-      for (const render of store.rendersOf(instance.id)) {
-        if (checked >= WHY_CAP) return set;
-        checked++;
-        try {
-          if (causality.why(render.renderId).verdict === "no-observable-change") {
-            set.add(render.renderId);
-          }
-        } catch {
-          /* no verdict */
-        }
-      }
-    }
-    return set;
-  });
+  const gapProgRef = useRef(new Map<string, number>());
+  const laneModesRef = useRef(new Map<LaneKey, LaneMode>());
 
-  const lanes = caches.lanes.read([store, version, laneFilter, wasted], () =>
-    buildLanes(store, {
-      include: (key) => isLaneVisible(laneFilter, key),
-      isWasted: (renderId) => wasted.has(renderId),
-    }),
-  );
-
-  const laneDepth = (() => {
-    const byLane = new Map<string, (typeof lanes)[0]["clips"]>();
-    for (const lane of lanes) byLane.set(lane.key, lane.clips);
-    return assignStacks(byLane);
-  })();
-
+  // Activity from LOD summary — not every clip.
   const acts = (() => {
-    const iv: Array<[number, number]> = [];
-    for (const lane of lanes) {
-      for (const c of lane.clips) iv.push([c.t0, c.t1]);
-    }
+    const fromIndex = store.activityIntervals(64);
+    const iv: Array<[number, number]> = fromIndex.length > 0 ? [...fromIndex] : [];
     for (const c of commits) iv.push([c.timestamp, c.endTimestamp]);
     for (const it of interactions) iv.push([it.start, it.end]);
     if (iv.length === 0) iv.push([bounds.t0, bounds.t1]);
@@ -128,8 +75,6 @@ export function useTimeline({
       : ([[bounds.t0, bounds.t1]] as Array<[number, number]>);
   })();
 
-  const gapProgRef = useRef(new Map<string, number>());
-  const laneModesRef = useRef(new Map<LaneKey, LaneMode>());
   const ctxRef = useRef<TimelineContext>({
     bounds,
     axis: buildAxis(acts, gapProgRef.current),
@@ -145,7 +90,6 @@ export function useTimeline({
   );
 
   const liveAxis = (() => {
-    // Remount / first paint: expanded gaps should already be at full progress.
     for (const id of state.expandedGaps) {
       if (!gapProgRef.current.has(id)) gapProgRef.current.set(id, 1);
     }
@@ -155,10 +99,21 @@ export function useTimeline({
 
   const visible = wallWindow(liveAxis, state.view);
 
-  // Real plot width — must match the projector's stageW - nameW, or the LOD
-  // threshold disagrees with what gets painted.
   const plotW = Math.max(1, state.width - nameWidthFor(state.width));
   const pxPerMs = plotW / Math.max(1, state.view.a1 - state.view.a0);
+
+  // Materialize only the visible time window (+ pad) from columnar lanes.
+  // Wastedness is a stored flag — no causality.why() sweep.
+  const pad = Math.max(50, (visible.end - visible.start) * 0.1);
+  const lanes: Lane[] = lanesFromIndex(store.timelineIndex, {
+    window: { t0: visible.start - pad, t1: visible.end + pad },
+    include: (key) => isLaneVisible(laneFilter, key),
+  });
+
+  const laneDepth = new Map<string, number>();
+  for (const lane of lanes) {
+    laneDepth.set(lane.key, Math.max(1, lane.depth ?? 1));
+  }
 
   const layout = computeLayout(lanes, laneDepth, {
     shelfOpen: state.shelfOpen,
@@ -179,10 +134,12 @@ export function useTimeline({
   );
 
   const statsRange = state.region ?? { start: visible.start, end: visible.end };
-  const stats = statsInRegion(lanes, statsRange.start, statsRange.end, {
+  const includeLane = (key: string) => isLaneVisible(laneFilter, key as LaneKey);
+  const stats = statsFromStore(store, statsRange.start, statsRange.end, {
+    includeLane,
     excludeWasted: fixApplied,
   });
-  const statsRaw = statsInRegion(lanes, statsRange.start, statsRange.end);
+  const statsRaw = statsFromStore(store, statsRange.start, statsRange.end, { includeLane });
 
   const playhead = cursor.mode === "live" ? bounds.t1 : cursor.t;
 

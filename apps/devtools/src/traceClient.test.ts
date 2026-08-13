@@ -46,7 +46,7 @@ describe("createTraceClient", () => {
     vi.unstubAllGlobals();
   });
 
-  it("exposes a sync cache store and dual-write ingest", async () => {
+  it("exposes a sync mirror store and worker-authoritative ingest fallback", async () => {
     // happy-dom may lack a usable Worker — client must still work as fallback.
     vi.stubGlobal(
       "Worker",
@@ -64,6 +64,7 @@ describe("createTraceClient", () => {
     handle.client.ingest(sampleBatch());
     expect(handle.store.stats().components).toBe(1);
     expect(handle.store.instance(7 as ComponentId)?.name).toBe("Widget");
+    expect(handle.store.timelineIndex.count).toBe(1);
 
     const stats = await handle.client.stats();
     expect(stats.events).toBe(1);

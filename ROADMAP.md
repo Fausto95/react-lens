@@ -71,8 +71,9 @@ with multiple **projections** rather than a raw fiber tree.
   log-scaled heat track; global time cursor (Timeline/Tree/Inspector) with LIVE/PAST +
   historical Inspector (◷); A/B marks → Compare diff; compressed idle gaps; anomaly
   markers; play mode + whole-timeline/scoped replay; per-component render waterfall
-  (expanded). Deferred to later phases: Canvas/worker-LOD, screenshots/thumbnails, full
-  track stack, tree-topology patches, session compare/HMR/story mode.
+  (expanded). **Canvas/worker-LOD + columnar viewport queries** now land (see
+  Known follow-ups). Deferred: screenshots/thumbnails, full track stack,
+  tree-topology patches, session compare/HMR/story mode.
 - ✅ **Real time travel** (supersedes "Instant Replay") — scrubbing the playhead
   restores the page's actual state, Redux-DevTools-style: page-side raw-state ring
   (`instrumentation.timeTravel`, dev builds only) applied via `overrideHookState`/class
@@ -114,19 +115,24 @@ with multiple **projections** rather than a raw fiber tree.
 
 - **Reliability pipeline** — Phase 1 (seq/ack content-script ring, heartbeat,
   WAL, poison quarantine, protocol handshake) in tree. Phase 2: TraceStore +
-  WAL + causality live in a supervised trace worker (raw postMessage ingest,
-  Comlink queries, Jotai bridge); main thread still dual-writes a sync cache
-  for UI. Phase 3: Doctor WASM/`analyzeSourceSmart` (extension still stubs
-  oxc for Chrome worker CSP), session export/import + per-`sessionId` segment
-  archive/stitch on the trace worker. Phase 4: OffscreenCanvas timeline base
-  paint with main-thread fallback. Remaining: drop the main-thread cache,
-  chaos e2e, percentage Compiler ratchet.
+  WAL + causality live in a supervised trace worker; **ingest is
+  worker-authoritative** (panel sync mirror updates from `{ type: "ingested" }`,
+  not dual-write on the hot path). Columnar `TimelineIndex` + LOD pyramids +
+  prefix-sum stats + typed `TraceQuery` protocol. Causality / diff run in
+  dedicated workers and write wasted flags into the index. Phase 3: Doctor
+  WASM/`analyzeSourceSmart` (extension still stubs oxc for Chrome worker CSP),
+  session export/import + per-`sessionId` segment archive/stitch on the trace
+  worker. Phase 4: OffscreenCanvas timeline base paint with transferable
+  columnar geometry + main-thread fallback. Tiered HOT/WARM/COLD retention
+  (IDB cold chunks) + SUMMARY LOD pyramids. Remaining: chaos e2e, percentage
+  Compiler ratchet, fully drop the sync mirror once all inspector reads are
+  query-shaped.
 - **Doctor static rules.** Runtime + static fusion ships via `mergeStaticAndRuntime`.
   Playground / e2e-fixture / site leave `oxc-parser` unstubbed (WASM via the
   package `browser` field + `@oxc-parser/binding-wasm32-wasi`); regex fallback
   when load fails. Extension build keeps an explicit oxc stub.
 - ✅ **Doctor worker** — the all-components Doctor pass (`diagnoseAll`, causality
-  per render) now runs in a Web Worker mirroring the store via `TraceStore.onIngest`
+  per render) now runs in a Web Worker mirroring the store via `TraceClient.onFrame`
   - `export()`; the panel consumes `{count, affected}` async and the old
     800-component guard is gone. Falls back to a synchronous pass if the worker
     can't spawn. Selected component source is uploaded for static fusion.
@@ -137,15 +143,19 @@ with multiple **projections** rather than a raw fiber tree.
   and `react/react-compiler` at error; CI runs `check:compiled` +
   `check:compiled:build` on every PR. Percentage ratchet TODO in
   `scripts/check-compiled.mjs`.
-- **Tree worker** — virtualization mounts few rows, but grouping/projection/query
-  still run on the main thread; move to a worker for very large apps (the
-  per-render Doctor/verdict pass is now off-thread; the tree build is not).
+- ✅ **Tree worker path** — virtualization mounts few rows; flat-tree columns +
+  `queryWindow` / `useTreeWindow` keep projections viewport-bounded; full
+  semantic `buildTree` still available for grouping modes.
 - **ui/icons** — foundational extraction done; migrate the remaining panel
   primitives (rows, value view, diff lines) into `ui`.
 - ✅ **Website (`apps/site`)** — the site inspects itself: a Vite React SPA that
   boots the runtime and mounts the real panel over its own marketing sections
   (Hero, REWIND/WHY/DIFF specimens, Features, Install, Agents). Follow-up: wire a
   static deploy (GH Pages/Vercel) and add prerendered meta for SEO.
+- ✅ **Columnar timeline database** — `TimelineIndex` append-only typed arrays,
+  binary-search hit testing, prefix-sum region stats, LOD buckets, incremental
+  stack rows, wasted flags from causality (no WHY_CAP sweep). OpsBoard scale
+  scenario + `playwright.perf.config.ts`.
 
 ## North star
 

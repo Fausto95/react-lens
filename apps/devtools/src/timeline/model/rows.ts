@@ -34,7 +34,11 @@ export function isQuietLane(
   _quietMax = QUIET_MAX,
   quietTotalMs = QUIET_TOTAL_MS,
 ): boolean {
-  if (lane.clips.length === 0) return true;
+  // Inclusive clip work in the current materialization (viewport window).
+  // Lifetime selfTotal alone must not override a cascade root whose bar is wide.
+  if (lane.clips.length === 0) {
+    return (lane.selfTotal ?? 0) < quietTotalMs;
+  }
   const inclusive = lane.clips.reduce((a, c) => a + c.total, 0);
   return inclusive < quietTotalMs;
 }

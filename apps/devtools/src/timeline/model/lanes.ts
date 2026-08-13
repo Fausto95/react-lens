@@ -1,10 +1,16 @@
 import type { TraceStore } from "@reactlens/trace-engine";
+import {
+  RenderFlags,
+  causeCodeToName,
+  type HitTestResult,
+  type TimelineIndex,
+} from "@reactlens/trace-engine";
 import type { ComponentId, RenderEvent, RenderId } from "@reactlens/protocol";
 import { typeLaneKey, type LaneKey } from "../../laneFilter.js";
 
 /**
- * Timeline lanes: one per component type. Clips carry duration + cause; stack
- * rows / wave mode are decided later in layout.
+ * Timeline lanes: one per component type. Clips are adapters over the columnar
+ * TimelineIndex — the live projection is typed arrays, not Clip objects.
  */
 
 export type ClipCause = "props" | "state" | "context" | "cascade" | "mount" | "other";
@@ -52,6 +58,8 @@ export interface Lane {
   wasted: number;
   selfTotal: number;
   firstT: number;
+  /** Max stack depth from incremental assignment. */
+  depth?: number;
 }
 
 export interface BuildLanesOptions {
@@ -81,9 +89,89 @@ export function causeOf(render: RenderEvent): ClipCause {
   }
 }
 
-export function buildLanes(store: TraceStore, options: BuildLanesOptions = {}): Lane[] {
-  const { window: win, include, isWasted } = options;
+/**
+ * Materialize Lane[] adapters from the columnar index.
+ * Prefer `window` so cost scales with the viewport, not the session.
+ */
+export function lanesFromIndex(
+  index: TimelineIndex,
+  options: BuildLanesOptions = {},
+): Lane[] {
+  const { window: win, include } = options;
+  const lanes: Lane[] = [];
 
+  for (const col of index.orderedLanes()) {
+    if (include && !include(col.laneKey as LaneKey, col.name)) continue;
+
+    let lo = 0;
+    let hi = col.count;
+    if (win) {
+      // binary search via timestamps
+      let a = 0;
+      let b = col.count;
+      while (a < b) {
+        const mid = (a + b) >>> 1;
+        if (col.timestamps[mid]! < win.t0) a = mid + 1;
+        else b = mid;
+      }
+      lo = a;
+      while (lo > 0) {
+        const pt0 = col.timestamps[lo - 1]!;
+        if (pt0 + col.durations[lo - 1]! < win.t0) break;
+        lo--;
+      }
+      a = lo;
+      b = col.count;
+      while (a < b) {
+        const mid = (a + b) >>> 1;
+        if (col.timestamps[mid]! <= win.t1) a = mid + 1;
+        else b = mid;
+      }
+      hi = a;
+    }
+
+    const clips: Clip[] = [];
+    for (let i = lo; i < hi; i++) {
+      const t0 = col.timestamps[i]!;
+      const total = col.durations[i]!;
+      clips.push({
+        renderId: col.renderIds[i]! as RenderId,
+        componentId: col.componentIds[i]! as ComponentId,
+        laneKey: col.laneKey as LaneKey,
+        name: col.name,
+        t0,
+        t1: t0 + total,
+        self: col.selfDurations[i]!,
+        total,
+        cause: causeCodeToName(col.causes[i]!),
+        wasted: (col.flags[i]! & RenderFlags.Wasted) !== 0,
+        row: col.rows[i]!,
+      });
+    }
+
+    lanes.push({
+      key: col.laneKey as LaneKey,
+      name: col.name,
+      instanceCount: col.instanceIds.size,
+      clips,
+      renders: col.count,
+      wasted: col.wastedCount,
+      selfTotal: col.selfTotal,
+      firstT: Number.isFinite(col.firstT) ? col.firstT : 0,
+      depth: col.maxRow + 1,
+    });
+  }
+
+  return lanes;
+}
+
+/** @deprecated Prefer lanesFromIndex — still used by tests. */
+export function buildLanes(store: TraceStore, options: BuildLanesOptions = {}): Lane[] {
+  if (store.timelineIndex.count > 0) {
+    return lanesFromIndex(store.timelineIndex, options);
+  }
+  // Fallback for empty index / legacy fixtures that never went through ingest hooks.
+  const { window: win, include, isWasted } = options;
   type Draft = {
     key: LaneKey;
     name: string;
@@ -97,8 +185,6 @@ export function buildLanes(store: TraceStore, options: BuildLanesOptions = {}): 
     if (include && !include(key, instance.name)) continue;
     for (const render of store.rendersOf(instance.id)) {
       const t0 = render.timestamp;
-      // Inclusive width: a parent that barely works still spans its cascade, so
-      // App doesn't read as a hairline while CartBadge shows 18 ms underneath.
       const total = Math.max(render.totalDuration, render.selfDuration, MIN_CLIP_MS);
       const t1 = t0 + total;
       if (win && (t1 < win.t0 || t0 > win.t1)) continue;
@@ -195,6 +281,48 @@ export function statsInRegion(
   return { renders, wasted, selfMs, byLane, byComponent };
 }
 
+/** Prefix-sum stats from the store's columnar index. */
+export function statsFromStore(
+  store: TraceStore,
+  t0: number,
+  t1: number,
+  options: {
+    includeLane?: (laneKey: LaneKey, name: string) => boolean;
+    excludeWasted?: boolean;
+  } = {},
+): Omit<RegionStats, "byLane" | "byComponent"> & {
+  byLane: Map<LaneKey, { renders: number; wasted: number; selfMs: number }>;
+  byComponent: Map<ComponentId, { renders: number; wasted: number; selfMs: number }>;
+} {
+  const s = store.statsInRange(t0, t1, {
+    includeLane: options.includeLane,
+    excludeWasted: options.excludeWasted,
+  });
+  return {
+    renders: s.renders,
+    wasted: s.wasted,
+    selfMs: s.selfMs,
+    byLane: new Map(),
+    byComponent: new Map(),
+  };
+}
+
+function hitToClip(hit: HitTestResult): Clip {
+  return {
+    renderId: hit.renderId as RenderId,
+    componentId: hit.componentId as ComponentId,
+    laneKey: hit.laneKey as LaneKey,
+    name: hit.laneKey.replace(/^t:/, ""),
+    t0: hit.t0,
+    t1: hit.t1,
+    self: hit.self,
+    total: hit.t1 - hit.t0,
+    cause: causeCodeToName(hit.cause),
+    wasted: hit.wasted,
+    row: hit.stackRow,
+  };
+}
+
 export function clipAtTime(
   lanes: Lane[],
   t: number,
@@ -203,7 +331,19 @@ export function clipAtTime(
   let best: Clip | null = null;
   let bestScore = Number.POSITIVE_INFINITY;
   for (const lane of lanes) {
-    for (const clip of lane.clips) {
+    // Binary search within the lane's (already-sorted) clips.
+    const clips = lane.clips;
+    let lo = 0;
+    let hi = clips.length;
+    while (lo < hi) {
+      const mid = (lo + hi) >>> 1;
+      if (clips[mid]!.t0 < t) lo = mid + 1;
+      else hi = mid;
+    }
+    const start = Math.max(0, lo - 4);
+    const end = Math.min(clips.length, lo + 8);
+    for (let i = start; i < end; i++) {
+      const clip = clips[i]!;
       const containing = clip.t0 <= t && t <= clip.t1;
       const mid = (clip.t0 + clip.t1) / 2;
       let score = Math.abs(mid - t);
@@ -217,4 +357,14 @@ export function clipAtTime(
     }
   }
   return best;
+}
+
+/** O(log N) hit test against the columnar index. */
+export function clipAtTimeFromStore(
+  store: TraceStore,
+  t: number,
+  preferLane: LaneKey | null = null,
+): Clip | null {
+  const hit = store.hitTest(t, preferLane);
+  return hit ? hitToClip(hit) : null;
 }

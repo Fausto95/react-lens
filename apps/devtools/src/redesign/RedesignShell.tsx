@@ -571,22 +571,14 @@ function PaneRail({
   );
 }
 
-function buildData(store: TraceStore, causality: Causality): ComponentDatum[] {
+function buildData(store: TraceStore, _causality: Causality): ComponentDatum[] {
+  // Prefer stored last-render flags — never re-run causality.why() for every
+  // instance on the panel thread.
   return store
     .allInstances()
     .filter((i) => store.renderCount(i.id) > 0)
     .map((i) => {
-      let observableChange: boolean | null = null;
-      const last = store.rendersOf(i.id).at(-1);
-      if (last) {
-        try {
-          const verdict = causality.why(last.renderId).verdict;
-          observableChange =
-            verdict === "no-observable-change" ? false : verdict === "expected" ? true : null;
-        } catch {
-          observableChange = null;
-        }
-      }
+      const observableChange = store.flatTree.lastObservable(i.id as number);
       return {
         id: i.id,
         name: i.name,

@@ -2,11 +2,18 @@
 /**
  * OffscreenCanvas timeline base-layer renderer.
  * Overlay + pointer/keyboard stay on the main thread.
+ *
+ * Prefers transferable columnar geometry; reconstructs Clip adapters for
+ * drawBase so we never structured-clone millions of JS objects.
  */
 
 import { hydrateAxis } from "./model/axis.js";
 import { drawBase, ensureHatchPattern, type ClipRect } from "./view/draw.js";
-import type { TimelineBasePaintPayload } from "./timelineRendererClient.js";
+import type { TimelineBasePaintPayload, TimelineGeometryPayload } from "./timelineRendererClient.js";
+import type { Clip } from "./model/lanes.js";
+import type { LayoutRow } from "./model/rows.js";
+import { causeCodeToName, RenderFlags } from "@reactlens/trace-engine";
+import type { ComponentId, RenderId } from "@reactlens/protocol";
 
 type InMessage =
   | {
@@ -24,6 +31,36 @@ const scope = self as unknown as DedicatedWorkerGlobalScope;
 let canvas: OffscreenCanvas | null = null;
 let g: OffscreenCanvasRenderingContext2D | null = null;
 let pattern: CanvasPattern | null = null;
+
+function hydrateLayoutFromGeometry(
+  payload: TimelineBasePaintPayload,
+  geo: TimelineGeometryPayload,
+): TimelineBasePaintPayload["layout"] {
+  const byRow: Clip[][] = payload.layout.rows.map(() => []);
+  for (let i = 0; i < geo.count; i++) {
+    const ri = geo.rowIndex[i]!;
+    if (ri < 0 || ri >= byRow.length) continue;
+    const row = payload.layout.rows[ri]!;
+    byRow[ri]!.push({
+      renderId: geo.renderId[i]! as RenderId,
+      componentId: 0 as ComponentId,
+      laneKey: row.key,
+      name: row.lane.name,
+      t0: geo.x0[i]!,
+      t1: geo.x1[i]!,
+      self: geo.self[i]!,
+      total: geo.x1[i]! - geo.x0[i]!,
+      cause: causeCodeToName(geo.cause[i]!),
+      wasted: (geo.flags[i]! & RenderFlags.Wasted) !== 0,
+      row: geo.stackRow[i]!,
+    });
+  }
+  const rows: LayoutRow[] = payload.layout.rows.map((r, i) => ({
+    ...r,
+    clips: byRow[i]!,
+  }));
+  return { ...payload.layout, rows };
+}
 
 scope.onmessage = (e: MessageEvent<InMessage>) => {
   const msg = e.data;
@@ -50,11 +87,13 @@ scope.onmessage = (e: MessageEvent<InMessage>) => {
       const view = p.view;
       const aToX = (a: number) => nw + ((a - view.a0) / (view.a1 - view.a0 || 1)) * (stageW - nw);
       const wToX = (t: number) => aToX(axis.wallToAxis(t));
+      const layout =
+        p.geometry && p.geometry.count > 0 ? hydrateLayoutFromGeometry(p, p.geometry) : p.layout;
       const { clipRects, snapEdges } = drawBase({
         ctx: g as unknown as CanvasRenderingContext2D,
         axis,
         view,
-        layout: p.layout,
+        layout,
         region: p.region,
         markers: p.markers,
         selectedRender: p.selectedRender,

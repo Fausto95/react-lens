@@ -23,6 +23,7 @@
     "build:site": "pnpm --filter @reactlens/site build",
     "og:site": "pnpm --filter @reactlens/site og",
     "test:e2e": "playwright test",
+    "test:perf": "playwright test -c playwright.perf.config.ts",
     "react-lens": "node --import tsx packages/cli/src/cli.ts",
     "eval:smoke": "vp test run packages/mcp/src/eval-smoke.test.ts",
     "changeset": "changeset",

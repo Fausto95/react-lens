@@ -1,9 +1,10 @@
 import { Hero, Shell } from "@reactlens/demo-ui";
 import { Storefront } from "./scenarios/Storefront.js";
+import { OpsBoard } from "./scenarios/OpsBoard.js";
 
 /**
  * The playground is the demo, and nothing else.
- * One small shop, one cascade story for the embedded panel.
+ * Storefront = cascade story; OpsBoard = scale / columnar stress.
  */
 export function App() {
   return (
@@ -15,6 +16,7 @@ export function App() {
           note="Refresh prices re-fetches equal values into new objects: hatched clips that changed nothing on screen."
         />
         <Storefront />
+        <OpsBoard />
       </Shell>
     </div>
   );

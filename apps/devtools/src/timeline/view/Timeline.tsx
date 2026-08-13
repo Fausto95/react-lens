@@ -33,6 +33,8 @@ import { clipAtTime, clipCauseColor, type Clip } from "../model/lanes.js";
 import type { Timeline as TimelineModel } from "../useTimeline.js";
 import { drawBase, drawOverlay, ensureHatchPattern, type ClipRect } from "./draw.js";
 import { createTimelineRenderer, type TimelineRendererClient } from "../timelineRendererClient.js";
+import { geometryFromLayout } from "./geometryFromLayout.js";
+import { preferWorkerPaint } from "../gpuGate.js";
 import { WallStrip } from "./WallStrip.js";
 import { Navigator } from "./Navigator.js";
 import { Shelf } from "./Shelf.js";
@@ -368,6 +370,13 @@ export function Timeline({
       if (base) {
         const axis = axisLiveRef.current;
         if (renderer) {
+          const clipEstimate = layout.rows.reduce((n, r) => n + r.clips.length, 0);
+          const geometry = geometryFromLayout(layout);
+          const useGeo = preferWorkerPaint({
+            clipEstimate,
+            hasGeometry: geometry.count > 0,
+            offscreenAvailable: true,
+          });
           renderer.paint(
             {
               axis: {
@@ -378,6 +387,7 @@ export function Timeline({
               },
               view: state.view,
               layout,
+              ...(useGeo ? { geometry } : {}),
               region: state.region,
               markers,
               selectedRender: state.selectedRender,
