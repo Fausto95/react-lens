@@ -42,11 +42,11 @@ export function WhySection() {
       <div className="sec-kicker">
         <span className="dot" /> WHY · cause, then fix
       </div>
-      <h2>Then ask why — and get a cited answer.</h2>
+      <h2>Trace any value to its source.</h2>
       <p className="sec-lead">
         Cycle the context and select a <code>Consumer</code> in the panel: “Why this render” names
-        the exact cause and the fanout across every consumer, so you fix the source instead of each
-        leaf.
+        the exact cause and the fanout across every consumer — then source maps and Doctor findings
+        stamp the fix at <code>file:line</code>. Receipts, not guesses.
       </p>
 
       <div className="card">
@@ -63,7 +63,7 @@ export function WhySection() {
           <p>
             Every render gets a ranked cause with diff evidence and a confidence level — including a
             “no observable change” verdict when it was avoidable. Compiler bailouts count as
-            evidence; Lens never tells you to hand-roll <code>useMemo</code>.
+            evidence; recommendations stay evidence-backed.
           </p>
         </article>
         <article className="change">

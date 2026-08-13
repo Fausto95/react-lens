@@ -34,7 +34,7 @@ Legend: ✅ done · 🚧 in progress · ⬜ not started
 Verified against **real React 19** (integration tests): mount + state + prop
 re-render counting, prop-change reasons, DOM→component resolution, and
 **hook/state/ref/memo/context extraction** (heuristic classification off the
-fiber's hook list). All packages: **46 tests passing**, full `tsc -b` clean.
+fiber's hook list). All packages: **600+ tests**, full `tsc -b` clean.
 
 ## Apps
 
@@ -144,7 +144,7 @@ with multiple **projections** rather than a raw fiber tree.
   primitives (rows, value view, diff lines) into `ui`.
 - ✅ **Website (`apps/site`)** — the site inspects itself: a Vite React SPA that
   boots the runtime and mounts the real panel over its own marketing sections
-  (Hero/five-questions, TRACE/GRAPH/DIFF specimens, Install). Follow-up: wire a
+  (Hero, REWIND/WHY/DIFF specimens, Features, Install, Agents). Follow-up: wire a
   static deploy (GH Pages/Vercel) and add prerendered meta for SEO.
 
 ## North star

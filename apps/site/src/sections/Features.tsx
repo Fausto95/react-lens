@@ -14,6 +14,14 @@ const FEATURES: Feature[] = [
     body: "Pick an element on the page (⌘\\) to select it in the tree; select anything in the panel and the page scrolls to it and outlines it — off-screen only.",
   },
   {
+    title: "⌘K search",
+    body: "Command palette plus a structured filter language — renders:>20, wasted:true, compiled:false — so the tree answers questions, not just names.",
+  },
+  {
+    title: "Replay with fix",
+    body: "Preview the tree without wasted renders before you change code; Fix with AI proposes a patch against real source at file:line.",
+  },
+  {
     title: "Waste detection",
     body: "After an interaction settles, a banner flags renders that produced no visible change and jumps you to the worst offender.",
   },
@@ -27,15 +35,23 @@ const FEATURES: Feature[] = [
   },
   {
     title: "Suspense & RSC aware",
-    body: "Suspense boundaries, server-component roles, and server actions are detected and badged in the tree and inspector.",
+    body: "Suspense boundaries, server-component roles, and server actions are detected and badged in the tree and inspector — server to pixel.",
   },
   {
     title: "Sessions",
     body: "Export or import the whole trace as a .json file; recent sessions persist in IndexedDB and reload from ⌘K.",
   },
   {
+    title: "CLI & MCP",
+    body: "react-lens analyze, mcp, and ci — the same typed tools as the panel agent, over a session file for hosts and CI.",
+  },
+  {
+    title: "Named-interaction CI",
+    body: "markInteraction + Playwright helpers + compare_sessions / react-lens ci to catch perf regressions by interaction name.",
+  },
+  {
     title: "React 19 + Compiler",
-    body: "Compiled components are badged ◆ and compiler bailouts are first-class evidence — never a nudge to hand-memoize.",
+    body: "Compiled components are badged ◆ and compiler bailouts are first-class evidence — recommendations stay evidence-backed.",
   },
 ];
 

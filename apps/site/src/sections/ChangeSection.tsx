@@ -31,11 +31,11 @@ export function ChangeSection() {
       <div className="sec-kicker">
         <span className="dot" /> DIFF · what changed
       </div>
-      <h2>See the change, not the whole object.</h2>
+      <h2>Bisect the commit that broke perf.</h2>
       <p className="sec-lead">
-        One universal diff over values, props, state, and DOM. Select <code>DiffSpecimen</code>,
-        bump it, and the inspector shows the precise before → after — reference-only churn flagged
-        separately from a real change.
+        One universal diff over values, props, state, and DOM — then A/B any two Lens commits for a
+        whole-app index of what ended up different. Simulate the fix with live edit or Replay with
+        fix before you ship the change.
       </p>
 
       <div className="card">
@@ -62,10 +62,9 @@ export function ChangeSection() {
           <span className="tag orange">A → B</span>
           <h3>What two moments apart did</h3>
           <p>
-            Double-click a commit tick to mark <b>A</b> and <b>B</b>, and the header grows{" "}
-            <code>A→B · N changed</code> — a whole-app index that reads{" "}
-            <code>1 changed · 881 unchanged</code>, resolved the same way time travel resolves
-            state.
+            Mark <b>A</b> and <b>B</b> on the timeline (<kbd>[</kbd> / <kbd>]</kbd>) — a whole-app
+            index that reads <code>1 changed · 881 unchanged</code>. Same idea in CI: named
+            interactions and <code>react-lens ci</code> bisect which Lens commit broke perf.
           </p>
         </article>
       </div>

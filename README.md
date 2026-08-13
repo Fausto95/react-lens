@@ -1,13 +1,14 @@
 <p align="center">
-  <img src="apps/site/public/og.png" alt="React Lens — rewind any render, then ask why. Time travel, AI agent, render causes, AST Doctor, waste detection, Suspense & RSC." width="800" />
+  <img src="apps/site/public/og.png" alt="React Lens — React debugging with receipts. Time travel, AI agent, render causes, AST Doctor, waste detection, Suspense & RSC." width="800" />
 </p>
 
 <h1 align="center">React Lens</h1>
 
 <p align="center">
-  <strong>Rewind any render. Then ask why.</strong><br />
-  Replay your app's real state at any commit — then a trace-grounded AI agent
-  answers, citing the exact render, component, and line.
+  <strong>React debugging with receipts.</strong><br />
+  Time travel through real state. Trace any value to its source. Simulate the
+  fix before you make it. Bisect the commit that broke perf. Human or AI agent —
+  every answer cites the exact render, component, and line.
 </p>
 
 <p align="center">
@@ -18,10 +19,9 @@
 
 ---
 
-React devtools tell you **what** rendered. React Lens tells you **why** — and
-what it cost, whether it was wasted, and how to fix it. Every click, commit,
-and render lands in one event log, so answers are backed by evidence instead
-of guesses.
+The debugging platform for React — built for humans and AI agents, from server
+to pixel, with proof. Every click, commit, and render lands in one event log, so
+answers are backed by evidence instead of guesses.
 
 ## Features
 
@@ -45,6 +45,8 @@ of guesses.
   it (off-screen ones only, so ↑/↓ doesn't drag the app around).
 - **Inspector** — props, state, hooks, DOM, and source for the selection, with
   live edit through the dev renderer.
+- **Replay with fix** — preview the tree without wasted renders before you
+  change the code; Fix with AI proposes a patch against real source.
 - **AST Doctor** — static analysis (OXC parser, regex fallback) fused with
   runtime evidence; findings are scoped to a component's definition and
   stamped `file:line`.
@@ -58,12 +60,26 @@ of guesses.
   server actions are detected and badged in the tree and inspector.
 - **Sessions** — export/import the whole trace as a `.json` file; recent
   sessions persist in IndexedDB and reload from ⌘K.
-- **React 19 + Compiler aware** — compiled components are badged ◆, and Lens
-  never recommends hand-rolled `useMemo` / `useCallback`.
+- **React 19 + Compiler aware** — compiled components are badged ◆;
+  compiler bailouts are first-class evidence. Recommendations stay
+  evidence-backed (including memo when the data supports it).
+
+### Agents, CLI, and CI
+
+- **CLI** — `react-lens analyze` turns a session file into a markdown report;
+  `react-lens ci` compares baseline vs actual sessions for regressions.
+- **MCP** — `react-lens mcp` exposes the same 22 typed tools over stdio so
+  Cursor, Claude, or any MCP host can diagnose from a session file.
+- **Playwright verify** — name interactions in tests, capture sessions, and
+  `compare_sessions` (or `react-lens ci`) before vs after a fix.
+- **Session files** — portable v1 JSON: export from the panel, analyze
+  headlessly, hand to an agent. See [docs/sessions.md](docs/sessions.md).
 
 ## Quick start
 
-Requires Node ≥ 20 and [pnpm](https://pnpm.io).
+Requires Node ≥ 20 and [pnpm](https://pnpm.io). Full walkthrough:
+[docs/getting-started.md](docs/getting-started.md). Live demo:
+[reactlens.xyz](https://www.reactlens.xyz/).
 
 ```bash
 pnpm install
@@ -96,6 +112,21 @@ pnpm dev:site
 The product site runs Lens on its own component tree — everything in the
 panel is the page you're looking at.
 
+## For agents
+
+Same tools the panel agent uses, over a session file:
+
+```bash
+pnpm react-lens analyze path/to/session.json
+pnpm react-lens mcp --session path/to/session.json
+pnpm react-lens ci --baseline ./baselines --actual ./actual
+```
+
+- [docs/cli.md](docs/cli.md) — analyze + CI flags
+- [docs/mcp.md](docs/mcp.md) — MCP setup and tool catalog
+- [packages/mcp/AGENTS.md](packages/mcp/AGENTS.md) — symptom → tool playbook
+- [docs/verify.md](docs/verify.md) — Playwright + named interactions
+
 ## How it works
 
 A pure analysis core — plain data in, plain data out, zero framework
@@ -105,7 +136,7 @@ event log.
 
 ```
 packages/
-  protocol/         shared event + message contract
+  protocol/         shared event + message + session contract
   serializer/       safe value serialization (never throws)
   diff-engine/      value + DOM diff
   trace-engine/     event log, queries, subscriptions
@@ -115,27 +146,35 @@ packages/
   diagnostics/      Doctor rules (runtime + static AST)
   explain/          deterministic interaction narratives
   agent/            trace-grounded tool loop, BYOK providers
+  agent-tools/      shared tool handlers (panel, CLI, MCP)
+  cli/              analyze · mcp · ci
+  mcp/              stdio MCP server + AGENTS.md playbook
+  playwright/       named-interaction helpers for the verify loop
+  dev-channel/      live WebSocket frame sink + Vite plugin
   source-maps/      runtime component ↔ original source
   tree/ graph/      semantic tree + graph projections
   ui/ icons/        shared panel primitives
+  demo-ui/          shared demo primitives (playground / e2e)
 apps/
   devtools/         the React 19 panel
   playground/       demo app engineered to misbehave
   extension/        MV3 Chrome extension shell
   site/             product site (inspects itself)
+  e2e-fixture/      Playwright / CI fixture app
 ```
 
-See [DESIGN.md](DESIGN.md) for architecture decisions and
-[INTERFACES.md](INTERFACES.md) for package contracts.
+User guides live in [docs/](docs/). Architecture:
+[DESIGN.md](DESIGN.md). Package contracts: [INTERFACES.md](INTERFACES.md).
 
 ## Status
 
 The core is demoable end-to-end: fiber capture, semantic tree, inspector,
-timeline with time travel, Explain, Doctor, the AI agent, sessions, and the
-extension shell. [ROADMAP.md](ROADMAP.md) is the living checklist of what's
-built and what's next.
+timeline with time travel, Explain, Doctor, the AI agent, sessions, CLI/MCP,
+the verify loop, and the extension shell. [ROADMAP.md](ROADMAP.md) is the
+living checklist of what's built and what's next.
 
-Not yet: npm-published packages, Firefox/Safari extensions, network adapters.
+Not yet: npm-published packages (still `0.0.0`; release pipeline is ready),
+Firefox/Safari extensions, network adapters.
 
 ## Contributing
 

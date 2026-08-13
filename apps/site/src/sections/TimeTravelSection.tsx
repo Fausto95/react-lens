@@ -32,12 +32,11 @@ export function TimeTravelSection() {
       <div className="sec-kicker">
         <span className="dot" /> REWIND · any commit
       </div>
-      <h2>Scrub the playhead. The page follows.</h2>
+      <h2>Time travel through real state.</h2>
       <p className="sec-lead">
-        Not a highlight animation — your app's actual state moves with the timeline, like Redux
-        DevTools for any React app. The page keeps the raw state each component had at every commit
-        and puts it back through React's own dev-build override API; nothing is serialized or
-        replayed.
+        Rewind any render — not a highlight animation. Your app’s actual state moves with the
+        timeline: the page keeps the raw state each component had at every commit and puts it back
+        through React’s own dev-build override API. Nothing is serialized or replayed.
       </p>
 
       <div className="card">
