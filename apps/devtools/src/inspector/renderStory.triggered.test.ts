@@ -8,6 +8,8 @@ import type {
   EventId,
   RenderEvent,
   RenderId,
+  RenderSnapshot,
+  SerializedValue,
 } from "@reactlens/protocol";
 import { typeLaneKey } from "../laneFilter.js";
 import { buildRenderStory } from "./renderStory.js";
@@ -69,6 +71,7 @@ describe("render story triggered", () => {
         laneKey: typeLaneKey("Header"),
         cause: "cascade",
         selfMs: 3,
+        changes: [],
       },
       {
         renderId: 12,
@@ -77,6 +80,7 @@ describe("render story triggered", () => {
         laneKey: typeLaneKey("List"),
         cause: "cascade",
         selfMs: 4,
+        changes: [],
       },
     ]);
     expect(story.triggered.triggeredTotal).toBe(2);
@@ -95,6 +99,60 @@ describe("render story triggered", () => {
     expect(story.triggered.entries).toEqual([]);
     expect(story.triggered.triggeredTotal).toBe(0);
     expect(story.triggered.cascadeTotal).toBe(0);
+  });
+
+  it("embeds the child's own changed rows, dropping unchanged ones", () => {
+    const prim = (value: unknown): SerializedValue => ({ k: "primitive", value } as never);
+    const objectValue = (entries: Array<[string, SerializedValue]>): SerializedValue =>
+      ({ k: "object", entries }) as never;
+    const snap = (
+      rid: number,
+      comp: number,
+      t: number,
+      props: SerializedValue,
+    ): RenderSnapshot => ({
+      renderId: rid as RenderId,
+      componentId: comp as ComponentId,
+      timestamp: t,
+      props,
+    });
+
+    const store = new TraceStore();
+    const earlier = {
+      ...render(2, 11, { t: 50, cause: "parent" as const }),
+      commitId: 0 as CommitId,
+    };
+    store.ingest({
+      instances: [inst(1, "App"), inst(2, "Header", 1)],
+      snapshots: [
+        snap(
+          11,
+          2,
+          50,
+          objectValue([
+            ["n", prim(1)],
+            ["keep", prim("a")],
+          ]),
+        ),
+        snap(
+          21,
+          2,
+          201,
+          objectValue([
+            ["n", prim(2)],
+            ["keep", prim("a")],
+          ]),
+        ),
+      ],
+      events: [earlier, render(1, 20, { t: 200 }), render(2, 21, { t: 201, cause: "parent" })],
+    });
+
+    const story = buildRenderStory(store, createCausality(store), 20 as RenderId)!;
+    const changes = story.triggered.entries[0]!.changes;
+    expect(changes).toEqual([
+      expect.objectContaining({ kind: "removed", path: "props.n" }),
+      expect.objectContaining({ kind: "added", path: "props.n" }),
+    ]);
   });
 
   it("caps the entries while reporting the full direct count", () => {
