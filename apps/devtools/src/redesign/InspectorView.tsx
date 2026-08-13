@@ -248,17 +248,17 @@ function TriggeredList({
   const overflow = triggered.triggeredTotal - triggered.entries.length;
   return (
     <>
-      <div className="trig">
+      <div className="diff trig">
         {triggered.entries.map((e) => (
           <div
             key={e.renderId}
-            className={`trow ${e.cause}`}
+            className="row add trow"
             role="button"
             tabIndex={0}
             onClick={() => pick(e)}
             onKeyDown={(ev) => ev.key === "Enter" && pick(e)}
           >
-            <span className="tname">{e.name}</span>
+            <span className="tname">+ {e.name}</span>
             <span className="tcause">{e.cause}</span>
             <span className="tms">{formatPhaseMs(e.selfMs)} ms</span>
           </div>
