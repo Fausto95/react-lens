@@ -34,12 +34,13 @@ jobs:
 
       # Every file must stay compiled: one `"use no memo"` silently drops a
       # whole file, and the panel's files are the expensive ones.
-      - run: pnpm check:compiled
+      # Use `vp run` — setup-vp does not put pnpm on PATH.
+      - run: vp run check:compiled
 
       # Bundle must carry Compiler output (memo_cache_sentinel), not just
       # pass the directive ban — a misconfigured sources filter would otherwise
       # ship unoptimized panel code silently. Runs on every PR + main push.
-      - run: pnpm check:compiled:build
+      - run: vp run check:compiled:build
 
       - run: vp test run
 
