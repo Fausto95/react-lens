@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vite-plus/test";
 import {
+  arrowSpanVisible,
   causalBezierPoints,
   cubicTangent,
   planCausalArrows,
@@ -165,6 +166,47 @@ describe("planCausalArrows", () => {
     expect(planned.find((p) => p.waveCount != null)?.waveCount).toBe(2);
     expect(planned.find((p) => p.to.t0 === 20)?.order).toBe(1);
     expect(planned.find((p) => p.waveCount != null)?.order).toBe(2);
+  });
+});
+
+describe("planCausalArrows with off-screen ports", () => {
+  it("plans an edge whose source port sits far left of the stage", () => {
+    const ports = new Map([
+      ["src", { x0: -500, x1: -440, y0: 40, y1: 56, t0: 0 }],
+      ["dst", { x0: 200, x1: 260, y0: 70, y1: 86, t0: 20 }],
+    ]);
+    const planned = planCausalArrows([{ from: "src", to: "dst", causeKey: "state" }], ports);
+    expect(planned).toHaveLength(1);
+    expect(planned[0]!.from.x0).toBe(-500);
+  });
+});
+
+describe("arrowSpanVisible", () => {
+  const NW = 100;
+  const W = 500;
+
+  it("keeps an arrow whose curve crosses the viewport", () => {
+    const from = { x0: -500, x1: -440, y0: 40, y1: 56 };
+    const to = { x0: 200, x1: 260, y0: 70, y1: 86 };
+    expect(arrowSpanVisible(from, to, NW, W)).toBe(true);
+  });
+
+  it("keeps an arrow whose ports straddle the viewport entirely", () => {
+    const from = { x0: -500, x1: -440, y0: 40, y1: 56 };
+    const to = { x0: 900, x1: 960, y0: 70, y1: 86 };
+    expect(arrowSpanVisible(from, to, NW, W)).toBe(true);
+  });
+
+  it("culls an arrow whose ports are both far past the same edge", () => {
+    const from = { x0: -900, x1: -840, y0: 40, y1: 56 };
+    const to = { x0: -700, x1: -640, y0: 70, y1: 86 };
+    expect(arrowSpanVisible(from, to, NW, W)).toBe(false);
+  });
+
+  it("keeps an arrow just past the edge within the bezier handle margin", () => {
+    const from = { x0: 40, x1: 90, y0: 40, y1: 56 };
+    const to = { x0: 60, x1: 95, y0: 70, y1: 86 };
+    expect(arrowSpanVisible(from, to, NW, W)).toBe(true);
   });
 });
 
