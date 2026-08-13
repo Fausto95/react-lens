@@ -4,7 +4,16 @@ import type { ComponentId } from "@reactlens/protocol";
 import type { LaneControls } from "../../laneFilter.js";
 import type { TimeCursor } from "../../timeCursor.js";
 import { buildAxis, clamp, compactGap, easeOut, type TimeAxis } from "../model/axis.js";
-import { loupeAt, LOUPE_H, LOUPE_HALF_MS, LOUPE_W, loupeX } from "../model/loupe.js";
+import {
+  loupeAnchor,
+  loupeAt,
+  loupeBarSpan,
+  loupeX,
+  loupeZoomHalf,
+  LOUPE_H,
+  LOUPE_HALF_MS,
+  LOUPE_W,
+} from "../model/loupe.js";
 import {
   clampView,
   fitWallRange,
@@ -254,7 +263,7 @@ export function Timeline({
         const win = loupeAt(loupe.laneKey, loupe.wallT, LOUPE_HALF_MS, axisLiveRef.current);
         loupeEl.style.display = "block";
         loupeEl.style.left = `${loupe.x}px`;
-        loupeEl.style.top = `${Math.max(loupe.y, 2)}px`;
+        loupeEl.style.top = `${loupe.y}px`;
         loupeEl.dataset.t0 = String(win.t0);
         loupeEl.dataset.t1 = String(win.t1);
         loupeEl.dataset.wallT = String(win.wallT);
@@ -297,15 +306,18 @@ export function Timeline({
     if (!lp || !cv) return;
     const ctx = cv.getContext("2d");
     if (!ctx) return;
+    ctx.clearRect(0, 0, LOUPE_W, LOUPE_H);
     const lane = lanes.find((l) => l.key === lp.laneKey);
     if (!lane) return;
     const theme = themeRef.current;
     const win = loupeAt(lp.laneKey, lp.wallT, LOUPE_HALF_MS, axisLiveRef.current);
-    ctx.clearRect(0, 0, LOUPE_W, LOUPE_H);
     for (const c of lane.clips) {
-      if (c.t1 < win.t0 || c.t0 > win.t1) continue;
-      const x0 = Math.max(loupeX(c.t0, win), 0);
-      const x1 = Math.min(loupeX(c.t1, win), LOUPE_W);
+      // Paint the exclusive self span the wave histogram paints — inclusive
+      // spans drew wide bars where the wave shows a thin column.
+      const bar = loupeBarSpan(c);
+      if (bar.t1 < win.t0 || bar.t0 > win.t1) continue;
+      const x0 = Math.max(loupeX(bar.t0, win), 0);
+      const x1 = Math.min(loupeX(bar.t1, win), LOUPE_W);
       const y = 5 + ((c.row ?? 0) % 2) * 21;
       const col = causeColor(theme, clipCauseColor(c.cause));
       ctx.fillStyle = c.wasted ? "rgba(150,150,160,.28)" : col + "55";
@@ -593,7 +605,9 @@ export function Timeline({
 
   /** Zoom the timeline to a loupe wall window, keeping `centerW` centered. */
   const applyLoupeZoom = (laneKey: string, wallT: number) => {
-    const win = loupeAt(laneKey, wallT, LOUPE_HALF_MS, axisLiveRef.current);
+    // Shrink the window once the view is tighter than ±HALF — never zoom out.
+    const half = loupeZoomHalf(state.view.a1 - state.view.a0);
+    const win = loupeAt(laneKey, wallT, half, axisLiveRef.current);
     doFitWallAround(win.t0, win.t1, win.wallT);
     loupeRef.current = null;
     tipRef.current = null;
@@ -768,7 +782,10 @@ export function Timeline({
           return;
         }
       }
-      const hit = clipUnderPointer(x, y);
+      // Wave rows zoom first: soft hits on sub-pixel bars made taps randomly
+      // inspect instead of zooming. Hard port hits still inspect.
+      const waveRow = layout.rows.find((r) => y >= r.y && y <= r.y + r.h && r.mode === "wave");
+      const hit = waveRow ? (hitClip(x, y)?.clip ?? null) : clipUnderPointer(x, y);
       if (hit) {
         inspectClip(hit);
         // Tap = inspect (stays live). Drag past the threshold still scrubs.
@@ -776,8 +793,7 @@ export function Timeline({
         e.currentTarget.setPointerCapture(e.pointerId);
         return;
       }
-      // Empty wave: tap zooms the loupe window; drag still scrubs.
-      const waveRow = layout.rows.find((r) => y >= r.y && y <= r.y + r.h && r.mode === "wave");
+      // Wave: tap zooms the loupe window; drag still scrubs.
       if (waveRow && x > nameW()) {
         dragRef.current = {
           type: "waveTap",
@@ -825,7 +841,10 @@ export function Timeline({
     const { x, y, viewY } = localXY(e);
     const d = dragRef.current;
     if (!d) {
-      const soft = clipUnderPointer(x, y);
+      // Wave rows are the loupe's surface: no soft clip hits there — the
+      // sub-pixel bars made hover flicker between tip and loupe.
+      const waveRow = layout.rows.find((r) => y >= r.y && y <= r.y + r.h && r.mode === "wave");
+      const soft = waveRow ? null : clipUnderPointer(x, y);
       const id = soft ? String(soft.renderId) : null;
       if (id !== hoverRef.current) {
         hoverRef.current = id;
@@ -840,15 +859,15 @@ export function Timeline({
           }
         : null;
       ghostRef.current = x > nameW() ? xToW(x) : null;
-      // Loupe is a wave-only empty-track preview — never over clips, stack
-      // rows, the ruler, or while a tip is showing.
-      const row = layout.rows.find((r) => y >= r.y && y <= r.y + r.h && r.mode === "wave");
-      if (row && x > nameW() && !soft) {
+      if (waveRow && x > nameW()) {
+        // Anchor in scrolled content coordinates — that is where absolutely
+        // positioned stage children live.
+        const anchor = loupeAnchor(x, waveRow.y, scrollTop, nameW(), sizeRef.current.w);
         loupeRef.current = {
-          laneKey: row.key,
+          laneKey: waveRow.key,
           wallT: xToW(x),
-          x: clamp(x - 145, nameW() + 4, sizeRef.current.w - 296),
-          y: row.y - scrollTop - 52,
+          x: anchor.x,
+          y: anchor.top,
         };
       } else loupeRef.current = null;
       scheduleDraw(false);
