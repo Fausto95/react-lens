@@ -8,6 +8,7 @@
 
 import type { Clip } from "../model/lanes.js";
 import type { LaneLayout } from "../model/rows.js";
+import { WAVE_MIN_MS } from "../model/wave.js";
 import { LANE_PAD, MIN_CLIP_PX, ROW_H } from "./metrics.js";
 
 export interface ClipRect {
@@ -36,7 +37,9 @@ export function computeClipRects(
     if (row.mode === "wave") {
       const mid = row.y + row.h / 2;
       for (const c of row.clips) {
-        const xc = wToX((c.t0 + c.t1) / 2);
+        // Aim at the painted histogram span [t0, t0 + self] — the inclusive
+        // midpoint floats past the drawn column when total covers a cascade.
+        const xc = wToX(c.t0 + Math.max(c.self, WAVE_MIN_MS) / 2);
         clipRects.set(String(c.renderId), {
           x0: xc - 3,
           x1: xc + 3,
