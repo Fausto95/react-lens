@@ -82,6 +82,26 @@ export interface ClipPorts {
   y1: number;
 }
 
+/** Max outward bow a causal bezier can take (see causalBezierPoints handles). */
+const MAX_HANDLE_PX = 130;
+
+/**
+ * Whether an arrow's curve can intersect the stage. Tests the span between
+ * both ports padded by the max bezier handle — endpoint containment is wrong:
+ * an arrow with one port off-screen still crosses the viewport.
+ */
+export function arrowSpanVisible(
+  from: ClipPorts,
+  to: ClipPorts,
+  nameW: number,
+  stageW: number,
+  pad = MAX_HANDLE_PX,
+): boolean {
+  const lo = Math.min(from.x0, to.x0) - pad;
+  const hi = Math.max(from.x1, to.x1) + pad;
+  return hi >= nameW && lo <= stageW;
+}
+
 export interface ArrowRoute {
   side: ArrowSide;
   x1: number;

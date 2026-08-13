@@ -3,7 +3,6 @@
  */
 
 import type { CausalEdge } from "../model/edges.js";
-import type { Clip } from "../model/lanes.js";
 import { clipCauseColor } from "../model/lanes.js";
 import type { TimeAxis } from "../model/axis.js";
 import { niceStep } from "../model/axis.js";
@@ -12,18 +11,11 @@ import type { TimeSpan } from "../model/axis.js";
 import type { ViewWindow } from "../model/viewport.js";
 import { waveBins } from "../model/wave.js";
 import { LANE_PAD, MIN_CLIP_PX, ROW_H, RULER_H } from "./metrics.js";
-import { drawCausalArrow, planCausalArrows, routeCausalArrow } from "./arrows.js";
+import { arrowSpanVisible, drawCausalArrow, planCausalArrows, routeCausalArrow } from "./arrows.js";
+import { computeClipRects, type ClipRect } from "./clipRects.js";
 import { causeColor, clipPaint, hexAlpha, type TimelineTheme } from "./timelineTheme.js";
 
-export interface ClipRect {
-  x0: number;
-  x1: number;
-  y0: number;
-  y1: number;
-  clip: Clip;
-  /** True when the port is a wave-lane stand-in (no stack bar). */
-  wave?: boolean;
-}
+export type { ClipRect } from "./clipRects.js";
 
 export interface Projectors {
   aToX: (a: number) => number;
@@ -215,8 +207,8 @@ export function drawBase(args: DrawBaseArgs): {
   placeMarkerLabels(visibleMarkers.filter((m) => m.warn).sort((a, b) => a.x - b.x));
   placeMarkerLabels(visibleMarkers.filter((m) => !m.warn).sort((a, b) => a.x - b.x));
 
-  const clipRects = new Map<string, ClipRect>();
-  const snapEdges: number[] = [];
+  // Ports for every clip, visible or not — arrows keep anchors off-screen.
+  const { clipRects, snapEdges } = computeClipRects(layout, proj);
 
   for (const row of layout.rows) {
     hline(row.y + row.h - 1, hexAlpha(theme.line, 0.55));
@@ -235,20 +227,6 @@ export function drawBase(args: DrawBaseArgs): {
         ctx.fill();
       }
       ctx.globalAlpha = 1;
-      // Wave ports so causality can still aim at the group when bars aren't drawn.
-      for (const c of row.clips) {
-        const xc = wToX((c.t0 + c.t1) / 2);
-        if (xc < NW - 4 || xc > W + 4) continue;
-        clipRects.set(String(c.renderId), {
-          x0: xc - 3,
-          x1: xc + 3,
-          y0: mid - 8,
-          y1: mid + 8,
-          clip: c,
-          wave: true,
-        });
-        snapEdges.push(c.t0, c.t1);
-      }
       continue;
     }
 
@@ -310,9 +288,6 @@ export function drawBase(args: DrawBaseArgs): {
         ctx.fillText(lbl.slice(0, Math.floor(w / 5.5)), x0 + 5, cy + clipH / 2 + 3);
       }
       ctx.globalAlpha = 1;
-      const id = String(c.renderId);
-      clipRects.set(id, { x0, x1: x0 + w, y0: cy, y1: cy + clipH, clip: c });
-      snapEdges.push(c.t0, c.t1);
     }
   }
 
@@ -391,6 +366,7 @@ export function drawOverlay(args: DrawOverlayArgs): void {
 
   const planned = planCausalArrows(edgeList, ports);
   for (const p of planned) {
+    if (!arrowSpanVisible(p.from, p.to, NW, W)) continue;
     const route = routeCausalArrow(p.from, p.to, p.slot, p.slotCount);
     const col = hexAlpha(causeColor(theme, p.causeKey), 0.92);
     drawCausalArrow({
