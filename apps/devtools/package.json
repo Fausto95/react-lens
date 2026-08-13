@@ -11,7 +11,8 @@
     "./errors": "./src/errorsEntry.ts",
     "./wal": "./src/walEntry.ts",
     "./reveal": "./src/revealGeometry.ts",
-    "./highlighter": "./src/highlighter.ts"
+    "./highlighter": "./src/highlighter.ts",
+    "./trace": "./src/traceEntry.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit"
@@ -32,6 +33,8 @@
     "@reactlens/trace-engine": "workspace:*",
     "@reactlens/tree": "workspace:*",
     "@reactlens/ui": "workspace:*",
+    "comlink": "^4.4.2",
+    "jotai": "^2.20.2",
     "react": "^19",
     "react-dom": "^19"
   },

@@ -31,6 +31,7 @@
     "build": "tsup src/index.ts --format esm --dts --sourcemap --clean --tsconfig tsconfig.build.json"
   },
   "dependencies": {
+    "@oxc-parser/binding-wasm32-wasi": "0.144.0",
     "@reactlens/protocol": "workspace:*",
     "oxc-parser": "^0.144.0"
   },

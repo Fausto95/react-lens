@@ -1,4 +1,4 @@
-import { StrictMode, useState, useMemo, useEffect, useRef, useCallback } from "react";
+import { StrictMode, useState, useMemo, useEffect, useRef } from "react";
 import { createRoot } from "react-dom/client";
 import type { ComponentId } from "@reactlens/protocol";
 import { Panel } from "./Panel.js";
@@ -90,10 +90,10 @@ function EmbeddedPanel({ runtime, host }: { runtime: LensRuntime; host: HTMLElem
     [runtime],
   );
 
-  const onToggleInspect = useCallback(() => {
+  const onToggleInspect = () => {
     if (inspect.isActive()) inspect.stop();
     else inspect.start();
-  }, [inspect]);
+  };
 
   return (
     <Panel

@@ -83,10 +83,54 @@ export function compareValue(
         before,
         after,
       );
-    case "map":
-    case "set":
-      // Structural map/set diff is deferred; report reference change only.
-      return [{ path, kind: "REFERENCE_ONLY_CHANGED", before, after, confidence: 1 }];
+    case "map": {
+      const a = after as Extract<SerializedValue, { k: "map" }>;
+      if (before.identity === a.identity) {
+        return [{ path, kind: "UNCHANGED", confidence: 1 }];
+      }
+      // Map keys are values — compare entry lists by index for a usable summary.
+      const beforeEntries = before.entries ?? [];
+      const afterEntries = a.entries ?? [];
+      const childChanges: DiffChange[] = [];
+      const n = Math.max(beforeEntries.length, afterEntries.length);
+      for (let i = 0; i < n; i++) {
+        const b = beforeEntries[i];
+        const av = afterEntries[i];
+        const childPath = [...path, i];
+        if (!b && av) {
+          childChanges.push({ path: childPath, kind: "ADDED", after: av[1], confidence: 1 });
+        } else if (b && !av) {
+          childChanges.push({ path: childPath, kind: "REMOVED", before: b[1], confidence: 1 });
+        } else if (b && av) {
+          childChanges.push(...compareValue(b[0], av[0], [...childPath, "key"]));
+          childChanges.push(...compareValue(b[1], av[1], [...childPath, "value"]));
+        }
+      }
+      const structurallyChanged = childChanges.some((c) => c.kind !== "UNCHANGED");
+      return [
+        {
+          path,
+          kind: structurallyChanged ? "STRUCTURE_CHANGED" : "REFERENCE_ONLY_CHANGED",
+          before,
+          after,
+          confidence: 1,
+        },
+        ...childChanges,
+      ];
+    }
+    case "set": {
+      const a = after as Extract<SerializedValue, { k: "set" }>;
+      if (before.identity === a.identity) {
+        return [{ path, kind: "UNCHANGED", confidence: 1 }];
+      }
+      return compareEntries(
+        indexedEntries(before.values),
+        indexedEntries(a.values),
+        path,
+        before,
+        after,
+      );
+    }
     default:
       // Exhaustive over SerializedValue["k"]; keeps the compiler satisfied.
       return [{ path, kind: "UNCHANGED", confidence: 1 }];

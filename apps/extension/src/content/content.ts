@@ -33,6 +33,17 @@ let heartbeat: Heartbeat | null = null;
 let reportedCompactionTo = 0;
 
 function connect(): void {
+  // Extension context gone (reload/update) — keep buffering and retry; never
+  // throw into the host page.
+  try {
+    if (!chrome.runtime?.id) {
+      scheduleReconnect();
+      return;
+    }
+  } catch {
+    scheduleReconnect();
+    return;
+  }
   let p: chrome.runtime.Port;
   try {
     p = chrome.runtime.connect({ name: PAGE_PORT_NAME });
@@ -247,6 +258,12 @@ function scheduleReconnect(): void {
 
 connect();
 
+window.addEventListener("pagehide", () => {
+  // Best-effort: flush pending spill chunks before the document goes away so a
+  // later panel reopen can still replay what was in the ring.
+  void buffer.settled();
+});
+
 function relayLive(msg: PortMessage): void {
   if (!port) return;
   try {
@@ -324,7 +341,12 @@ window.addEventListener("message", (event: MessageEvent) => {
     data.kind === "frame"
       ? { kind: "frame", frame: data.frame, sessionId: data.sessionId }
       : data.kind === "hello"
-        ? { kind: "hello", reactVersion: data.reactVersion, sessionId: data.sessionId }
+        ? {
+            kind: "hello",
+            reactVersion: data.reactVersion,
+            sessionId: data.sessionId,
+            protocolVersion: data.protocolVersion ?? 1,
+          }
         : null;
   if (!unsequenced) return;
 

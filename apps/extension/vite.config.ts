@@ -9,8 +9,9 @@ import manifest from "./src/manifest.json" with { type: "json" };
 export default defineConfig({
   resolve: {
     alias: [
-      // oxc-parser WASM isn't browser-bundleable (worker or main). Stub it so
-      // analyzeSourceSmart falls back to regex — including in doctorWorker.
+      // Chrome extension workers cannot reliably load oxc-parser WASM
+      // (chrome-extension:// CSP + WASI threads). Stub so analyzeSourceSmart
+      // falls back to regex. Playground / e2e-fixture / site leave oxc unstubbed.
       {
         find: "oxc-parser",
         replacement: new URL("./src/oxc-stub.ts", import.meta.url).pathname,
@@ -24,10 +25,10 @@ export default defineConfig({
       // repo's engineering rules) — so without this every handler and child
       // re-rendered with nothing collecting the debt.
       //
-      // No file opts out. Reads of the trace store go through `useDerived` /
-      // `readFresh`, which put the store's version counter in the dependency
-      // where the Compiler can see it; the `"use no memo"` directives those
-      // replaced left whole files uncompiled to work around exactly that.
+      // No file opts out. Reads of the trace store go through `readFresh` /
+      // `derivationCache` (keyed on the store version), which put the version
+      // counter where the Compiler can see it; the old `useDerived` hook and
+      // `"use no memo"` directives those replaced are gone.
       babel: {
         plugins: [
           [
@@ -43,6 +44,9 @@ export default defineConfig({
     }),
     crx({ manifest: manifest as never }),
   ]),
+  optimizeDeps: {
+    exclude: ["oxc-parser", "@oxc-parser/binding-wasm32-wasi"],
+  },
   build: {
     target: "chrome116",
     // Chrome 116 supports native ESM + <link rel=modulepreload>, so the polyfill

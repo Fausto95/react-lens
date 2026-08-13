@@ -31,7 +31,8 @@
     "build": "tsup src/index.ts --format esm --dts --sourcemap --clean --tsconfig tsconfig.build.json"
   },
   "dependencies": {
-    "@reactlens/protocol": "workspace:*"
+    "@reactlens/protocol": "workspace:*",
+    "seroval": "^1.6.2"
   },
   "devDependencies": {
     "tsup": "^8.5.1"

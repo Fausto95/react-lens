@@ -128,14 +128,19 @@ Decisions:
 
 - **Background worker holds no trace state.** MV3 terminates it; it is a dumb,
   reconnect-tolerant relay keyed by `tabId`. Authoritative state lives in the
-  panel's `trace-engine`.
-- **We never serialize the app's object graph.** The page sends structured
-  snapshots and references. A function becomes
-  `{ type: "function", identity: "fn_812", name: "handleClick" }`. This is what
-  makes function/object identity diffing possible (§6) and is the reason
-  `serializer` is built early.
-- Every frame is `LensMessage { protocolVersion: 1, type, payload }`.
-  Versioning exists from commit one; runtime and panel will drift.
+  panel's trace worker (WAL + `trace-engine`); the panel main thread keeps a
+  sync cache for UI reads during migration.
+- Content script owns the outbound seq/ack ring buffer + spill; the page capture
+  agent stays stateless.
+- Every sequenced frame carries a monotonic `seq`; the panel acks only after a
+  durable WAL write. On reconnect the page replays everything after the last
+  acked seq.
+- Handshake includes `protocolVersion` + per-document `sessionId`.
+- **We never serialize the app's object graph as live references.** The page
+  sends structured snapshots via `seroval` projected into `SerializedValue`
+  with session-stable identity strings for reference-vs-value diffing.
+- Every frame is `LensMessage { protocolVersion: 1, type, payload }` on the
+  analysis boundary; the extension port uses `PortMessage` with seq/ack.
 
 ---
 
@@ -244,15 +249,18 @@ or language server.
 
 Three separated stores, never merged:
 
-- **UI state** → Zustand. Narrow `Object.is`-stable selectors. No manual
-  memoization (Compiler assumed). One render path per component.
-- **Trace store** → plain normalized log, _outside React_, updated by batched
-  appends. Components subscribe to narrow slices. High-frequency events never go
-  through `setState`.
-- **Derived analysis** → computed in the worker, cached by input hash.
+- **UI state** → Jotai (planned; currently React local state). Narrow atoms.
+  No manual memoization (Compiler assumed). Trace data must not be mirrored
+  into the UI store.
+- **Trace store** → plain normalized log, _outside React_ (and soon: in a
+  dedicated worker), updated by batched appends. Components subscribe to
+  narrow slices / async queries. High-frequency events never go through
+  `setState`.
+- **Derived analysis** → computed in workers, cached by input hash.
 
-Timeline and large graphs render to **Canvas** (worker produces draw commands
-from a viewport query), not thousands of DOM nodes.
+Timeline and large graphs render to **Canvas** (OffscreenCanvas worker for the
+timeline base layer, with main-thread `draw.ts` fallback; overlay /
+pointer / keyboard stay on the panel thread), not thousands of DOM nodes.
 
 **Bidirectional selection.** Every pick — tree, ⌘K, timeline bar, relations,
 waste banner, page inspect — goes through one writer in `Panel` (`select`), so
@@ -388,10 +396,10 @@ browser page.
 ## 11. Stack
 
 TypeScript (strict; no `any` in public APIs, `unknown` + narrow), React 19 +
-React Compiler, Vite, pnpm, vanilla-extract, Zustand, IndexedDB (sessions),
-Web Workers, Canvas/OffscreenCanvas, OXC (WASM, static analysis), Playwright
-(browser tests), Storybook (visual). No React Query for high-frequency local
-trace state.
+React Compiler, Vite, pnpm, vanilla-extract, Jotai (panel UI / async worker
+queries), IndexedDB (sessions + WAL), Web Workers (trace + doctor),
+Canvas/OffscreenCanvas, OXC (WASM, static analysis), Playwright (browser
+tests), Storybook (visual). No React Query for high-frequency local trace state.
 
 ---
 

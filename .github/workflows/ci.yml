@@ -1,6 +1,6 @@
 name: CI
 
-# Unit (Vitest) + Playwright e2e against the playground. Runs on every PR and
+# Unit (Vitest) + Playwright e2e against apps/e2e-fixture. Runs on every PR and
 # on pushes to main so release workflows can assume the suite is green.
 
 on:
@@ -34,7 +34,12 @@ jobs:
 
       # Every file must stay compiled: one `"use no memo"` silently drops a
       # whole file, and the panel's files are the expensive ones.
-      - run: node scripts/check-compiled.mjs
+      - run: pnpm check:compiled
+
+      # Bundle must carry Compiler output (memo_cache_sentinel), not just
+      # pass the directive ban — a misconfigured sources filter would otherwise
+      # ship unoptimized panel code silently. Runs on every PR + main push.
+      - run: pnpm check:compiled:build
 
       - run: vp test run
 

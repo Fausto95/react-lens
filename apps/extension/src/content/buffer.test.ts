@@ -15,7 +15,7 @@ import type {
 const SESSION = "session-a";
 
 function hello(version: string, sessionId = SESSION): Unsequenced<SequencedMessage> {
-  return { kind: "hello", reactVersion: version, sessionId };
+  return { kind: "hello", reactVersion: version, sessionId, protocolVersion: 1 };
 }
 
 function instance(id: number): ComponentInstance {

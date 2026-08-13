@@ -1,7 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
-import { TraceStore } from "@reactlens/trace-engine";
-import { createCausality } from "@reactlens/causality";
 import type {
   ComponentId,
   SourceLocation,
@@ -21,7 +19,7 @@ import {
   reportError,
   reportNotice,
 } from "@reactlens/devtools/errors";
-import { createIdbWalStore, createTraceWal, type TraceWal } from "@reactlens/devtools/wal";
+import { createTraceClient, TraceProvider } from "@reactlens/devtools/trace";
 import { isContextInvalidated, reconnectDelay } from "../connection.js";
 import {
   INITIAL_SESSION,
@@ -38,24 +36,91 @@ import { createHeartbeat, type Heartbeat } from "../heartbeat.js";
 const ACK_INTERVAL_MS = 250;
 
 /**
- * The DevTools panel. Owns the authoritative trace store on the panel side and
- * feeds it frames arriving over the background port for the inspected tab.
+ * The DevTools panel. Prefers a worker-backed TraceClient (authoritative store
+ * + WAL off-thread) with a main-thread cache for sync UI reads; falls back to a
+ * plain TraceStore when the worker cannot spawn.
  */
 function ExtensionPanel() {
-  const store = useMemo(() => new TraceStore(), []);
-  const causality = useMemo(() => createCausality(store), [store]);
+  const sessionRef = useRef<SessionState>(INITIAL_SESSION);
+  const portRef = useRef<chrome.runtime.Port | null>(null);
+  const ackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const scheduleAck = useCallback((port: chrome.runtime.Port) => {
+    if (ackTimerRef.current !== null) return;
+    ackTimerRef.current = setTimeout(() => {
+      ackTimerRef.current = null;
+      const { sessionId, fromSeq } = resyncRequest(sessionRef.current);
+      if (sessionId === null || fromSeq <= 0) return;
+      try {
+        port.postMessage({ kind: "ack", sessionId, seq: fromSeq } satisfies PortMessage);
+      } catch (err) {
+        reportError("ack", err);
+      }
+    }, ACK_INTERVAL_MS);
+  }, []);
+
+  const { store, causality, client } = useMemo(() => {
+    return createTraceClient({
+      durableWal: true,
+      wal: {
+        onDurable: (sessionId, seqs) => {
+          if (sessionId !== sessionRef.current.sessionId) return;
+          for (const seq of seqs) {
+            sessionRef.current = commitFrame(sessionRef.current, seq);
+          }
+          const port = portRef.current;
+          if (port) scheduleAck(port);
+        },
+        onFailed: (sessionId, seqs) => {
+          if (sessionId !== sessionRef.current.sessionId) return;
+          for (const seq of seqs) {
+            sessionRef.current = failFrame(sessionRef.current, seq);
+          }
+          reportError("wal", new Error("could not persist frames — storage is unavailable"));
+        },
+        onDropped: (count) =>
+          reportNotice(
+            "trace",
+            `${count} of the oldest frames left the recovery log (size budget).`,
+          ),
+        onRecovered: (recovered) => {
+          if (!recovered) return;
+          sessionRef.current = {
+            sessionId: recovered.sessionId,
+            lastSeq: recovered.lastSeq,
+            gapAt: null,
+            ahead: [],
+          };
+          reportNotice(
+            "recovery",
+            `Recovered ${recovered.frames.length} frames from the previous panel session.`,
+          );
+        },
+        onResync: () => {
+          // Worker respawned (<1s target): ask the page for anything not yet durable.
+          const port = portRef.current;
+          if (!port) return;
+          try {
+            port.postMessage(resyncRequest(sessionRef.current));
+          } catch (err) {
+            reportError("resync", err);
+          }
+        },
+      },
+    });
+  }, [scheduleAck]);
+
+  useEffect(() => () => client.dispose(), [client]);
+
   const [inspecting, setInspecting] = useState(false);
   const [pickedId, setPickedId] = useState<ComponentId | null>(null);
   /** The extension was reloaded under us; only reopening DevTools recovers. */
   const [connectionLost, setConnectionLost] = useState(false);
-  const portRef = useRef<chrome.runtime.Port | null>(null);
   const heartbeatRef = useRef<Heartbeat | null>(null);
-  /** Durable copy of everything ingested; null where storage is unavailable. */
-  const walRef = useRef<TraceWal | null>(null);
   /** Lets the recovery screen retry in place instead of demanding a reopen. */
   const reconnectRef = useRef<(() => void) | null>(null);
-  /** Which page document we are showing, and how much of it we have. */
-  const sessionRef = useRef<SessionState>(INITIAL_SESSION);
+  /** How many times each seq has failed ingest — twice → quarantine. */
+  const poisonRef = useRef(new Map<number, number>());
   const pendingSource = useRef(
     new Map<string, { resolve: (body: string) => void; reject: (err: Error) => void }>(),
   );
@@ -89,24 +154,46 @@ function ExtensionPanel() {
           // only advance over a frame the store actually took. A throw here
           // used to lose that frame permanently.
           try {
-            store.ingest(action.frame);
+            if (state.sessionId !== null) {
+              client.ingest(action.frame, { sessionId: state.sessionId, seq: action.seq });
+            } else {
+              client.ingest(action.frame);
+              sessionRef.current = commitFrame(sessionRef.current, action.seq);
+            }
+            poisonRef.current.delete(action.seq);
           } catch (err) {
-            sessionRef.current = failFrame(sessionRef.current, action.seq);
-            reportError("ingest", err);
+            const fails = (poisonRef.current.get(action.seq) ?? 0) + 1;
+            poisonRef.current.set(action.seq, fails);
+            if (fails >= 2) {
+              // Same seq crashed twice — skip it, keep the session alive.
+              sessionRef.current = commitFrame(sessionRef.current, action.seq);
+              reportNotice(
+                "poison",
+                `Skipped poison frame seq ${action.seq} after repeated ingest failures.`,
+              );
+            } else {
+              sessionRef.current = failFrame(sessionRef.current, action.seq);
+              reportError("ingest", err);
+            }
             continue;
           }
-          const wal = walRef.current;
-          if (wal && state.sessionId !== null) {
-            // Held open until the log confirms the write: the page may only
-            // forget its copy once the frame survives this panel closing.
-            wal.append(state.sessionId, action.seq, action.frame);
-          } else {
-            sessionRef.current = commitFrame(sessionRef.current, action.seq);
-          }
+          // Durability (and therefore ack) is owned by the trace worker WAL —
+          // onDurable/onFailed handlers advance the session cursor.
         } else if (action.type === "reset-store") {
-          store.clear();
+          // Keep prior documents as stitchable segments (Phase 3) instead of
+          // wiping the session forever. Live UI still shows only the new doc.
+          void client.beginSegment(action.previousSessionId, action.nextSessionId);
+          poisonRef.current.clear();
           setInspecting(false);
           setPickedId(null);
+        } else if (action.type === "protocol-mismatch") {
+          reportError(
+            "protocol",
+            new Error(
+              `Page speaks protocol v${action.protocolVersion}; this panel expects a compatible version. Reload DevTools after updating the extension.`,
+            ),
+          );
+          setConnectionLost(true);
         } else if (action.type === "resync") {
           try {
             port.postMessage(resyncRequest(sessionRef.current));
@@ -120,26 +207,6 @@ function ExtensionPanel() {
       // Tell the page how far it can forget. Without this the page-side buffer
       // retains the whole session and spills to storage for no reason.
       if (resyncRequest(sessionRef.current).fromSeq > before) scheduleAck(port);
-    };
-
-    /**
-     * Acks are throttled, never one per frame: a busy app commits many times a
-     * frame and the page only needs the newest cursor. Trailing, so a burst
-     * still ends with an ack.
-     */
-    let ackTimer: ReturnType<typeof setTimeout> | null = null;
-    const scheduleAck = (port: chrome.runtime.Port) => {
-      if (ackTimer !== null) return;
-      ackTimer = setTimeout(() => {
-        ackTimer = null;
-        const { sessionId, fromSeq } = resyncRequest(sessionRef.current);
-        if (sessionId === null || fromSeq <= 0) return;
-        try {
-          port.postMessage({ kind: "ack", sessionId, seq: fromSeq } satisfies PortMessage);
-        } catch (err) {
-          reportError("ack", err);
-        }
-      }, ACK_INTERVAL_MS);
     };
 
     let attempt = 0;
@@ -226,7 +293,7 @@ function ExtensionPanel() {
         }
         applySession(port, msg);
         // On-demand snapshots answer a request; they carry no sequence.
-        if (msg.kind === "snapshot") store.ingest(msg.frame);
+        if (msg.kind === "snapshot") client.ingest(msg.frame);
         if (msg.kind === "source") {
           const pending = pendingSource.current.get(msg.requestId);
           if (!pending) return;
@@ -285,60 +352,12 @@ function ExtensionPanel() {
     reconnectRef.current = connect;
 
     /**
-     * Bring the log up before the port, so `panel-ready` carries the cursor we
-     * recovered rather than 0. Capture never stopped page-side, so the wait
-     * costs a slightly later first paint and loses nothing.
+     * Bring the worker WAL up before the port, so `panel-ready` carries the
+     * cursor we recovered rather than 0. Capture never stopped page-side, so
+     * the wait costs a slightly later first paint and loses nothing.
      */
     void (async () => {
-      const walStore = await createIdbWalStore();
-      if (disposed) return;
-      if (walStore) {
-        const wal = createTraceWal(walStore, {
-          onDurable: (sessionId, seqs) => {
-            // A reload may have moved us on while the write was in flight.
-            if (sessionId !== sessionRef.current.sessionId) return;
-            for (const seq of seqs) {
-              sessionRef.current = commitFrame(sessionRef.current, seq);
-            }
-            const port = portRef.current;
-            if (port) scheduleAck(port);
-          },
-          onFailed: (sessionId, seqs) => {
-            if (sessionId !== sessionRef.current.sessionId) return;
-            // Not on disk, so not ours to acknowledge: hold the cursor and let
-            // the page re-deliver on the next resync.
-            for (const seq of seqs) {
-              sessionRef.current = failFrame(sessionRef.current, seq);
-            }
-            reportError("wal", new Error("could not persist frames — storage is unavailable"));
-          },
-          onDropped: (count) =>
-            reportNotice(
-              "trace",
-              `${count} of the oldest frames left the recovery log (size budget).`,
-            ),
-        });
-        walRef.current = wal;
-        try {
-          const recovered = await wal.recover();
-          if (disposed) return;
-          if (recovered) {
-            for (const frame of recovered.frames) store.ingest(frame);
-            sessionRef.current = {
-              sessionId: recovered.sessionId,
-              lastSeq: recovered.lastSeq,
-              gapAt: null,
-              ahead: [],
-            };
-            reportNotice(
-              "recovery",
-              `Recovered ${recovered.frames.length} frames from the previous panel session.`,
-            );
-          }
-        } catch (err) {
-          reportError("recovery", err);
-        }
-      }
+      await client.whenReady();
       if (!disposed) connect();
     })();
 
@@ -374,20 +393,16 @@ function ExtensionPanel() {
     return () => {
       disposed = true;
       configureSourceFetcher(undefined);
-      if (ackTimer !== null) clearTimeout(ackTimer);
+      if (ackTimerRef.current !== null) clearTimeout(ackTimerRef.current);
       heartbeatRef.current?.stop();
       heartbeatRef.current = null;
       reconnectRef.current = null;
-      // Flush before closing: frames queued in the trailing window are exactly
-      // the ones a recovery would otherwise be missing.
-      const wal = walRef.current;
-      walRef.current = null;
-      if (wal) {
-        void wal.flush().finally(() => wal.close());
-      }
+      // Flush worker WAL before closing: frames queued in the trailing window
+      // are exactly the ones a recovery would otherwise be missing.
+      void client.flushWal();
       portRef.current?.disconnect();
     };
-  }, [store]);
+  }, [client, scheduleAck, sessionRef, portRef, ackTimerRef]);
 
   const send = (msg: PortMessage) => {
     const port = portRef.current;
@@ -561,13 +576,13 @@ function ExtensionPanel() {
     return () => configureSourceRevealer(undefined);
   }, []);
 
-  const onToggleInspect = useCallback(() => {
+  const onToggleInspect = () => {
     setInspecting((on) => {
       const next = !on;
       send({ kind: next ? "inspect-start" : "inspect-stop" });
       return next;
     });
-  }, []);
+  };
 
   if (connectionLost) {
     // Usually terminal — a reloaded extension invalidates this panel's context
@@ -601,24 +616,27 @@ function ExtensionPanel() {
   // ingest keeps running and the store keeps filling, so "Retry" renders
   // everything that arrived in the meantime instead of a truncated trace.
   return (
-    <ErrorBoundary scope="panel">
-      <Panel
-        store={store}
-        causality={causality}
-        recording
-        edit={edit}
-        inspecting={inspecting}
-        onToggleInspect={onToggleInspect}
-        selectComponent={pickedId}
-        onSelectConsumed={() => setPickedId(null)}
-        onRequestSnapshot={(renderId) => send({ kind: "snapshot-request", renderId })}
-        onHighlight={(componentId, opts) =>
-          send({ kind: "highlight", componentId, ...(opts?.reveal ? { reveal: true } : {}) })
-        }
-        onReplayCommit={(componentIds) => send({ kind: "replay", componentIds })}
-        timeTravel={timeTravel}
-      />
-    </ErrorBoundary>
+    <TraceProvider client={client}>
+      <ErrorBoundary scope="panel">
+        <Panel
+          store={store}
+          causality={causality}
+          traceClient={client}
+          recording
+          edit={edit}
+          inspecting={inspecting}
+          onToggleInspect={onToggleInspect}
+          selectComponent={pickedId}
+          onSelectConsumed={() => setPickedId(null)}
+          onRequestSnapshot={(renderId) => send({ kind: "snapshot-request", renderId })}
+          onHighlight={(componentId, opts) =>
+            send({ kind: "highlight", componentId, ...(opts?.reveal ? { reveal: true } : {}) })
+          }
+          onReplayCommit={(componentIds) => send({ kind: "replay", componentIds })}
+          timeTravel={timeTravel}
+        />
+      </ErrorBoundary>
+    </TraceProvider>
   );
 }
 

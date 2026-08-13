@@ -142,6 +142,29 @@ describe("serializer — safety invariants", () => {
     if (set.k === "set") expect(set.size).toBe(2);
   });
 
+  it("preserves Map entries and Set values for structural inspection", () => {
+    const s = createSerializer();
+    const m = s.serialize(
+      new Map([
+        ["a", 1],
+        ["b", 2],
+      ]),
+    );
+    expect(m.k).toBe("map");
+    if (m.k === "map") {
+      expect(m.size).toBe(2);
+      expect(m.entries).toHaveLength(2);
+      expect(m.entries?.[0]?.[0]).toEqual({ k: "primitive", type: "string", value: "a" });
+      expect(m.entries?.[0]?.[1]).toEqual({ k: "primitive", type: "number", value: 1 });
+    }
+    const set = s.serialize(new Set([1, 2, 3]));
+    expect(set.k).toBe("set");
+    if (set.k === "set") {
+      expect(set.size).toBe(3);
+      expect(set.values).toHaveLength(3);
+    }
+  });
+
   it("reset clears the identity table", () => {
     const s = createSerializer();
     const fn = () => {};

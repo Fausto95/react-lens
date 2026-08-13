@@ -171,7 +171,7 @@ function frameOf(
 describe("page → panel resync", () => {
   it("delivers exactly the frames missed while the panel was disconnected", async () => {
     const h = harness();
-    await h.emit({ kind: "hello", reactVersion: "19.0.0", sessionId: "doc-1" });
+    await h.emit({ kind: "hello", reactVersion: "19.0.0", sessionId: "doc-1", protocolVersion: 1 });
     await h.emit(frameOf("doc-1", { instances: [instance(1, "App")], events: [render(1)] }));
 
     h.disconnect();
@@ -188,7 +188,7 @@ describe("page → panel resync", () => {
 
   it("does not re-ingest events the panel already had", async () => {
     const h = harness();
-    await h.emit({ kind: "hello", reactVersion: "19.0.0", sessionId: "doc-1" });
+    await h.emit({ kind: "hello", reactVersion: "19.0.0", sessionId: "doc-1", protocolVersion: 1 });
     await h.emit(frameOf("doc-1", { events: [render(1)] }));
     await h.reconnect();
     await h.reconnect();
@@ -198,7 +198,7 @@ describe("page → panel resync", () => {
 
   it("keeps the tree placeable when the buffer evicted the mount frame", async () => {
     const h = harness();
-    await h.emit({ kind: "hello", reactVersion: "19.0.0", sessionId: "doc-1" });
+    await h.emit({ kind: "hello", reactVersion: "19.0.0", sessionId: "doc-1", protocolVersion: 1 });
     h.disconnect();
     await h.emit(frameOf("doc-1", { instances: [instance(1, "App")] }));
     // Overflow the 50-entry buffer so the mount frame is evicted.
@@ -213,14 +213,14 @@ describe("page → panel resync", () => {
     // The reported symptom: after a reload the panel showed nothing, because
     // renderIds 1..N were still in the store from the previous document.
     const h = harness();
-    await h.emit({ kind: "hello", reactVersion: "19.0.0", sessionId: "doc-1" });
+    await h.emit({ kind: "hello", reactVersion: "19.0.0", sessionId: "doc-1", protocolVersion: 1 });
     for (let n = 1; n <= 5; n++) {
       await h.emit(frameOf("doc-1", { instances: [instance(1, "Old")], events: [render(n)] }));
     }
     expect(h.store.allEvents()).toHaveLength(5);
 
     h.reload();
-    await h.emit({ kind: "hello", reactVersion: "19.0.0", sessionId: "doc-2" });
+    await h.emit({ kind: "hello", reactVersion: "19.0.0", sessionId: "doc-2", protocolVersion: 1 });
     for (let n = 1; n <= 5; n++) {
       await h.emit(frameOf("doc-2", { instances: [instance(1, "New")], events: [render(n)] }));
     }
@@ -237,7 +237,7 @@ describe("no trace is lost", () => {
     // The DevTools-closed case at real-app scale: capacity is seconds, the
     // session is minutes. Every one of these renders must survive to the replay.
     const h = harness({ capacity: 20 });
-    await h.emit({ kind: "hello", reactVersion: "19.0.0", sessionId: "doc-1" });
+    await h.emit({ kind: "hello", reactVersion: "19.0.0", sessionId: "doc-1", protocolVersion: 1 });
     await h.emit(frameOf("doc-1", { instances: [instance(1, "App")] }));
 
     h.disconnect();
@@ -252,7 +252,7 @@ describe("no trace is lost", () => {
 
   it("re-delivers a frame the store refused, and only that frame", async () => {
     const h = harness();
-    await h.emit({ kind: "hello", reactVersion: "19.0.0", sessionId: "doc-1" });
+    await h.emit({ kind: "hello", reactVersion: "19.0.0", sessionId: "doc-1", protocolVersion: 1 });
     await h.emit(frameOf("doc-1", { instances: [instance(1, "App")], events: [render(1)] }));
 
     h.failIngestAt(3);
@@ -270,7 +270,7 @@ describe("no trace is lost", () => {
     // Without acks the page retains the entire session behind a live panel and
     // spills for no reason at all.
     const h = harness({ capacity: 20 });
-    await h.emit({ kind: "hello", reactVersion: "19.0.0", sessionId: "doc-1" });
+    await h.emit({ kind: "hello", reactVersion: "19.0.0", sessionId: "doc-1", protocolVersion: 1 });
     for (let n = 1; n <= 200; n++) await h.emit(frameOf("doc-1", { events: [render(n)] }));
 
     expect(h.ackCount).toBeGreaterThan(0);
@@ -282,7 +282,7 @@ describe("no trace is lost", () => {
     // The ack is the page's only signal that a frame is safe to forget, so a
     // refused frame must not be acked away.
     const h = harness({ capacity: 20 });
-    await h.emit({ kind: "hello", reactVersion: "19.0.0", sessionId: "doc-1" });
+    await h.emit({ kind: "hello", reactVersion: "19.0.0", sessionId: "doc-1", protocolVersion: 1 });
     h.failIngestAt(2);
     for (let n = 1; n <= 100; n++) await h.emit(frameOf("doc-1", { events: [render(n)] }));
 

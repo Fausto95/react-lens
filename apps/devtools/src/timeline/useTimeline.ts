@@ -1,13 +1,13 @@
 import { useReducer, useRef } from "react";
-import type { TraceStore } from "@reactlens/trace-engine";
+import type { TraceStore, CommitSummary } from "@reactlens/trace-engine";
 import type { Causality } from "@reactlens/causality";
 import type { RenderId } from "@reactlens/protocol";
 import { useTraceVersion } from "../useLens.js";
-import { useDerived } from "../useDerived.js";
+import { derivationCache } from "../traceFresh.js";
 import { isLaneVisible, laneVisibility, type LaneFilter } from "../laneFilter.js";
 import type { TimeCursor } from "../timeCursor.js";
-import { buildLanes, statsInRegion } from "./model/lanes.js";
-import { chainFor, edgesForCommit } from "./model/edges.js";
+import { buildLanes, statsInRegion, type Lane } from "./model/lanes.js";
+import { chainFor, edgesForCommit, type CausalEdge } from "./model/edges.js";
 import { buildActivity, buildAxis, mergeActive, type TimeSpan } from "./model/axis.js";
 import { computeLayout } from "./model/rows.js";
 import { assignStacks } from "./model/stacks.js";
@@ -39,10 +39,21 @@ export function useTimeline({
 }: UseTimelineArgs) {
   const version = useTraceVersion(store, { kind: "global" });
 
-  const commits = useDerived([store, version], () => store.commits());
-  const interactions = useDerived([store, version], () => store.interactions());
+  // Version-keyed caches: the store mutates in place; pan/zoom re-renders must
+  // not redo the causality sweep. (Former useDerived call sites.)
+  const caches = useRef({
+    commits: derivationCache<CommitSummary[]>(),
+    interactions: derivationCache<ReturnType<TraceStore["interactions"]>>(),
+    bounds: derivationCache<{ t0: number; t1: number }>(),
+    wasted: derivationCache<Set<RenderId>>(),
+    lanes: derivationCache<Lane[]>(),
+    arrows: derivationCache<CausalEdge[]>(),
+  }).current;
 
-  const bounds = useDerived([store, version, commits], () => {
+  const commits = caches.commits.read([store, version], () => store.commits());
+  const interactions = caches.interactions.read([store, version], () => store.interactions());
+
+  const bounds = caches.bounds.read([store, version, commits], () => {
     let lo = Number.POSITIVE_INFINITY;
     let hi = Number.NEGATIVE_INFINITY;
     for (const instance of store.allInstances()) {
@@ -62,7 +73,7 @@ export function useTimeline({
     return { t0: lo, t1: Math.max(hi, lo + 120) };
   });
 
-  const wasted = useDerived([store, causality, version], () => {
+  const wasted = caches.wasted.read([store, causality, version], () => {
     const set = new Set<RenderId>();
     let checked = 0;
     for (const instance of store.allInstances()) {
@@ -81,7 +92,7 @@ export function useTimeline({
     return set;
   });
 
-  const lanes = useDerived([store, version, laneFilter, wasted], () =>
+  const lanes = caches.lanes.read([store, version, laneFilter, wasted], () =>
     buildLanes(store, {
       include: (key) => isLaneVisible(laneFilter, key),
       isWasted: (renderId) => wasted.has(renderId),
@@ -152,7 +163,7 @@ export function useTimeline({
     },
   });
 
-  const arrows = useDerived([store, version, state.selectedRender], () =>
+  const arrows = caches.arrows.read([store, version, state.selectedRender], () =>
     state.selectedRender === null
       ? []
       : chainFor(edgesForCommit(store, state.selectedRender), state.selectedRender),

@@ -8,18 +8,15 @@ test("inspect mode highlights on hover and Escape un-lights the button", async (
   await crosshair.click();
   await expect(crosshair).toHaveAttribute("aria-pressed", "true");
 
-  // Hover a component on the page: tooltip shows name + renders × self-time.
   await page.getByRole("button", { name: "count +1" }).hover();
   const tip = page.locator("#react-lens-inspect-tip");
   await expect(tip).toBeVisible();
   await expect(tip).toContainText("×");
 
-  // Escape must disarm AND report back to the host (the stuck-button bug).
   await page.keyboard.press("Escape");
   await expect(crosshair).toHaveAttribute("aria-pressed", "false");
   await expect(tip).toBeHidden();
 
-  // One click re-enters (used to take two).
   await crosshair.click();
   await expect(crosshair).toHaveAttribute("aria-pressed", "true");
   await page.keyboard.press("Escape");

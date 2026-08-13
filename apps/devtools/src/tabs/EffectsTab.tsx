@@ -2,7 +2,7 @@ import type { InspectorContext } from "../Inspector.js";
 import { formatValue, ms } from "@reactlens/ui";
 import { EmptyTab } from "./shared.js";
 import { useTraceVersion } from "../useLens.js";
-import { readFresh } from "../useDerived.js";
+import { readFresh } from "../traceFresh.js";
 
 /**
  * Effect hooks with a mini run/cleanup sparkline and dependency summary.

@@ -10,14 +10,16 @@ function frame(sessionId: string, seq: number): PortMessage {
 }
 
 function hello(sessionId: string, seq = 1): PortMessage {
-  return { kind: "hello", reactVersion: "19.0.0", sessionId, seq };
+  return { kind: "hello", reactVersion: "19.0.0", sessionId, seq, protocolVersion: 1 };
 }
 
 describe("panel session reducer", () => {
   it("adopts the first document and ingests its frames", () => {
     const a = stepSession(INITIAL_SESSION, hello("doc-1"));
     expect(a.state).toEqual({ sessionId: "doc-1", lastSeq: 1, gapAt: null, ahead: [] });
-    expect(a.actions).toEqual([{ type: "reset-store" }]);
+    expect(a.actions).toEqual([
+      { type: "reset-store", previousSessionId: null, nextSessionId: "doc-1" },
+    ]);
 
     const b = stepSession(a.state, frame("doc-1", 2));
     expect(b.state.lastSeq).toBe(2);
@@ -31,7 +33,9 @@ describe("panel session reducer", () => {
     const seen = stepSession(first, frame("doc-1", 7)).state;
 
     const reloaded = stepSession(seen, hello("doc-2"));
-    expect(reloaded.actions).toEqual([{ type: "reset-store" }]);
+    expect(reloaded.actions).toEqual([
+      { type: "reset-store", previousSessionId: "doc-1", nextSessionId: "doc-2" },
+    ]);
     // The new document's buffer starts its own cursor at 1.
     expect(reloaded.state).toEqual({ sessionId: "doc-2", lastSeq: 1, gapAt: null, ahead: [] });
   });
@@ -46,7 +50,7 @@ describe("panel session reducer", () => {
 
     const next = stepSession(seen, frame("doc-2", 1));
     expect(next.actions).toEqual([
-      { type: "reset-store" },
+      { type: "reset-store", previousSessionId: "doc-1", nextSessionId: "doc-2" },
       { type: "ingest", frame: EMPTY, seq: 1 },
     ]);
     expect(next.state).toEqual({ sessionId: "doc-2", lastSeq: 1, gapAt: null, ahead: [] });
@@ -83,6 +87,19 @@ describe("panel session reducer", () => {
       sessionId: null,
       fromSeq: 0,
     });
+  });
+
+  it("rejects a hello from an incompatible protocol version", () => {
+    const bad: PortMessage = {
+      kind: "hello",
+      reactVersion: "19.0.0",
+      sessionId: "doc-1",
+      seq: 1,
+      protocolVersion: 99,
+    };
+    const out = stepSession(INITIAL_SESSION, bad);
+    expect(out.actions).toEqual([{ type: "protocol-mismatch", protocolVersion: 99 }]);
+    expect(out.state).toEqual(INITIAL_SESSION);
   });
 
   it("passes non-session messages through untouched", () => {

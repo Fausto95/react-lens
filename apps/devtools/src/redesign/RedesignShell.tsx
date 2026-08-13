@@ -10,7 +10,7 @@ import {
   type SemanticNode,
 } from "@reactlens/tree";
 import { useTraceVersion } from "../useLens.js";
-import { readFresh, useDerived } from "../useDerived.js";
+import { readFresh, derivationCache } from "../traceFresh.js";
 import { loadPanelPrefs, savePanelPrefs } from "../panelPrefs.js";
 import { typeLaneKey, type LaneControls } from "../laneFilter.js";
 import type { TimeCursor } from "../timeCursor.js";
@@ -163,7 +163,13 @@ export function RedesignShell({
   // ── Tree ─────────────────────────────────────────────────────────────────
   const [collapsedNodes, setCollapsedNodes] = useState<ReadonlySet<string>>(new Set());
   const [openGroups, setOpenGroups] = useState<ReadonlySet<string>>(new Set());
-  const data = useDerived([store, causality, version], () => buildData(store, causality));
+  const treeCaches = useRef({
+    data: derivationCache<ReturnType<typeof buildData>>(),
+    watchlist:
+      derivationCache<Array<{ id: ComponentId; name: string; issues: number; renders: number }>>(),
+    story: derivationCache<ReturnType<typeof buildRenderStory> | null>(),
+  }).current;
+  const data = treeCaches.data.read([store, causality, version], () => buildData(store, causality));
   const parsed = parseQuery(query);
   const roots = buildTree(data, { include: parsed.predicate });
   const expanded = (() => {
@@ -200,7 +206,7 @@ export function RedesignShell({
   };
 
   /** Watchlist: Doctor-flagged components, heaviest first. */
-  const watchlist = useDerived([doctor, store, version], () => {
+  const watchlist = treeCaches.watchlist.read([doctor, store, version], () => {
     if (!doctor || doctor.size === 0) return [];
     return [...doctor]
       .map((id) => ({
@@ -215,7 +221,7 @@ export function RedesignShell({
 
   // ── Inspector ────────────────────────────────────────────────────────────
   const selectedRender = timeline.state.selectedRender;
-  const story = useDerived([store, causality, selectedRender, version], () =>
+  const story = treeCaches.story.read([store, causality, selectedRender, version], () =>
     selectedRender === null ? null : buildRenderStory(store, causality, selectedRender),
   );
   const selectedRenderEvent = readFresh(version, () =>

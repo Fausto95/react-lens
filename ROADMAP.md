@@ -112,16 +112,31 @@ with multiple **projections** rather than a raw fiber tree.
 
 ## Known follow-ups
 
+- **Reliability pipeline** — Phase 1 (seq/ack content-script ring, heartbeat,
+  WAL, poison quarantine, protocol handshake) in tree. Phase 2: TraceStore +
+  WAL + causality live in a supervised trace worker (raw postMessage ingest,
+  Comlink queries, Jotai bridge); main thread still dual-writes a sync cache
+  for UI. Phase 3: Doctor WASM/`analyzeSourceSmart` (extension still stubs
+  oxc for Chrome worker CSP), session export/import + per-`sessionId` segment
+  archive/stitch on the trace worker. Phase 4: OffscreenCanvas timeline base
+  paint with main-thread fallback. Remaining: drop the main-thread cache,
+  chaos e2e, percentage Compiler ratchet.
 - **Doctor static rules.** Runtime + static fusion ships via `mergeStaticAndRuntime`.
-  Browser bundles stub `oxc-parser` (WASM isn't Vite-bundleable yet), so static
-  analysis uses the regex path via `analyzeSourceSmart`. Node/tests still use real OXC.
+  Playground / e2e-fixture / site leave `oxc-parser` unstubbed (WASM via the
+  package `browser` field + `@oxc-parser/binding-wasm32-wasi`); regex fallback
+  when load fails. Extension build keeps an explicit oxc stub.
 - ✅ **Doctor worker** — the all-components Doctor pass (`diagnoseAll`, causality
   per render) now runs in a Web Worker mirroring the store via `TraceStore.onIngest`
   - `export()`; the panel consumes `{count, affected}` async and the old
     800-component guard is gone. Falls back to a synchronous pass if the worker
     can't spawn. Selected component source is uploaded for static fusion.
+    Source-map resolve also runs in the doctor worker.
 - ✅ **Source fetch via page** — extension `source-request` / `source` hop so the
   panel resolver reads modules same-origin to the inspected app.
+- **Compiler gates** — oxlint `react/rules-of-hooks`, `react/exhaustive-deps`,
+  and `react/react-compiler` at error; CI runs `check:compiled` +
+  `check:compiled:build` on every PR. Percentage ratchet TODO in
+  `scripts/check-compiled.mjs`.
 - **Tree worker** — virtualization mounts few rows, but grouping/projection/query
   still run on the main thread; move to a worker for very large apps (the
   per-render Doctor/verdict pass is now off-thread; the tree build is not).

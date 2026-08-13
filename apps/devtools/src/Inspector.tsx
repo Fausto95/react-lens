@@ -5,7 +5,7 @@ import type { Causality } from "@reactlens/causality";
 import type { ComponentId, RenderId, RenderSnapshot } from "@reactlens/protocol";
 import { diff, type DiffResult } from "@reactlens/diff-engine";
 import { useTraceVersion } from "./useLens.js";
-import { readFresh } from "./useDerived.js";
+import { readFresh } from "./traceFresh.js";
 import type { TimeCursor, ABMarks } from "./timeCursor.js";
 import { WhySection } from "./tabs/OverviewTab.js";
 import { PropsTab } from "./tabs/PropsTab.js";

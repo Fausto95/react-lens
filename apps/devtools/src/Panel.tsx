@@ -3,7 +3,7 @@ import type { TraceStore } from "@reactlens/trace-engine";
 import type { Causality } from "@reactlens/causality";
 import type { ComponentId, RenderId } from "@reactlens/protocol";
 import { useTraceVersion } from "./useLens.js";
-import { readFresh, useDerived } from "./useDerived.js";
+import { readFresh } from "./traceFresh.js";
 import { diagnoseAll } from "./doctor.js";
 import { createDoctorClient, type DoctorResult } from "./doctorClient.js";
 import { CommandPalette, type Command } from "./CommandPalette.js";
@@ -30,6 +30,7 @@ import { loadAgentSettings } from "./settings.js";
 import type { AgentSettings } from "@reactlens/agent";
 import { sessionSpanMs } from "./sessionSpan.js";
 import { AgentPane } from "./AgentPane.js";
+import { ErrorBoundary } from "./ErrorBoundary.js";
 import { SettingsPopover } from "./SettingsPopover.js";
 import {
   IconSearch,
@@ -50,7 +51,11 @@ import {
   listRecentSessions,
   loadSessionFromIdb,
   importSession,
+  parseSessionFile,
+  saveSessionToIdb,
+  type LensSessionFile,
 } from "./session.js";
+import type { TraceClient } from "./traceClient.js";
 import { sourceResolver } from "./sourceResolver.js";
 import { createTooltipLayer } from "./tooltip.js";
 import type { EditApi } from "./Inspector.js";
@@ -71,6 +76,11 @@ export interface PanelProps {
   store: TraceStore;
   causality: Causality;
   recording: boolean;
+  /**
+   * Optional worker-backed client. When present, session export/import and
+   * navigation segment stitch go through the trace worker.
+   */
+  traceClient?: TraceClient;
   /** @deprecated Recording is always on; pause control has been removed. */
   onToggleRecording?: () => void;
   embedded?: boolean;
@@ -107,6 +117,7 @@ export function Panel({
   store,
   causality,
   recording,
+  traceClient,
   embedded,
   onHighlight,
   overlayEnabled,
@@ -128,19 +139,19 @@ export function Panel({
   // Scroll the inspected page to a newly selected component (off-screen only).
   // Persisted so a user who finds it intrusive turns it off once.
   const [revealOnSelect, setRevealOnSelectState] = useState(() => loadPanelPrefs().revealOnSelect);
-  const setRevealOnSelect = useCallback((next: boolean) => {
+  const setRevealOnSelect = (next: boolean) => {
     setRevealOnSelectState(next);
     savePanelPrefs({ revealOnSelect: next });
-  }, []);
+  };
   /** How much history the store keeps — user-tunable in Settings. */
   const [retention, setRetentionState] = useState<Retention>(() => {
     const prefs = loadPanelPrefs();
     return { maxEvents: prefs.maxEvents, maxAgeMs: prefs.maxAgeMs };
   });
-  const setRetention = useCallback((next: Retention) => {
+  const setRetention = (next: Retention) => {
     setRetentionState(next);
     savePanelPrefs(next);
-  }, []);
+  };
   useEffect(() => {
     store.configure(retention);
   }, [store, retention]);
@@ -194,7 +205,7 @@ export function Panel({
    * moves the ref access into the effect, where it belongs.
    */
   const [importRequests, setImportRequests] = useState(0);
-  const openImport = useCallback(() => setImportRequests((n) => n + 1), []);
+  const openImport = () => setImportRequests((n) => n + 1);
   useEffect(() => {
     if (importRequests > 0) importRef.current?.click();
   }, [importRequests]);
@@ -211,10 +222,10 @@ export function Panel({
   const [doctorOpen, setDoctorOpen] = useState(false);
   const doctorAnchorRef = useRef<HTMLSpanElement>(null);
   useEffect(() => applyThemePref(themePref), [themePref]);
-  const setThemePref = useCallback((pref: ThemePref) => {
+  const setThemePref = (pref: ThemePref) => {
     setThemePrefState(pref);
     savePanelPrefs({ theme: pref });
-  }, []);
+  };
   // Loaded once (and on save) so AgentPane doesn't re-read storage per ask.
   const [agentSettings, setAgentSettings] = useState<AgentSettings | null>(null);
   useEffect(() => {
@@ -230,7 +241,7 @@ export function Panel({
   const { dockWidth, onDockResize } = useDockResize(embedded);
   const stats = readFresh(version, () => store.stats());
   /** Session length so far — first activity to last activity+duration. */
-  const sessionMs = useDerived([store, version], () => sessionSpanMs(store));
+  const sessionMs = readFresh(version, () => sessionSpanMs(store));
 
   /**
    * Say when retention has eaten into the session. A timeline that begins
@@ -308,11 +319,49 @@ export function Panel({
     });
   }, [store, sessionLabel]);
   /** Common post-import state: fresh cursor, no marks. Capture stays on. */
-  const enterSessionView = useCallback((label: string) => {
+  const enterSessionView = (label: string) => {
     setSelected(null);
     setCursor({ t: 0, mode: "live" });
     setSessionLabel(label);
-  }, []);
+  };
+
+  const downloadActiveSession = () => {
+    if (traceClient) {
+      void traceClient
+        .exportSession({
+          title: "react-lens-session.json",
+          pageUrl: typeof location !== "undefined" ? location.href : undefined,
+        })
+        .then((session) => {
+          const body = JSON.stringify(session, null, 2);
+          const blob = new Blob([body], { type: "application/json" });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement("a");
+          a.href = url;
+          a.download = "react-lens-session.json";
+          a.click();
+          URL.revokeObjectURL(url);
+          void saveSessionToIdb(session).catch(() => {
+            /* IDB optional */
+          });
+        });
+      return;
+    }
+    downloadSession(store);
+  };
+
+  const loadSessionFile = async (file: File): Promise<LensSessionFile> => {
+    if (traceClient) {
+      const text = await file.text();
+      const session = parseSessionFile(text);
+      await traceClient.importSession(session);
+      await saveSessionToIdb(session).catch(() => {
+        /* ignore */
+      });
+      return session;
+    }
+    return importSessionFromFile(store, file);
+  };
   useEffect(() => {
     travelCtl?.onCursor(cursor, travelOn && travelSupported && !offlineSession);
   }, [travelCtl, cursor, travelOn, travelSupported, offlineSession]);
@@ -364,18 +413,19 @@ export function Panel({
 
   // The store was cleared (page navigated/reloaded) — return the timeline to
   // LIVE and drop A/B marks so it doesn't sit at a now-gone historical moment.
+  // Do NOT clear `sessionLabel` here: import clears then re-ingests, and wiping
+  // the offline flag in that gap re-enables travel on imported sessions.
   const empty = stats.events === 0;
   useEffect(() => {
     if (empty) {
       setCursor({ t: 0, mode: "live" });
       setSelected(null);
-      setSessionLabel(null);
     }
   }, [empty]);
 
   // The synchronous pass only runs where the worker could not be spawned, and
   // only for small apps; it is still the most expensive read on this path.
-  const fallback = useDerived([doctorClient, store, causality, version, stats.components], () =>
+  const fallback = readFresh(version, () =>
     !doctorClient && stats.components <= 2000 ? diagnoseAll(store, causality) : null,
   );
   const affected = workerDoctor?.affected ?? fallback?.affected ?? new Set<ComponentId>();
@@ -430,12 +480,12 @@ export function Panel({
     void listRecentSessions().then(setRecentSessions);
   }, [paletteOpen]);
 
-  const goLive = useCallback(() => {
+  const goLive = () => {
     // Read at click time, not render time: the handler needs the newest commit,
     // not whichever one existed when this closure was created.
     const t = store.commits().at(-1)?.timestamp ?? 0;
     setCursor({ t, mode: "live" });
-  }, [store]);
+  };
 
   const commands: Command[] = [];
   commands.push({
@@ -493,7 +543,7 @@ export function Panel({
     label: "Export session",
     hint: "↓",
     group: "Session",
-    run: () => downloadSession(store),
+    run: downloadActiveSession,
   });
   commands.push({
     id: "import-session",
@@ -511,7 +561,8 @@ export function Panel({
       run: () => {
         void loadSessionFromIdb(entry.id).then((file) => {
           if (!file) return;
-          importSession(store, file);
+          if (traceClient) void traceClient.importSession(file);
+          else importSession(store, file);
           enterSessionView(file.meta?.title ?? entry.title);
         });
       },
@@ -606,7 +657,7 @@ export function Panel({
             </button>
             <button
               className="rl-icon-btn"
-              onClick={() => downloadSession(store)}
+              onClick={downloadActiveSession}
               title="Export session"
               aria-label="Export session"
             >
@@ -750,7 +801,7 @@ export function Panel({
           const file = e.target.files?.[0];
           e.target.value = "";
           if (!file) return;
-          void importSessionFromFile(store, file)
+          void loadSessionFile(file)
             .then((session) => {
               enterSessionView(session.meta?.title ?? file.name);
             })
@@ -769,18 +820,20 @@ export function Panel({
         />
       )}
 
-      <AgentPane
-        open={agentOpen}
-        store={store}
-        causality={causality}
-        settings={agentSettings}
-        settingsVersion={settingsVersion}
-        askRequest={agentAsk}
-        onClose={() => setAgentOpen(false)}
-        onOpenSettings={() => setSettingsOpen(true)}
-        onSelectComponent={select}
-        onCursor={setCursor}
-      />
+      <ErrorBoundary scope="agent">
+        <AgentPane
+          open={agentOpen}
+          store={store}
+          causality={causality}
+          settings={agentSettings}
+          settingsVersion={settingsVersion}
+          askRequest={agentAsk}
+          onClose={() => setAgentOpen(false)}
+          onOpenSettings={() => setSettingsOpen(true)}
+          onSelectComponent={select}
+          onCursor={setCursor}
+        />
+      </ErrorBoundary>
       {settingsOpen && (
         <div className="rl-settings-anchor">
           <SettingsPopover

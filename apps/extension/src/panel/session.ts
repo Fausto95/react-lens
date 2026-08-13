@@ -1,4 +1,4 @@
-import type { EventsBatchMessage } from "@reactlens/protocol";
+import { PROTOCOL_VERSION, type EventsBatchMessage } from "@reactlens/protocol";
 import type { PortMessage } from "../transport.js";
 
 /**
@@ -41,10 +41,16 @@ export interface SessionState {
 const AHEAD_MAX = 256;
 
 export type SessionAction =
-  | { type: "reset-store" }
+  /**
+   * New document: archive `previousSessionId` (if any) then clear the live
+   * store. Segments stay stitchable in the trace worker / TraceClient.
+   */
+  | { type: "reset-store"; previousSessionId: string | null; nextSessionId: string }
   /** Ingest, then report the outcome via `commitFrame` / `failFrame`. */
   | { type: "ingest"; frame: EventsBatchMessage["payload"]; seq: number }
-  | { type: "resync" };
+  | { type: "resync" }
+  /** Page speaks a protocol the panel does not understand. */
+  | { type: "protocol-mismatch"; protocolVersion: number };
 
 export const INITIAL_SESSION: SessionState = {
   sessionId: null,
@@ -70,13 +76,28 @@ export function stepSession(state: SessionState, msg: PortMessage): SessionStep 
     return { state, actions: [] };
   }
 
+  if (msg.kind === "hello") {
+    const version = msg.protocolVersion ?? PROTOCOL_VERSION;
+    if (version !== PROTOCOL_VERSION) {
+      return {
+        state,
+        actions: [{ type: "protocol-mismatch", protocolVersion: version }],
+      };
+    }
+  }
+
   const actions: SessionAction[] = [];
   let next = state;
   if (msg.sessionId !== state.sessionId) {
     // New document. `hello` normally opens it, but a frame's own session id is
     // just as authoritative — `hello` can be lost with the port it queued on.
     // The previous document's gap goes with it: its seqs mean nothing here.
-    actions.push({ type: "reset-store" });
+    // Archive the prior segment instead of discarding it forever.
+    actions.push({
+      type: "reset-store",
+      previousSessionId: state.sessionId,
+      nextSessionId: msg.sessionId,
+    });
     next = { sessionId: msg.sessionId, lastSeq: 0, gapAt: null, ahead: [] };
   } else if (msg.seq <= state.lastSeq && !needsReingest(state, msg.seq)) {
     // Already ingested; a replay overlapped the live stream.

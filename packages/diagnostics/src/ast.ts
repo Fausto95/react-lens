@@ -1,13 +1,39 @@
-import { parseSync } from "oxc-parser";
 import type { StaticFinding, AnalyzeSourceOptions } from "./static.js";
 import { definitionSpan } from "./static.js";
 
+export type ParseSync = (
+  filename: string,
+  source: string,
+  opts: { sourceType: string; lang: string },
+) => { program?: unknown };
+
 /**
- * AST-backed static analysis via oxc-parser (DESIGN §8). Prefer this over the
- * regex path when the parser is available; findings are scoped to a component
- * definition when `opts.name` is set.
+ * Prefer AST; fall back to regex when oxc fails to load (browser without WASM).
+ * Always returns findings — never null.
+ *
+ * Browser: `import("oxc-parser")` resolves the package `browser` field → WASM
+ * (`@oxc-parser/binding-wasm32-wasi`). Extension builds may stub oxc-parser so
+ * this catch engages. Static analysis never blocks the trace path.
  */
-export function analyzeSourceAst(source: string, opts: AnalyzeSourceOptions = {}): StaticFinding[] {
+export async function analyzeSourceSmart(
+  source: string,
+  opts: AnalyzeSourceOptions,
+  regexFallback: (source: string, opts: AnalyzeSourceOptions) => StaticFinding[],
+): Promise<StaticFinding[]> {
+  try {
+    const mod = await import("oxc-parser");
+    return analyzeSourceAstWithParse(mod.parseSync as ParseSync, source, opts);
+  } catch {
+    return regexFallback(source, opts);
+  }
+}
+
+/** Shared walker — Node (`analyzeSourceAst`) and browser (`analyzeSourceSmart`). */
+export function analyzeSourceAstWithParse(
+  parseSync: ParseSync,
+  source: string,
+  opts: AnalyzeSourceOptions = {},
+): StaticFinding[] {
   const result = parseSync("component.tsx", source, { sourceType: "module", lang: "tsx" });
   const program = result.program as unknown as AstNode | undefined;
   if (!program) return [];
@@ -67,22 +93,6 @@ export function analyzeSourceAst(source: string, opts: AnalyzeSourceOptions = {}
   });
 
   return findings;
-}
-
-/**
- * Prefer AST; fall back to regex when oxc fails to load (browser without WASM).
- * Always returns findings — never null.
- */
-export async function analyzeSourceSmart(
-  source: string,
-  opts: AnalyzeSourceOptions,
-  regexFallback: (source: string, opts: AnalyzeSourceOptions) => StaticFinding[],
-): Promise<StaticFinding[]> {
-  try {
-    return analyzeSourceAst(source, opts);
-  } catch {
-    return regexFallback(source, opts);
-  }
 }
 
 interface AstNode {

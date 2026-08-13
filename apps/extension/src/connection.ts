@@ -14,6 +14,9 @@
 /** Reconnect backoff for transient failures; the last delay repeats. */
 export const RECONNECT_DELAYS_MS = [250, 500, 1000, 2000, 5000];
 
+/** Extra fraction of the base delay added as random jitter (0..jitter). */
+export const RECONNECT_JITTER_FRACTION = 0.25;
+
 export function isContextInvalidated(error: unknown): boolean {
   // Chrome hands this back three ways: a thrown Error, `runtime.lastError`
   // (a plain `{ message }`), and occasionally a bare string. Stringifying the
@@ -31,8 +34,14 @@ export function isContextInvalidated(error: unknown): boolean {
   );
 }
 
-/** Delay before attempt `n` (0-based), holding at the longest. */
+/**
+ * Delay before attempt `n` (0-based), holding at the longest, plus jitter so
+ * a tab full of content scripts does not reconnect in lockstep after the SW
+ * wakes.
+ */
 export function reconnectDelay(attempt: number): number {
   const index = Math.min(Math.max(attempt, 0), RECONNECT_DELAYS_MS.length - 1);
-  return RECONNECT_DELAYS_MS[index]!;
+  const base = RECONNECT_DELAYS_MS[index]!;
+  const jitter = Math.floor(Math.random() * base * RECONNECT_JITTER_FRACTION);
+  return base + jitter;
 }

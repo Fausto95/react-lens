@@ -6,13 +6,18 @@
  *
  *  1. A `"use no memo"` directive creeps back in. Each one leaves a whole file
  *    uncompiled, and the panel's files are the expensive ones. Reads of the
- *    trace store belong in `useDerived` / `readFresh`, which put the version
+ *    trace store belong in `traceFresh` / `readFresh`, which put the version
  *    counter where the Compiler can see it — that is what the directives were
  *    working around.
  *  2. The build stops compiling altogether — a plugin ordering change, a
  *    `sources` filter that no longer matches — and nothing fails. The panel just
  *    gets slower. So we also assert the built bundle carries the Compiler's
  *    runtime marker.
+ *
+ * TODO(phase5-ratchet): once we can count compiled vs uncompiled components in
+ * the bundle (or via Compiler instrumentation), add a percentage floor and
+ * ratchet it upward in CI. Until then the marker presence check below is the
+ * hard gate; oxlint `react/react-compiler` catches source-level bailouts.
  *
  * Usage: `node scripts/check-compiled.mjs [--bundle <dir>]`
  */
@@ -46,7 +51,7 @@ if (offenders.length > 0) {
   console.error(
     "The React Compiler is opted out of in these files:\n" +
       offenders.map((p) => `  ${p}`).join("\n") +
-      "\n\nTake store reads through `useDerived` / `readFresh` instead — they make the\n" +
+      "\n\nTake store reads through `derivationCache` / `readFresh` instead — they make the\n" +
       "trace version a real dependency, which is what the directive was avoiding.",
   );
   process.exit(1);
@@ -79,6 +84,11 @@ if (bundleFlag !== -1) {
 }
 
 console.log("No `use no memo` directives.");
+
+// Percentage ratchet (Phase 5): once we can count compiled components reliably
+// in the bundle (memo_cache_sentinel sites / component names), assert a
+// minimum share of panel components are compiled and bump the floor in CI.
+// Until then the binary marker above is the healthcheck.
 
 async function* walkAll(dir) {
   const info = await stat(dir).catch(() => null);

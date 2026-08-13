@@ -14,7 +14,7 @@
  */
 
 /** How often to ping. Comfortably under the MV3 worker's 30s idle timeout. */
-export const HEARTBEAT_INTERVAL_MS = 20_000;
+export const HEARTBEAT_INTERVAL_MS = 5_000;
 /** How long to wait for the answer before calling the port dead. */
 export const HEARTBEAT_TIMEOUT_MS = 5_000;
 

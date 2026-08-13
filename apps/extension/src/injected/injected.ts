@@ -2,6 +2,7 @@ import { createSerializer } from "@reactlens/serializer";
 import { createFiberBridge } from "@reactlens/fiber";
 import { createInstrumentation } from "@reactlens/instrumentation";
 import type { EventsBatchMessage, ComponentId } from "@reactlens/protocol";
+import { PROTOCOL_VERSION } from "@reactlens/protocol";
 import { PAGE_SOURCE, CONTENT_SOURCE, type ContentToPage } from "../transport.js";
 import { createHighlighter } from "./highlighter.js";
 import { createInspectController, tryReactTextOverride } from "./inspect.js";
@@ -61,7 +62,13 @@ function start(): void {
     onFrame: (frame) => post(frame),
   });
   window.postMessage(
-    { source: PAGE_SOURCE, kind: "hello", reactVersion: fiber.reactVersion(), sessionId },
+    {
+      source: PAGE_SOURCE,
+      kind: "hello",
+      reactVersion: fiber.reactVersion(),
+      sessionId,
+      protocolVersion: PROTOCOL_VERSION,
+    },
     "*",
   );
 }

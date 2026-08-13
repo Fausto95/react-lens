@@ -51,7 +51,11 @@ export interface DrawBaseArgs {
 const fmt = (t: number) => Math.round(t).toLocaleString("en-US");
 
 export function ensureHatchPattern(ctx: CanvasRenderingContext2D): CanvasPattern | null {
-  const p = document.createElement("canvas");
+  // OffscreenCanvas workers have no `document`; prefer OffscreenCanvas when available.
+  const p =
+    typeof OffscreenCanvas !== "undefined"
+      ? new OffscreenCanvas(6, 6)
+      : document.createElement("canvas");
   p.width = p.height = 6;
   const pc = p.getContext("2d");
   if (!pc) return null;
@@ -61,7 +65,7 @@ export function ensureHatchPattern(ctx: CanvasRenderingContext2D): CanvasPattern
   pc.moveTo(-2, 8);
   pc.lineTo(8, -2);
   pc.stroke();
-  return ctx.createPattern(p, "repeat");
+  return ctx.createPattern(p as CanvasImageSource, "repeat");
 }
 
 export function drawBase(args: DrawBaseArgs): {

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ComponentId } from "@reactlens/protocol";
 import type { LaneControls } from "../../laneFilter.js";
 import type { TimeCursor } from "../../timeCursor.js";
@@ -21,6 +21,7 @@ import { timelineKeyAction } from "../keymap.js";
 import { clipAtTime, clipCauseColor, type Clip } from "../model/lanes.js";
 import type { Timeline as TimelineModel } from "../useTimeline.js";
 import { drawBase, drawOverlay, ensureHatchPattern, type ClipRect } from "./draw.js";
+import { createTimelineRenderer, type TimelineRendererClient } from "../timelineRendererClient.js";
 import { WallStrip } from "./WallStrip.js";
 import { Navigator } from "./Navigator.js";
 import { Shelf } from "./Shelf.js";
@@ -97,6 +98,11 @@ export function Timeline({
   const wrapRef = useRef<HTMLDivElement>(null);
   const baseRef = useRef<HTMLCanvasElement>(null);
   const overRef = useRef<HTMLCanvasElement>(null);
+  /** OffscreenCanvas base painter; null ⇒ main-thread drawBase fallback. */
+  const rendererRef = useRef<TimelineRendererClient | null>(null);
+  /** Bump to replace canvas DOM nodes after a failed/reclaimed transfer. */
+  const [surfaceGen, setSurfaceGen] = useState(0);
+  const preferMainPaint = useRef(false);
   const loupeCvRef = useRef<HTMLCanvasElement>(null);
   const tipElRef = useRef<HTMLDivElement>(null);
   const tipNameRef = useRef<HTMLDivElement>(null);
@@ -323,11 +329,15 @@ export function Timeline({
       const bc = baseRef.current;
       const oc = overRef.current;
       if (!bc || !oc) return;
-      const bctx = bc.getContext("2d");
       const octx = oc.getContext("2d");
-      if (!bctx || !octx) return;
+      if (!octx) return;
 
-      if (!patternRef.current) patternRef.current = ensureHatchPattern(bctx);
+      const renderer = rendererRef.current;
+      // After transferControlToOffscreen, getContext on the base canvas is null.
+      const bctx = renderer ? null : bc.getContext("2d");
+      if (!renderer && !bctx) return;
+
+      if (bctx && !patternRef.current) patternRef.current = ensureHatchPattern(bctx);
 
       themeRef.current = readTimelineTheme(wrapRef.current?.closest(".rl-redesign") ?? null);
       const theme = themeRef.current;
@@ -342,21 +352,49 @@ export function Timeline({
       };
 
       if (base) {
-        const { clipRects, snapEdges } = drawBase({
-          ctx: bctx,
-          axis: axisLiveRef.current,
-          view: state.view,
-          layout,
-          region: state.region,
-          markers,
-          selectedRender: state.selectedRender,
-          proj,
-          pattern: patternRef.current,
-          tOrigin: bounds.t0,
-          theme,
-        });
-        clipRectsRef.current = clipRects;
-        snapEdgesRef.current = snapEdges;
+        const axis = axisLiveRef.current;
+        if (renderer) {
+          renderer.paint(
+            {
+              axis: {
+                segs: axis.segs,
+                total: axis.total,
+                w0: axis.w0,
+                w1: axis.w1,
+              },
+              view: state.view,
+              layout,
+              region: state.region,
+              markers,
+              selectedRender: state.selectedRender,
+              nameW: nw,
+              stageW: sizeRef.current.w,
+              pxPerMs: model.pxPerMs,
+              tOrigin: bounds.t0,
+              theme,
+            },
+            (clipRects, snapEdges) => {
+              clipRectsRef.current = clipRects;
+              snapEdgesRef.current = snapEdges;
+            },
+          );
+        } else if (bctx) {
+          const { clipRects, snapEdges } = drawBase({
+            ctx: bctx,
+            axis,
+            view: state.view,
+            layout,
+            region: state.region,
+            markers,
+            selectedRender: state.selectedRender,
+            proj,
+            pattern: patternRef.current,
+            tOrigin: bounds.t0,
+            theme,
+          });
+          clipRectsRef.current = clipRects;
+          snapEdgesRef.current = snapEdges;
+        }
       }
 
       drawOverlay({
@@ -428,6 +466,22 @@ export function Timeline({
     scheduleDraw(false);
   };
 
+  // OffscreenCanvas transfer is one-shot per canvas element. The client caches
+  // by canvas identity so StrictMode remounts reuse the live worker instead of
+  // transferring twice. Never dispose on effect cleanup for that reason.
+  useEffect(() => {
+    if (preferMainPaint.current) return;
+    const base = baseRef.current;
+    if (!base) return;
+    const client = createTimelineRenderer(base);
+    if (!client) {
+      preferMainPaint.current = true;
+      setSurfaceGen((g) => g + 1);
+      return;
+    }
+    rendererRef.current = client;
+  }, [surfaceGen]);
+
   useEffect(() => {
     const el = wrapRef.current;
     if (!el) return;
@@ -438,10 +492,29 @@ export function Timeline({
       dispatch({ type: "measure", width: w });
       const h = layout.totalH;
       const dpr = window.devicePixelRatio || 1;
-      for (const cv of [baseRef.current, overRef.current]) {
+      const renderer = rendererRef.current;
+      if (renderer) {
+        renderer.resize(w, h, dpr);
+        const baseCv = baseRef.current;
+        if (baseCv) {
+          baseCv.style.width = `${w}px`;
+          baseCv.style.height = `${h}px`;
+        }
+      }
+      for (const cv of renderer ? [overRef.current] : [baseRef.current, overRef.current]) {
         if (!cv) continue;
-        cv.width = w * dpr;
-        cv.height = h * dpr;
+        // Offscreen-transferred canvases throw on width/height writes; skip them
+        // (the worker owns their buffer). A remount can race resize before the
+        // renderer client is reattached to rendererRef.
+        if (cv === baseRef.current && renderer == null && cv.getContext("2d") == null) {
+          continue;
+        }
+        try {
+          cv.width = w * dpr;
+          cv.height = h * dpr;
+        } catch {
+          continue;
+        }
         cv.style.width = `${w}px`;
         cv.style.height = `${h}px`;
         cv.getContext("2d")?.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -1215,8 +1288,12 @@ export function Timeline({
           scheduleDraw(false);
         }}
       >
-        <canvas ref={baseRef} style={{ display: "block" }} />
-        <canvas ref={overRef} style={{ position: "absolute", inset: 0, pointerEvents: "none" }} />
+        <canvas key={`base-${surfaceGen}`} ref={baseRef} style={{ display: "block" }} />
+        <canvas
+          key={`over-${surfaceGen}`}
+          ref={overRef}
+          style={{ position: "absolute", inset: 0, pointerEvents: "none" }}
+        />
 
         {layout.rows.map((r) => (
           <div

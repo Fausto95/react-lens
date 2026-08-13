@@ -34,13 +34,21 @@ describe("isContextInvalidated", () => {
 });
 
 describe("reconnectDelay", () => {
-  it("backs off, then holds at the longest delay", () => {
-    expect(reconnectDelay(0)).toBe(RECONNECT_DELAYS_MS[0]);
-    expect(reconnectDelay(2)).toBe(RECONNECT_DELAYS_MS[2]);
-    expect(reconnectDelay(99)).toBe(RECONNECT_DELAYS_MS.at(-1));
+  it("backs off, then holds at the longest delay (plus jitter)", () => {
+    // Jitter is 0..25% of the base, so the result always lands in that band.
+    for (const attempt of [0, 2, 99]) {
+      const index = Math.min(attempt, RECONNECT_DELAYS_MS.length - 1);
+      const base = RECONNECT_DELAYS_MS[index]!;
+      const delay = reconnectDelay(attempt);
+      expect(delay).toBeGreaterThanOrEqual(base);
+      expect(delay).toBeLessThanOrEqual(base + Math.floor(base * 0.25));
+    }
   });
 
   it("clamps a negative attempt rather than returning undefined", () => {
-    expect(reconnectDelay(-1)).toBe(RECONNECT_DELAYS_MS[0]);
+    const base = RECONNECT_DELAYS_MS[0]!;
+    const delay = reconnectDelay(-1);
+    expect(delay).toBeGreaterThanOrEqual(base);
+    expect(delay).toBeLessThanOrEqual(base + Math.floor(base * 0.25));
   });
 });

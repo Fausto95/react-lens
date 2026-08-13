@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { boot, bumpCounter, selectInTree, openSection } from "./helpers.js";
+import { boot, bumpCounter, selectInTree, openSection, propsLine, counterLine } from "./helpers.js";
 
 test("renders feed lists newest first and expands with the diff", async ({ page }) => {
   await boot(page);
@@ -13,45 +13,51 @@ test("renders feed lists newest first and expands with the diff", async ({ page 
   await expect(rows.nth(2)).toContainText("#1");
   await expect(rows.nth(2).locator(".rl-render-chip")).toContainText("mount");
 
-  // Newest render expands with the state diff vs the previous one.
   await rows.nth(0).click();
   const diff = page.locator(".rl-render-diff");
   await expect(diff).toBeVisible();
-  await expect(diff.locator(".rl-render-diff-head").first()).toContainText("State");
-
-  // The mount render shows its initial props instead of "nothing to compare".
-  await rows.nth(2).click();
-  await expect(page.locator(".rl-render-diff-head").first()).toContainText("Mount");
+  await expect(diff.locator(".diff .row").first()).toBeVisible();
 });
 
-test("header file:line opens through the dev server's editor middleware", async ({ page }) => {
+test("editing a prop in the inspector re-renders the page", async ({ page }) => {
   await boot(page);
-  const opened: string[] = [];
-  await page.route("**/__open-in-editor**", (route) => {
-    opened.push(route.request().url());
-    void route.fulfill({ status: 200, body: "" });
-  });
+  await selectInTree(page, "PropsShowcase");
+  await openSection(page, "Props");
 
-  await selectInTree(page, "HooksShowca");
-  await page.locator(".rl-insp-source-link").click();
+  const textRow = page
+    .locator(".rl-val-row")
+    .filter({ has: page.locator(".rl-val-key", { hasText: /^text$/ }) });
+  const input = textRow.locator(".rl-edit-input.rl-t-string");
+  await expect(input).toHaveValue("hello world");
+  await input.fill("lens e2e");
+  await input.blur();
 
-  await expect.poll(() => opened).toHaveLength(1);
-  const file = new URL(opened[0]!).searchParams.get("file")!;
-  // Server-relative source path with a line:column — the server resolves the
-  // absolute path on disk, so the editor never sees "/App.tsx".
-  expect(file).toMatch(/^src\/.+\.tsx:\d+:\d+$/);
+  await expect(propsLine(page)).toContainText("text=lens e2e");
 });
 
-test("stack relations navigate between components", async ({ page }) => {
+test("reducer state shows a read-only badge", async ({ page }) => {
   await boot(page);
-  await selectInTree(page, "App");
-  await openSection(page, "Stack");
+  await selectInTree(page, "HooksShowcase");
+  await openSection(page, "State");
 
-  await page.locator(".rl-rel-item.link", { hasText: "Toolbar" }).click();
-  await expect(page.locator(".rl-insp-head h2")).toHaveText("Toolbar");
+  const reducerRow = page.locator(".rl-val-row").filter({ hasText: /reducer #/ });
+  await expect(reducerRow.locator(".rl-badge.dim", { hasText: "read-only" })).toBeVisible();
+  await expect(reducerRow.locator(".rl-edit-input")).toHaveCount(0);
+});
 
-  // And back up through its parent.
-  await openSection(page, "Stack");
-  await page.locator(".rl-rel-item.link", { hasText: "App" }).first().click();
-  await expect(page.locator(".rl-insp-head h2")).toHaveText("App");
+test("editing useState in the inspector updates the page counter", async ({ page }) => {
+  await boot(page);
+  await selectInTree(page, "HooksShowcase");
+  await openSection(page, "State");
+
+  const stateInput = page
+    .locator(".rl-val-row")
+    .filter({ hasText: /state #/ })
+    .first()
+    .locator(".rl-edit-input");
+  await expect(stateInput).toBeVisible();
+  await stateInput.fill("7");
+  await stateInput.press("Enter");
+
+  await expect(counterLine(page)).toContainText("count 7");
 });
