@@ -46,6 +46,23 @@ test("replay walks the app through history and returns live", async ({ page }) =
     .toContain("count 3");
 });
 
+test("End during active reverse play stops the transport and returns live", async ({ page }) => {
+  await boot(page);
+  await bumpCounter(page, 3);
+  await ensureTravelOn(page);
+
+  await tl(page).getByRole("button", { name: "Play in reverse" }).click();
+  // Press End mid-play: a still-running transport tick must not re-seek the
+  // cursor historical and swallow the go-live.
+  await page.waitForTimeout(250);
+  await page.keyboard.press("End");
+
+  await expect
+    .poll(async () => counterLine(page).innerText(), { timeout: 10_000 })
+    .toContain("count 3");
+  await expect(tl(page).getByRole("button", { name: "Live" })).toHaveCount(0);
+});
+
 test("stepping to the previous commit rewinds the page; L returns live", async ({ page }) => {
   await boot(page);
   await bumpCounter(page, 2);
