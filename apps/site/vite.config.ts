@@ -1,7 +1,22 @@
 import { defineConfig, lazyPlugins } from "vite-plus";
 import react from "@vitejs/plugin-react";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+const here = path.dirname(fileURLToPath(import.meta.url));
+const oxcStub = path.resolve(here, "src/oxc-stub.ts");
+const nodeModuleStub = path.resolve(here, "src/node-module-stub.ts");
 
 export default defineConfig({
+  resolve: {
+    alias: [
+      // Doctor worker would otherwise bundle @oxc-parser/binding-wasm32-wasi
+      // (top-level await) into an IIFE and fail `vp build` on Vercel.
+      { find: "oxc-parser", replacement: oxcStub },
+      { find: "@oxc-parser/binding-wasm32-wasi", replacement: oxcStub },
+      { find: "node:module", replacement: nodeModuleStub },
+    ],
+  },
   plugins: lazyPlugins(() => [
     react({
       // React Compiler on for the SITE's own source only (DESIGN §1.4), matching
