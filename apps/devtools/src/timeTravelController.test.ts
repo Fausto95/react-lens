@@ -248,6 +248,19 @@ describe("createPanelTimeTravel — restore status", () => {
     expect(statuses.at(-1)!.applied).toBe(1);
     ctl.dispose();
   });
+
+  it("does not apply a queued restore after goLive (replay End race)", async () => {
+    const api = fakeApi();
+    const ctl = createPanelTimeTravel(makeStore(), api);
+    ctl.onCursor({ t: 100, mode: "historical" }, true);
+    flushRaf();
+    // goLive before the flush's microtasked apply runs — End during reverse play.
+    ctl.goLive();
+    await settle();
+    expect(api.goLives).toBe(1);
+    expect(api.applies).toHaveLength(0);
+    ctl.dispose();
+  });
 });
 
 describe("createPanelTimeTravel — hidden-tab scheduling", () => {

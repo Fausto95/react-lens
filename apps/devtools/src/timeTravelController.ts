@@ -66,6 +66,8 @@ export function createPanelTimeTravel(
   /** Monotonic apply generation; results arriving out of order are dropped. */
   let generation = 0;
   let lastProcessed = 0;
+  /** Bumped only on goLive — cancels in-flight applies before they hit the page. */
+  let travelEpoch = 0;
 
   function publish(atT: number): void {
     onStatus?.({ atT, applied: restoredIds.size, failedIds: new Map(failedIds) });
@@ -115,18 +117,29 @@ export function createPanelTimeTravel(
     if (delta.length === 0 && !traveling) return;
     traveling = true;
     const gen = ++generation;
+    const epoch = travelEpoch;
     Promise.resolve()
-      .then(() => api.apply(delta, t))
+      .then(() => {
+        // goLive bumped the epoch — never clobber the restored live page with
+        // a scrub apply that was already queued as a microtask (replay End).
+        if (epoch !== travelEpoch) return null;
+        return api.apply(delta, t);
+      })
       .then(
-        (result) => ingestResult(gen, t, delta, result),
-        () =>
+        (result) => {
+          if (result == null || epoch !== travelEpoch) return;
+          ingestResult(gen, t, delta, result);
+        },
+        () => {
+          if (epoch !== travelEpoch) return;
           // Transport death (e.g. extension port closed): nothing landed.
           ingestResult(gen, t, delta, {
             applied: 0,
             failed: delta.length,
             supported: true,
             failures: delta.map((e) => ({ ...e, reason: "write-failed" as const })),
-          }),
+          });
+        },
       );
   }
 
@@ -136,6 +149,7 @@ export function createPanelTimeTravel(
     lastApplied = new Map();
     restoredIds.clear();
     failedIds.clear();
+    travelEpoch++;
     generation++;
     lastProcessed = generation; // in-flight results are now stale
     if (!traveling) return;

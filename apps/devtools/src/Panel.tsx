@@ -311,13 +311,13 @@ export function Panel({
   // different app run, so real restoration is disabled and the timeline shows
   // captured page DOM instead.
   const offlineSession = sessionLabel != null;
-  // Importing pauses recording (see the import handlers). If the user resumes,
-  // the first live frame means the store has moved past the imported session —
-  // drop the session view and return to live semantics so travel re-enables.
+  // Capture stays on after import. Ignore passive commits (Suspense, lists…) —
+  // only a real user interaction means the store has moved past the imported
+  // session and travel may re-enable.
   useEffect(() => {
     if (sessionLabel == null) return;
     return store.onIngest((batch) => {
-      if (batch.events.length > 0) setSessionLabel(null);
+      if (batch.events.some((e) => e.type === "interaction")) setSessionLabel(null);
     });
   }, [store, sessionLabel]);
   /** Common post-import state: fresh cursor, no marks. Capture stays on. */
