@@ -14,13 +14,11 @@ reload. Recent sessions also persist in IndexedDB (capped) and reload from ⌘K.
 interface LensSessionFile {
   protocolVersion: number; // currently 1
   exportedAt: string; // ISO timestamp
-  payload: {
-    /* events, snapshots, instances, … */
-  };
+  payload: {/* events, snapshots, instances, … */};
   meta?: {
     title?: string;
     pageUrl?: string;
-    redacted?: boolean;
+    redacted?: boolean; // reserved; panel export does not set this today
   };
 }
 ```
@@ -34,17 +32,17 @@ Only **protocolVersion 1** is supported today (`parseSessionFile` /
 Session files can contain serialized props, state, and DOM from the inspected
 app. Treat them like production logs:
 
-- Prefer redacted exports when sharing.
-- MCP string previews stay redacted unless you pass `--include-values`.
 - Do not commit sessions with secrets to public repos.
+- MCP string previews stay redacted unless you pass `--include-values`
+  (tool output only — the session file itself is unchanged).
 
 ## Downstream
 
-| Consumer | Command / API |
-| -------- | ------------- |
-| Markdown report | `react-lens analyze session.json` |
-| MCP agent | `react-lens mcp --session session.json` |
-| CI | `react-lens ci --baseline … --actual …` |
-| Programmatic | `compareSessions(before, after)` in `@reactlens/agent-tools` |
+| Consumer        | Command / API                                                              |
+| --------------- | -------------------------------------------------------------------------- |
+| Markdown report | `react-lens analyze session.json`                                          |
+| MCP agent       | `react-lens mcp --session session.json`                                    |
+| CI              | `react-lens ci --baseline … --actual …`                                    |
+| Programmatic    | `compareSessions(beforePayload, afterPayload)` in `@reactlens/agent-tools` |
 
 See [cli.md](cli.md), [mcp.md](mcp.md), [verify.md](verify.md).

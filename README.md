@@ -6,9 +6,9 @@
 
 <p align="center">
   <strong>React debugging with receipts.</strong><br />
-  Time travel through real state. Trace any value to its source. Simulate the
-  fix before you make it. Bisect the commit that broke perf. Human or AI agent —
-  every answer cites the exact render, component, and line.
+  Time travel through real state. Trace a render to its cause. Preview waste
+  before you change code. Diff two moments — or two sessions in CI. Human or AI
+  agent — every answer cites the exact render, component, and line.
 </p>
 
 <p align="center">
@@ -19,9 +19,9 @@
 
 ---
 
-The debugging platform for React — built for humans and AI agents, from server
-to pixel, with proof. Every click, commit, and render lands in one event log, so
-answers are backed by evidence instead of guesses.
+The debugging platform for React — built for humans and AI agents, with proof.
+Every click, commit, and render lands in one event log, so answers are backed
+by evidence instead of guesses.
 
 ## Features
 
@@ -41,15 +41,16 @@ answers are backed by evidence instead of guesses.
   interactions, grouped into what you actually did, with commit heat and a
   component waterfall.
 - **Pick it, find it** — ⌘\\ picks an element on the page and selects it in the
-  tree; selecting in the panel scrolls the page to the component and outlines
-  it (off-screen ones only, so ↑/↓ doesn't drag the app around).
+  tree; selecting in the panel outlines it and scrolls off-screen targets into
+  view (so ↑/↓ doesn't drag the app around).
 - **Inspector** — props, state, hooks, DOM, and source for the selection, with
   live edit through the dev renderer.
-- **Replay with fix** — preview the tree without wasted renders before you
-  change the code; Fix with AI proposes a patch against real source.
-- **AST Doctor** — static analysis (OXC parser, regex fallback) fused with
-  runtime evidence; findings are scoped to a component's definition and
-  stamped `file:line`.
+- **Replay with fix** — preview the panel tree with wasted renders hidden.
+  Fix with AI opens the BYOK agent on a Doctor finding; it proposes a patch and
+  does not write to disk.
+- **AST Doctor** — static analysis (OXC when available, regex fallback in the
+  panel) fused with runtime evidence; findings are scoped to a component's
+  definition and stamped `file:line`.
 - **Waste detection** — after an interaction settles, a banner flags renders
   that produced no visible change and jumps you to the worst offender.
 - **Explain this interaction** — one click produces a ranked narrative: cost,
@@ -57,20 +58,22 @@ answers are backed by evidence instead of guesses.
 - **Effect debugger** — timed effect run/cleanup events, durations, and a
   "possible loop" badge when an effect fires on nearly every render.
 - **Suspense & RSC aware** — suspense boundaries, server-component roles, and
-  server actions are detected and badged in the tree and inspector.
+  server actions are detected from client fiber heuristics and badged in the
+  tree and inspector.
 - **Sessions** — export/import the whole trace as a `.json` file; recent
   sessions persist in IndexedDB and reload from ⌘K.
-- **React 19 + Compiler aware** — compiled components are badged ◆;
+- **React 19 + Compiler aware** — compiled components are badged ✓;
   compiler bailouts are first-class evidence. Recommendations stay
   evidence-backed (including memo when the data supports it).
 
 ### Agents, CLI, and CI
 
 - **CLI** — `react-lens analyze` turns a session file into a markdown report;
-  `react-lens ci` compares baseline vs actual sessions for regressions.
-- **MCP** — `react-lens mcp` exposes the same 22 typed tools over stdio so
+  `react-lens ci` compares baseline vs actual session files (paired by filename)
+  for regressions.
+- **MCP** — `react-lens mcp` exposes the same 23 typed tools over stdio so
   Cursor, Claude, or any MCP host can diagnose from a session file.
-- **Playwright verify** — name interactions in tests, capture sessions, and
+- **Playwright verify** — name interactions in tests, export sessions, and
   `compare_sessions` (or `react-lens ci`) before vs after a fix.
 - **Session files** — portable v1 JSON: export from the panel, analyze
   headlessly, hand to an agent. See [docs/sessions.md](docs/sessions.md).

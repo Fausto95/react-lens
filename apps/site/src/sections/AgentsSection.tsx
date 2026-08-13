@@ -19,14 +19,14 @@ const ROWS: Row[] = [
   },
   {
     title: "MCP",
-    body: "Stdio server over a session file. Same 22 typed tools as the in-panel agent — every answer cites a Lens ID.",
+    body: "Stdio server over a session file. Same 23 typed tools as the in-panel agent — answers cite Lens IDs.",
     cmd: "react-lens mcp --session session.json",
     href: `${DOCS}/mcp.md`,
     linkLabel: "MCP docs",
   },
   {
     title: "Verify in CI",
-    body: "Name interactions in Playwright, capture sessions, compare baseline vs actual — or let an agent call compare_sessions.",
+    body: "Name interactions in Playwright, export sessions, then compare baseline vs actual — or pass both payloads to compare_sessions.",
     cmd: "react-lens ci --baseline ./b --actual ./a",
     href: `${DOCS}/verify.md`,
     linkLabel: "Verify loop",

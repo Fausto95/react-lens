@@ -95,16 +95,8 @@ pre {
   inset: 0;
   z-index: -2;
   background:
-    radial-gradient(
-      900px 520px at 12% -8%,
-      rgba(var(--accent-rgb), 0.22),
-      transparent 60%
-    ),
-    radial-gradient(
-      700px 480px at 88% 18%,
-      rgba(var(--accent-rgb), 0.08),
-      transparent 55%
-    ),
+    radial-gradient(900px 520px at 12% -8%, rgba(var(--accent-rgb), 0.22), transparent 60%),
+    radial-gradient(700px 480px at 88% 18%, rgba(var(--accent-rgb), 0.08), transparent 55%),
     var(--bg);
   pointer-events: none;
 }
@@ -123,10 +115,14 @@ pre {
 }
 @keyframes grid-drift {
   from {
-    background-position: 0 0, 0 0;
+    background-position:
+      0 0,
+      0 0;
   }
   to {
-    background-position: 48px 48px, 48px 48px;
+    background-position:
+      48px 48px,
+      48px 48px;
   }
 }
 

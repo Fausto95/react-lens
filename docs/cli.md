@@ -34,10 +34,10 @@ pnpm react-lens mcp --session path/to/session.json
 LENS_SESSION=path/to/session.json pnpm react-lens mcp
 ```
 
-| Flag / env | Meaning |
-| ---------- | ------- |
-| `--session <file>` | Session JSON path |
-| `LENS_SESSION` | Same, when `--session` is omitted |
+| Flag / env         | Meaning                                               |
+| ------------------ | ----------------------------------------------------- |
+| `--session <file>` | Session JSON path                                     |
+| `LENS_SESSION`     | Same, when `--session` is omitted                     |
 | `--include-values` | Opt in to unredacted string previews (off by default) |
 
 ## `ci`
@@ -55,14 +55,15 @@ Update baselines after an intentional change:
 pnpm react-lens ci --update-baseline --baseline ./baselines --actual ./actual
 ```
 
-| Flag | Meaning |
-| ---- | ------- |
-| `--baseline <dir>` | Directory of baseline session files |
-| `--actual <dir>` | Directory of freshly captured sessions |
+| Flag                | Meaning                                     |
+| ------------------- | ------------------------------------------- |
+| `--baseline <dir>`  | Directory of baseline session files         |
+| `--actual <dir>`    | Directory of freshly captured sessions      |
 | `--update-baseline` | Copy actual → baseline instead of comparing |
 
-Pair with named interactions from [@reactlens/playwright](verify.md) so
-before/after files line up by `InteractionEvent.name`.
+Pair with named interactions from [@reactlens/playwright](verify.md). CI pairs
+files by **filename** inside `--baseline` / `--actual`; within a pair,
+`compareSessions` keys deltas by interaction label.
 
 ## Related
 

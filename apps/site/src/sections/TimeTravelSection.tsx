@@ -34,9 +34,9 @@ export function TimeTravelSection() {
       </div>
       <h2>Time travel through real state.</h2>
       <p className="sec-lead">
-        Rewind any render — not a highlight animation. Your app’s actual state moves with the
-        timeline: the page keeps the raw state each component had at every commit and puts it back
-        through React’s own dev-build override API. Nothing is serialized or replayed.
+        Rewind any render — not a highlight animation. In a development React build, the page keeps
+        the raw <code>useState</code> / <code>useReducer</code> / class state each component had at
+        every commit and puts it back through React’s own override API.
       </p>
 
       <div className="card">
@@ -46,7 +46,7 @@ export function TimeTravelSection() {
         <div className="card-hint">
           <span>
             ▶ Click a few times, then drag the timeline playhead left (or press <kbd>←</kbd>). Press{" "}
-            <kbd>L</kbd> to snap back to now.
+            <kbd>End</kbd> or <kbd>.</kbd> to go live again.
           </span>
         </div>
       </div>
@@ -64,9 +64,9 @@ export function TimeTravelSection() {
           <span className="tag orange">Stays put</span>
           <h3>What doesn't</h3>
           <p>
-            Refs, external stores, module state, uncontrolled inputs, server state, imperative DOM
-            writes. Same rules as Redux DevTools — and production builds have no override API, so
-            the toggle is disabled there.
+            Refs, module state, uncontrolled inputs, server state, imperative DOM writes, and most
+            external stores. Production builds have no override API, so the toggle is disabled
+            there.
           </p>
         </article>
       </div>

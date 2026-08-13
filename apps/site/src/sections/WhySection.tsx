@@ -42,11 +42,11 @@ export function WhySection() {
       <div className="sec-kicker">
         <span className="dot" /> WHY · cause, then fix
       </div>
-      <h2>Trace any value to its source.</h2>
+      <h2>Trace a render to its cause.</h2>
       <p className="sec-lead">
-        Cycle the context and select a <code>Consumer</code> in the panel: “Why this render” names
-        the exact cause and the fanout across every consumer — then source maps and Doctor findings
-        stamp the fix at <code>file:line</code>. Receipts, not guesses.
+        Cycle the context and select a <code>Consumer</code> in the panel: the cause chain names the
+        exact reason and the fanout across every consumer — then source maps and Doctor findings
+        land on <code>file:line</code>. Receipts, not guesses.
       </p>
 
       <div className="card">
@@ -72,7 +72,7 @@ export function WhySection() {
           <p>
             <kbd>⌘I</kbd> opens an assistant that answers through typed tools over the live trace
             (OpenAI / Anthropic / Z.AI — your key stays in the browser). Claims cite clickable Lens
-            IDs, and fixes are proposed against your real source, stamped <code>file:line</code>.
+            IDs; the agent can propose fixes citing <code>file:line</code> against your source.
           </p>
         </article>
       </div>

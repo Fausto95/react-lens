@@ -11,7 +11,7 @@ const FEATURES: Feature[] = [
   },
   {
     title: "Bidirectional selection",
-    body: "Pick an element on the page (⌘\\) to select it in the tree; select anything in the panel and the page scrolls to it and outlines it — off-screen only.",
+    body: "Pick an element on the page (⌘\\) to select it in the tree; selecting in the panel outlines it and scrolls off-screen targets into view.",
   },
   {
     title: "⌘K search",
@@ -19,7 +19,7 @@ const FEATURES: Feature[] = [
   },
   {
     title: "Replay with fix",
-    body: "Preview the tree without wasted renders before you change code; Fix with AI proposes a patch against real source at file:line.",
+    body: "Preview the panel tree with wasted renders hidden. Fix with AI opens the BYOK agent on a Doctor finding — it proposes a patch; it does not write to disk.",
   },
   {
     title: "Waste detection",
@@ -27,7 +27,7 @@ const FEATURES: Feature[] = [
   },
   {
     title: "AST Doctor",
-    body: "oxc-parser static analysis fused with runtime evidence, scoped to a component's definition span, so findings land on file:line.",
+    body: "Static analysis fused with runtime evidence, scoped to a component's definition span. OXC when available; the in-panel Doctor falls back to regex.",
   },
   {
     title: "Effect debugger",
@@ -35,7 +35,7 @@ const FEATURES: Feature[] = [
   },
   {
     title: "Suspense & RSC aware",
-    body: "Suspense boundaries, server-component roles, and server actions are detected and badged in the tree and inspector — server to pixel.",
+    body: "Suspense boundaries, server-component roles, and server actions are detected from client fiber heuristics and badged in the tree and inspector.",
   },
   {
     title: "Sessions",
@@ -47,11 +47,11 @@ const FEATURES: Feature[] = [
   },
   {
     title: "Named-interaction CI",
-    body: "markInteraction + Playwright helpers + compare_sessions / react-lens ci to catch perf regressions by interaction name.",
+    body: "markInteraction + Playwright helpers to name a window; export sessions, then compare_sessions / react-lens ci on matching files.",
   },
   {
     title: "React 19 + Compiler",
-    body: "Compiled components are badged ◆ and compiler bailouts are first-class evidence — recommendations stay evidence-backed.",
+    body: "Compiled components are badged ✓ and compiler bailouts are first-class evidence — recommendations stay evidence-backed.",
   },
 ];
 

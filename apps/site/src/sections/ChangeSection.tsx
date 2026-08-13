@@ -31,11 +31,11 @@ export function ChangeSection() {
       <div className="sec-kicker">
         <span className="dot" /> DIFF · what changed
       </div>
-      <h2>Bisect the commit that broke perf.</h2>
+      <h2>Compare any two moments.</h2>
       <p className="sec-lead">
         One universal diff over values, props, state, and DOM — then A/B any two Lens commits for a
-        whole-app index of what ended up different. Simulate the fix with live edit or Replay with
-        fix before you ship the change.
+        whole-app index of what ended up different. In a development build, live-edit primitives in
+        the inspector; Replay with fix previews the tree with wasted renders hidden.
       </p>
 
       <div className="card">
@@ -44,7 +44,7 @@ export function ChangeSection() {
             <code> doesn't become a sibling column. */}
         <div className="card-hint">
           <span>
-            ▶ Edit <code>count</code> in the inspector — the page reacts.
+            ▶ Edit <code>count</code> in the inspector — the page reacts (dev builds).
           </span>
         </div>
       </div>
@@ -63,8 +63,8 @@ export function ChangeSection() {
           <h3>What two moments apart did</h3>
           <p>
             Mark <b>A</b> and <b>B</b> on the timeline (<kbd>[</kbd> / <kbd>]</kbd>) — a whole-app
-            index that reads <code>1 changed · 881 unchanged</code>. Same idea in CI: named
-            interactions and <code>react-lens ci</code> bisect which Lens commit broke perf.
+            index that reads <code>1 changed · 881 unchanged</code>. In CI, export matching session
+            files and run <code>react-lens ci</code> to catch interaction regressions.
           </p>
         </article>
       </div>
