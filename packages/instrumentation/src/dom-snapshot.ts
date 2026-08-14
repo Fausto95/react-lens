@@ -10,78 +10,27 @@ const MAX_TEXT = 120;
  * details, so visual history works regardless of styling technique.
  */
 const VISUAL_STYLE_PROPERTIES = [
-  "display",
-  "visibility",
-  "opacity",
-  "position",
-  "z-index",
-  "overflow",
-  "overflow-x",
-  "overflow-y",
-  "box-sizing",
-  "width",
-  "height",
-  "min-width",
-  "min-height",
-  "max-width",
-  "max-height",
-  "margin-top",
-  "margin-right",
-  "margin-bottom",
-  "margin-left",
-  "padding-top",
-  "padding-right",
-  "padding-bottom",
-  "padding-left",
-  "border-top-width",
-  "border-right-width",
-  "border-bottom-width",
-  "border-left-width",
-  "border-top-color",
-  "border-right-color",
-  "border-bottom-color",
-  "border-left-color",
-  "border-radius",
-  "background-color",
-  "background-image",
-  "color",
-  "font-family",
-  "font-size",
-  "font-weight",
-  "line-height",
-  "letter-spacing",
-  "text-align",
-  "white-space",
-  "flex-direction",
-  "flex-wrap",
-  "flex-grow",
-  "flex-shrink",
-  "flex-basis",
-  "align-items",
-  "align-content",
-  "align-self",
-  "justify-content",
-  "gap",
-  "row-gap",
-  "column-gap",
-  "grid-template-columns",
-  "grid-template-rows",
-  "grid-column",
-  "grid-row",
-  "transform",
-  "transform-origin",
-  "filter",
-  "box-shadow",
-  "clip-path",
-  "object-fit",
-  "object-position",
+  "display", "visibility", "opacity", "position", "z-index",
+  "overflow", "overflow-x", "overflow-y", "box-sizing",
+  "width", "height", "min-width", "min-height", "max-width", "max-height",
+  "margin-top", "margin-right", "margin-bottom", "margin-left",
+  "padding-top", "padding-right", "padding-bottom", "padding-left",
+  "border-top-width", "border-right-width", "border-bottom-width", "border-left-width",
+  "border-top-color", "border-right-color", "border-bottom-color", "border-left-color",
+  "border-radius", "background-color", "background-image", "color",
+  "font-family", "font-size", "font-weight", "line-height", "letter-spacing",
+  "text-align", "white-space", "flex-direction", "flex-wrap", "flex-grow",
+  "flex-shrink", "flex-basis", "align-items", "align-content", "align-self",
+  "justify-content", "gap", "row-gap", "column-gap", "grid-template-columns",
+  "grid-template-rows", "grid-column", "grid-row", "transform", "transform-origin",
+  "filter", "box-shadow", "clip-path", "object-fit", "object-position",
 ] as const;
 
 export interface SnapshotDomOptions {
   /** Default 6 — the per-render budget. Commit-wide captures pass more. */
   maxDepth?: number;
   maxChildren?: number;
-  /** Capture browser-resolved style + layout. Intended for throttled commit snapshots only. */
+  /** Capture browser-resolved style + layout. Defaults on for budgeted commit captures. */
   captureVisuals?: boolean;
 }
 
@@ -90,7 +39,9 @@ export function snapshotDom(node: Node, options?: SnapshotDomOptions): DOMSnapsh
   const limits = {
     maxDepth: options?.maxDepth ?? MAX_DEPTH,
     maxChildren: options?.maxChildren ?? MAX_CHILDREN,
-    captureVisuals: options?.captureVisuals ?? false,
+    // Instrumentation passes an explicit budget only for its throttled whole-page
+    // commit capture. Per-render snapshotDom(first) stays structural and cheap.
+    captureVisuals: options?.captureVisuals ?? options !== undefined,
   };
   const root = snapshotNode(node, 0, limits);
   if (!root) return undefined;
