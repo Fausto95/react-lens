@@ -3,7 +3,7 @@ import type { RenderId, ComponentId } from "@reactlens/protocol";
 import type { LaneKey } from "../../laneFilter.js";
 import type { Clip, Lane } from "../model/lanes.js";
 import type { LayoutRow, LaneLayout } from "../model/rows.js";
-import { LANE_PAD, MIN_HIT_TARGET_PX, ROW_H, RULER_H } from "./metrics.js";
+import { LANE_PAD, MIN_HIT_TARGET_PX, ROW_H, RULER_H, VIRTUAL_ROW_H } from "./metrics.js";
 import { computeClipRects } from "./clipRects.js";
 import { hitTestClipRects } from "./hitTest.js";
 
@@ -31,7 +31,7 @@ function layoutWith(
 ): LaneLayout {
   let y = RULER_H;
   const built = rows.map((r) => {
-    const h = r.mode === "wave" ? 44 : LANE_PAD + (r.depth ?? 1) * ROW_H;
+    const h = r.h ?? (r.mode === "wave" ? 44 : LANE_PAD + (r.depth ?? 1) * ROW_H);
     const lane: Lane = {
       key: "t:Comp" as LaneKey,
       name: "Comp",
@@ -119,5 +119,19 @@ describe("computeClipRects", () => {
       clipRects.values(),
     );
     expect(hit?.clip.renderId).toBe(11);
+  });
+
+  it("keeps all 13 overlap rows distinct inside a fixed virtual lane", () => {
+    const clips = Array.from({ length: 13 }, (_, row) => clip(100 + row, 50, 80, row));
+    const layout = layoutWith([{ mode: "stack", clips, depth: 13, h: VIRTUAL_ROW_H }]);
+    const { clipRects } = computeClipRects(layout, proj);
+    const rects = clips.map((c) => clipRects.get(String(c.renderId))!);
+    const ys = rects.map((r) => r.visual.y);
+
+    expect(new Set(ys).size).toBe(13);
+    expect(rects.every((r) => r.visual.height >= 1)).toBe(true);
+    expect(Math.max(...rects.map((r) => r.visual.y + r.visual.height))).toBeLessThanOrEqual(
+      RULER_H + VIRTUAL_ROW_H,
+    );
   });
 });
