@@ -1,3 +1,4 @@
+import "./timelinePro.css";
 import type { ClipCauseColor } from "../model/lanes.js";
 
 /** Colors read from `.rl-redesign` CSS tokens — canvas cannot inherit theme by itself. */
@@ -81,7 +82,6 @@ export function causeCssVar(cause: ClipCauseColor): string {
   return CAUSE_CSS[cause];
 }
 
-/** `#rrggbb` → `rgba(r,g,b,a)` for canvas fills. */
 export function hexAlpha(hex: string, alpha: number): string {
   const h = hex.replace("#", "");
   if (h.length !== 6) return hex;
@@ -94,12 +94,7 @@ export function hexAlpha(hex: string, alpha: number): string {
 export function clipPaint(
   theme: TimelineTheme,
   col: string,
-): {
-  fillTop: string;
-  fillBottom: string;
-  stroke: string;
-  label: string;
-} {
+): { fillTop: string; fillBottom: string; stroke: string; label: string } {
   if (theme.light) {
     return {
       fillTop: hexAlpha(col, 0.58),
