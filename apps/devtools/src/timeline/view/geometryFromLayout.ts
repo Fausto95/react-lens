@@ -1,4 +1,5 @@
 import type { LaneLayout } from "../model/rows.js";
+import { packIntervals } from "../model/stacking.js";
 import type { TimelineGeometryPayload } from "../timelineRendererClient.js";
 import { CauseCode, RenderFlags, type TimelineQueryResult } from "@reactlens/trace-engine";
 
@@ -10,6 +11,29 @@ const CAUSE_TO_CODE: Record<string, number> = {
   mount: CauseCode.mount,
   other: CauseCode.other,
 };
+
+function repackStackRows(
+  rowIndex: Uint32Array,
+  x0: Float64Array,
+  x1: Float64Array,
+  stackRow: Uint16Array,
+  count: number,
+): void {
+  const byRow = new Map<number, number[]>();
+  for (let i = 0; i < count; i++) {
+    const row = rowIndex[i]!;
+    const indices = byRow.get(row);
+    if (indices) indices.push(i);
+    else byRow.set(row, [i]);
+  }
+
+  for (const indices of byRow.values()) {
+    const packed = packIntervals(
+      indices.map((i) => ({ key: i, start: x0[i]!, end: x1[i]! })),
+    );
+    for (const i of indices) stackRow[i] = packed.slots.get(i) ?? 0;
+  }
+}
 
 /** Build transferable column geometry from a viewport layout (cap ~10k). */
 export function geometryFromLayout(layout: LaneLayout, cap = 10_000): TimelineGeometryPayload {
@@ -46,13 +70,14 @@ export function geometryFromLayout(layout: LaneLayout, cap = 10_000): TimelineGe
       componentId[k] = c.componentId as number;
       cause[k] = CAUSE_TO_CODE[c.cause] ?? CauseCode.other;
       flags[k] = c.wasted ? RenderFlags.Wasted : RenderFlags.None;
-      stackRow[k] = c.row;
       aggregate[k] = c.aggregate ? 1 : 0;
       renderCount[k] = c.renderCount ?? 1;
       wastedCount[k] = c.wastedCount ?? (c.wasted ? 1 : 0);
       k++;
     }
   }
+
+  repackStackRows(rowIndex, x0, x1, stackRow, k);
 
   return {
     count: k,
@@ -102,11 +127,13 @@ export function geometryFromQueryResult(result: TimelineQueryResult): TimelineGe
     componentId.set(cols.componentId.subarray(0, count));
     cause.set(cols.cause.subarray(0, count));
     flags.set(cols.flags.subarray(0, count));
-    stackRow.set(cols.stackRow.subarray(0, count));
     renderCount.fill(1);
     for (let i = 0; i < count; i++) {
       wastedCount[i] = (flags[i]! & RenderFlags.Wasted) !== 0 ? 1 : 0;
     }
+    // Never trust the persisted stackRow for visual layout. Repartition the
+    // viewport intervals so overlapping events cannot share a visual row.
+    repackStackRows(rowIndex, x0, x1, stackRow, count);
   } else if (result.lod === "buckets" && result.buckets) {
     const buckets = result.buckets;
     rowIndex.set(buckets.rowIndex.subarray(0, count));
