@@ -192,6 +192,7 @@ export function useTimeline({
   });
 
   return {
+    store,
     state,
     dispatch,
     gapProgRef,
