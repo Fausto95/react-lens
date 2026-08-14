@@ -26,7 +26,9 @@ function clip(id: number, t0: number, t1: number, row = 0, self = 1): Clip {
   };
 }
 
-function layoutWith(rows: Array<Partial<LayoutRow> & Pick<LayoutRow, "clips" | "mode">>): LaneLayout {
+function layoutWith(
+  rows: Array<Partial<LayoutRow> & Pick<LayoutRow, "clips" | "mode">>,
+): LaneLayout {
   let y = RULER_H;
   const built = rows.map((r) => {
     const h = r.mode === "wave" ? 44 : LANE_PAD + (r.depth ?? 1) * ROW_H;
@@ -54,7 +56,12 @@ function layoutWith(rows: Array<Partial<LayoutRow> & Pick<LayoutRow, "clips" | "
     y += h;
     return row;
   });
-  return { rows: built, totalH: y, quietLanes: [], quietSummary: { lanes: 0, renders: 0, selfMs: 0 } };
+  return {
+    rows: built,
+    totalH: y,
+    quietLanes: [],
+    quietSummary: { lanes: 0, renders: 0, selfMs: 0 },
+  };
 }
 
 const proj = {

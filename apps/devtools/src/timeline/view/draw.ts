@@ -71,7 +71,10 @@ function visibleAxisSegs(axis: TimeAxis, view: ViewWindow): TimeAxis["segs"] {
   return out;
 }
 
-function geometryRowRanges(layout: LaneLayout, geo: TimelineGeometryPayload): Array<[number, number]> {
+function geometryRowRanges(
+  layout: LaneLayout,
+  geo: TimelineGeometryPayload,
+): Array<[number, number]> {
   const ranges: Array<[number, number]> = layout.rows.map(() => [0, 0]);
   const seen = new Uint8Array(layout.rows.length);
   for (let i = 0; i < geo.count; i++) {
@@ -87,7 +90,11 @@ function geometryRowRanges(layout: LaneLayout, geo: TimelineGeometryPayload): Ar
   return ranges;
 }
 
-function clipFromGeometry(layout: LaneLayout, geo: TimelineGeometryPayload, i: number): Clip | null {
+function clipFromGeometry(
+  layout: LaneLayout,
+  geo: TimelineGeometryPayload,
+  i: number,
+): Clip | null {
   const row = layout.rows[geo.rowIndex[i]!];
   if (!row) return null;
   const t0 = geo.x0[i]!;
@@ -133,9 +140,14 @@ function clipRectsFromGeometry(
         clipRects.set(String(clip.renderId), buildWaveRect(clip, centerX, row.y + row.h / 2));
       } else {
         const clipH = ROW_H - 6;
-        const stackRow = detailed ? (clip.row ?? 0) % Math.max(1, Math.floor((row.h - LANE_PAD) / ROW_H)) : 0;
+        const stackRow = detailed
+          ? (clip.row ?? 0) % Math.max(1, Math.floor((row.h - LANE_PAD) / ROW_H))
+          : 0;
         const y = row.y + LANE_PAD / 2 + stackRow * ROW_H + 1.5;
-        clipRects.set(String(clip.renderId), buildClipRect(clip, x0, y, clipH, Math.max(0, x1 - x0)));
+        clipRects.set(
+          String(clip.renderId),
+          buildClipRect(clip, x0, y, clipH, Math.max(0, x1 - x0)),
+        );
       }
       snapEdges.push(clip.t0, clip.t1);
     }
@@ -144,7 +156,10 @@ function clipRectsFromGeometry(
 }
 
 export function ensureHatchPattern(ctx: CanvasRenderingContext2D): CanvasPattern | null {
-  const p = typeof OffscreenCanvas !== "undefined" ? new OffscreenCanvas(6, 6) : document.createElement("canvas");
+  const p =
+    typeof OffscreenCanvas !== "undefined"
+      ? new OffscreenCanvas(6, 6)
+      : document.createElement("canvas");
   p.width = p.height = 6;
   const pc = p.getContext("2d");
   if (!pc) return null;
@@ -157,7 +172,14 @@ export function ensureHatchPattern(ctx: CanvasRenderingContext2D): CanvasPattern
   return ctx.createPattern(p as CanvasImageSource, "repeat");
 }
 
-function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number): void {
+function roundRect(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  r: number,
+): void {
   ctx.beginPath();
   if (typeof ctx.roundRect === "function") ctx.roundRect(x, y, w, h, r);
   else ctx.rect(x, y, w, h);
@@ -207,7 +229,11 @@ function drawClipFill(
   ctx.restore();
 }
 
-function drawSelectionRing(ctx: CanvasRenderingContext2D, rect: ClipRect, theme: TimelineTheme): void {
+function drawSelectionRing(
+  ctx: CanvasRenderingContext2D,
+  rect: ClipRect,
+  theme: TimelineTheme,
+): void {
   const r = rect.visual;
   ctx.save();
   ctx.shadowColor = hexAlpha(theme.accent, 0.6);
@@ -243,7 +269,7 @@ function drawDensityRow(
     const x = proj.wToX(clip.t0);
     const bi = Math.floor((x - proj.nameW) / binW);
     if (bi < 0 || bi >= n) continue;
-    bins[bi] += Math.max(1, clip.renderCount ?? 1);
+    bins[bi] = (bins[bi] ?? 0) + Math.max(1, clip.renderCount ?? 1);
     max = Math.max(max, bins[bi]!);
   }
   for (let i = 0; i < n; i++) {
@@ -255,7 +281,10 @@ function drawDensityRow(
   }
 }
 
-export function drawBase(args: DrawBaseArgs): { clipRects: Map<string, ClipRect>; snapEdges: number[] } {
+export function drawBase(args: DrawBaseArgs): {
+  clipRects: Map<string, ClipRect>;
+  snapEdges: number[];
+} {
   const { ctx, axis, view, layout, geometry, region, markers, proj, tOrigin, theme } = args;
   const viewMode = args.viewMode ?? "events";
   const H = layout.paintH ?? layout.totalH;
@@ -283,11 +312,19 @@ export function drawBase(args: DrawBaseArgs): { clipRects: Map<string, ClipRect>
     ctx.fillStyle = hexAlpha(theme.accent, 0.055);
     ctx.fillRect(x0, 0, x1 - x0, H);
     ctx.strokeStyle = hexAlpha(theme.accent, 0.4);
-    ctx.beginPath(); ctx.moveTo(x0, 0); ctx.lineTo(x0, H); ctx.moveTo(x1, 0); ctx.lineTo(x1, H); ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(x0, 0);
+    ctx.lineTo(x0, H);
+    ctx.moveTo(x1, 0);
+    ctx.lineTo(x1, H);
+    ctx.stroke();
   }
 
   ctx.strokeStyle = hexAlpha(theme.lineStrong, 0.7);
-  ctx.beginPath(); ctx.moveTo(0, RULER_H - 0.5); ctx.lineTo(W, RULER_H - 0.5); ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(0, RULER_H - 0.5);
+  ctx.lineTo(W, RULER_H - 0.5);
+  ctx.stroke();
 
   let lastLabelX = -Infinity;
   for (const s of segs) {
@@ -299,7 +336,10 @@ export function drawBase(args: DrawBaseArgs): { clipRects: Map<string, ClipRect>
       if (x < NW || x > W) continue;
       const major = Math.abs(t / step - Math.round(t / step)) < 1e-6;
       ctx.strokeStyle = major ? hexAlpha(theme.lineStrong, 0.8) : hexAlpha(theme.line, 0.7);
-      ctx.beginPath(); ctx.moveTo(Math.round(x) + 0.5, RULER_H - (major ? 10 : 5)); ctx.lineTo(Math.round(x) + 0.5, H); ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(Math.round(x) + 0.5, RULER_H - (major ? 10 : 5));
+      ctx.lineTo(Math.round(x) + 0.5, H);
+      ctx.stroke();
       if (major && x - lastLabelX > 54) {
         ctx.fillStyle = theme.text3;
         ctx.font = `9.5px ${theme.mono}`;
@@ -319,13 +359,21 @@ export function drawBase(args: DrawBaseArgs): { clipRects: Map<string, ClipRect>
       const x = wToX(m.t);
       if (x < NW || x > W) continue;
       ctx.fillStyle = m.warn ? theme.warn : theme.accent;
-      ctx.beginPath(); ctx.moveTo(x, 5); ctx.lineTo(x + 4, 9); ctx.lineTo(x, 13); ctx.lineTo(x - 4, 9); ctx.closePath(); ctx.fill();
+      ctx.beginPath();
+      ctx.moveTo(x, 5);
+      ctx.lineTo(x + 4, 9);
+      ctx.lineTo(x, 13);
+      ctx.lineTo(x - 4, 9);
+      ctx.closePath();
+      ctx.fill();
       if (semantic === "session") continue;
       ctx.font = `9px ${theme.mono}`;
       const width = ctx.measureText(m.label).width;
       const left = x + 8;
       const right = left + width;
-      const row = markerRows.findIndex((spans) => spans.every((r) => right + 8 <= r.left || left >= r.right + 8));
+      const row = markerRows.findIndex((spans) =>
+        spans.every((r) => right + 8 <= r.left || left >= r.right + 8),
+      );
       if (row >= 0) {
         markerRows[row]!.push({ left, right });
         ctx.fillStyle = m.warn ? theme.warn : theme.text3;
@@ -334,15 +382,20 @@ export function drawBase(args: DrawBaseArgs): { clipRects: Map<string, ClipRect>
     }
   }
 
-  const { clipRects, snapEdges } = geometry && geoRanges
-    ? clipRectsFromGeometry(layout, geometry, geoRanges, proj, detailed)
-    : computeClipRects(layout, proj);
+  const { clipRects, snapEdges } =
+    geometry && geoRanges
+      ? clipRectsFromGeometry(layout, geometry, geoRanges, proj, detailed)
+      : computeClipRects(layout, proj);
 
   for (const row of layout.rows) {
     ctx.strokeStyle = hexAlpha(theme.line, 0.55);
-    ctx.beginPath(); ctx.moveTo(0, row.y + row.h - 0.5); ctx.lineTo(W, row.y + row.h - 0.5); ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(0, row.y + row.h - 0.5);
+    ctx.lineTo(W, row.y + row.h - 0.5);
+    ctx.stroke();
 
-    const useDensity = viewMode === "density" || semantic === "session" || semantic === "interactions";
+    const useDensity =
+      viewMode === "density" || semantic === "session" || semantic === "interactions";
     if (useDensity) {
       drawDensityRow(ctx, row.clips, row, proj, theme);
       continue;
@@ -354,16 +407,25 @@ export function drawBase(args: DrawBaseArgs): { clipRects: Map<string, ClipRect>
       if (rect.visual.x + rect.visual.width < NW || rect.visual.x > W) continue;
       drawClipFill(ctx, rect, theme, args.pattern, viewMode === "cost");
       const text = labelForClip(rect.visual.width, rect.clip);
-      if (!text || semantic === "interactions") continue;
+      if (!text) continue;
       ctx.font = `600 9px ${theme.mono}`;
       const tw = ctx.measureText(text).width;
       if (tw > rect.visual.width - 10) continue;
       const left = rect.visual.x + 5;
       const right = left + tw;
       if (!reserveLabelSpan(labelSpans, left, right)) continue;
-      ctx.fillStyle = rect.clip.wasted ? theme.warn : clipPaint(theme, causeColor(theme, clipCauseColor(rect.clip.cause))).label;
+      ctx.fillStyle = rect.clip.wasted
+        ? theme.warn
+        : clipPaint(theme, causeColor(theme, clipCauseColor(rect.clip.cause))).label;
       ctx.save();
-      ctx.beginPath(); ctx.rect(rect.visual.x + 3, rect.visual.y, Math.max(0, rect.visual.width - 6), rect.visual.height); ctx.clip();
+      ctx.beginPath();
+      ctx.rect(
+        rect.visual.x + 3,
+        rect.visual.y,
+        Math.max(0, rect.visual.width - 6),
+        rect.visual.height,
+      );
+      ctx.clip();
       ctx.fillText(text, left, rect.visual.y + rect.visual.height / 2 + 3);
       ctx.restore();
     }
@@ -372,7 +434,10 @@ export function drawBase(args: DrawBaseArgs): { clipRects: Map<string, ClipRect>
   ctx.fillStyle = theme.bg;
   ctx.fillRect(0, 0, NW, H);
   ctx.strokeStyle = hexAlpha(theme.lineStrong, 0.75);
-  ctx.beginPath(); ctx.moveTo(NW - 0.5, 0); ctx.lineTo(NW - 0.5, H); ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(NW - 0.5, 0);
+  ctx.lineTo(NW - 0.5, H);
+  ctx.stroke();
 
   return { clipRects, snapEdges };
 }
@@ -396,7 +461,22 @@ export interface DrawOverlayArgs {
 }
 
 export function drawOverlay(args: DrawOverlayArgs): void {
-  const { ctx, stageW: W, totalH: H, nameW: NW, clipRects, edges, selectedRender, marquee, hoverId, ghostT, playheadT, wToX, dragging, theme } = args;
+  const {
+    ctx,
+    stageW: W,
+    totalH: H,
+    nameW: NW,
+    clipRects,
+    edges,
+    selectedRender,
+    marquee,
+    hoverId,
+    ghostT,
+    playheadT,
+    wToX,
+    dragging,
+    theme,
+  } = args;
   const viewMode = args.viewMode ?? "events";
   ctx.clearRect(0, 0, W, H);
 
@@ -404,12 +484,25 @@ export function drawOverlay(args: DrawOverlayArgs): void {
   const shouldDrawArrows = viewMode === "causality" || (viewMode === "events" && sel != null);
   if (shouldDrawArrows) {
     const edgeList = edges
-      .filter((e) => !sel || viewMode === "causality" || String(e.from) === sel || String(e.to) === sel)
+      .filter(
+        (e) => !sel || viewMode === "causality" || String(e.from) === sel || String(e.to) === sel,
+      )
       .slice(0, 100)
       .map((e) => ({ from: String(e.from), to: String(e.to), causeKey: clipCauseColor(e.cause) }));
-    const ports = new Map([...clipRects.entries()].map(([id, r]) => [id, {
-      x0: r.x0, x1: r.x1, y0: r.y0, y1: r.y1, t0: r.clip.t0, wave: r.wave, laneKey: String(r.clip.laneKey),
-    }]));
+    const ports = new Map(
+      [...clipRects.entries()].map(([id, r]) => [
+        id,
+        {
+          x0: r.x0,
+          x1: r.x1,
+          y0: r.y0,
+          y1: r.y1,
+          t0: r.clip.t0,
+          wave: r.wave,
+          laneKey: String(r.clip.laneKey),
+        },
+      ]),
+    );
     for (const p of planCausalArrows(edgeList, ports)) {
       if (!arrowSpanVisible(p.from, p.to, NW, W)) continue;
       const route = routeCausalArrow(p.from, p.to, p.slot, p.slotCount);
@@ -458,7 +551,10 @@ export function drawOverlay(args: DrawOverlayArgs): void {
     const gx = wToX(ghostT);
     if (gx > NW && gx < W) {
       ctx.strokeStyle = hexAlpha(theme.accent, 0.18);
-      ctx.beginPath(); ctx.moveTo(Math.round(gx) + 0.5, 0); ctx.lineTo(Math.round(gx) + 0.5, H); ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(Math.round(gx) + 0.5, 0);
+      ctx.lineTo(Math.round(gx) + 0.5, H);
+      ctx.stroke();
     }
   }
 
@@ -466,8 +562,16 @@ export function drawOverlay(args: DrawOverlayArgs): void {
   if (x >= NW && x <= W) {
     ctx.strokeStyle = theme.accent;
     ctx.lineWidth = 1.25;
-    ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(x, 0);
+    ctx.lineTo(x, H);
+    ctx.stroke();
     ctx.fillStyle = theme.accent;
-    ctx.beginPath(); ctx.moveTo(x - 5, 0); ctx.lineTo(x + 5, 0); ctx.lineTo(x, 7); ctx.closePath(); ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(x - 5, 0);
+    ctx.lineTo(x + 5, 0);
+    ctx.lineTo(x, 7);
+    ctx.closePath();
+    ctx.fill();
   }
 }

@@ -1,5 +1,8 @@
 name: CI
 
+# Unit (Vitest) + Playwright e2e against apps/e2e-fixture. Runs on every PR and
+# on pushes to main so release workflows can assume the suite is green.
+
 on:
   push:
     branches: [main]
@@ -10,7 +13,7 @@ concurrency:
   cancel-in-progress: true
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   unit:
@@ -19,8 +22,6 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
-        with:
-          ref: ${{ github.head_ref }}
 
       - uses: voidzero-dev/setup-vp@v1.17.0
         with:
@@ -29,46 +30,18 @@ jobs:
 
       - run: vp install
 
-      - name: Fix timeline lint issues and format
-        run: |
-          python - <<'PY'
-          from pathlib import Path
+      - run: vp check
 
-          p = Path('apps/devtools/src/timeline/view/Timeline.tsx')
-          s = p.read_text()
-          s = s.replace('import { useCallback, useEffect, useMemo, useRef, useState } from "react";', 'import { useCallback, useEffect, useRef, useState } from "react";')
-          s = s.replace('''  const theme = useMemo(\n    () => readTimelineTheme(rootRef.current?.closest(".rl-redesign") ?? null),\n    [size.width, viewMode],\n  );''', '''  const theme = readTimelineTheme(rootRef.current?.closest(".rl-redesign") ?? null);''')
-          p.write_text(s)
-
-          p = Path('apps/devtools/src/timeline/view/draw.ts')
-          s = p.read_text()
-          s = s.replace('bins[bi] += Math.max(1, clip.renderCount ?? 1);', 'bins[bi] = (bins[bi] ?? 0) + Math.max(1, clip.renderCount ?? 1);')
-          s = s.replace('if (!text || semantic === "interactions") continue;', 'if (!text) continue;')
-          p.write_text(s)
-
-          p = Path('apps/devtools/src/useTreeWindow.ts')
-          s = p.read_text()
-          s = s.replace('''  return useMemo(() => {\n    const include =''', '''  return useMemo(() => {\n    void args.version;\n    const include =''')
-          p.write_text(s)
-          PY
-
-          vp check --fix
-          vp check
-
-      - name: Commit canonical formatting
-        run: |
-          git fetch origin more-perf --depth=1
-          git show origin/more-perf:.github/workflows/ci.yml > .github/workflows/ci.yml
-          git config user.name "react-lens-ci"
-          git config user.email "actions@users.noreply.github.com"
-          git add -A
-          if ! git diff --cached --quiet; then
-            git commit -m "chore(timeline): apply canonical formatting"
-            git push origin HEAD:${{ github.head_ref }}
-          fi
-
+      # Every file must stay compiled: one `"use no memo"` silently drops a
+      # whole file, and the panel's files are the expensive ones.
+      # Use `vp run` — setup-vp does not put pnpm on PATH.
       - run: vp run check:compiled
+
+      # Bundle must carry Compiler output (memo_cache_sentinel), not just
+      # pass the directive ban — a misconfigured sources filter would otherwise
+      # ship unoptimized panel code silently. Runs on every PR + main push.
       - run: vp run check:compiled:build
+
       - run: vp test run
 
   e2e:
@@ -85,6 +58,8 @@ jobs:
 
       - run: vp install
 
+      # Chromium only — matches the default Playwright project and keeps the
+      # download small. --with-deps installs the OS libraries Ubuntu needs.
       - name: Install Playwright Chromium
         run: vp exec playwright install --with-deps chromium
 

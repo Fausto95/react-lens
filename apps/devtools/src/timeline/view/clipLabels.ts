@@ -1,7 +1,15 @@
 import type { Clip } from "../model/lanes.js";
-import { CLIP_CAUSE_LABEL_PX, CLIP_FULL_LABEL_PX, CLIP_LABEL_GAP_PX, CLIP_SHORT_LABEL_PX } from "./metrics.js";
+import {
+  CLIP_CAUSE_LABEL_PX,
+  CLIP_FULL_LABEL_PX,
+  CLIP_LABEL_GAP_PX,
+  CLIP_SHORT_LABEL_PX,
+} from "./metrics.js";
 
-export interface LabelSpan { left: number; right: number }
+export interface LabelSpan {
+  left: number;
+  right: number;
+}
 
 export function labelForClip(width: number, clip: Clip): string | null {
   if (width < CLIP_SHORT_LABEL_PX) return null;
@@ -13,7 +21,8 @@ export function labelForClip(width: number, clip: Clip): string | null {
 
 export function reserveLabelSpan(occupied: LabelSpan[], left: number, right: number): boolean {
   for (const span of occupied) {
-    if (right + CLIP_LABEL_GAP_PX > span.left && left - CLIP_LABEL_GAP_PX < span.right) return false;
+    if (right + CLIP_LABEL_GAP_PX > span.left && left - CLIP_LABEL_GAP_PX < span.right)
+      return false;
   }
   occupied.push({ left, right });
   return true;

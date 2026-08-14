@@ -19,6 +19,7 @@ export function useTreeWindow(
 ): { rows: VisibleTreeRow[]; totalRows: number; totalHeight: number } {
   const rowHeight = args.rowHeight ?? 26;
   return useMemo(() => {
+    void args.version;
     const include =
       args.projection === "changed"
         ? (index: number) => (store.flatTree.flags[index]! & TreeFlags.ChangedLast) !== 0
@@ -32,15 +33,7 @@ export function useTreeWindow(
       rowHeight,
       include,
     });
-  }, [
-    store,
-    args.version,
-    args.expanded,
-    args.scrollTop,
-    args.viewH,
-    rowHeight,
-    args.projection,
-  ]);
+  }, [store, args.version, args.expanded, args.scrollTop, args.viewH, rowHeight, args.projection]);
 }
 
 /** Local scroll state helper for tree panes. */

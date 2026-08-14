@@ -61,7 +61,9 @@ export function createTimelineRenderer(canvas: HTMLCanvasElement): TimelineRende
 
   let worker: Worker;
   try {
-    worker = new Worker(new URL("./timelineRendererWorker.ts", import.meta.url), { type: "module" });
+    worker = new Worker(new URL("./timelineRendererWorker.ts", import.meta.url), {
+      type: "module",
+    });
   } catch {
     return null;
   }

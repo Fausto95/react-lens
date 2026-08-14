@@ -2,9 +2,20 @@
 import type { Clip } from "../model/lanes.js";
 import type { LaneLayout } from "../model/rows.js";
 import { WAVE_MIN_MS } from "../model/wave.js";
-import { LANE_PAD, MIN_HIT_TARGET_PX, MIN_VISUAL_EVENT_PX, ROW_H, TICK_THRESHOLD_PX } from "./metrics.js";
+import {
+  LANE_PAD,
+  MIN_HIT_TARGET_PX,
+  MIN_VISUAL_EVENT_PX,
+  ROW_H,
+  TICK_THRESHOLD_PX,
+} from "./metrics.js";
 
-export interface RectGeometry { x: number; y: number; width: number; height: number }
+export interface RectGeometry {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
 
 export interface ClipRect {
   x0: number;
@@ -18,7 +29,9 @@ export interface ClipRect {
   representation: "tick" | "clip" | "wave";
 }
 
-export interface ClipRectProjectors { wToX: (t: number) => number }
+export interface ClipRectProjectors {
+  wToX: (t: number) => number;
+}
 
 export function buildClipRect(
   clip: Clip,
@@ -28,9 +41,10 @@ export function buildClipRect(
   trueWidth: number,
 ): ClipRect {
   const representation = trueWidth < TICK_THRESHOLD_PX ? "tick" : "clip";
-  const visualWidth = representation === "tick"
-    ? Math.max(1, Math.min(TICK_THRESHOLD_PX, Math.max(trueWidth, MIN_VISUAL_EVENT_PX)))
-    : Math.max(trueWidth, MIN_VISUAL_EVENT_PX);
+  const visualWidth =
+    representation === "tick"
+      ? Math.max(1, Math.min(TICK_THRESHOLD_PX, Math.max(trueWidth, MIN_VISUAL_EVENT_PX)))
+      : Math.max(trueWidth, MIN_VISUAL_EVENT_PX);
   const center = x0 + visualWidth / 2;
   const hitWidth = Math.max(MIN_HIT_TARGET_PX, visualWidth);
   const visual = { x: x0, y, width: visualWidth, height };
@@ -49,7 +63,12 @@ export function buildClipRect(
 
 export function buildWaveRect(clip: Clip, centerX: number, centerY: number): ClipRect {
   const visual = { x: centerX - 1, y: centerY - 8, width: 2, height: 16 };
-  const hit = { x: centerX - MIN_HIT_TARGET_PX / 2, y: centerY - 11, width: MIN_HIT_TARGET_PX, height: 22 };
+  const hit = {
+    x: centerX - MIN_HIT_TARGET_PX / 2,
+    y: centerY - 11,
+    width: MIN_HIT_TARGET_PX,
+    height: 22,
+  };
   return {
     x0: visual.x,
     x1: visual.x + visual.width,
