@@ -6,22 +6,39 @@ export function WallStrip({
   nameW,
   axis,
   view,
+  commits,
   gaps,
   onView,
 }: {
   nameW: number;
   axis: TimeAxis;
   view: ViewWindow;
+  commits: readonly { timestamp: number; endTimestamp: number }[];
   gaps?: readonly Extract<TimeAxis["segs"][number], { type: "gap" }>[];
   onView?: (a0: number, span: number) => void;
 }) {
   const total = Math.max(1, axis.total);
   const pct = (a: number) => (a / total) * 100;
-  const activity = axis.segs.filter(
-    (s): s is Extract<(typeof axis.segs)[number], { type: "act" }> => s.type === "act",
-  );
   const left = Math.max(0, pct(view.a0));
   const width = Math.max(Math.min(100, pct(view.a1)) - left, 0.5);
+
+  // The overview is a commit map, not a generic activity texture. No commit
+  // means no bar. Very short commits keep a tiny visual mark so sparse sessions
+  // remain navigable without inventing activity in empty time ranges.
+  const commitBars = commits.map((commit, index) => {
+    const a0 = axis.wallToAxis(commit.timestamp);
+    const a1 = axis.wallToAxis(Math.max(commit.timestamp, commit.endTimestamp));
+    const start = Math.max(0, Math.min(total, a0));
+    const end = Math.max(start, Math.min(total, a1));
+    const duration = Math.max(0, commit.endTimestamp - commit.timestamp);
+    return {
+      key: `${commit.timestamp}:${commit.endTimestamp}:${index}`,
+      left: pct(start),
+      width: Math.max(pct(end) - pct(start), 0.08),
+      duration,
+    };
+  });
+  const maxDuration = Math.max(0.01, ...commitBars.map((bar) => bar.duration));
 
   return (
     <div className="tl-wall" style={{ height: WALL_H }}>
@@ -30,7 +47,7 @@ export function WallStrip({
       </div>
       <div
         className="tl-wall-track"
-        title="Session overview · click to navigate"
+        title="Session overview · each bar is a commit · click to navigate"
         onPointerDown={(e) => {
           if (!onView) return;
           const r = e.currentTarget.getBoundingClientRect();
@@ -51,22 +68,24 @@ export function WallStrip({
             style={{ left: `${pct(s.a0)}%`, width: `${Math.max(pct(s.a1) - pct(s.a0), 0.15)}%` }}
           />
         ))}
-        {activity.map((s, i) => (
-          <i
-            key={`${s.w0}:${s.w1}:${i}`}
-            className="tl-wall-activity"
-            style={{
-              left: `${pct(s.a0)}%`,
-              width: `${Math.max(pct(s.a1) - pct(s.a0), 0.12)}%`,
-              // Read as an overview waveform rather than one opaque purple bar.
-              // The fine stripes stay legible when a short recording is one
-              // continuous activity segment, while gaps still cut the strip.
-              background:
-                "repeating-linear-gradient(90deg, color-mix(in srgb, var(--state) 78%, transparent) 0 2px, color-mix(in srgb, var(--props) 62%, transparent) 2px 3px, transparent 3px 5px)",
-              opacity: 0.9,
-            }}
-          />
-        ))}
+
+        {commitBars.map((bar) => {
+          const strength = 0.38 + 0.5 * Math.min(1, bar.duration / maxDuration);
+          return (
+            <i
+              key={bar.key}
+              className="tl-wall-activity"
+              title={`${bar.duration.toFixed(2)}ms commit`}
+              style={{
+                left: `${bar.left}%`,
+                width: `${bar.width}%`,
+                opacity: strength,
+                background: "var(--state)",
+              }}
+            />
+          );
+        })}
+
         <div
           className="tl-wall-view"
           style={{
