@@ -70,6 +70,14 @@ export function isTimelineCanvasTransferred(canvas: HTMLCanvasElement): boolean 
 }
 
 export function createTimelineRenderer(canvas: HTMLCanvasElement): TimelineRendererClient | null {
+  // Correctness first: once a canvas is transferred to OffscreenCanvas, a
+  // worker/bootstrap error leaves the base layer permanently blank because the
+  // DOM canvas can no longer fall back to getContext("2d"). Keep the existing
+  // worker implementation available for explicit testing, but default the
+  // production timeline to the viewport-capped main-thread renderer until the
+  // worker has an acknowledged/error fallback handshake.
+  if (canvas.dataset.timelineWorker !== "on") return null;
+
   const existing = liveRenderers.get(canvas);
   if (existing) {
     existing.cancelDispose();
