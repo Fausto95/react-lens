@@ -57,11 +57,63 @@ export interface PanelTimeTravelOptions {
 }
 
 /**
- * Remove muted components from a time-travel apply set.
+ * Whether this component sits inside a replay-mute boundary. A muted component
+ * isolates its whole recorded subtree from Lens-driven state restoration.
+ * Results are memoized for the current apply-set projection so deep trees do
+ * not repeatedly walk the same ancestor chain.
+ */
+function replaySubtreeMuted(
+  store: TraceStore,
+  filter: LaneFilter,
+  componentId: ComponentId,
+  cache: Map<ComponentId, boolean>,
+): boolean {
+  const cached = cache.get(componentId);
+  if (cached !== undefined) return cached;
+
+  const path: ComponentId[] = [];
+  const seen = new Set<ComponentId>();
+  let cursor: ComponentId | undefined = componentId;
+  let muted = false;
+
+  while (cursor !== undefined && !seen.has(cursor)) {
+    const known = cache.get(cursor);
+    if (known !== undefined) {
+      muted = known;
+      break;
+    }
+
+    seen.add(cursor);
+    path.push(cursor);
+    const instance = store.instance(cursor);
+    if (!instance) break;
+
+    if (isComponentReplayMuted(filter, instance.name, cursor)) {
+      muted = true;
+      break;
+    }
+
+    cursor = instance.parentId;
+  }
+
+  for (const id of path) cache.set(id, muted);
+  return muted;
+}
+
+/**
+ * Project the raw time-travel set through replay mute policy.
  *
- * The trace itself is untouched. A type mute excludes every instance of that
- * component type; an instance mute excludes only that instance. Solo never
- * affects replay eligibility.
+ * A mute is a replay-isolation boundary: the matching component and every
+ * recorded descendant are omitted from Lens-driven React state writes. A type
+ * mute creates a boundary at every matching instance; an instance mute only at
+ * that instance. Solo remains view-only.
+ *
+ * This substantially prevents effects in the muted subtree from being
+ * retriggered by replay state restoration. It is deliberately not implemented
+ * by mutating React's internal effect lists: React exposes no supported
+ * DevTools API for per-component effect suppression, and doing so would be
+ * renderer/version fragile. Unrelated external/global app activity can still
+ * cause React to render that subtree independently of Lens.
  */
 export function replayApplySet(
   store: TraceStore,
@@ -69,10 +121,11 @@ export function replayApplySet(
   filter: LaneFilter,
 ): Map<ComponentId, RenderId> {
   if (filter.muted.size === 0) return new Map(applySet);
+
   const next = new Map<ComponentId, RenderId>();
+  const mutedCache = new Map<ComponentId, boolean>();
   for (const [componentId, renderId] of applySet) {
-    const instance = store.instance(componentId);
-    if (instance && isComponentReplayMuted(filter, instance.name, componentId)) continue;
+    if (replaySubtreeMuted(store, filter, componentId, mutedCache)) continue;
     next.set(componentId, renderId);
   }
   return next;
@@ -80,8 +133,8 @@ export function replayApplySet(
 
 /**
  * Bridges the timeline cursor to page-side state restoration: rAF-coalesces
- * scrub positions to the latest t, computes the apply set there, filters out
- * replay-muted components, and sends only the delta against what was last
+ * scrub positions to the latest t, computes the apply set there, projects out
+ * replay-muted subtrees, and sends only the delta against what was last
  * applied. Apply results feed `onStatus` — the single error path for partial
  * restores, including transport failures.
  */
