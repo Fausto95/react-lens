@@ -55,7 +55,16 @@ export function WallStrip({
           <i
             key={`${s.w0}:${s.w1}:${i}`}
             className="tl-wall-activity"
-            style={{ left: `${pct(s.a0)}%`, width: `${Math.max(pct(s.a1) - pct(s.a0), 0.12)}%` }}
+            style={{
+              left: `${pct(s.a0)}%`,
+              width: `${Math.max(pct(s.a1) - pct(s.a0), 0.12)}%`,
+              // Read as an overview waveform rather than one opaque purple bar.
+              // The fine stripes stay legible when a short recording is one
+              // continuous activity segment, while gaps still cut the strip.
+              background:
+                "repeating-linear-gradient(90deg, color-mix(in srgb, var(--state) 78%, transparent) 0 2px, color-mix(in srgb, var(--props) 62%, transparent) 2px 3px, transparent 3px 5px)",
+              opacity: 0.9,
+            }}
           />
         ))}
         <div
@@ -63,8 +72,9 @@ export function WallStrip({
           style={{
             left: `${left}%`,
             width: `${width}%`,
-            background: "color-mix(in srgb, var(--accent) 10%, transparent)",
-            borderColor: "color-mix(in srgb, var(--accent) 55%, var(--line-strong))",
+            background: "transparent",
+            borderColor: "color-mix(in srgb, var(--accent) 75%, var(--line-strong))",
+            boxShadow: "inset 0 0 0 1px color-mix(in srgb, var(--accent) 18%, transparent)",
           }}
         />
       </div>
