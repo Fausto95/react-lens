@@ -1,6 +1,7 @@
 /** Shared clip geometry. Paint and hit testing consume the same rectangles. */
 import type { Clip } from "../model/lanes.js";
 import type { LaneLayout, LayoutRow } from "../model/rows.js";
+import { packIntervals } from "../model/stacking.js";
 import { WAVE_MIN_MS } from "../model/wave.js";
 import {
   LANE_PAD,
@@ -33,78 +34,16 @@ export interface ClipRectProjectors {
   wToX: (t: number) => number;
 }
 
-export interface PackedClipRows {
+export function packClipRows(clips: readonly Clip[]): {
   rows: ReadonlyMap<string, number>;
   depth: number;
-}
-
-interface ActiveSlot {
-  end: number;
-  slot: number;
-}
-
-function heapPush(heap: ActiveSlot[], value: ActiveSlot): void {
-  let i = heap.length;
-  heap.push(value);
-  while (i > 0) {
-    const parent = (i - 1) >>> 1;
-    if (heap[parent]!.end <= value.end) break;
-    heap[i] = heap[parent]!;
-    i = parent;
-  }
-  heap[i] = value;
-}
-
-function heapPop(heap: ActiveSlot[]): ActiveSlot | undefined {
-  const first = heap[0];
-  const last = heap.pop();
-  if (!first || !last || heap.length === 0) return first;
-  let i = 0;
-  while (true) {
-    const left = i * 2 + 1;
-    if (left >= heap.length) break;
-    const right = left + 1;
-    const child = right < heap.length && heap[right]!.end < heap[left]!.end ? right : left;
-    if (heap[child]!.end >= last.end) break;
-    heap[i] = heap[child]!;
-    i = child;
-  }
-  heap[i] = last;
-  return first;
-}
-
-/**
- * Interval-partitions every visible clip in a component lane.
- *
- * This deliberately ignores the engine-provided `clip.row`. That value is an
- * ingest/indexing hint and may collide after viewport projection. The visual
- * invariant is stronger: two clips whose wall-time intervals overlap can NEVER
- * occupy the same vertical slot, regardless of cause (props/state/context/etc).
- *
- * Complexity is O(n log depth) for the viewport-sized lane materialization.
- */
-export function packClipRows(clips: readonly Clip[]): PackedClipRows {
-  const ordered = clips
-    .filter((clip) => !clip.aggregate)
-    .slice()
-    .sort((a, b) => a.t0 - b.t0 || a.t1 - b.t1 || Number(a.renderId) - Number(b.renderId));
-  const rows = new Map<string, number>();
-  const active: ActiveSlot[] = [];
-  const freeSlots: number[] = [];
-  let depth = 0;
-
-  for (const clip of ordered) {
-    while (active[0] && active[0].end <= clip.t0) {
-      const freed = heapPop(active)!;
-      freeSlots.push(freed.slot);
-    }
-
-    const slot = freeSlots.length > 0 ? freeSlots.pop()! : depth++;
-    rows.set(String(clip.renderId), slot);
-    heapPush(active, { end: Math.max(clip.t1, clip.t0), slot });
-  }
-
-  return { rows, depth: Math.max(1, depth) };
+} {
+  const packed = packIntervals(
+    clips
+      .filter((clip) => !clip.aggregate)
+      .map((clip) => ({ key: String(clip.renderId), start: clip.t0, end: clip.t1 })),
+  );
+  return { rows: packed.slots, depth: packed.depth };
 }
 
 /**
@@ -113,9 +52,9 @@ export function packClipRows(clips: readonly Clip[]): PackedClipRows {
  * the outer lane height fixed preserves O(visible rows) scroll virtualization.
  */
 export function stackClipVerticalGeometry(
-  row: Pick<LayoutRow, "y" | "h">,
+  row: Pick<LayoutRow, "y" | "h" | "depth">,
   stackRow: number,
-  stackDepth: number,
+  stackDepth = row.depth,
 ): { y: number; height: number } {
   const depth = Math.max(1, stackDepth);
   const usable = Math.max(1, row.h - LANE_PAD - 3);
