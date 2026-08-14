@@ -1,0 +1,110 @@
+/* Replay lives in the footer DOM so Cascade stays a graph renderer, but the
+   controls are painted onto the same command strip as graph navigation. */
+
+.rl-cascade-footer .rl-cascade-transport {
+  position: absolute;
+  top: 6px;
+  right: 8px;
+  z-index: 12;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  height: var(--cascade-chip, 28px);
+}
+
+.rl-cascade-transport-group,
+.rl-cascade-travel-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 1px;
+  height: var(--cascade-chip, 28px);
+}
+
+.rl-cascade-transport-button,
+.rl-cascade-travel-control .rl-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  min-width: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--cascade-r, 6px);
+  background: transparent;
+  box-shadow: none;
+  color: var(--text-2);
+  cursor: pointer;
+}
+
+.rl-cascade-transport-button:hover:not(:disabled),
+.rl-cascade-travel-control .rl-icon-btn:hover:not(:disabled) {
+  color: var(--text);
+  background: color-mix(in srgb, var(--text) 6%, transparent);
+}
+
+.rl-cascade-transport-button.active,
+.rl-cascade-travel-control .rl-icon-btn.active {
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
+.rl-cascade-transport-button:disabled,
+.rl-cascade-travel-control .rl-icon-btn:disabled {
+  opacity: 0.34;
+  cursor: default;
+}
+
+.rl-cascade-transport-button > span:last-child,
+.rl-cascade-travel-label {
+  display: none;
+}
+
+.rl-cascade-transport-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  line-height: 1;
+}
+
+.rl-cascade-footer {
+  min-height: 28px;
+  height: 28px;
+  gap: 8px;
+  padding: 0 8px 0 10px;
+  overflow: hidden;
+  background: var(--panel);
+  border-top: 1px solid color-mix(in srgb, var(--line-strong) 50%, transparent);
+  color: var(--text-3);
+}
+.rl-cascade-footer > span:first-child {
+  max-width: 44%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.rl-cascade-help {
+  margin-left: auto;
+  overflow: hidden;
+  color: color-mix(in srgb, var(--text-3) 66%, transparent);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 8.5px;
+}
+
+@media (max-width: 1120px) {
+  .rl-cascade-footer .rl-cascade-transport {
+    right: 6px;
+  }
+  .rl-cascade-help {
+    display: none;
+  }
+}
+
+@media (max-width: 680px) {
+  .rl-cascade-footer > span:first-child {
+    max-width: 100%;
+  }
+}

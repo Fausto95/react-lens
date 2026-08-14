@@ -1183,15 +1183,12 @@
   color: var(--accent);
   background: rgba(110, 155, 255, 0.14);
 }
-/* The "views are filtered" affordance is a chip, not an icon button. */
 .rl-redesign .rl-toolbar-actions .rl-filtered-chip {
-  width: auto;
-  padding: 0 8px;
-  font-size: 10.5px;
-  font-family: var(--mono);
   color: var(--accent);
   background: rgba(110, 155, 255, 0.14);
-  border: 1px solid rgba(110, 155, 255, 0.35);
+}
+.rl-redesign .rl-toolbar-actions .rl-doctor-btn {
+  margin-right: 10px;
 }
 .rl-redesign .rl-toolbar-actions .rl-icon-btn.recording .rl-rec-pulse {
   width: 9px;
@@ -1879,13 +1876,13 @@
     rgba(255, 255, 255, 0.04) 2px 4px
   );
 }
-.rl-redesign .tl-wall-blip {
+.rl-redesign .tl-wall-activity {
   position: absolute;
-  top: 4.5px;
-  width: 3px;
-  height: 6px;
-  border-radius: 1px;
-  opacity: 0.55;
+  top: 4px;
+  bottom: 4px;
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--accent) 58%, transparent);
+  opacity: 0.7;
 }
 
 .rl-redesign .tl-stage {
@@ -1895,6 +1892,10 @@
   overflow-y: auto;
   overscroll-behavior: contain;
   position: relative;
+}
+.rl-redesign .tl-stage-spacer {
+  width: 1px;
+  pointer-events: none;
 }
 .rl-redesign .tl-lname {
   display: flex;
@@ -2149,12 +2150,13 @@
     color-mix(in srgb, var(--text-3) 22%, transparent) 3px 6px
   );
 }
-.rl-redesign .tl-nav-blip {
+.rl-redesign .tl-nav-activity {
   position: absolute;
-  width: 3px;
-  height: 5px;
-  border-radius: 1px;
-  opacity: 0.6;
+  top: 9px;
+  height: 7px;
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--accent) 62%, transparent);
+  opacity: 0.68;
 }
 .rl-redesign .tl-nav-window {
   position: absolute;

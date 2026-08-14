@@ -3,17 +3,19 @@
  */
 
 import type { CausalEdge } from "../model/edges.js";
-import { clipCauseColor } from "../model/lanes.js";
+import { clipCauseColor, type Clip } from "../model/lanes.js";
 import type { TimeAxis } from "../model/axis.js";
 import { niceStep } from "../model/axis.js";
 import type { LaneLayout } from "../model/rows.js";
 import type { TimeSpan } from "../model/axis.js";
 import type { ViewWindow } from "../model/viewport.js";
-import { waveBins } from "../model/wave.js";
+import { WAVE_MIN_MS, waveBins, type WaveBin } from "../model/wave.js";
+import type { TimelineGeometryPayload } from "../timelineRendererClient.js";
 import { LANE_PAD, MIN_CLIP_PX, ROW_H, RULER_H } from "./metrics.js";
 import { arrowSpanVisible, drawCausalArrow, planCausalArrows, routeCausalArrow } from "./arrows.js";
 import { computeClipRects, type ClipRect } from "./clipRects.js";
 import { causeColor, clipPaint, hexAlpha, type TimelineTheme } from "./timelineTheme.js";
+import { RenderFlags, causeCodeToName } from "@reactlens/trace-engine";
 
 export type { ClipRect } from "./clipRects.js";
 
@@ -30,6 +32,7 @@ export interface DrawBaseArgs {
   axis: TimeAxis;
   view: ViewWindow;
   layout: LaneLayout;
+  geometry?: TimelineGeometryPayload;
   region: TimeSpan | null;
   markers: ReadonlyArray<{ t: number; label: string; warn: boolean }>;
   selectedRender: string | number | null;
@@ -41,6 +44,168 @@ export interface DrawBaseArgs {
 }
 
 const fmt = (t: number) => Math.round(t).toLocaleString("en-US");
+
+function lowerBoundMarker(markers: ReadonlyArray<{ t: number }>, target: number): number {
+  let lo = 0;
+  let hi = markers.length;
+  while (lo < hi) {
+    const mid = (lo + hi) >>> 1;
+    if (markers[mid]!.t < target) lo = mid + 1;
+    else hi = mid;
+  }
+  return lo;
+}
+
+function visibleAxisSegs(axis: TimeAxis, view: ViewWindow): TimeAxis["segs"] {
+  const segs = axis.segs;
+  let lo = 0;
+  let hi = segs.length;
+  while (lo < hi) {
+    const mid = (lo + hi) >>> 1;
+    if (segs[mid]!.a1 < view.a0) lo = mid + 1;
+    else hi = mid;
+  }
+  const out: TimeAxis["segs"] = [];
+  for (let i = lo; i < segs.length; i++) {
+    const seg = segs[i]!;
+    if (seg.a0 > view.a1) break;
+    out.push(seg);
+  }
+  return out;
+}
+
+function geometryRowRanges(
+  layout: LaneLayout,
+  geo: TimelineGeometryPayload,
+): Array<[number, number]> {
+  const ranges: Array<[number, number]> = layout.rows.map(() => [0, 0]);
+  const seen = new Uint8Array(layout.rows.length);
+  for (let i = 0; i < geo.count; i++) {
+    const ri = geo.rowIndex[i]!;
+    if (ri >= ranges.length) continue;
+    if (!seen[ri]) {
+      ranges[ri] = [i, i + 1];
+      seen[ri] = 1;
+    } else {
+      ranges[ri]![1] = i + 1;
+    }
+  }
+  return ranges;
+}
+
+function clipFromGeometry(
+  layout: LaneLayout,
+  geo: TimelineGeometryPayload,
+  i: number,
+): Clip | null {
+  const row = layout.rows[geo.rowIndex[i]!];
+  if (!row) return null;
+  const t0 = geo.x0[i]!;
+  const t1 = geo.x1[i]!;
+  return {
+    renderId: geo.renderId[i]! as Clip["renderId"],
+    componentId: geo.componentId[i]! as Clip["componentId"],
+    laneKey: row.key,
+    name: row.lane.name,
+    t0,
+    t1,
+    self: geo.self[i]!,
+    total: t1 - t0,
+    cause: causeCodeToName(geo.cause[i]!),
+    wasted: (geo.flags[i]! & RenderFlags.Wasted) !== 0,
+    row: geo.stackRow[i]!,
+    aggregate: geo.aggregate[i] === 1,
+    renderCount: geo.renderCount[i]!,
+    wastedCount: geo.wastedCount[i]!,
+  };
+}
+
+function computeClipRectsFromGeometry(
+  layout: LaneLayout,
+  geo: TimelineGeometryPayload,
+  ranges: ReadonlyArray<[number, number]>,
+  proj: Projectors,
+): { clipRects: Map<string, ClipRect>; snapEdges: number[] } {
+  const { wToX } = proj;
+  const clipRects = new Map<string, ClipRect>();
+  const snapEdges: number[] = [];
+  for (let ri = 0; ri < layout.rows.length; ri++) {
+    const row = layout.rows[ri]!;
+    const [start, end] = ranges[ri]!;
+    if (row.mode === "wave") {
+      const mid = row.y + row.h / 2;
+      for (let i = start; i < end; i++) {
+        if (geo.aggregate[i] === 1) continue;
+        const c = clipFromGeometry(layout, geo, i);
+        if (!c) continue;
+        const xc = wToX(c.t0 + Math.max(c.self, WAVE_MIN_MS) / 2);
+        clipRects.set(String(c.renderId), {
+          x0: xc - 3,
+          x1: xc + 3,
+          y0: mid - 8,
+          y1: mid + 8,
+          clip: c,
+          wave: true,
+        });
+        snapEdges.push(c.t0, c.t1);
+      }
+      continue;
+    }
+
+    for (let i = start; i < end; i++) {
+      if (geo.aggregate[i] === 1) continue;
+      const c = clipFromGeometry(layout, geo, i);
+      if (!c) continue;
+      const x0 = wToX(c.t0);
+      const x1 = wToX(c.t1);
+      const w = Math.max(x1 - x0, MIN_CLIP_PX);
+      const clipH = ROW_H - 6;
+      const cy = row.y + LANE_PAD / 2 + (c.row ?? 0) * ROW_H + 1.5;
+      clipRects.set(String(c.renderId), { x0, x1: x0 + w, y0: cy, y1: cy + clipH, clip: c });
+      snapEdges.push(c.t0, c.t1);
+    }
+  }
+  return { clipRects, snapEdges };
+}
+
+function waveBinsFromGeometry(
+  geo: TimelineGeometryPayload,
+  start: number,
+  end: number,
+  wallToX: (t: number) => number,
+  nameW: number,
+  stageW: number,
+  binW = 3,
+): { bins: WaveBin[]; max: number } {
+  const plotW = Math.max(binW, stageW - nameW);
+  const n = Math.max(1, Math.ceil(plotW / binW));
+  const bins: WaveBin[] = Array.from({ length: n }, () => ({ count: 0, wasted: 0 }));
+  for (let i = start; i < end; i++) {
+    const selfMs = Math.max(geo.self[i]!, WAVE_MIN_MS);
+    const weight = Math.max(1, geo.renderCount[i] || 1);
+    const wastedWeight = Math.max(
+      0,
+      geo.wastedCount[i] || ((geo.flags[i]! & RenderFlags.Wasted) !== 0 ? weight : 0),
+    );
+    const x0 = wallToX(geo.x0[i]!);
+    const x1 = wallToX(geo.x0[i]! + selfMs);
+    if (x1 < nameW || x0 > stageW) continue;
+    let b0 = Math.floor((x0 - nameW) / binW);
+    let b1 = Math.floor((x1 - nameW) / binW);
+    if (!Number.isFinite(b0) || !Number.isFinite(b1)) continue;
+    if (b1 < b0) b1 = b0;
+    b0 = Math.max(0, Math.min(n - 1, b0));
+    b1 = Math.max(0, Math.min(n - 1, b1));
+    for (let b = b0; b <= b1; b++) {
+      const bin = bins[b]!;
+      bin.count += weight;
+      bin.wasted += wastedWeight;
+    }
+  }
+  let max = 1;
+  for (const b of bins) if (b.count > max) max = b.count;
+  return { bins, max };
+}
 
 export function ensureHatchPattern(ctx: CanvasRenderingContext2D): CanvasPattern | null {
   // OffscreenCanvas workers have no `document`; prefer OffscreenCanvas when available.
@@ -64,11 +229,25 @@ export function drawBase(args: DrawBaseArgs): {
   clipRects: Map<string, ClipRect>;
   snapEdges: number[];
 } {
-  const { ctx, axis, layout, region, markers, selectedRender, proj, tOrigin, theme } = args;
+  const {
+    ctx,
+    axis,
+    view,
+    layout,
+    geometry,
+    region,
+    markers,
+    selectedRender,
+    proj,
+    tOrigin,
+    theme,
+  } = args;
   const { nameW: NW, stageW: W, wToX, aToX, pxPerMs } = proj;
-  const H = layout.totalH;
+  const H = layout.paintH ?? layout.totalH;
   const pattern = args.pattern;
   const MONO = theme.mono;
+  const segs = visibleAxisSegs(axis, view);
+  const geoRanges = geometry ? geometryRowRanges(layout, geometry) : null;
 
   ctx.clearRect(0, 0, W, H);
   ctx.fillStyle = theme.bg;
@@ -92,7 +271,7 @@ export function drawBase(args: DrawBaseArgs): {
     if (dash) ctx.setLineDash([]);
   };
 
-  for (const s of axis.segs) {
+  for (const s of segs) {
     if (s.type !== "gap") continue;
     // Collapsed gaps have zero axis width — skip. Only paint when expanded to wall.
     if (s.a1 - s.a0 < 1e-6) continue;
@@ -121,7 +300,7 @@ export function drawBase(args: DrawBaseArgs): {
   hline(RULER_H - 1, hexAlpha(theme.lineStrong, 0.75));
 
   // Compressed idle stitches: hairline so wall-time jumps stay visible.
-  for (const s of axis.segs) {
+  for (const s of segs) {
     if (s.type !== "gap" || s.a1 - s.a0 >= 1e-6) continue;
     const x = aToX(s.a0);
     if (x < NW || x > W) continue;
@@ -139,7 +318,7 @@ export function drawBase(args: DrawBaseArgs): {
   // Ruler ticks + labels; cull major labels that would collide at stitches.
   const LABEL_MIN_PX = 44;
   let lastLabelX = -Infinity;
-  for (const s of axis.segs) {
+  for (const s of segs) {
     if (s.type !== "act") continue;
     const step = niceStep(70 / Math.max(pxPerMs, 1e-6));
     const minor = step / 5;
@@ -169,18 +348,24 @@ export function drawBase(args: DrawBaseArgs): {
   const markerLabelYs = [14, 26] as const;
   const markerLabelSpans: Array<Array<{ left: number; right: number }>> = [[], []];
   const visibleMarkers: Array<{ x: number; label: string; warn: boolean }> = [];
-  for (const m of markers) {
-    const x = wToX(m.t);
-    if (x < NW || x > W) continue;
-    ctx.fillStyle = m.warn ? theme.warn : theme.text2;
-    ctx.beginPath();
-    ctx.moveTo(x, 6);
-    ctx.lineTo(x + 4.5, 11);
-    ctx.lineTo(x, 16);
-    ctx.lineTo(x - 4.5, 11);
-    ctx.closePath();
-    ctx.fill();
-    if (pxPerMs > 0.3) visibleMarkers.push({ x, label: m.label, warn: m.warn });
+  for (const s of segs) {
+    if (s.type !== "act") continue;
+    const lo = lowerBoundMarker(markers, s.w0);
+    const hi = lowerBoundMarker(markers, s.w1 + Number.EPSILON);
+    for (let i = lo; i < hi; i++) {
+      const m = markers[i]!;
+      const x = wToX(m.t);
+      if (x < NW || x > W) continue;
+      ctx.fillStyle = m.warn ? theme.warn : theme.text2;
+      ctx.beginPath();
+      ctx.moveTo(x, 6);
+      ctx.lineTo(x + 4.5, 11);
+      ctx.lineTo(x, 16);
+      ctx.lineTo(x - 4.5, 11);
+      ctx.closePath();
+      ctx.fill();
+      if (pxPerMs > 0.3) visibleMarkers.push({ x, label: m.label, warn: m.warn });
+    }
   }
   const labelFits = (row: number, left: number, right: number) =>
     markerLabelSpans[row]!.every(
@@ -208,12 +393,20 @@ export function drawBase(args: DrawBaseArgs): {
   placeMarkerLabels(visibleMarkers.filter((m) => !m.warn).sort((a, b) => a.x - b.x));
 
   // Ports for every clip, visible or not — arrows keep anchors off-screen.
-  const { clipRects, snapEdges } = computeClipRects(layout, proj);
+  const { clipRects, snapEdges } =
+    geometry && geoRanges
+      ? computeClipRectsFromGeometry(layout, geometry, geoRanges, proj)
+      : computeClipRects(layout, proj);
 
-  for (const row of layout.rows) {
+  for (let rowIndex = 0; rowIndex < layout.rows.length; rowIndex++) {
+    const row = layout.rows[rowIndex]!;
     hline(row.y + row.h - 1, hexAlpha(theme.line, 0.55));
     if (row.mode === "wave") {
-      const { bins, max } = waveBins(row.clips, wToX, NW, W, 3);
+      const range = geoRanges?.[rowIndex];
+      const { bins, max } =
+        geometry && range
+          ? waveBinsFromGeometry(geometry, range[0], range[1], wToX, NW, W, 3)
+          : waveBins(row.clips, wToX, NW, W, 3);
       const mid = row.y + row.h / 2;
       ctx.globalAlpha = row.dim ? 0.25 : 1;
       for (let b = 0; b < bins.length; b++) {
@@ -230,7 +423,76 @@ export function drawBase(args: DrawBaseArgs): {
       continue;
     }
 
+    if (geometry && geoRanges) {
+      const [start, end] = geoRanges[rowIndex]!;
+      for (let i = start; i < end; i++) {
+        if (geometry.aggregate[i] === 1) continue;
+        const x0 = wToX(geometry.x0[i]!);
+        const x1 = wToX(geometry.x1[i]!);
+        if (x1 < NW || x0 > W) continue;
+        const w = Math.max(x1 - x0, MIN_CLIP_PX);
+        const clipH = ROW_H - 6;
+        const cy = row.y + LANE_PAD / 2 + (geometry.stackRow[i] ?? 0) * ROW_H + 1.5;
+        const causeKey = clipCauseColor(causeCodeToName(geometry.cause[i]!));
+        const col = causeColor(theme, causeKey);
+        const paint = clipPaint(theme, col);
+        const wasted = (geometry.flags[i]! & RenderFlags.Wasted) !== 0;
+        ctx.globalAlpha = row.dim ? 0.25 : 1;
+
+        if (wasted && pattern) {
+          ctx.fillStyle = pattern;
+          roundRect(ctx, x0, cy, w, clipH, 4);
+          ctx.fill();
+          ctx.strokeStyle = hexAlpha(theme.text3, 0.55);
+          ctx.setLineDash([3, 2]);
+          ctx.stroke();
+          ctx.setLineDash([]);
+        } else {
+          const grad = ctx.createLinearGradient(0, cy, 0, cy + clipH);
+          grad.addColorStop(0, paint.fillTop);
+          grad.addColorStop(1, paint.fillBottom);
+          ctx.fillStyle = grad;
+          roundRect(ctx, x0, cy, w, clipH, 4);
+          ctx.fill();
+          ctx.strokeStyle = paint.stroke;
+          ctx.stroke();
+          if (w > 74) {
+            let px = x0 + 1;
+            const barAlpha = theme.light ? 0.65 : 0.55;
+            for (const frac of [0.6, 0.25, 0.15] as const) {
+              ctx.fillStyle = hexAlpha(col, barAlpha);
+              roundRect(ctx, px, cy + clipH - 4.5, frac * (w - 2), 3, 1.5);
+              ctx.fill();
+              px += frac * (w - 2);
+            }
+          }
+        }
+
+        if (selectedRender === geometry.renderId[i]) {
+          ctx.strokeStyle = theme.accent;
+          ctx.lineWidth = 1.5;
+          ctx.shadowColor = hexAlpha(theme.accent, 0.5);
+          ctx.shadowBlur = 6;
+          roundRect(ctx, x0 - 1.5, cy - 1.5, w + 3, clipH + 3, 5);
+          ctx.stroke();
+          ctx.shadowBlur = 0;
+          ctx.lineWidth = 1;
+        }
+
+        if (w > 48) {
+          ctx.fillStyle = wasted ? hexAlpha(theme.text3, 0.85) : paint.label;
+          ctx.font = `9px ${MONO}`;
+          const total = geometry.x1[i]! - geometry.x0[i]!;
+          const lbl = wasted ? "wasted" : `${causeKey} · ${total.toFixed(0)}ms`;
+          ctx.fillText(lbl.slice(0, Math.floor(w / 5.5)), x0 + 5, cy + clipH / 2 + 3);
+        }
+        ctx.globalAlpha = 1;
+      }
+      continue;
+    }
+
     for (const c of row.clips) {
+      if (c.aggregate) continue;
       const x0 = wToX(c.t0);
       const x1 = wToX(c.t1);
       if (x1 < NW || x0 > W) continue;

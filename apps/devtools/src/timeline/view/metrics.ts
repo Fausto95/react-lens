@@ -18,6 +18,9 @@ export const QUIET_MAX = 2;
  */
 export const QUIET_TOTAL_MS = 8;
 export const STACK_MAX = 4;
+/** Fixed row slot for virtual timeline scrolling. Deep lanes switch to wave in the slot. */
+export const VIRTUAL_ROW_H = LANE_PAD + 2 * ROW_H;
+export const VIRTUAL_OVERSCAN_ROWS = 6;
 export const SNAP_PX = 5;
 export const IDLE_MS = 200;
 /**

@@ -1,9 +1,7 @@
 import { useRef } from "react";
 import type { TimeAxis } from "../model/axis.js";
 import type { ViewWindow } from "../model/viewport.js";
-import { clipCauseColor, type Clip } from "../model/lanes.js";
 import { NAV_H } from "./metrics.js";
-import { causeCssVar } from "./timelineTheme.js";
 
 /**
  * Session minimap in **compressed axis** space — idle gaps stay gutters, so
@@ -13,13 +11,13 @@ export function Navigator({
   nameW,
   axis,
   view,
-  blips,
+  gaps,
   onView,
 }: {
   nameW: number;
   axis: TimeAxis;
   view: ViewWindow;
-  blips: readonly Clip[];
+  gaps?: readonly Extract<TimeAxis["segs"][number], { type: "gap" }>[];
   onView: (a0: number, span: number, animate?: boolean) => void;
 }) {
   const navRef = useRef<HTMLDivElement>(null);
@@ -32,6 +30,9 @@ export function Navigator({
 
   const total = Math.max(1, axis.total);
   const pct = (a: number) => (a / total) * 100;
+  const activity = axis.segs.filter(
+    (s): s is Extract<(typeof axis.segs)[number], { type: "act" }> => s.type === "act",
+  );
   // Past-fit zoom: clamp the chrome window to the track (full width = seeing margins).
   const left = Math.max(0, pct(view.a0));
   const width = Math.max(Math.min(100, pct(view.a1)) - left, 1.2);
@@ -81,28 +82,28 @@ export function Navigator({
           onView(a - span / 2, span, true);
         }}
       >
-        {axis.segs
-          .filter((s): s is Extract<(typeof axis.segs)[number], { type: "gap" }> => {
+        {(
+          gaps ??
+          axis.segs.filter((s): s is Extract<(typeof axis.segs)[number], { type: "gap" }> => {
             return s.type === "gap" && s.a1 - s.a0 > 1e-6;
           })
-          .map((s) => (
-            <div
-              key={s.id}
-              className="tl-nav-gap"
-              style={{
-                left: `${pct(s.a0)}%`,
-                width: `${Math.max(pct(s.a1) - pct(s.a0), 0.15)}%`,
-              }}
-            />
-          ))}
-        {blips.map((c) => (
-          <i
-            key={String(c.renderId)}
-            className="tl-nav-blip"
+        ).map((s) => (
+          <div
+            key={s.id}
+            className="tl-nav-gap"
             style={{
-              left: `${pct(axis.wallToAxis(c.t0))}%`,
-              top: 10 + ((c.row ?? 0) % 2) * 5,
-              background: c.wasted ? "var(--warn)" : causeCssVar(clipCauseColor(c.cause)),
+              left: `${pct(s.a0)}%`,
+              width: `${Math.max(pct(s.a1) - pct(s.a0), 0.15)}%`,
+            }}
+          />
+        ))}
+        {activity.map((s, i) => (
+          <i
+            key={`${s.w0}:${s.w1}:${i}`}
+            className="tl-nav-activity"
+            style={{
+              left: `${pct(s.a0)}%`,
+              width: `${Math.max(pct(s.a1) - pct(s.a0), 0.18)}%`,
             }}
           />
         ))}

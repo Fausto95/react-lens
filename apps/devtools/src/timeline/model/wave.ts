@@ -76,6 +76,9 @@ export interface WaveClip {
   /** Exclusive self time (ms). When omitted, falls back to `t1 - t0`. */
   self?: number;
   wasted: boolean;
+  /** LOD buckets carry many renders in one mark. */
+  renderCount?: number;
+  wastedCount?: number;
 }
 
 /**
@@ -95,6 +98,8 @@ export function waveBins(
 
   for (const c of clips) {
     const selfMs = Math.max(c.self !== undefined ? c.self : c.t1 - c.t0, WAVE_MIN_MS);
+    const weight = Math.max(1, c.renderCount ?? 1);
+    const wastedWeight = Math.max(0, c.wastedCount ?? (c.wasted ? weight : 0));
     const x0 = wallToX(c.t0);
     const x1 = wallToX(c.t0 + selfMs);
     // Fully outside the plot.
@@ -111,8 +116,8 @@ export function waveBins(
 
     for (let b = b0; b <= b1; b++) {
       const bin = bins[b]!;
-      bin.count++;
-      if (c.wasted) bin.wasted++;
+      bin.count += weight;
+      bin.wasted += wastedWeight;
     }
   }
 

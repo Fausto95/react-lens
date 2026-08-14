@@ -1,17 +1,24 @@
 /// <reference lib="webworker" />
 /**
- * Trace worker: owns the authoritative TraceStore, causality engine, and (when
+ * Trace worker: owns the authoritative TraceStore + columnar indexes, and (when
  * IndexedDB is available) the durable WAL — off the panel main thread.
  *
  * Hot path: raw `postMessage({ type: "frame", batch, sessionId?, seq? })`.
- * Queries: Comlink. WAL durability signals (`wal-durable` / `wal-failed`) go
- * back as raw postMessages so the panel can ack the page only after disk.
+ * Queries: Comlink + typed `{ type: "query" }` TraceQuery protocol.
+ * Causality flag analysis runs in a child worker so ingest is never blocked.
  *
  * Supervision: answers `ping` with `pong` so the main-thread client can detect
  * a wedged worker and respawn (<1s recovery target; see traceClient).
  */
 import * as Comlink from "comlink";
-import { TraceStore, type CommitSummary, type TraceSelector } from "@reactlens/trace-engine";
+import {
+  TraceStore,
+  TreeFlags,
+  createApplySetCursor,
+  diffApplySet,
+  type CommitSummary,
+  type TraceSelector,
+} from "@reactlens/trace-engine";
 import { createCausality } from "@reactlens/causality";
 import type { Cause, WhyResult } from "@reactlens/causality";
 import {
@@ -24,14 +31,22 @@ import {
   type RenderEvent,
   type RenderId,
   type RenderSnapshot,
+  type TimeTravelEntry,
 } from "@reactlens/protocol";
 import { createTraceWal, type RecoveredSession, type TraceWal } from "./wal.js";
 import { createIdbWalStore } from "./walIdb.js";
+import { createIdbColdStore } from "./coldIdb.js";
+import type {
+  CausalityResult,
+  TraceQuery,
+  TraceQueryMessage,
+  TraceQueryReplyMessage,
+  TraceQueryResult,
+} from "./traceQuery.js";
 
 export type TraceFrameMessage = {
   type: "frame";
   batch: EventsBatchMessage["payload"];
-  /** When set with `seq`, the worker appends to the WAL after ingest. */
   sessionId?: string;
   seq?: number;
 };
@@ -44,10 +59,16 @@ export type TraceInMessage =
   | TraceClearMessage
   | TracePingMessage
   | TraceWalRecoverMessage
-  | TraceWalFlushMessage;
+  | TraceWalFlushMessage
+  | TraceQueryMessage;
 
-export type TraceIngestedMessage = { type: "ingested"; batch: EventsBatchMessage["payload"] };
-export type TraceClearedMessage = { type: "cleared" };
+export type TraceIngestedMessage = {
+  type: "ingested";
+  batch: EventsBatchMessage["payload"];
+  generation: number;
+  wasted?: readonly RenderId[];
+};
+export type TraceClearedMessage = { type: "cleared"; generation: number };
 export type TracePongMessage = { type: "pong"; id: number };
 export type TraceWalDurableMessage = {
   type: "wal-durable";
@@ -66,6 +87,12 @@ export type TraceWalRecoveredMessage = {
   recovered: RecoveredSession | null;
 };
 export type TraceWalFlushedMessage = { type: "wal-flushed"; requestId: number };
+export type TraceFlagsMessage = {
+  type: "flags";
+  wasted: readonly RenderId[];
+  expected: readonly RenderId[];
+  generation: number;
+};
 export type TraceOutMessage =
   | TraceIngestedMessage
   | TraceClearedMessage
@@ -74,19 +101,21 @@ export type TraceOutMessage =
   | TraceWalFailedMessage
   | TraceWalDroppedMessage
   | TraceWalRecoveredMessage
-  | TraceWalFlushedMessage;
+  | TraceWalFlushedMessage
+  | TraceFlagsMessage
+  | TraceQueryReplyMessage;
 
 export interface TraceWorkerStats {
   events: number;
   renders: number;
   snapshots: number;
   components: number;
+  columnarRenders?: number;
+  generation?: number;
 }
 
-/** Session file shape for download / IDB recents — from @reactlens/protocol. */
 export type TraceSessionExport = LensSessionFile;
 
-/** One navigation document archived before the store was cleared for the next. */
 export interface TraceSegment {
   sessionId: string;
   archivedAt: string;
@@ -98,40 +127,57 @@ export interface TraceWorkerApi {
   ingest(batch: EventsBatchMessage["payload"]): void;
   clear(): void;
   export(): EventsBatchMessage["payload"];
-  /** Session file shape for download / IDB recents (same as session.exportSession). */
   exportSession(meta?: TraceSessionExport["meta"]): TraceSessionExport;
-  /** Replace the active store with an imported session. */
   importSession(session: TraceSessionExport): void;
-  /**
-   * Archive the current document under `previousSessionId` (when set), then
-   * clear and mark `nextSessionId` active. Keeps per-sessionId segments.
-   */
   beginSegment(previousSessionId: string | null, nextSessionId: string): void;
   listSegments(): TraceSegment[];
-  /** Stitch archived segments (and optionally the live store) for offline view. */
   stitchSegments(ids?: string[]): TraceSessionExport;
   stats(): TraceWorkerStats;
   instance(id: ComponentId): ComponentInstance | undefined;
   snapshot(renderId: RenderId): RenderSnapshot | undefined;
   getRender(renderId: RenderId): RenderEvent | undefined;
   commits(): CommitSummary[];
-  /** Causality causes for a render (plan: getCauses). */
   getCauses(renderId: RenderId): Cause[];
   why(renderId: RenderId): WhyResult;
   rootCause(renderId: RenderId): Cause | undefined;
-  /**
-   * Subscribe to a store slice. Pass a Comlink.proxy'd callback from the main
-   * thread; returns an unsubscribe function (also proxied).
-   */
   subscribe(selector: TraceSelector, cb: () => void): () => void;
+  query(q: TraceQuery): TraceQueryResult;
+  applySetDelta(t: number): TimeTravelEntry[];
+  timeBounds(): { t0: number; t1: number };
 }
 
 const store = new TraceStore();
+void createIdbColdStore().then((cold) => {
+  if (cold) store.retentionManager.setColdStore(cold);
+});
 const causality = createCausality(store);
+const applyCursor = createApplySetCursor(store);
+let generation = 0;
 
 const MAX_SEGMENTS = 8;
 const segments: TraceSegment[] = [];
 let activeSessionId: string | null = null;
+
+let causalityWorker: Worker | null = null;
+try {
+  causalityWorker = new Worker(new URL("./causalityWorker.ts", import.meta.url), {
+    type: "module",
+  });
+  causalityWorker.onmessage = (e: MessageEvent<CausalityResult>) => {
+    const msg = e.data;
+    if (!msg || msg.type !== "flags") return;
+    store.markWastedMany(msg.wasted, msg.expected);
+    generation++;
+    post({
+      type: "flags",
+      wasted: msg.wasted,
+      expected: msg.expected,
+      generation,
+    });
+  };
+} catch {
+  causalityWorker = null;
+}
 
 function archiveActive(sessionId: string): void {
   const payload = store.export();
@@ -191,15 +237,43 @@ async function initWal(): Promise<void> {
   });
 }
 
-function ingestBatch(batch: EventsBatchMessage["payload"]): void {
-  store.ingest(batch);
-  post({ type: "ingested", batch });
+function analyzeRendersAsync(batch: EventsBatchMessage["payload"]): void {
+  const renderIds: RenderId[] = [];
+  for (const e of batch.events) {
+    if (e.type === "render") renderIds.push(e.renderId);
+  }
+  if (renderIds.length === 0) return;
+
+  if (causalityWorker) {
+    causalityWorker.postMessage({ type: "frame", batch });
+    causalityWorker.postMessage({ type: "analyze-renders", renderIds });
+    return;
+  }
+
+  // Fallback: analyze on this worker after ingest (still O(new), not O(session)).
+  const wasted: typeof renderIds = [];
+  const expected: typeof renderIds = [];
+  for (const id of renderIds) {
+    try {
+      const verdict = causality.why(id).verdict;
+      if (verdict === "no-observable-change") wasted.push(id);
+      else if (verdict === "expected") expected.push(id);
+    } catch {
+      /* no verdict */
+    }
+  }
+  store.markWastedMany(wasted, expected);
 }
 
-/**
- * Ingest then durable-append. When IDB is unavailable, report durable
- * immediately so the panel can still ack (in-memory only — same as pre-WAL).
- */
+function ingestBatch(batch: EventsBatchMessage["payload"]): void {
+  store.ingest(batch);
+  applyCursor.reset();
+  generation++;
+  // Ingest must not wait on causality — fire-and-forget.
+  analyzeRendersAsync(batch);
+  post({ type: "ingested", batch, generation });
+}
+
 function ingestDurable(
   batch: EventsBatchMessage["payload"],
   sessionId: string | undefined,
@@ -216,13 +290,88 @@ function ingestDurable(
   });
 }
 
+function runQuery(q: TraceQuery): TraceQueryResult {
+  switch (q.kind) {
+    case "timeline-range":
+      return { kind: "timeline-range", result: store.queryTimeline(q) };
+    case "hit-test":
+      return {
+        kind: "hit-test",
+        result: store.hitTest(q.t, q.laneKey ?? null, {
+          rowStart: q.rowStart,
+          rowEnd: q.rowEnd,
+          includeQuiet: q.includeQuiet,
+          laneFilter: q.laneFilter,
+        }),
+      };
+    case "render":
+      return { kind: "render", result: store.getRender(q.id) };
+    case "component-renders": {
+      let renders = store.rendersOf(q.componentId);
+      if (q.t0 !== undefined || q.t1 !== undefined) {
+        const lo = q.t0 ?? Number.NEGATIVE_INFINITY;
+        const hi = q.t1 ?? Number.POSITIVE_INFINITY;
+        renders = renders.filter((r) => r.timestamp >= lo && r.timestamp <= hi);
+      }
+      return { kind: "component-renders", result: renders };
+    }
+    case "tree-window": {
+      const expanded = new Set(q.expanded);
+      const projection = q.projection ?? "all";
+      const result = store.flatTree.queryWindow({
+        expanded,
+        scrollTop: q.scrollTop,
+        viewH: q.viewH,
+        rowHeight: q.rowHeight ?? 26,
+        include:
+          projection === "all"
+            ? undefined
+            : (index) => {
+                const f = store.flatTree.flags[index]!;
+                if (projection === "changed") return (f & TreeFlags.ChangedLast) !== 0;
+                if (projection === "waste") return (f & TreeFlags.WastedLast) !== 0;
+                return true;
+              },
+      });
+      return { kind: "tree-window", result };
+    }
+    case "apply-set-delta": {
+      const next = applyCursor.moveTo(q.t);
+      // Full set as delta from empty when prevT omitted — caller diffs locally.
+      const entries: TimeTravelEntry[] = [];
+      for (const [componentId, renderId] of next) {
+        entries.push({ componentId, renderId });
+      }
+      return { kind: "apply-set-delta", result: entries };
+    }
+    case "time-bounds":
+      return { kind: "time-bounds", result: store.timeBounds() };
+    case "stats-range":
+      return {
+        kind: "stats-range",
+        result: store.statsInRange(q.t0, q.t1, { excludeWasted: q.excludeWasted }),
+      };
+    case "why":
+      return { kind: "why", result: causality.why(q.id) };
+    case "instance":
+      return { kind: "instance", result: store.instance(q.id) };
+    case "snapshot":
+      return { kind: "snapshot", result: store.snapshot(q.id) };
+    case "commits":
+      return { kind: "commits", result: store.commits() };
+  }
+}
+
 const api: TraceWorkerApi = {
   ingest(batch) {
     ingestBatch(batch);
   },
   clear() {
     store.clear();
-    post({ type: "cleared" });
+    applyCursor.reset();
+    generation++;
+    causalityWorker?.postMessage({ type: "clear" });
+    post({ type: "cleared", generation });
   },
   export() {
     return store.export();
@@ -234,16 +383,21 @@ const api: TraceWorkerApi = {
     const loaded = loadSession(JSON.stringify(session)) as LensSessionFile;
     store.clear();
     store.ingest(loaded.payload);
-    post({ type: "cleared" });
-    post({ type: "ingested", batch: loaded.payload });
+    applyCursor.reset();
+    generation++;
+    post({ type: "cleared", generation });
+    post({ type: "ingested", batch: loaded.payload, generation });
   },
   beginSegment(previousSessionId, nextSessionId) {
     const archiveId = previousSessionId ?? activeSessionId;
     if (archiveId != null) archiveActive(archiveId);
     else if (store.stats().events > 0) archiveActive(`anon:${Date.now()}`);
     store.clear();
+    applyCursor.reset();
     activeSessionId = nextSessionId;
-    post({ type: "cleared" });
+    generation++;
+    causalityWorker?.postMessage({ type: "clear" });
+    post({ type: "cleared", generation });
   },
   listSegments() {
     return segments.map((s) => ({ ...s }));
@@ -262,15 +416,21 @@ const api: TraceWorkerApi = {
     if (payload.events.length > 0 || payload.instances.length > 0) {
       store.ingest(payload);
     }
+    applyCursor.reset();
+    generation++;
     const session = toSession(payload, {
       title: `Stitched ${chosen.length || parts.length} segment(s)`,
     });
-    post({ type: "cleared" });
-    if (payload.events.length > 0) post({ type: "ingested", batch: payload });
+    post({ type: "cleared", generation });
+    if (payload.events.length > 0) post({ type: "ingested", batch: payload, generation });
     return session;
   },
   stats() {
-    return store.stats();
+    return {
+      ...store.stats(),
+      columnarRenders: store.timelineIndex.count,
+      generation,
+    };
   },
   instance(id) {
     return store.instance(id);
@@ -296,9 +456,20 @@ const api: TraceWorkerApi = {
   subscribe(selector, cb) {
     return store.subscribe(selector, cb);
   },
+  query(q) {
+    return runQuery(q);
+  },
+  applySetDelta(t) {
+    const prev = new Map(applyCursor.moveTo(t));
+    // Re-read as delta from previous internal state is already applied by cursor;
+    // return full current set entries for the panel to diff.
+    return diffApplySet(new Map(), prev);
+  },
+  timeBounds() {
+    return store.timeBounds();
+  },
 };
 
-// Hot path: raw frames bypass Comlink serialization of the call wrapper.
 self.addEventListener("message", (e: MessageEvent<TraceInMessage>) => {
   const msg = e.data;
   if (!msg || typeof msg !== "object" || !("type" in msg)) return;
@@ -314,6 +485,23 @@ self.addEventListener("message", (e: MessageEvent<TraceInMessage>) => {
     api.clear();
   } else if (msg.type === "ping") {
     post({ type: "pong", id: msg.id });
+  } else if (msg.type === "query") {
+    try {
+      const result = runQuery(msg.query);
+      const reply: TraceQueryReplyMessage = {
+        type: "query-result",
+        requestId: msg.requestId,
+        result,
+      };
+      post(reply);
+    } catch (err) {
+      post({
+        type: "query-result",
+        requestId: msg.requestId,
+        result: { kind: "time-bounds", result: { t0: 0, t1: 120 } },
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
   } else if (msg.type === "wal-recover") {
     void walReady
       .then(async () => {

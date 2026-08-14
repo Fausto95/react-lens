@@ -327,23 +327,6 @@
   pointer-events: none;
   box-shadow: 0 0 0 1.5px var(--rl-bg);
 }
-.rl-status-doctor .rl-doctor-btn {
-  display: inline-flex;
-  width: 16px;
-  height: 16px;
-  align-items: center;
-  justify-content: center;
-}
-.rl-status-doctor .rl-doctor-badge {
-  top: -5px;
-  right: -8px;
-  min-width: 12px;
-  height: 12px;
-  padding: 0 3px;
-  font-size: 8px;
-  line-height: 12px;
-  box-shadow: 0 0 0 1.5px var(--rl-bg-raised);
-}
 
 /* Doctor issues popover (toolbar badge) */
 .rl-doctor-menu {
@@ -3317,21 +3300,6 @@
   text-transform: uppercase;
   letter-spacing: 0.04em;
   color: var(--rl-text-faint);
-}
-.rl-status-action {
-  background: none;
-  border: none;
-  padding: 0;
-  font: inherit;
-  font-variant-numeric: tabular-nums;
-  cursor: pointer;
-  border-radius: 4px;
-}
-.rl-status-action:hover {
-  color: var(--rl-text);
-}
-.rl-status-action:hover .rl-status-k {
-  color: var(--rl-text-dim);
 }
 .rl-status-rec {
   font-size: 10px;

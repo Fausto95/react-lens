@@ -37,6 +37,7 @@ export function computeClipRects(
     if (row.mode === "wave") {
       const mid = row.y + row.h / 2;
       for (const c of row.clips) {
+        if (c.aggregate) continue;
         // Aim at the painted histogram span [t0, t0 + self] — the inclusive
         // midpoint floats past the drawn column when total covers a cascade.
         const xc = wToX(c.t0 + Math.max(c.self, WAVE_MIN_MS) / 2);
@@ -54,6 +55,7 @@ export function computeClipRects(
     }
 
     for (const c of row.clips) {
+      if (c.aggregate) continue;
       const x0 = wToX(c.t0);
       const x1 = wToX(c.t1);
       const w = Math.max(x1 - x0, MIN_CLIP_PX);

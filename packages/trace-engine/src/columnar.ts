@@ -1,0 +1,692 @@
+/**
+ * Columnar timeline index: typed arrays per lane, binary-searchable by time,
+ * with prefix sums and LOD aggregation pyramids.
+ *
+ * Interactive work must scale with the viewport, not the session.
+ */
+
+export const RenderFlags = {
+  None: 0,
+  Wasted: 1 << 0,
+} as const;
+
+export type RenderFlag = number;
+
+/** Cause encoding matching timeline ClipCause. */
+export const CauseCode = {
+  props: 0,
+  state: 1,
+  context: 2,
+  cascade: 3,
+  mount: 4,
+  other: 5,
+} as const;
+
+export type CauseCodeValue = (typeof CauseCode)[keyof typeof CauseCode];
+
+export const LOD_BUCKET_MS = [1, 4, 16, 64, 256, 1000] as const;
+export type LodLevel = 0 | 1 | 2 | 3 | 4 | 5;
+
+const INITIAL_CAP = 64;
+const LOD_ACTIVATION_THRESHOLD = 512;
+
+function growFloat64(
+  arr: Float64Array<ArrayBufferLike>,
+  need: number,
+): Float64Array<ArrayBufferLike> {
+  if (need <= arr.length) return arr;
+  let n = arr.length || INITIAL_CAP;
+  while (n < need) n *= 2;
+  const next = new Float64Array(n);
+  next.set(arr);
+  return next;
+}
+
+function growFloat32(
+  arr: Float32Array<ArrayBufferLike>,
+  need: number,
+): Float32Array<ArrayBufferLike> {
+  if (need <= arr.length) return arr;
+  let n = arr.length || INITIAL_CAP;
+  while (n < need) n *= 2;
+  const next = new Float32Array(n);
+  next.set(arr);
+  return next;
+}
+
+function growUint32(arr: Uint32Array<ArrayBufferLike>, need: number): Uint32Array<ArrayBufferLike> {
+  if (need <= arr.length) return arr;
+  let n = arr.length || INITIAL_CAP;
+  while (n < need) n *= 2;
+  const next = new Uint32Array(n);
+  next.set(arr);
+  return next;
+}
+
+function growUint8(arr: Uint8Array<ArrayBufferLike>, need: number): Uint8Array<ArrayBufferLike> {
+  if (need <= arr.length) return arr;
+  let n = arr.length || INITIAL_CAP;
+  while (n < need) n *= 2;
+  const next = new Uint8Array(n);
+  next.set(arr);
+  return next;
+}
+
+function growInt32(arr: Int32Array<ArrayBufferLike>, need: number): Int32Array<ArrayBufferLike> {
+  if (need <= arr.length) return arr;
+  let n = arr.length || INITIAL_CAP;
+  while (n < need) n *= 2;
+  const next = new Int32Array(n);
+  next.set(arr);
+  return next;
+}
+
+/**
+ * Mutable prefix index for values that can change after append.
+ * Updates are O(log N); range queries are O(log N).
+ */
+export class FenwickTree {
+  private values: Float64Array<ArrayBufferLike>;
+  private tree: Float64Array<ArrayBufferLike>;
+
+  constructor(capacity = INITIAL_CAP) {
+    const n = Math.max(1, capacity);
+    this.values = new Float64Array(n);
+    this.tree = new Float64Array(n + 1);
+  }
+
+  ensureCapacity(need: number): void {
+    if (need <= this.values.length) return;
+    let n = this.values.length || INITIAL_CAP;
+    while (n < need) n *= 2;
+    const nextValues = new Float64Array(n);
+    nextValues.set(this.values);
+    this.values = nextValues;
+    this.rebuild();
+  }
+
+  set(index: number, value: number): void {
+    if (index < 0) return;
+    this.ensureCapacity(index + 1);
+    const delta = value - this.values[index]!;
+    if (delta === 0) return;
+    this.values[index] = value;
+    this.addDelta(index, delta);
+  }
+
+  add(index: number, delta: number): void {
+    if (index < 0 || delta === 0) return;
+    this.ensureCapacity(index + 1);
+    this.values[index] = this.values[index]! + delta;
+    this.addDelta(index, delta);
+  }
+
+  prefix(endExclusive: number): number {
+    let i = Math.max(0, Math.min(endExclusive, this.values.length));
+    let sum = 0;
+    while (i > 0) {
+      sum += this.tree[i]!;
+      i -= i & -i;
+    }
+    return sum;
+  }
+
+  range(start: number, endExclusive: number): number {
+    if (endExclusive <= start) return 0;
+    return this.prefix(endExclusive) - this.prefix(start);
+  }
+
+  private addDelta(index: number, delta: number): void {
+    for (let i = index + 1; i < this.tree.length; i += i & -i) {
+      this.tree[i] = this.tree[i]! + delta;
+    }
+  }
+
+  private rebuild(): void {
+    const tree = new Float64Array(this.values.length + 1);
+    for (let i = 1; i < tree.length; i++) {
+      tree[i] = tree[i]! + this.values[i - 1]!;
+      const parent = i + (i & -i);
+      if (parent < tree.length) tree[parent] = tree[parent]! + tree[i]!;
+    }
+    this.tree = tree;
+  }
+}
+
+/** First index with timestamps[i] >= target. */
+export function lowerBound(timestamps: ArrayLike<number>, count: number, target: number): number {
+  let lo = 0;
+  let hi = count;
+  while (lo < hi) {
+    const mid = (lo + hi) >>> 1;
+    if (timestamps[mid]! < target) lo = mid + 1;
+    else hi = mid;
+  }
+  return lo;
+}
+
+/** First index with timestamps[i] > target. */
+export function upperBound(timestamps: ArrayLike<number>, count: number, target: number): number {
+  let lo = 0;
+  let hi = count;
+  while (lo < hi) {
+    const mid = (lo + hi) >>> 1;
+    if (timestamps[mid]! <= target) lo = mid + 1;
+    else hi = mid;
+  }
+  return lo;
+}
+
+export interface LodBucket {
+  start: number;
+  renderCount: number;
+  wastedCount: number;
+  totalTime: number;
+  selfTime: number;
+  maxDuration: number;
+  propsCount: number;
+  stateCount: number;
+  contextCount: number;
+}
+
+interface LodLevelState {
+  bucketMs: number;
+  /** Sparse map: bucketStart → bucket (mutated on append). */
+  buckets: Map<number, LodBucket>;
+  /** Bucket starts for O(log B + visible B) viewport reads. */
+  starts: number[];
+  startsSorted: boolean;
+}
+
+function emptyLodStates(): LodLevelState[] {
+  return LOD_BUCKET_MS.map((bucketMs) => ({
+    bucketMs,
+    buckets: new Map(),
+    starts: [],
+    startsSorted: true,
+  }));
+}
+
+export interface AppendRenderInput {
+  timestamp: number;
+  duration: number;
+  selfDuration: number;
+  renderId: number;
+  componentId: number;
+  commitId: number;
+  cause: CauseCodeValue;
+  flags?: RenderFlag;
+  /** Component display name for the lane. */
+  name: string;
+  laneKey: string;
+}
+
+export interface WastedFlagUpdate {
+  renderId: number;
+  wasted: boolean;
+}
+
+export interface LaneColumns {
+  laneKey: string;
+  name: string;
+  count: number;
+  timestamps: Float64Array<ArrayBufferLike>;
+  durations: Float32Array<ArrayBufferLike>;
+  selfDurations: Float32Array<ArrayBufferLike>;
+  renderIds: Uint32Array<ArrayBufferLike>;
+  componentIds: Uint32Array<ArrayBufferLike>;
+  commitIds: Uint32Array<ArrayBufferLike>;
+  causes: Uint8Array<ArrayBufferLike>;
+  flags: Uint8Array<ArrayBufferLike>;
+  /** Stack row assigned incrementally on append. */
+  rows: Uint16Array<ArrayBufferLike>;
+  /** Prefix sums: prefix[i] = sum of [0..i). Length = count+1. */
+  selfPrefix: Float64Array<ArrayBufferLike>;
+  countPrefix: Uint32Array<ArrayBufferLike>;
+  wastedTree: FenwickTree;
+  wastedSelfTree: FenwickTree;
+  /** Live row-end times for incremental stack assignment. */
+  rowEnds: number[];
+  /** Per-stack-row render indices, ordered by timestamp for overlap recovery. */
+  rowIndices: number[][];
+  maxRow: number;
+  instanceIds: Set<number>;
+  firstT: number;
+  selfTotal: number;
+  totalDuration: number;
+  wastedCount: number;
+  lod: LodLevelState[] | null;
+}
+
+function emptyLane(laneKey: string, name: string): LaneColumns {
+  return {
+    laneKey,
+    name,
+    count: 0,
+    timestamps: new Float64Array(INITIAL_CAP),
+    durations: new Float32Array(INITIAL_CAP),
+    selfDurations: new Float32Array(INITIAL_CAP),
+    renderIds: new Uint32Array(INITIAL_CAP),
+    componentIds: new Uint32Array(INITIAL_CAP),
+    commitIds: new Uint32Array(INITIAL_CAP),
+    causes: new Uint8Array(INITIAL_CAP),
+    flags: new Uint8Array(INITIAL_CAP),
+    rows: new Uint16Array(INITIAL_CAP),
+    selfPrefix: new Float64Array(INITIAL_CAP + 1),
+    countPrefix: new Uint32Array(INITIAL_CAP + 1),
+    wastedTree: new FenwickTree(INITIAL_CAP),
+    wastedSelfTree: new FenwickTree(INITIAL_CAP),
+    rowEnds: [],
+    rowIndices: [],
+    maxRow: 0,
+    instanceIds: new Set(),
+    firstT: Number.POSITIVE_INFINITY,
+    selfTotal: 0,
+    totalDuration: 0,
+    wastedCount: 0,
+    lod: null,
+  };
+}
+
+function ensureCapacity(lane: LaneColumns, need: number): void {
+  lane.timestamps = growFloat64(lane.timestamps, need);
+  lane.durations = growFloat32(lane.durations, need);
+  lane.selfDurations = growFloat32(lane.selfDurations, need);
+  lane.renderIds = growUint32(lane.renderIds, need);
+  lane.componentIds = growUint32(lane.componentIds, need);
+  lane.commitIds = growUint32(lane.commitIds, need);
+  lane.causes = growUint8(lane.causes, need);
+  lane.flags = growUint8(lane.flags, need);
+  if (need > lane.rows.length) {
+    let n = lane.rows.length || INITIAL_CAP;
+    while (n < need) n *= 2;
+    const next = new Uint16Array(n);
+    next.set(lane.rows);
+    lane.rows = next;
+  }
+  const prefixNeed = need + 1;
+  lane.selfPrefix = growFloat64(lane.selfPrefix, prefixNeed);
+  lane.countPrefix = growUint32(lane.countPrefix, prefixNeed);
+  lane.wastedTree.ensureCapacity(need);
+  lane.wastedSelfTree.ensureCapacity(need);
+}
+
+function assignStackRow(lane: LaneColumns, t0: number, t1: number): number {
+  const ends = lane.rowEnds;
+  let r = ends.findIndex((e) => e <= t0 + 0.01);
+  if (r === -1) {
+    r = ends.length;
+    ends.push(t1);
+  } else {
+    ends[r] = t1;
+  }
+  lane.maxRow = Math.max(lane.maxRow, r);
+  return r;
+}
+
+type LodInput = Pick<AppendRenderInput, "timestamp" | "duration" | "selfDuration" | "cause">;
+
+function updateLodStates(states: LodLevelState[], input: LodInput, wasted: boolean): void {
+  for (const level of states) {
+    const start = Math.floor(input.timestamp / level.bucketMs) * level.bucketMs;
+    let b = level.buckets.get(start);
+    if (!b) {
+      b = {
+        start,
+        renderCount: 0,
+        wastedCount: 0,
+        totalTime: 0,
+        selfTime: 0,
+        maxDuration: 0,
+        propsCount: 0,
+        stateCount: 0,
+        contextCount: 0,
+      };
+      level.buckets.set(start, b);
+      const last = level.starts[level.starts.length - 1];
+      if (last !== undefined && start < last) level.startsSorted = false;
+      level.starts.push(start);
+    }
+    b.renderCount++;
+    if (wasted) b.wastedCount++;
+    b.totalTime += input.duration;
+    b.selfTime += input.selfDuration;
+    b.maxDuration = Math.max(b.maxDuration, input.duration);
+    if (input.cause === CauseCode.props) b.propsCount++;
+    else if (input.cause === CauseCode.state || input.cause === CauseCode.mount) b.stateCount++;
+    else if (input.cause === CauseCode.context) b.contextCount++;
+  }
+}
+
+function updateLod(lane: LaneColumns, input: LodInput, wasted: boolean): void {
+  if (!lane.lod) return;
+  updateLodStates(lane.lod, input, wasted);
+}
+
+function setLodWastedAt(states: LodLevelState[] | null, t: number, wasted: boolean): void {
+  if (!states) return;
+  for (const level of states) {
+    const start = Math.floor(t / level.bucketMs) * level.bucketMs;
+    const b = level.buckets.get(start);
+    if (!b) continue;
+    if (wasted) b.wastedCount++;
+    else b.wastedCount = Math.max(0, b.wastedCount - 1);
+  }
+}
+
+function buildLaneLod(lane: LaneColumns): void {
+  const states = emptyLodStates();
+  for (let i = 0; i < lane.count; i++) {
+    updateLodStates(
+      states,
+      {
+        timestamp: lane.timestamps[i]!,
+        duration: lane.durations[i]!,
+        selfDuration: lane.selfDurations[i]!,
+        cause: lane.causes[i]! as CauseCodeValue,
+      },
+      (lane.flags[i]! & RenderFlags.Wasted) !== 0,
+    );
+  }
+  lane.lod = states;
+}
+
+/**
+ * Global + per-lane columnar index. Append-only (clear resets). Events are
+ * expected roughly chronological; out-of-order timestamps still work for
+ * prefix sums but binary search assumes sorted lanes — callers should append
+ * in time order (capture does).
+ */
+export class TimelineIndex {
+  readonly lanes = new Map<string, LaneColumns>();
+  /** Global chronological columns (all lanes interleaved by arrival). */
+  count = 0;
+  timestamps: Float64Array<ArrayBufferLike> = new Float64Array(INITIAL_CAP);
+  durations: Float32Array<ArrayBufferLike> = new Float32Array(INITIAL_CAP);
+  selfDurations: Float32Array<ArrayBufferLike> = new Float32Array(INITIAL_CAP);
+  renderIds: Uint32Array<ArrayBufferLike> = new Uint32Array(INITIAL_CAP);
+  componentIds: Uint32Array<ArrayBufferLike> = new Uint32Array(INITIAL_CAP);
+  commitIds: Uint32Array<ArrayBufferLike> = new Uint32Array(INITIAL_CAP);
+  causes: Uint8Array<ArrayBufferLike> = new Uint8Array(INITIAL_CAP);
+  flags: Uint8Array<ArrayBufferLike> = new Uint8Array(INITIAL_CAP);
+  /** Global prefix sums: prefix[i] = sum of [0..i). Length = count+1. */
+  selfPrefix: Float64Array<ArrayBufferLike> = new Float64Array(INITIAL_CAP + 1);
+  countPrefix: Uint32Array<ArrayBufferLike> = new Uint32Array(INITIAL_CAP + 1);
+  wastedTree = new FenwickTree(INITIAL_CAP);
+  wastedSelfTree = new FenwickTree(INITIAL_CAP);
+  /** Lane key string index into laneOrder. */
+  laneIndices: Int32Array<ArrayBufferLike> = new Int32Array(INITIAL_CAP);
+  /** Per-render local index within the lane selected by laneIndices. */
+  laneLocalIndices: Uint32Array<ArrayBufferLike> = new Uint32Array(INITIAL_CAP);
+  laneOrder: string[] = [];
+  private laneKeyToOrder = new Map<string, number>();
+  /** renderId → global column index for O(1) flag updates. */
+  private renderToIndex = new Map<number, number>();
+  private orderedCache: LaneColumns[] | null = null;
+  private orderedNonQuietCache: { quietTotalMs: number; lanes: LaneColumns[] } | null = null;
+  private quietSummaryCache: {
+    quietTotalMs: number;
+    lanes: number;
+    renders: number;
+    selfMs: number;
+  } | null = null;
+  activityLod: LodLevelState[] = emptyLodStates();
+
+  t0 = Number.POSITIVE_INFINITY;
+  t1 = Number.NEGATIVE_INFINITY;
+
+  append(input: AppendRenderInput): void {
+    if (this.renderToIndex.has(input.renderId)) return;
+
+    const flags = input.flags ?? RenderFlags.None;
+    const wasted = (flags & RenderFlags.Wasted) !== 0;
+
+    // Global columns
+    const g = this.count;
+    const gNeed = g + 1;
+    this.timestamps = growFloat64(this.timestamps, gNeed);
+    this.durations = growFloat32(this.durations, gNeed);
+    this.selfDurations = growFloat32(this.selfDurations, gNeed);
+    this.renderIds = growUint32(this.renderIds, gNeed);
+    this.componentIds = growUint32(this.componentIds, gNeed);
+    this.commitIds = growUint32(this.commitIds, gNeed);
+    this.causes = growUint8(this.causes, gNeed);
+    this.flags = growUint8(this.flags, gNeed);
+    this.laneIndices = growInt32(this.laneIndices, gNeed);
+    this.laneLocalIndices = growUint32(this.laneLocalIndices, gNeed);
+    const prefixNeed = gNeed + 1;
+    this.selfPrefix = growFloat64(this.selfPrefix, prefixNeed);
+    this.countPrefix = growUint32(this.countPrefix, prefixNeed);
+    this.wastedTree.ensureCapacity(gNeed);
+    this.wastedSelfTree.ensureCapacity(gNeed);
+
+    this.timestamps[g] = input.timestamp;
+    this.durations[g] = input.duration;
+    this.selfDurations[g] = input.selfDuration;
+    this.renderIds[g] = input.renderId;
+    this.componentIds[g] = input.componentId;
+    this.commitIds[g] = input.commitId;
+    this.causes[g] = input.cause;
+    this.flags[g] = flags;
+    this.selfPrefix[g + 1] = this.selfPrefix[g]! + input.selfDuration;
+    this.countPrefix[g + 1] = this.countPrefix[g]! + 1;
+    this.wastedTree.set(g, wasted ? 1 : 0);
+    this.wastedSelfTree.set(g, wasted ? input.selfDuration : 0);
+
+    let laneOrd = this.laneKeyToOrder.get(input.laneKey);
+    if (laneOrd === undefined) {
+      laneOrd = this.laneOrder.length;
+      this.laneOrder.push(input.laneKey);
+      this.laneKeyToOrder.set(input.laneKey, laneOrd);
+      this.orderedCache = null;
+    }
+    this.laneIndices[g] = laneOrd;
+    this.renderToIndex.set(input.renderId, g);
+    this.count = gNeed;
+
+    // Per-lane columns
+    let lane = this.lanes.get(input.laneKey);
+    let previousTotalDuration = 0;
+    if (!lane) {
+      lane = emptyLane(input.laneKey, input.name);
+      this.lanes.set(input.laneKey, lane);
+      this.orderedCache = null;
+      this.orderedNonQuietCache = null;
+      this.quietSummaryCache = null;
+    } else {
+      previousTotalDuration = lane.totalDuration;
+    }
+    const i = lane.count;
+    ensureCapacity(lane, i + 1);
+    const t1 = input.timestamp + input.duration;
+    const row = assignStackRow(lane, input.timestamp, t1);
+
+    lane.timestamps[i] = input.timestamp;
+    lane.durations[i] = input.duration;
+    lane.selfDurations[i] = input.selfDuration;
+    lane.renderIds[i] = input.renderId;
+    lane.componentIds[i] = input.componentId;
+    lane.commitIds[i] = input.commitId;
+    lane.causes[i] = input.cause;
+    lane.flags[i] = flags;
+    lane.rows[i] = row;
+    (lane.rowIndices[row] ??= []).push(i);
+
+    lane.selfPrefix[i + 1] = lane.selfPrefix[i]! + input.selfDuration;
+    lane.countPrefix[i + 1] = lane.countPrefix[i]! + 1;
+    lane.wastedTree.set(i, wasted ? 1 : 0);
+    lane.wastedSelfTree.set(i, wasted ? input.selfDuration : 0);
+
+    lane.instanceIds.add(input.componentId);
+    lane.firstT = Math.min(lane.firstT, input.timestamp);
+    lane.selfTotal += input.selfDuration;
+    lane.totalDuration += input.duration;
+    if (wasted) lane.wastedCount++;
+    lane.count = i + 1;
+    if (
+      this.orderedNonQuietCache &&
+      previousTotalDuration < this.orderedNonQuietCache.quietTotalMs &&
+      lane.totalDuration >= this.orderedNonQuietCache.quietTotalMs
+    ) {
+      this.orderedNonQuietCache = null;
+    }
+    if (this.quietSummaryCache) {
+      const threshold = this.quietSummaryCache.quietTotalMs;
+      if (previousTotalDuration < threshold || lane.totalDuration < threshold) {
+        this.quietSummaryCache = null;
+      }
+    }
+
+    this.laneLocalIndices[g] = i;
+    if (lane.lod) updateLod(lane, input, wasted);
+    else if (lane.count === LOD_ACTIVATION_THRESHOLD) buildLaneLod(lane);
+    updateLodStates(this.activityLod, input, wasted);
+
+    this.t0 = Math.min(this.t0, input.timestamp);
+    this.t1 = Math.max(this.t1, t1);
+  }
+
+  /** Set or clear the wasted flag after causality analysis. */
+  setFlag(renderId: number, flag: RenderFlag, on: boolean): void {
+    if (flag === RenderFlags.Wasted) {
+      this.setWastedFlags([{ renderId, wasted: on }]);
+      return;
+    }
+    const g = this.renderToIndex.get(renderId);
+    if (g === undefined) return;
+    const prev = this.flags[g]!;
+    const next = on ? prev | flag : prev & ~flag;
+    if (next === prev) return;
+    this.flags[g] = next;
+
+    const laneKey = this.laneOrder[this.laneIndices[g]!];
+    if (!laneKey) return;
+    const lane = this.lanes.get(laneKey);
+    if (!lane) return;
+    const i = this.laneLocalIndices[g]!;
+    lane.flags[i] = next;
+  }
+
+  /** Batch wasted flag changes with O(log N) updates per touched render. */
+  setWastedFlags(updates: ReadonlyArray<WastedFlagUpdate>): void {
+    for (const update of updates) {
+      const g = this.renderToIndex.get(update.renderId);
+      if (g === undefined) continue;
+      const prev = this.flags[g]!;
+      const next = update.wasted ? prev | RenderFlags.Wasted : prev & ~RenderFlags.Wasted;
+      if (next === prev) continue;
+      this.flags[g] = next;
+      const isWasted = (next & RenderFlags.Wasted) !== 0;
+      const delta = isWasted ? 1 : -1;
+      this.wastedTree.add(g, delta);
+      this.wastedSelfTree.add(g, delta * this.selfDurations[g]!);
+
+      const laneKey = this.laneOrder[this.laneIndices[g]!];
+      if (!laneKey) continue;
+      const lane = this.lanes.get(laneKey);
+      if (!lane) continue;
+      const i = this.laneLocalIndices[g]!;
+      const wasWasted = (lane.flags[i]! & RenderFlags.Wasted) !== 0;
+      lane.flags[i] = next;
+      if (wasWasted === isWasted) continue;
+      if (isWasted) lane.wastedCount++;
+      else lane.wastedCount = Math.max(0, lane.wastedCount - 1);
+      lane.wastedTree.add(i, delta);
+      lane.wastedSelfTree.add(i, delta * lane.selfDurations[i]!);
+
+      const t = lane.timestamps[i]!;
+      setLodWastedAt(lane.lod, t, isWasted);
+      setLodWastedAt(this.activityLod, t, isWasted);
+    }
+  }
+
+  bounds(): { t0: number; t1: number } {
+    if (!Number.isFinite(this.t0) || !Number.isFinite(this.t1)) {
+      return { t0: 0, t1: 120 };
+    }
+    return { t0: this.t0, t1: Math.max(this.t1, this.t0 + 120) };
+  }
+
+  clear(): void {
+    this.lanes.clear();
+    this.count = 0;
+    this.timestamps = new Float64Array(INITIAL_CAP);
+    this.durations = new Float32Array(INITIAL_CAP);
+    this.selfDurations = new Float32Array(INITIAL_CAP);
+    this.renderIds = new Uint32Array(INITIAL_CAP);
+    this.componentIds = new Uint32Array(INITIAL_CAP);
+    this.commitIds = new Uint32Array(INITIAL_CAP);
+    this.causes = new Uint8Array(INITIAL_CAP);
+    this.flags = new Uint8Array(INITIAL_CAP);
+    this.selfPrefix = new Float64Array(INITIAL_CAP + 1);
+    this.countPrefix = new Uint32Array(INITIAL_CAP + 1);
+    this.wastedTree = new FenwickTree(INITIAL_CAP);
+    this.wastedSelfTree = new FenwickTree(INITIAL_CAP);
+    this.laneIndices = new Int32Array(INITIAL_CAP);
+    this.laneLocalIndices = new Uint32Array(INITIAL_CAP);
+    this.laneOrder = [];
+    this.laneKeyToOrder.clear();
+    this.renderToIndex.clear();
+    this.orderedCache = null;
+    this.orderedNonQuietCache = null;
+    this.quietSummaryCache = null;
+    this.activityLod = emptyLodStates();
+    this.t0 = Number.POSITIVE_INFINITY;
+    this.t1 = Number.NEGATIVE_INFINITY;
+  }
+
+  /** Ordered lanes by firstT then name (stable for UI). */
+  orderedLanes(options: { includeQuiet?: boolean; quietTotalMs?: number } = {}): LaneColumns[] {
+    if (!this.orderedCache) {
+      this.orderedCache = [...this.lanes.values()].sort(
+        (a, b) => a.firstT - b.firstT || a.name.localeCompare(b.name),
+      );
+    }
+    if (options.includeQuiet !== false) return this.orderedCache;
+
+    const quietTotalMs = options.quietTotalMs ?? 8;
+    if (!this.orderedNonQuietCache || this.orderedNonQuietCache.quietTotalMs !== quietTotalMs) {
+      this.orderedNonQuietCache = {
+        quietTotalMs,
+        lanes: this.orderedCache.filter((lane) => lane.totalDuration >= quietTotalMs),
+      };
+    }
+    return this.orderedNonQuietCache.lanes;
+  }
+
+  quietSummary(quietTotalMs = 8): { lanes: number; renders: number; selfMs: number } {
+    if (!this.quietSummaryCache || this.quietSummaryCache.quietTotalMs !== quietTotalMs) {
+      let lanes = 0;
+      let renders = 0;
+      let selfMs = 0;
+      for (const lane of this.lanes.values()) {
+        if (lane.totalDuration >= quietTotalMs) continue;
+        lanes++;
+        renders += lane.count;
+        selfMs += lane.selfTotal;
+      }
+      this.quietSummaryCache = { quietTotalMs, lanes, renders, selfMs };
+    }
+    const { lanes, renders, selfMs } = this.quietSummaryCache;
+    return { lanes, renders, selfMs };
+  }
+}
+
+export function causeFromReasons(reasons: ReadonlyArray<{ type: string }>): CauseCodeValue {
+  const reason = reasons[0];
+  if (!reason) return CauseCode.other;
+  switch (reason.type) {
+    case "props":
+      return CauseCode.props;
+    case "state":
+      return CauseCode.state;
+    case "context":
+      return CauseCode.context;
+    case "parent":
+      return CauseCode.cascade;
+    case "mount":
+      return CauseCode.mount;
+    default:
+      return CauseCode.other;
+  }
+}

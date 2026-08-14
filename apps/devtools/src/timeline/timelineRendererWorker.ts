@@ -2,6 +2,9 @@
 /**
  * OffscreenCanvas timeline base-layer renderer.
  * Overlay + pointer/keyboard stay on the main thread.
+ *
+ * Prefers transferable columnar geometry; reconstructs Clip adapters for
+ * drawBase so we never structured-clone millions of JS objects.
  */
 
 import { hydrateAxis } from "./model/axis.js";
@@ -55,6 +58,7 @@ scope.onmessage = (e: MessageEvent<InMessage>) => {
         axis,
         view,
         layout: p.layout,
+        ...(p.geometry ? { geometry: p.geometry } : {}),
         region: p.region,
         markers: p.markers,
         selectedRender: p.selectedRender,

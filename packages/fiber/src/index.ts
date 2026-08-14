@@ -21,3 +21,4 @@ export type { TimedEffect } from "./effect-timing.js";
 export { unwrapComponentFunction, locateComponentType } from "./componentSource.js";
 export { describeFunctionFrame, parseFrameLocation, clearFrameCache } from "./functionFrame.js";
 export type { DispatcherRef, FrameLocation } from "./functionFrame.js";
+export { eventHandlerName } from "./event-handler.js";

@@ -55,7 +55,12 @@ function layoutWith(
     y += h;
     return row;
   });
-  return { rows: built, totalH: y, quietLanes: [] };
+  return {
+    rows: built,
+    totalH: y,
+    quietLanes: [],
+    quietSummary: { lanes: 0, renders: 0, selfMs: 0 },
+  };
 }
 
 // 1 wall ms = 1 px, origin at nameW.

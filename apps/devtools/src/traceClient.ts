@@ -1,14 +1,14 @@
 /**
- * Main-thread TraceClient: spawns the trace worker, dual-writes into a local
- * TraceStore cache for sync UI reads, and exposes Comlink query helpers.
+ * Main-thread TraceClient: the trace worker is the authoritative database.
+ * React holds UI state + a sync mirror of the worker store for point reads
+ * during the remaining UI migration (inspector tabs, time travel apply sets).
  *
- * Hot-path ingest uses raw `postMessage({ type: "frame" })`; optional
- * `sessionId`/`seq` make the worker own the durable WAL append. Comlink
- * `ingest` remains available for callers that prefer the RPC surface.
+ * Hot-path ingest: worker-only when available (`postMessage({ type: "frame" })`).
+ * The local TraceStore is updated from `{ type: "ingested" }` — never dual-written
+ * on the ingest call itself. Doctor / other tees use {@link TraceClient.onFrame}.
  *
  * Worker supervision: `onerror` + ping/pong heartbeat. On death we respawn,
- * `wal.recover()`, rehydrate the local cache, and ask the panel to resync the
- * page — target recovery under 1s (WAL IDB + worker boot, no full page wait).
+ * `wal.recover()`, rehydrate the local mirror, and ask the panel to resync.
  */
 import * as Comlink from "comlink";
 import { TraceStore, type CommitSummary, type TraceSelector } from "@reactlens/trace-engine";
@@ -29,8 +29,10 @@ import type {
   TraceWorkerStats,
 } from "./traceWorker.js";
 import type { RecoveredSession } from "./wal.js";
+import type { TraceQuery, TraceQueryResult } from "./traceQuery.js";
 
 export type { TraceWorkerApi, TraceWorkerStats, TraceSessionExport, TraceSegment };
+export type { TraceQuery, TraceQueryResult };
 
 /** Ping interval while the worker is alive. */
 const WORKER_HEARTBEAT_MS = 2_000;
@@ -73,27 +75,27 @@ export interface TraceIngestMeta {
 
 export interface TraceClient {
   readonly workerAvailable: boolean;
-  /** Local cache — sync reads for the panel during migration. */
-  readonly store: TraceStore;
   /**
-   * Underlying worker (when spawned). Prefer {@link ingest} which dual-writes;
-   * use this for raw hot-path posts or diagnostics.
+   * Sync mirror of the worker store for point UI reads. Not dual-written on
+   * ingest — updated from worker `{ type: "ingested" }` (or local when no worker).
    */
+  readonly store: TraceStore;
+  /** Worker generation — bumps on every authoritative ingest / flag update. */
+  readonly generation: number;
   readonly worker: Worker | null;
-  /** Comlink RPC surface; null when the worker failed to spawn. */
   readonly api: Comlink.Remote<TraceWorkerApi> | null;
   /**
-   * Dual-write ingest. Pass `meta` when {@link TraceClientOptions.durableWal}
+   * Worker-authoritative ingest. Pass `meta` when {@link TraceClientOptions.durableWal}
    * is on so the worker can append + signal durability for page acks.
    */
   ingest(batch: EventsBatchMessage["payload"], meta?: TraceIngestMeta): void;
-  clear(): void;
   /**
-   * Archive the current document then clear — used on navigation so prior
-   * segments stay stitchable in the worker.
+   * Tee raw frames (Doctor, etc.) without depending on the sync mirror's
+   * `onIngest`. Fires once per ingest call.
    */
+  onFrame(cb: (batch: EventsBatchMessage["payload"]) => void): () => void;
+  clear(): void;
   beginSegment(previousSessionId: string | null, nextSessionId: string): void | Promise<void>;
-  /** Async queries (worker when available, else local cache). */
   export(): Promise<EventsBatchMessage["payload"]>;
   exportSession(meta?: TraceSessionExport["meta"]): Promise<TraceSessionExport>;
   importSession(session: TraceSessionExport): Promise<void>;
@@ -107,16 +109,11 @@ export interface TraceClient {
   getCauses(renderId: RenderId): Promise<Cause[]>;
   why(renderId: RenderId): Promise<WhyResult>;
   rootCause(renderId: RenderId): Promise<Cause | undefined>;
-  /**
-   * Prefer the local cache subscribe for UI (sync). Worker subscribe is for
-   * cross-thread listeners via Comlink.proxy.
-   */
+  /** Typed viewport / entity query against the worker (falls back to local). */
+  query(q: TraceQuery): Promise<TraceQueryResult>;
   subscribe(selector: TraceSelector, cb: () => void): () => void;
-  /** Worker-side subscribe when a worker is available; else local. */
   subscribeRemote(selector: TraceSelector, cb: () => void): Promise<() => void>;
-  /** Flush the worker WAL (panel teardown). */
   flushWal(): Promise<void>;
-  /** Await initial (or post-respawn) WAL recovery. */
   whenReady(): Promise<void>;
   dispose(): void;
 }
@@ -133,16 +130,16 @@ export interface TraceClientHandle {
  * a main-thread-only TraceStore when the worker cannot be created (same
  * graceful degradation as {@link createDoctorClient}).
  *
- * Ingest dual-writes: the local cache updates synchronously for UI reads, and
- * the worker gets a raw `{ type: "frame" }` post (authoritative store + WAL).
- * Worker `{ type: "ingested" }` acks are intentionally not re-applied here —
- * that would double-fire `onIngest` observers (Doctor tee).
+ * Ingest is worker-authoritative: the local mirror updates from `{ type: "ingested" }`.
+ * Frame tees (Doctor) use {@link TraceClient.onFrame}, not `store.onIngest`.
  */
 export function createTraceClient(options: TraceClientOptions = {}): TraceClientHandle {
   const store = new TraceStore();
   const causality = createCausality(store);
   const durableWal = options.durableWal === true;
   const walHandlers = options.wal ?? {};
+  const frameObservers = new Set<(batch: EventsBatchMessage["payload"]) => void>();
+  let generation = 0;
 
   let worker: Worker | null = null;
   let api: Comlink.Remote<TraceWorkerApi> | null = null;
@@ -155,12 +152,41 @@ export function createTraceClient(options: TraceClientOptions = {}): TraceClient
     readyResolve = r;
   });
   const pendingFlush = new Map<number, () => void>();
+  const pendingQueries = new Map<
+    number,
+    { resolve: (r: TraceQueryResult) => void; reject: (e: Error) => void }
+  >();
   let nextRequestId = 1;
   /** True after the first successful recover cycle (boot or respawn). */
   let recoveredOnce = false;
   /** Main-thread segment archive when the worker is unavailable. */
   const localSegments: TraceSegment[] = [];
   let localActiveId: string | null = null;
+
+  function notifyFrames(batch: EventsBatchMessage["payload"]): void {
+    for (const cb of frameObservers) cb(batch);
+  }
+
+  function markWastedLocal(batch: EventsBatchMessage["payload"]): void {
+    const wasted: RenderId[] = [];
+    const expected: RenderId[] = [];
+    for (const event of batch.events) {
+      if (event.type !== "render") continue;
+      try {
+        const verdict = causality.why(event.renderId).verdict;
+        if (verdict === "no-observable-change") wasted.push(event.renderId);
+        else if (verdict === "expected") expected.push(event.renderId);
+      } catch {
+        /* no verdict */
+      }
+    }
+    store.markWastedMany(wasted, expected);
+  }
+
+  function mirrorIngest(batch: EventsBatchMessage["payload"]): void {
+    store.ingest(batch);
+    markWastedLocal(batch);
+  }
 
   function markReady(): void {
     readyResolve?.();
@@ -205,6 +231,31 @@ export function createTraceClient(options: TraceClientOptions = {}): TraceClient
       case "pong":
         lastPongAt = Date.now();
         break;
+      case "ingested":
+        generation = msg.generation;
+        // Sync mirror for UI point reads — Doctor already teed via onFrame.
+        mirrorIngest(msg.batch);
+        if (msg.wasted) {
+          store.markWastedMany(msg.wasted);
+        }
+        break;
+      case "cleared":
+        generation = msg.generation;
+        store.clear();
+        break;
+      case "flags":
+        generation = msg.generation;
+        store.markWastedMany(msg.wasted, msg.expected);
+        break;
+      case "query-result": {
+        const pending = pendingQueries.get(msg.requestId);
+        if (pending) {
+          pendingQueries.delete(msg.requestId);
+          if (msg.error) pending.reject(new Error(msg.error));
+          else pending.resolve(msg.result);
+        }
+        break;
+      }
       case "wal-durable":
         walHandlers.onDurable?.(msg.sessionId, msg.seqs);
         break;
@@ -217,10 +268,8 @@ export function createTraceClient(options: TraceClientOptions = {}): TraceClient
       case "wal-recovered": {
         const recovered = msg.recovered;
         if (recovered) {
-          // Local cache may already hold live frames; clear+replay keeps it
-          // aligned with the worker after a cold boot / respawn.
           store.clear();
-          for (const frame of recovered.frames) store.ingest(frame);
+          for (const frame of recovered.frames) mirrorIngest(frame);
         }
         walHandlers.onRecovered?.(recovered);
         recoveredOnce = true;
@@ -235,7 +284,6 @@ export function createTraceClient(options: TraceClientOptions = {}): TraceClient
         }
         break;
       }
-      // ingested / cleared: dual-write already updated the local cache.
       default:
         break;
     }
@@ -327,6 +375,9 @@ export function createTraceClient(options: TraceClientOptions = {}): TraceClient
       return worker !== null && api !== null;
     },
     store,
+    get generation() {
+      return generation;
+    },
     get worker() {
       return worker;
     },
@@ -334,15 +385,17 @@ export function createTraceClient(options: TraceClientOptions = {}): TraceClient
       return api;
     },
     ingest(batch, meta) {
-      // Sync UI path first — panel reads stay synchronous during migration.
-      store.ingest(batch);
+      notifyFrames(batch);
       if (!worker) {
-        // No worker: durability is vacuously true for the panel cursor.
+        // No worker: local store is authoritative.
+        mirrorIngest(batch);
+        generation++;
         if (durableWal && meta) {
           walHandlers.onDurable?.(meta.sessionId, [meta.seq]);
         }
         return;
       }
+      // Worker-authoritative — do not dual-write here; mirror on `ingested`.
       if (durableWal && meta) {
         worker.postMessage({
           type: "frame",
@@ -354,8 +407,15 @@ export function createTraceClient(options: TraceClientOptions = {}): TraceClient
         worker.postMessage({ type: "frame", batch });
       }
     },
+    onFrame(cb) {
+      frameObservers.add(cb);
+      return () => {
+        frameObservers.delete(cb);
+      };
+    },
     clear() {
       store.clear();
+      generation++;
       worker?.postMessage({ type: "clear" });
     },
     beginSegment(previousSessionId, nextSessionId) {
@@ -398,11 +458,11 @@ export function createTraceClient(options: TraceClientOptions = {}): TraceClient
       if (api) {
         await api.importSession(session);
         store.clear();
-        store.ingest(session.payload);
+        mirrorIngest(session.payload);
         return;
       }
       store.clear();
-      store.ingest(session.payload);
+      mirrorIngest(session.payload);
     },
     async listSegments() {
       if (api) return api.listSegments();
@@ -412,7 +472,7 @@ export function createTraceClient(options: TraceClientOptions = {}): TraceClient
       if (api) {
         const session = await api.stitchSegments(ids);
         store.clear();
-        store.ingest(session.payload);
+        mirrorIngest(session.payload);
         return session;
       }
       const chosen =
@@ -436,12 +496,12 @@ export function createTraceClient(options: TraceClientOptions = {}): TraceClient
         meta: { title: `Stitched ${chosen.length || parts.length} segment(s)` },
       };
       store.clear();
-      store.ingest(payload);
+      mirrorIngest(payload);
       return session;
     },
     async stats() {
       if (api) return api.stats();
-      return store.stats();
+      return { ...store.stats(), columnarRenders: store.timelineIndex.count, generation };
     },
     async instance(id) {
       if (api) return api.instance(id);
@@ -471,6 +531,70 @@ export function createTraceClient(options: TraceClientOptions = {}): TraceClient
       if (api) return api.rootCause(renderId);
       return causality.rootCause(renderId);
     },
+    async query(q) {
+      if (api) return api.query(q);
+      // Local fallback for typed queries.
+      switch (q.kind) {
+        case "timeline-range":
+          return { kind: "timeline-range", result: store.queryTimeline(q) };
+        case "hit-test":
+          return {
+            kind: "hit-test",
+            result: store.hitTest(q.t, q.laneKey ?? null, {
+              rowStart: q.rowStart,
+              rowEnd: q.rowEnd,
+              includeQuiet: q.includeQuiet,
+              laneFilter: q.laneFilter,
+            }),
+          };
+        case "render":
+          return { kind: "render", result: store.getRender(q.id) };
+        case "component-renders":
+          return {
+            kind: "component-renders",
+            result: store.rendersOf(q.componentId).filter((render) => {
+              if (q.t0 !== undefined && render.timestamp < q.t0) return false;
+              if (q.t1 !== undefined && render.timestamp > q.t1) return false;
+              return true;
+            }),
+          };
+        case "tree-window": {
+          const result = store.flatTree.queryWindow({
+            expanded: new Set(q.expanded),
+            scrollTop: q.scrollTop,
+            viewH: q.viewH,
+            rowHeight: q.rowHeight ?? 26,
+          });
+          return { kind: "tree-window", result };
+        }
+        case "time-bounds":
+          return { kind: "time-bounds", result: store.timeBounds() };
+        case "stats-range":
+          return {
+            kind: "stats-range",
+            result: store.statsInRange(q.t0, q.t1, { excludeWasted: q.excludeWasted }),
+          };
+        case "why":
+          return { kind: "why", result: causality.why(q.id) };
+        case "instance":
+          return { kind: "instance", result: store.instance(q.id) };
+        case "snapshot":
+          return { kind: "snapshot", result: store.snapshot(q.id) };
+        case "commits":
+          return { kind: "commits", result: store.commits() };
+        case "apply-set-delta": {
+          const { applySetAt } = await import("@reactlens/trace-engine");
+          const set = applySetAt(store, q.t);
+          return {
+            kind: "apply-set-delta",
+            result: [...set.entries()].map(([componentId, renderId]) => ({
+              componentId,
+              renderId,
+            })),
+          };
+        }
+      }
+    },
     subscribe(selector, cb) {
       return store.subscribe(selector, cb);
     },
@@ -490,7 +614,6 @@ export function createTraceClient(options: TraceClientOptions = {}): TraceClient
           pendingFlush.delete(requestId);
           resolve();
         }
-        // Don't hang teardown if the worker is already dead.
         setTimeout(() => {
           if (pendingFlush.delete(requestId)) resolve();
         }, 2_000);
@@ -502,6 +625,9 @@ export function createTraceClient(options: TraceClientOptions = {}): TraceClient
     dispose() {
       disposed = true;
       stopHeartbeat();
+      frameObservers.clear();
+      for (const [, p] of pendingQueries) p.reject(new Error("disposed"));
+      pendingQueries.clear();
       if (api) {
         try {
           api[Comlink.releaseProxy]();

@@ -11,10 +11,33 @@ import type { LaneLayout } from "./model/rows.js";
 import type { TimelineTheme } from "./view/timelineTheme.js";
 import type { ClipRect } from "./view/draw.js";
 
+export type TimelineGeometryPayload = {
+  count: number;
+  /** Row index into layout.rows */
+  rowIndex: Uint32Array;
+  x0: Float64Array;
+  x1: Float64Array;
+  self: Float32Array;
+  renderId: Uint32Array;
+  componentId: Uint32Array;
+  cause: Uint8Array;
+  flags: Uint8Array;
+  stackRow: Uint16Array;
+  aggregate: Uint8Array;
+  renderCount: Uint32Array;
+  wastedCount: Uint32Array;
+};
+
 export type TimelineBasePaintPayload = {
   axis: AxisSnapshot;
   view: ViewWindow;
+  /**
+   * Row metadata + (optionally stripped) clips. Prefer {@link geometry} for
+   * transferable columns so we do not structured-clone every Clip object.
+   */
   layout: LaneLayout;
+  /** Transferable columnar geometry for the visible viewport. */
+  geometry?: TimelineGeometryPayload;
   region: TimeSpan | null;
   markers: ReadonlyArray<{ t: number; label: string; warn: boolean }>;
   selectedRender: string | number | null;
@@ -105,6 +128,45 @@ export function createTimelineRenderer(canvas: HTMLCanvasElement): TimelineRende
     onHit?: (clipRects: Map<string, ClipRect>, snapEdges: number[]) => void,
   ): void {
     if (onHit) hitCb = onHit;
+    const transfer: Transferable[] = [];
+    const geo = payload.geometry;
+    if (geo && geo.count > 0) {
+      for (const buf of [
+        geo.rowIndex.buffer,
+        geo.x0.buffer,
+        geo.x1.buffer,
+        geo.self.buffer,
+        geo.renderId.buffer,
+        geo.componentId.buffer,
+        geo.cause.buffer,
+        geo.flags.buffer,
+        geo.stackRow.buffer,
+        geo.aggregate.buffer,
+        geo.renderCount.buffer,
+        geo.wastedCount.buffer,
+      ]) {
+        if (buf instanceof ArrayBuffer) transfer.push(buf);
+      }
+      // Clips travel as columns — don't structured-clone Clip objects.
+      const stripLaneClips = <T extends { clips: unknown[] }>(lane: T): T => ({
+        ...lane,
+        clips: [] as unknown[] as T["clips"],
+      });
+      const slim = {
+        ...payload,
+        layout: {
+          ...payload.layout,
+          rows: payload.layout.rows.map((r) => ({
+            ...r,
+            lane: stripLaneClips(r.lane),
+            clips: [] as typeof r.clips,
+          })),
+          quietLanes: payload.layout.quietLanes.map(stripLaneClips),
+        },
+      };
+      worker.postMessage({ type: "paint", payload: slim, wantHit: !!onHit }, transfer);
+      return;
+    }
     worker.postMessage({ type: "paint", payload, wantHit: !!onHit });
   }
 

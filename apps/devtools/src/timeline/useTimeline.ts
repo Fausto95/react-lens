@@ -1,19 +1,13 @@
-/* oxlint-disable react/react-compiler -- imperative canvas/gesture/derivation caches; not Compiler-safe by design */
+/* oxlint-disable react/react-compiler -- reducer/context refs are intentionally imperative */
 import { useReducer, useRef } from "react";
 import type { TraceStore, CommitSummary } from "@reactlens/trace-engine";
 import type { Causality } from "@reactlens/causality";
-import type { RenderId } from "@reactlens/protocol";
 import { useTraceVersion } from "../useLens.js";
 import { derivationCache } from "../traceFresh.js";
-import { isLaneVisible, laneVisibility, type LaneFilter, type LaneKey } from "../laneFilter.js";
+import { laneFilterActive, type LaneFilter } from "../laneFilter.js";
 import type { TimeCursor } from "../timeCursor.js";
-import { buildLanes, statsInRegion, type Lane } from "./model/lanes.js";
-import { chainFor, edgesForCommit, type CausalEdge } from "./model/edges.js";
+import { statsPairFromStore } from "./model/lanes.js";
 import { buildActivity, buildAxis, mergeActive, type TimeSpan } from "./model/axis.js";
-import { computeLayout } from "./model/rows.js";
-import type { LaneMode } from "./model/wave.js";
-import { nameWidthFor } from "./view/metrics.js";
-import { assignStacks } from "./model/stacks.js";
 import { wallWindow } from "./model/viewport.js";
 import {
   initialTimelineState,
@@ -22,7 +16,6 @@ import {
   type TimelineContext,
 } from "./model/reducer.js";
 
-const WHY_CAP = 400;
 export const LONG_TASK_MS = 50;
 
 export interface UseTimelineArgs {
@@ -33,195 +26,116 @@ export interface UseTimelineArgs {
   fixApplied?: boolean;
 }
 
+/**
+ * Shared timeline model for Cascade.
+ *
+ * The old lane timeline paid for a viewport lane query, stack assignment and
+ * wave layout on every relevant state change. Cascade does not consume that
+ * representation, so this hook deliberately keeps only the indexed pieces the
+ * shell still needs: interactions, activity, selection, region stats and the
+ * global time cursor. No render-list materialization happens here.
+ */
 export function useTimeline({
   store,
-  causality,
+  causality: _causality,
   cursor,
   laneFilter,
   fixApplied = false,
 }: UseTimelineArgs) {
   const version = useTraceVersion(store, { kind: "global" });
-
-  // Version-keyed caches: the store mutates in place; pan/zoom re-renders must
-  // not redo the causality sweep. (Former useDerived call sites.)
   const caches = useRef({
     commits: derivationCache<CommitSummary[]>(),
     interactions: derivationCache<ReturnType<TraceStore["interactions"]>>(),
-    bounds: derivationCache<{ t0: number; t1: number }>(),
-    wasted: derivationCache<Set<RenderId>>(),
-    lanes: derivationCache<Lane[]>(),
-    arrows: derivationCache<CausalEdge[]>(),
+    activity: derivationCache<ReturnType<typeof buildActivity>>(),
+    active: derivationCache<Array<[number, number]>>(),
+    markers: derivationCache<Array<{ t: number; label: string; warn: boolean }>>(),
   }).current;
 
   const commits = caches.commits.read([store, version], () => store.commits());
   const interactions = caches.interactions.read([store, version], () => store.interactions());
+  const bounds = store.timeBounds();
 
-  const bounds = caches.bounds.read([store, version, commits], () => {
-    let lo = Number.POSITIVE_INFINITY;
-    let hi = Number.NEGATIVE_INFINITY;
-    for (const instance of store.allInstances()) {
-      for (const render of store.rendersOf(instance.id)) {
-        lo = Math.min(lo, render.timestamp);
-        hi = Math.max(
-          hi,
-          render.timestamp + Math.max(render.totalDuration, render.selfDuration, 0),
-        );
-      }
-    }
-    for (const commit of commits) {
-      lo = Math.min(lo, commit.timestamp);
-      hi = Math.max(hi, commit.endTimestamp);
-    }
-    if (!Number.isFinite(lo) || !Number.isFinite(hi)) return { t0: 0, t1: 120 };
-    return { t0: lo, t1: Math.max(hi, lo + 120) };
+  const acts = caches.activity.read([store, version], () => {
+    const fromIndex = store.activityIntervals(64);
+    const intervals: Array<[number, number]> = fromIndex.length > 0 ? [...fromIndex] : [];
+    for (const commit of commits) intervals.push([commit.timestamp, commit.endTimestamp]);
+    for (const interaction of interactions) intervals.push([interaction.start, interaction.end]);
+    if (intervals.length === 0) intervals.push([bounds.t0, bounds.t1]);
+    return buildActivity(intervals);
   });
 
-  const wasted = caches.wasted.read([store, causality, version], () => {
-    const set = new Set<RenderId>();
-    let checked = 0;
-    for (const instance of store.allInstances()) {
-      for (const render of store.rendersOf(instance.id)) {
-        if (checked >= WHY_CAP) return set;
-        checked++;
-        try {
-          if (causality.why(render.renderId).verdict === "no-observable-change") {
-            set.add(render.renderId);
-          }
-        } catch {
-          /* no verdict */
-        }
-      }
-    }
-    return set;
-  });
-
-  const lanes = caches.lanes.read([store, version, laneFilter, wasted], () =>
-    buildLanes(store, {
-      include: (key) => isLaneVisible(laneFilter, key),
-      isWasted: (renderId) => wasted.has(renderId),
-    }),
-  );
-
-  const laneDepth = (() => {
-    const byLane = new Map<string, (typeof lanes)[0]["clips"]>();
-    for (const lane of lanes) byLane.set(lane.key, lane.clips);
-    return assignStacks(byLane);
-  })();
-
-  const acts = (() => {
-    const iv: Array<[number, number]> = [];
-    for (const lane of lanes) {
-      for (const c of lane.clips) iv.push([c.t0, c.t1]);
-    }
-    for (const c of commits) iv.push([c.timestamp, c.endTimestamp]);
-    for (const it of interactions) iv.push([it.start, it.end]);
-    if (iv.length === 0) iv.push([bounds.t0, bounds.t1]);
-    return buildActivity(iv);
-  })();
-
-  const active = (() => {
+  const active = caches.active.read([store, version], () => {
     const spans: TimeSpan[] = [];
     for (const commit of commits) spans.push({ start: commit.timestamp, end: commit.endTimestamp });
-    for (const it of interactions) spans.push({ start: it.start, end: it.end });
+    for (const interaction of interactions)
+      spans.push({ start: interaction.start, end: interaction.end });
     return spans.length > 0
       ? mergeActive(spans)
       : ([[bounds.t0, bounds.t1]] as Array<[number, number]>);
-  })();
+  });
 
   const gapProgRef = useRef(new Map<string, number>());
-  const laneModesRef = useRef(new Map<LaneKey, LaneMode>());
-  const ctxRef = useRef<TimelineContext>({
-    bounds,
-    axis: buildAxis(acts, gapProgRef.current),
-  });
+  const ctxRef = useRef<TimelineContext>({ bounds, axis: buildAxis(acts, gapProgRef.current) });
   const [state, dispatch] = useReducer(
-    (s: Parameters<typeof timelineReducer>[0], a: TimelineAction) =>
-      timelineReducer(s, a, ctxRef.current),
+    (current: Parameters<typeof timelineReducer>[0], action: TimelineAction) =>
+      timelineReducer(current, action, ctxRef.current),
     undefined,
     () => {
-      const ax = buildAxis(acts, gapProgRef.current);
-      return initialTimelineState({ view: { a0: 0, a1: ax.total } });
+      const axis = buildAxis(acts, gapProgRef.current);
+      return initialTimelineState({ view: { a0: 0, a1: axis.total } });
     },
   );
 
-  const liveAxis = (() => {
-    // Remount / first paint: expanded gaps should already be at full progress.
-    for (const id of state.expandedGaps) {
-      if (!gapProgRef.current.has(id)) gapProgRef.current.set(id, 1);
-    }
-    return buildAxis(acts, gapProgRef.current);
-  })();
-  ctxRef.current = { bounds, axis: liveAxis };
+  const axis = buildAxis(acts, gapProgRef.current);
+  ctxRef.current = { bounds, axis };
+  const visible = wallWindow(axis, state.view);
 
-  const visible = wallWindow(liveAxis, state.view);
-
-  // Real plot width — must match the projector's stageW - nameW, or the LOD
-  // threshold disagrees with what gets painted.
-  const plotW = Math.max(1, state.width - nameWidthFor(state.width));
-  const pxPerMs = plotW / Math.max(1, state.view.a1 - state.view.a0);
-
-  const layout = computeLayout(lanes, laneDepth, {
-    shelfOpen: state.shelfOpen,
-    pxPerMs,
-    visible: { t0: visible.start, t1: visible.end },
-    prevModes: laneModesRef.current,
-    isDim: (key) => {
-      const v = laneVisibility(laneFilter, key);
-      return v === "muted" || v === "unsoloed";
-    },
-  });
-  laneModesRef.current = new Map(layout.rows.map((r) => [r.key, r.mode]));
-
-  const arrows = caches.arrows.read([store, version, state.selectedRender], () =>
-    state.selectedRender === null
-      ? []
-      : chainFor(edgesForCommit(store, state.selectedRender), state.selectedRender),
-  );
-
+  const serializedLaneFilter = laneFilterActive(laneFilter)
+    ? { solo: [...laneFilter.solo], muted: [...laneFilter.muted] }
+    : undefined;
   const statsRange = state.region ?? { start: visible.start, end: visible.end };
-  const stats = statsInRegion(lanes, statsRange.start, statsRange.end, {
-    excludeWasted: fixApplied,
+  const statsPair = statsPairFromStore(store, statsRange.start, statsRange.end, {
+    ...(serializedLaneFilter ? { laneFilter: serializedLaneFilter } : {}),
   });
-  const statsRaw = statsInRegion(lanes, statsRange.start, statsRange.end);
+  const statsRaw = statsPair.raw;
+  const stats = fixApplied ? statsPair.excludeWasted : statsRaw;
 
-  const playhead = cursor.mode === "live" ? bounds.t1 : cursor.t;
-
-  const markers = (() => {
+  const markers = caches.markers.read([store, version], () => {
     const out: Array<{ t: number; label: string; warn: boolean }> = [];
-    for (const it of interactions) {
-      out.push({ t: it.start, label: it.label || "interaction", warn: false });
+    for (const interaction of interactions) {
+      out.push({ t: interaction.start, label: interaction.label || "interaction", warn: false });
     }
-    for (const c of commits) {
-      const dur = c.endTimestamp - c.timestamp;
-      if (dur >= LONG_TASK_MS) {
-        out.push({ t: c.timestamp, label: `long task ${Math.round(dur)} ms`, warn: true });
+    for (const commit of commits) {
+      const duration = commit.endTimestamp - commit.timestamp;
+      if (duration >= LONG_TASK_MS) {
+        out.push({
+          t: commit.timestamp,
+          label: `long task ${Math.round(duration)} ms`,
+          warn: true,
+        });
       }
     }
     out.sort((a, b) => a.t - b.t);
     return out;
-  })();
+  });
 
   return {
+    store,
     state,
     dispatch,
     gapProgRef,
     bounds,
     active,
     acts,
-    axis: liveAxis,
+    axis,
     commits,
     interactions,
     markers,
     visible,
-    lanes,
-    laneDepth,
-    layout,
-    arrows,
     stats,
     statsRaw,
     fixSavedRenders: Math.max(0, statsRaw.renders - stats.renders),
-    playhead,
-    pxPerMs,
+    playhead: cursor.mode === "live" ? bounds.t1 : cursor.t,
   };
 }
 

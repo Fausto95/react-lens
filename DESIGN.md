@@ -188,8 +188,11 @@ is then a query, answered at three progressive-disclosure levels (parent
 rerender → what state/context changed → the originating call site + event).
 
 Snapshots (`RenderSnapshot`) live in **ring buffers with hard caps** (e.g. 100
-renders/component, 10k events) so we never retain the app graph. `WeakRef` for
-live fiber back-references; serialized snapshots for history.
+renders/component for the inspector, capped commit DOM snapshots) so we never
+retain the app graph unboundedly. The **timeline source of truth** is the
+columnar `TimelineIndex` with HOT/WARM/COLD retention (not the event ring
+cap). `WeakRef` for live fiber back-references; serialized snapshots for
+history.
 
 ---
 
@@ -260,18 +263,25 @@ or language server.
 
 Three separated stores, never merged:
 
-- **UI state** → Jotai (planned; currently React local state). Narrow atoms.
-  No manual memoization (Compiler assumed). Trace data must not be mirrored
-  into the UI store.
-- **Trace store** → plain normalized log, _outside React_ (and soon: in a
-  dedicated worker), updated by batched appends. Components subscribe to
-  narrow slices / async queries. High-frequency events never go through
-  `setState`.
-- **Derived analysis** → computed in workers, cached by input hash.
+- **UI state** → Jotai / React local state. Narrow atoms. No manual memoization
+  (Compiler assumed). Trace data must not be mirrored into the UI store as
+  `RenderEvent[]` / `Lane[]` / `Clip[]`.
+- **Trace database** → lives in the **trace worker** (columnar indexes +
+  snapshots + WAL). Authoritative. The panel may keep a sync mirror for point
+  reads during migration, but ingest is worker-first — never dual-written on
+  the hot path. High-frequency events never go through `setState`.
+- **Derived analysis** → causality / diff / Doctor in dedicated workers,
+  writing flags back into the columnar index. The timeline is a **reader** of
+  viewport queries (`queryTimeline`, `hitTest`, `statsInRange`), not an
+  analyzer.
 
 Timeline and large graphs render to **Canvas** (OffscreenCanvas worker for the
-timeline base layer, with main-thread `draw.ts` fallback; overlay /
-pointer / keyboard stay on the panel thread), not thousands of DOM nodes.
+timeline base layer with transferable columnar geometry; overlay / pointer /
+keyboard stay on the panel thread). The tree mounts only overscan-visible DOM
+rows from a flat-tree viewport query.
+
+**Invariant:** no interactive operation may be proportional to total session
+size (pan/zoom/hit-test/stats/tree-scroll/ingest).
 
 **Bidirectional selection.** Every pick — tree, ⌘K, timeline bar, relations,
 waste banner, page inspect — goes through one writer in `Panel` (`select`), so

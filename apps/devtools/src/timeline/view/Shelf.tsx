@@ -3,16 +3,19 @@ import type { Lane } from "../model/lanes.js";
 
 export function Shelf({
   quietLanes,
+  quietSummary,
   open,
   narrow,
   onToggle,
 }: {
   quietLanes: readonly Lane[];
+  quietSummary?: { lanes: number; renders: number };
   open: boolean;
   narrow: boolean;
   onToggle: () => void;
 }) {
-  const renders = quietLanes.reduce((a, l) => a + l.clips.length, 0);
+  const quietCount = quietSummary?.lanes ?? quietLanes.length;
+  const renders = quietSummary?.renders ?? quietLanes.reduce((a, l) => a + l.renders, 0);
   return (
     <div
       className="tl-shelf"
@@ -28,7 +31,7 @@ export function Shelf({
       }}
     >
       <span>{open ? "▾" : "▸"}</span>
-      {quietLanes.length} quiet components
+      {quietCount} quiet components
       <span className="tl-shelf-pill">{renders} renders</span>
       {!narrow && (
         <span className="tl-shelf-hint">
