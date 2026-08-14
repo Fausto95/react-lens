@@ -6,9 +6,15 @@ import type { LaneLayout } from "../model/rows.js";
 import type { ViewWindow } from "../model/viewport.js";
 import type { TimelineGeometryPayload } from "../timelineRendererClient.js";
 import { semanticZoomForPxPerMs } from "../model/semanticZoom.js";
-import { LANE_PAD, ROW_H, RULER_H } from "./metrics.js";
+import { RULER_H } from "./metrics.js";
 import { arrowSpanVisible, drawCausalArrow, planCausalArrows, routeCausalArrow } from "./arrows.js";
-import { buildClipRect, buildWaveRect, computeClipRects, type ClipRect } from "./clipRects.js";
+import {
+  buildClipRect,
+  buildWaveRect,
+  computeClipRects,
+  stackClipVerticalGeometry,
+  type ClipRect,
+} from "./clipRects.js";
 import { labelForClip, reserveLabelSpan, type LabelSpan } from "./clipLabels.js";
 import { causeColor, clipPaint, hexAlpha, type TimelineTheme } from "./timelineTheme.js";
 import { RenderFlags, causeCodeToName } from "@reactlens/trace-engine";
@@ -139,14 +145,13 @@ function clipRectsFromGeometry(
         const centerX = proj.wToX(clip.t0 + Math.max(clip.self, 0.15) / 2);
         clipRects.set(String(clip.renderId), buildWaveRect(clip, centerX, row.y + row.h / 2));
       } else {
-        const clipH = ROW_H - 6;
-        const stackRow = detailed
-          ? (clip.row ?? 0) % Math.max(1, Math.floor((row.h - LANE_PAD) / ROW_H))
-          : 0;
-        const y = row.y + LANE_PAD / 2 + stackRow * ROW_H + 1.5;
+        // Never modulo stackRow: doing so folds row N back onto rows 0..capacity
+        // and hides causal renders. Deep overlap stacks compress vertically inside
+        // the fixed virtual lane so virtualization stays fixed-height/O(visible).
+        const vertical = stackClipVerticalGeometry(row, clip.row ?? 0);
         clipRects.set(
           String(clip.renderId),
-          buildClipRect(clip, x0, y, clipH, Math.max(0, x1 - x0)),
+          buildClipRect(clip, x0, vertical.y, vertical.height, Math.max(0, x1 - x0)),
         );
       }
       snapEdges.push(clip.t0, clip.t1);
@@ -221,7 +226,7 @@ function drawClipFill(
     grad.addColorStop(0, paint.fillTop);
     grad.addColorStop(1, paint.fillBottom);
     ctx.fillStyle = grad;
-    roundRect(ctx, r.x, r.y, r.width, r.height, 4);
+    roundRect(ctx, r.x, r.y, r.width, r.height, Math.min(4, r.height / 2));
     ctx.fill();
     ctx.strokeStyle = paint.stroke;
     ctx.stroke();
@@ -412,6 +417,9 @@ export function drawBase(args: DrawBaseArgs): {
     for (const rect of rectsByLane.get(String(row.key)) ?? []) {
       if (rect.visual.x + rect.visual.width < NW || rect.visual.x > W) continue;
       drawClipFill(ctx, rect, theme, args.pattern, viewMode === "cost");
+      // Deep compressed tracks stay distinct and interactive, but labels would
+      // become unreadable at tiny heights. Their tooltip still contains details.
+      if (rect.visual.height < 10) continue;
       const text = labelForClip(rect.visual.width, rect.clip);
       if (!text) continue;
       ctx.font = `600 9px ${theme.mono}`;
