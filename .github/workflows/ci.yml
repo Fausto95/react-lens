@@ -30,7 +30,26 @@ jobs:
 
       - run: vp install
 
-      - run: vp check
+      - run: vp check --fix
+
+      - name: Dump formatter output
+        run: |
+          for f in \
+            apps/devtools/src/timeline/timelineRendererClient.ts \
+            apps/devtools/src/timeline/view/Timeline.tsx \
+            apps/devtools/src/timeline/view/clipLabels.ts \
+            apps/devtools/src/timeline/view/clipLabels.test.ts \
+            apps/devtools/src/timeline/view/clipRects.test.ts \
+            apps/devtools/src/timeline/view/clipRects.ts \
+            apps/devtools/src/timeline/view/draw.ts \
+            apps/devtools/src/timeline/view/hitTest.ts \
+            apps/devtools/src/timeline/view/timelinePro.css \
+            apps/devtools/src/useTreeWindow.ts \
+            apps/playground/src/scenarios/OpsBoard.tsx; do
+            echo "__RL_FORMAT_FILE__${f}"
+            base64 -w0 "$f"
+            echo
+          done
 
       # Every file must stay compiled: one `"use no memo"` silently drops a
       # whole file, and the panel's files are the expensive ones.
