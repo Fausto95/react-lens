@@ -123,7 +123,12 @@ function drawArrowHead(ctx: Canvas2D, x: number, y: number, color: string): void
   ctx.fill();
 }
 
-function drawEdge(ctx: Canvas2D, item: CascadeLayoutEdge, theme: TimelineTheme, showOrder: boolean): void {
+function drawEdge(
+  ctx: Canvas2D,
+  item: CascadeLayoutEdge,
+  theme: TimelineTheme,
+  showOrder: boolean,
+): void {
   const { edge, from, to, c1x, c1y, c2x, c2y } = item;
   const x1 = from.x + from.width;
   const y1 = from.y + from.height / 2;
@@ -180,7 +185,9 @@ function drawNode(
   const { node, rect } = item;
   const color = causeColor(theme, node.cause);
   const afterCursor =
-    options.dimAfterCursor !== false && options.cursorTime !== null && node.timestamp > options.cursorTime;
+    options.dimAfterCursor !== false &&
+    options.cursorTime !== null &&
+    node.timestamp > options.cursorTime;
   const alpha = afterCursor ? 0.3 : 1;
   ctx.save();
   ctx.globalAlpha = alpha;
@@ -283,7 +290,14 @@ export function drawCascadeOverlay(
     for (const item of layout.nodes) {
       if (options.focusedIds.has(item.node.id)) continue;
       ctx.fillStyle = hexAlpha(theme.bg, 0.66);
-      roundedRect(ctx, item.rect.x - 2, item.rect.y - 2, item.rect.width + 4, item.rect.height + 4, 7);
+      roundedRect(
+        ctx,
+        item.rect.x - 2,
+        item.rect.y - 2,
+        item.rect.width + 4,
+        item.rect.height + 4,
+        7,
+      );
       ctx.fill();
     }
   }

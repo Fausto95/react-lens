@@ -1,24 +1,27 @@
-name: Cascade format
+name: CI
+
+# Unit (Vitest) + Playwright e2e against apps/e2e-fixture. Runs on every PR and
+# on pushes to main so release workflows can assume the suite is green.
 
 on:
+  push:
+    branches: [main]
   pull_request:
 
 concurrency:
-  group: cascade-format-${{ github.ref }}
+  group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  format:
+  unit:
+    name: Unit tests
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
-        with:
-          ref: ${{ github.head_ref }}
-          fetch-depth: 2
 
       - uses: voidzero-dev/setup-vp@v1.17.0
         with:
@@ -27,35 +30,49 @@ jobs:
 
       - run: vp install
 
-      - name: Preserve imperative canvas and mutable-store invalidation patterns
-        run: |
-          python - <<'PY'
-          from pathlib import Path
+      - run: vp check
 
-          cascade = Path('apps/devtools/src/timeline/cascade/CascadeTimeline.tsx')
-          source = cascade.read_text()
-          marker = '/* oxlint-disable react/react-compiler -- imperative canvas/gesture refs; pointer hot paths intentionally bypass React state */\n'
-          if not source.startswith('/* oxlint-disable react/react-compiler'):
-              cascade.write_text(marker + source)
+      # Every file must stay compiled: one `"use no memo"` silently drops a
+      # whole file, and the panel's files are the expensive ones.
+      # Use `vp run` — setup-vp does not put pnpm on PATH.
+      - run: vp run check:compiled
 
-          tree = Path('apps/devtools/src/useTreeWindow.ts')
-          source = tree.read_text()
-          dep_marker = '/* oxlint-disable react-hooks/exhaustive-deps -- args.version intentionally invalidates memoized reads from the mutable TraceStore */\n'
-          if 'react-hooks/exhaustive-deps' not in source.splitlines()[0:3]:
-              tree.write_text(dep_marker + source)
-          PY
+      # Bundle must carry Compiler output (memo_cache_sentinel), not just
+      # pass the directive ban — a misconfigured sources filter would otherwise
+      # ship unoptimized panel code silently. Runs on every PR + main push.
+      - run: vp run check:compiled:build
 
-      - name: Apply repository formatter
-        run: vp check --fix || true
+      - run: vp test run
 
-      - name: Commit canonical formatting and restore CI
-        run: |
-          git fetch origin more-perf --depth=1
-          git show origin/more-perf:.github/workflows/ci.yml > .github/workflows/ci.yml
-          git config user.name "react-lens-ci"
-          git config user.email "actions@users.noreply.github.com"
-          git add -A
-          if ! git diff --cached --quiet; then
-            git commit -m "style(cascade): apply repository formatter"
-            git push origin HEAD:${{ github.head_ref }}
-          fi
+  e2e:
+    name: E2E (Playwright)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: voidzero-dev/setup-vp@v1.17.0
+        with:
+          node-version: "20"
+          cache: true
+
+      - run: vp install
+
+      # Chromium only — matches the default Playwright project and keeps the
+      # download small. --with-deps installs the OS libraries Ubuntu needs.
+      - name: Install Playwright Chromium
+        run: vp exec playwright install --with-deps chromium
+
+      - name: Run e2e
+        run: vp run test:e2e
+
+      - name: Upload Playwright report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: |
+            playwright-report/
+            test-results/
+          retention-days: 14
+          if-no-files-found: ignore

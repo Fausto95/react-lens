@@ -147,7 +147,9 @@ function buildRawGraph(store: TraceStore, interaction: Interaction): RawGraph {
     byCommitComponent.set(commitComponentKey(render.commitId, render.componentId), render.renderId);
   }
 
-  renders.sort((a, b) => a.timestamp - b.timestamp || (a.renderId as number) - (b.renderId as number));
+  renders.sort(
+    (a, b) => a.timestamp - b.timestamp || (a.renderId as number) - (b.renderId as number),
+  );
 
   const renderSet = new Set(renders.map((render) => render.renderId));
   const parentByRender = new Map<RenderId, RenderId>();
@@ -264,7 +266,9 @@ export function buildCascadeProjection(
   // Hard guard for huge fan-out that did not share component names. Preserve all
   // non-leaves, roots and the most expensive leaves; summarize the rest.
   if (nodes.length > maxVisibleNodes) {
-    const structural = nodes.filter((node) => node.kind === "aggregate" || node.childCount > 0 || node.depth === 0);
+    const structural = nodes.filter(
+      (node) => node.kind === "aggregate" || node.childCount > 0 || node.depth === 0,
+    );
     const structuralIds = new Set(structural.map((node) => node.id));
     const leaves = nodes
       .filter((node) => !structuralIds.has(node.id))
@@ -284,7 +288,8 @@ export function buildCascadeProjection(
         name: `${omitted.length.toLocaleString()} more renders`,
         cause: "other",
         timestamp: Math.min(...omitted.map((node) => node.timestamp)),
-        duration: Math.max(...omitted.map((node) => node.timestamp + node.duration)) - interaction.start,
+        duration:
+          Math.max(...omitted.map((node) => node.timestamp + node.duration)) - interaction.start,
         selfDuration: omitted.reduce((sum, node) => sum + node.selfDuration, 0),
         depth: Math.max(1, ...omitted.map((node) => node.depth)),
         parentId: null,
@@ -298,10 +303,14 @@ export function buildCascadeProjection(
   const aggregateByMember = new Map<string, string>();
   for (const aggregate of aggregates) {
     if (!visibleIds.has(aggregate.id)) continue;
-    for (const renderId of aggregate.renderIds) aggregateByMember.set(rawId(renderId), aggregate.id);
+    for (const renderId of aggregate.renderIds)
+      aggregateByMember.set(rawId(renderId), aggregate.id);
   }
 
-  const edgePairs = new Map<string, { from: string; to: string; cause: CascadeCause; timestamp: number }>();
+  const edgePairs = new Map<
+    string,
+    { from: string; to: string; cause: CascadeCause; timestamp: number }
+  >();
   for (const render of raw.renders) {
     const parent = raw.parentByRender.get(render.renderId);
     if (parent === undefined) continue;
@@ -311,20 +320,28 @@ export function buildCascadeProjection(
     const to = aggregateByMember.get(rawTo) ?? rawTo;
     if (from === to || !visibleIds.has(from) || !visibleIds.has(to)) continue;
     const key = `${from}>${to}`;
-    if (!edgePairs.has(key)) edgePairs.set(key, { from, to, cause: causeOf(render), timestamp: render.timestamp });
+    if (!edgePairs.has(key))
+      edgePairs.set(key, { from, to, cause: causeOf(render), timestamp: render.timestamp });
   }
 
   const edges = [...edgePairs.values()]
-    .sort((a, b) => a.timestamp - b.timestamp || a.from.localeCompare(b.from) || a.to.localeCompare(b.to))
-    .map((edge, index): CascadeEdge => ({
-      id: `e:${index}:${edge.from}:${edge.to}`,
-      from: edge.from,
-      to: edge.to,
-      order: index + 1,
-      cause: edge.cause,
-    }));
+    .sort(
+      (a, b) =>
+        a.timestamp - b.timestamp || a.from.localeCompare(b.from) || a.to.localeCompare(b.to),
+    )
+    .map(
+      (edge, index): CascadeEdge => ({
+        id: `e:${index}:${edge.from}:${edge.to}`,
+        from: edge.from,
+        to: edge.to,
+        order: index + 1,
+        cause: edge.cause,
+      }),
+    );
 
-  const roots = nodes.filter((node) => node.parentId === null || !visibleIds.has(node.parentId)).map((node) => node.id);
+  const roots = nodes
+    .filter((node) => node.parentId === null || !visibleIds.has(node.parentId))
+    .map((node) => node.id);
   const maxDepth = nodes.reduce((max, node) => Math.max(max, node.depth), 0);
   const aggregatedRenderCount = nodes.reduce(
     (sum, node) => sum + (node.kind === "aggregate" ? node.aggregateCount : 0),

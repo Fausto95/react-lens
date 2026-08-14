@@ -1,3 +1,4 @@
+/* oxlint-disable react/react-compiler -- imperative canvas/gesture refs; pointer hot paths intentionally bypass React state */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { TraceStore } from "@reactlens/trace-engine";
 import type { ComponentId } from "@reactlens/protocol";
@@ -52,10 +53,14 @@ function containingInteraction(
   return candidate;
 }
 
-function interactionWindow<T extends { id: string }>(items: readonly T[], selectedId: string | null): T[] {
+function interactionWindow<T extends { id: string }>(
+  items: readonly T[],
+  selectedId: string | null,
+): T[] {
   const max = 180;
   if (items.length <= max) return [...items];
-  const selected = selectedId === null ? items.length - 1 : items.findIndex((item) => item.id === selectedId);
+  const selected =
+    selectedId === null ? items.length - 1 : items.findIndex((item) => item.id === selectedId);
   const center = selected < 0 ? items.length - 1 : selected;
   const start = Math.max(0, Math.min(items.length - max, center - Math.floor(max / 2)));
   return items.slice(start, start + max);
@@ -100,7 +105,11 @@ function fitTransform(layout: CascadeLayout, width: number, height: number): Vie
   const pad = 34;
   const zoom = Math.max(
     0.18,
-    Math.min(1.35, (width - pad * 2) / Math.max(1, layout.worldWidth), (height - pad * 2) / Math.max(1, layout.worldHeight)),
+    Math.min(
+      1.35,
+      (width - pad * 2) / Math.max(1, layout.worldWidth),
+      (height - pad * 2) / Math.max(1, layout.worldHeight),
+    ),
   );
   return {
     zoom,
@@ -130,23 +139,22 @@ export function CascadeTimeline({
   const sizeRef = useRef({ width: 1, height: 1, dpr: 1 });
   const viewRef = useRef<ViewTransform>({ zoom: 1, panX: 0, panY: 0 });
   const hoverRef = useRef<string | null>(null);
-  const dragRef = useRef<
-    | null
-    | {
-        pointerId: number;
-        x: number;
-        y: number;
-        panX: number;
-        panY: number;
-        hitId: string | null;
-        moved: boolean;
-      }
-  >(null);
+  const dragRef = useRef<null | {
+    pointerId: number;
+    x: number;
+    y: number;
+    panX: number;
+    panY: number;
+    hitId: string | null;
+    moved: boolean;
+  }>(null);
   const firstFitRef = useRef(true);
 
   const latest = model.interactions[model.interactions.length - 1] ?? null;
   const initial = containingInteraction(model.interactions, cursor.t) ?? latest;
-  const [selectedInteractionId, setSelectedInteractionId] = useState<string | null>(initial?.id ?? null);
+  const [selectedInteractionId, setSelectedInteractionId] = useState<string | null>(
+    initial?.id ?? null,
+  );
   const [followLatest, setFollowLatest] = useState(initial?.id === latest?.id);
   const [expandedAggregates, setExpandedAggregates] = useState<ReadonlySet<string>>(new Set());
   const [localSelectedId, setLocalSelectedId] = useState<string | null>(null);
@@ -222,7 +230,9 @@ export function CascadeTimeline({
     if (focusMode === "expensive") {
       const threshold = maxSelfTime * 0.35;
       return new Set(
-        projection.nodes.filter((node) => node.selfDuration >= threshold || node.depth === 0).map((node) => node.id),
+        projection.nodes
+          .filter((node) => node.selfDuration >= threshold || node.depth === 0)
+          .map((node) => node.id),
       );
     }
     return null;
@@ -355,7 +365,8 @@ export function CascadeTimeline({
     }
     if (tooltipNameRef.current) tooltipNameRef.current.textContent = hit.node.name;
     if (tooltipMetaRef.current) {
-      const count = hit.node.kind === "aggregate" ? `${hit.node.aggregateCount} renders` : hit.node.cause;
+      const count =
+        hit.node.kind === "aggregate" ? `${hit.node.aggregateCount} renders` : hit.node.cause;
       tooltipMetaRef.current.textContent = `${count} · ${hit.node.selfDuration.toFixed(2)}ms self`;
     }
     const width = stageRef.current?.clientWidth ?? 300;
@@ -395,7 +406,11 @@ export function CascadeTimeline({
         return;
       }
       setLocalSelectedId(null);
-      model.dispatch({ type: "selectClip", renderId: node.renderId, laneKey: typeLaneKey(node.name) });
+      model.dispatch({
+        type: "selectClip",
+        renderId: node.renderId,
+        laneKey: typeLaneKey(node.name),
+      });
       onSelectComponent?.(node.componentId);
     },
     [model, onSelectComponent],
@@ -430,7 +445,8 @@ export function CascadeTimeline({
     (delta: number) => {
       if (!interaction || model.interactions.length === 0) return;
       const index = model.interactions.findIndex((item) => item.id === interaction.id);
-      const next = model.interactions[Math.max(0, Math.min(model.interactions.length - 1, index + delta))];
+      const next =
+        model.interactions[Math.max(0, Math.min(model.interactions.length - 1, index + delta))];
       if (next) chooseInteraction(next.id);
     },
     [chooseInteraction, interaction, model.interactions],
@@ -453,7 +469,9 @@ export function CascadeTimeline({
         <button type="button" onClick={fit}>
           Fit
         </button>
-        <span className="rl-cascade-zoom" ref={zoomRef}>100%</span>
+        <span className="rl-cascade-zoom" ref={zoomRef}>
+          100%
+        </span>
         <span className="rl-cascade-pill">{interaction?.kind ?? "idle"}</span>
         <span className="spacer" />
         <button
@@ -515,7 +533,8 @@ export function CascadeTimeline({
               <span className="title">{item.label}</span>
               <span className="time">{Math.round(item.start - model.bounds.t0)}ms</span>
               <span className="meta">
-                {item.metrics.renderCount.toLocaleString()} renders · {item.metrics.reactDuration.toFixed(1)}ms React
+                {item.metrics.renderCount.toLocaleString()} renders ·{" "}
+                {item.metrics.reactDuration.toFixed(1)}ms React
               </span>
             </button>
           ))}
@@ -602,7 +621,10 @@ export function CascadeTimeline({
             if (event.metaKey || event.ctrlKey) {
               const view = viewRef.current;
               const oldZoom = view.zoom;
-              const nextZoom = Math.max(0.16, Math.min(3.2, oldZoom * (event.deltaY > 0 ? 0.9 : 1.1)));
+              const nextZoom = Math.max(
+                0.16,
+                Math.min(3.2, oldZoom * (event.deltaY > 0 ? 0.9 : 1.1)),
+              );
               const wx = (sx - view.panX) / oldZoom;
               const wy = (sy - view.panY) / oldZoom;
               view.zoom = nextZoom;
@@ -637,7 +659,9 @@ export function CascadeTimeline({
           <canvas ref={baseRef} />
           <canvas ref={overlayRef} className="rl-cascade-overlay" />
           {!projection || projection.nodes.length === 0 ? (
-            <div className="rl-cascade-empty">No render cascade is available for this interaction.</div>
+            <div className="rl-cascade-empty">
+              No render cascade is available for this interaction.
+            </div>
           ) : null}
           <div className="rl-cascade-tooltip" ref={tooltipRef} style={{ display: "none" }}>
             <strong ref={tooltipNameRef} />
@@ -649,7 +673,9 @@ export function CascadeTimeline({
       <div className="rl-cascade-footer">
         <span>{footer}</span>
         <span className="spacer" />
-        <span className="rl-cascade-help">drag pan · ⌘/ctrl+wheel zoom · double-click seek · F fit · ←/→ interactions</span>
+        <span className="rl-cascade-help">
+          drag pan · ⌘/ctrl+wheel zoom · double-click seek · F fit · ←/→ interactions
+        </span>
         {transport}
       </div>
     </div>

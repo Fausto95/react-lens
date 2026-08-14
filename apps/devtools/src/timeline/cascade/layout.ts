@@ -76,7 +76,10 @@ export function layoutCascade(
   const orderById = new Map<string, number>();
   let maxBottom = o.paddingY;
   let maxRight = o.paddingX;
-  const interactionSpan = Math.max(0.001, projection.interaction.end - projection.interaction.start);
+  const interactionSpan = Math.max(
+    0.001,
+    projection.interaction.end - projection.interaction.start,
+  );
 
   for (let depth = 0; depth <= projection.maxDepth; depth++) {
     const nodes = byDepth.get(depth) ?? [];

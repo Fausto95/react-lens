@@ -86,7 +86,7 @@
   font-size: 9px;
   font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: .06em;
+  letter-spacing: 0.06em;
 }
 
 .rl-cascade-interaction {
@@ -172,7 +172,7 @@
   border: 1px solid var(--line-strong);
   border-radius: 6px;
   background: var(--panel-3, var(--panel-2));
-  box-shadow: 0 10px 28px rgba(0, 0, 0, .38);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.38);
   color: var(--text-2);
   pointer-events: none;
   font-size: 10px;

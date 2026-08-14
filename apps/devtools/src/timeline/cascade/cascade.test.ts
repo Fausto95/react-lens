@@ -42,7 +42,8 @@ function fixture() {
   const instances = new Map<number, { id: ComponentId; name: string; parentId?: ComponentId }>();
   instances.set(1, { id: cid(1), name: "CartProvider" });
   instances.set(2, { id: cid(2), name: "ProductList", parentId: cid(1) });
-  for (let i = 0; i < 7; i++) instances.set(10 + i, { id: cid(10 + i), name: "ProductCard", parentId: cid(2) });
+  for (let i = 0; i < 7; i++)
+    instances.set(10 + i, { id: cid(10 + i), name: "ProductCard", parentId: cid(2) });
   const store = {
     getRender: (id: RenderId) => renders.get(id),
     instance: (id: ComponentId) => instances.get(id as number),
@@ -100,7 +101,9 @@ describe("cascade projection", () => {
 describe("cascade spatial index", () => {
   it("hits nodes in world coordinates independent of viewport pan/zoom", () => {
     const { store, interaction } = fixture();
-    const layout = layoutCascade(buildCascadeProjection(store, interaction, { aggregateThreshold: 99 }));
+    const layout = layoutCascade(
+      buildCascadeProjection(store, interaction, { aggregateThreshold: 99 }),
+    );
     const index = new CascadeSpatialIndex(layout.nodes);
     const node = layout.nodeById.get("r:2")!;
     const hit = index.hit(node.rect.x + 5, node.rect.y + 5);

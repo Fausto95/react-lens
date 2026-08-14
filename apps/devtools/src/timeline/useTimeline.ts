@@ -67,7 +67,8 @@ export function useTimeline({
   const active = caches.active.read([store, version], () => {
     const spans: TimeSpan[] = [];
     for (const commit of commits) spans.push({ start: commit.timestamp, end: commit.endTimestamp });
-    for (const interaction of interactions) spans.push({ start: interaction.start, end: interaction.end });
+    for (const interaction of interactions)
+      spans.push({ start: interaction.start, end: interaction.end });
     return spans.length > 0
       ? mergeActive(spans)
       : ([[bounds.t0, bounds.t1]] as Array<[number, number]>);
@@ -107,7 +108,11 @@ export function useTimeline({
     for (const commit of commits) {
       const duration = commit.endTimestamp - commit.timestamp;
       if (duration >= LONG_TASK_MS) {
-        out.push({ t: commit.timestamp, label: `long task ${Math.round(duration)} ms`, warn: true });
+        out.push({
+          t: commit.timestamp,
+          label: `long task ${Math.round(duration)} ms`,
+          warn: true,
+        });
       }
     }
     out.sort((a, b) => a.t - b.t);
