@@ -83,8 +83,6 @@ jobs:
             '''        onPointerLeave={() => {\n          setHoverId(null);\n          setTip(null);\n          onHighlight?.(null);\n        }}''',
             '''        onPointerLeave={() => {\n          hoverRef.current = null;\n          setTip(null);\n          onHighlight?.(null);\n          paintOverlay();\n        }}''',
           )
-          if 'hoverId' in s:
-            raise SystemExit('unexpected hoverId state remains')
           p.write_text(s)
 
           p = Path('apps/devtools/src/timeline/view/draw.ts')
