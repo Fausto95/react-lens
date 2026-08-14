@@ -623,6 +623,7 @@ export class TraceStore {
     t1: number,
     options?: {
       includeLane?: (laneKey: string, name: string) => boolean;
+      laneFilter?: TimelineQuery["laneFilter"];
       excludeWasted?: boolean;
     },
   ) {
@@ -634,6 +635,7 @@ export class TraceStore {
     t1: number,
     options?: {
       includeLane?: (laneKey: string, name: string) => boolean;
+      laneFilter?: TimelineQuery["laneFilter"];
     },
   ): RegionStatsPair {
     return statsPairInRange(this.timelineIndex, t0, t1, options);

@@ -28,6 +28,7 @@ export const LOD_BUCKET_MS = [1, 4, 16, 64, 256, 1000] as const;
 export type LodLevel = 0 | 1 | 2 | 3 | 4 | 5;
 
 const INITIAL_CAP = 64;
+const LOD_ACTIVATION_THRESHOLD = 512;
 
 function growFloat64(
   arr: Float64Array<ArrayBufferLike>,
@@ -78,6 +79,78 @@ function growInt32(arr: Int32Array<ArrayBufferLike>, need: number): Int32Array<A
   const next = new Int32Array(n);
   next.set(arr);
   return next;
+}
+
+/**
+ * Mutable prefix index for values that can change after append.
+ * Updates are O(log N); range queries are O(log N).
+ */
+export class FenwickTree {
+  private values: Float64Array<ArrayBufferLike>;
+  private tree: Float64Array<ArrayBufferLike>;
+
+  constructor(capacity = INITIAL_CAP) {
+    const n = Math.max(1, capacity);
+    this.values = new Float64Array(n);
+    this.tree = new Float64Array(n + 1);
+  }
+
+  ensureCapacity(need: number): void {
+    if (need <= this.values.length) return;
+    let n = this.values.length || INITIAL_CAP;
+    while (n < need) n *= 2;
+    const nextValues = new Float64Array(n);
+    nextValues.set(this.values);
+    this.values = nextValues;
+    this.rebuild();
+  }
+
+  set(index: number, value: number): void {
+    if (index < 0) return;
+    this.ensureCapacity(index + 1);
+    const delta = value - this.values[index]!;
+    if (delta === 0) return;
+    this.values[index] = value;
+    this.addDelta(index, delta);
+  }
+
+  add(index: number, delta: number): void {
+    if (index < 0 || delta === 0) return;
+    this.ensureCapacity(index + 1);
+    this.values[index] = this.values[index]! + delta;
+    this.addDelta(index, delta);
+  }
+
+  prefix(endExclusive: number): number {
+    let i = Math.max(0, Math.min(endExclusive, this.values.length));
+    let sum = 0;
+    while (i > 0) {
+      sum += this.tree[i]!;
+      i -= i & -i;
+    }
+    return sum;
+  }
+
+  range(start: number, endExclusive: number): number {
+    if (endExclusive <= start) return 0;
+    return this.prefix(endExclusive) - this.prefix(start);
+  }
+
+  private addDelta(index: number, delta: number): void {
+    for (let i = index + 1; i < this.tree.length; i += i & -i) {
+      this.tree[i] = this.tree[i]! + delta;
+    }
+  }
+
+  private rebuild(): void {
+    const tree = new Float64Array(this.values.length + 1);
+    for (let i = 1; i < tree.length; i++) {
+      tree[i] = tree[i]! + this.values[i - 1]!;
+      const parent = i + (i & -i);
+      if (parent < tree.length) tree[parent] = tree[parent]! + tree[i]!;
+    }
+    this.tree = tree;
+  }
 }
 
 /** First index with timestamps[i] >= target. */
@@ -170,17 +243,19 @@ export interface LaneColumns {
   /** Prefix sums: prefix[i] = sum of [0..i). Length = count+1. */
   selfPrefix: Float64Array<ArrayBufferLike>;
   countPrefix: Uint32Array<ArrayBufferLike>;
-  wastedPrefix: Uint32Array<ArrayBufferLike>;
-  wastedSelfPrefix: Float64Array<ArrayBufferLike>;
+  wastedTree: FenwickTree;
+  wastedSelfTree: FenwickTree;
   /** Live row-end times for incremental stack assignment. */
   rowEnds: number[];
+  /** Per-stack-row render indices, ordered by timestamp for overlap recovery. */
+  rowIndices: number[][];
   maxRow: number;
   instanceIds: Set<number>;
   firstT: number;
   selfTotal: number;
   totalDuration: number;
   wastedCount: number;
-  lod: LodLevelState[];
+  lod: LodLevelState[] | null;
 }
 
 function emptyLane(laneKey: string, name: string): LaneColumns {
@@ -199,16 +274,17 @@ function emptyLane(laneKey: string, name: string): LaneColumns {
     rows: new Uint16Array(INITIAL_CAP),
     selfPrefix: new Float64Array(INITIAL_CAP + 1),
     countPrefix: new Uint32Array(INITIAL_CAP + 1),
-    wastedPrefix: new Uint32Array(INITIAL_CAP + 1),
-    wastedSelfPrefix: new Float64Array(INITIAL_CAP + 1),
+    wastedTree: new FenwickTree(INITIAL_CAP),
+    wastedSelfTree: new FenwickTree(INITIAL_CAP),
     rowEnds: [],
+    rowIndices: [],
     maxRow: 0,
     instanceIds: new Set(),
     firstT: Number.POSITIVE_INFINITY,
     selfTotal: 0,
     totalDuration: 0,
     wastedCount: 0,
-    lod: emptyLodStates(),
+    lod: null,
   };
 }
 
@@ -231,8 +307,8 @@ function ensureCapacity(lane: LaneColumns, need: number): void {
   const prefixNeed = need + 1;
   lane.selfPrefix = growFloat64(lane.selfPrefix, prefixNeed);
   lane.countPrefix = growUint32(lane.countPrefix, prefixNeed);
-  lane.wastedPrefix = growUint32(lane.wastedPrefix, prefixNeed);
-  lane.wastedSelfPrefix = growFloat64(lane.wastedSelfPrefix, prefixNeed);
+  lane.wastedTree.ensureCapacity(need);
+  lane.wastedSelfTree.ensureCapacity(need);
 }
 
 function assignStackRow(lane: LaneColumns, t0: number, t1: number): number {
@@ -248,7 +324,9 @@ function assignStackRow(lane: LaneColumns, t0: number, t1: number): number {
   return r;
 }
 
-function updateLodStates(states: LodLevelState[], input: AppendRenderInput, wasted: boolean): void {
+type LodInput = Pick<AppendRenderInput, "timestamp" | "duration" | "selfDuration" | "cause">;
+
+function updateLodStates(states: LodLevelState[], input: LodInput, wasted: boolean): void {
   for (const level of states) {
     const start = Math.floor(input.timestamp / level.bucketMs) * level.bucketMs;
     let b = level.buckets.get(start);
@@ -280,11 +358,13 @@ function updateLodStates(states: LodLevelState[], input: AppendRenderInput, wast
   }
 }
 
-function updateLod(lane: LaneColumns, input: AppendRenderInput, wasted: boolean): void {
+function updateLod(lane: LaneColumns, input: LodInput, wasted: boolean): void {
+  if (!lane.lod) return;
   updateLodStates(lane.lod, input, wasted);
 }
 
-function setLodWastedAt(states: LodLevelState[], t: number, wasted: boolean): void {
+function setLodWastedAt(states: LodLevelState[] | null, t: number, wasted: boolean): void {
+  if (!states) return;
   for (const level of states) {
     const start = Math.floor(t / level.bucketMs) * level.bucketMs;
     const b = level.buckets.get(start);
@@ -292,6 +372,23 @@ function setLodWastedAt(states: LodLevelState[], t: number, wasted: boolean): vo
     if (wasted) b.wastedCount++;
     else b.wastedCount = Math.max(0, b.wastedCount - 1);
   }
+}
+
+function buildLaneLod(lane: LaneColumns): void {
+  const states = emptyLodStates();
+  for (let i = 0; i < lane.count; i++) {
+    updateLodStates(
+      states,
+      {
+        timestamp: lane.timestamps[i]!,
+        duration: lane.durations[i]!,
+        selfDuration: lane.selfDurations[i]!,
+        cause: lane.causes[i]! as CauseCodeValue,
+      },
+      (lane.flags[i]! & RenderFlags.Wasted) !== 0,
+    );
+  }
+  lane.lod = states;
 }
 
 /**
@@ -315,16 +412,16 @@ export class TimelineIndex {
   /** Global prefix sums: prefix[i] = sum of [0..i). Length = count+1. */
   selfPrefix: Float64Array<ArrayBufferLike> = new Float64Array(INITIAL_CAP + 1);
   countPrefix: Uint32Array<ArrayBufferLike> = new Uint32Array(INITIAL_CAP + 1);
-  wastedPrefix: Uint32Array<ArrayBufferLike> = new Uint32Array(INITIAL_CAP + 1);
-  wastedSelfPrefix: Float64Array<ArrayBufferLike> = new Float64Array(INITIAL_CAP + 1);
+  wastedTree = new FenwickTree(INITIAL_CAP);
+  wastedSelfTree = new FenwickTree(INITIAL_CAP);
   /** Lane key string index into laneOrder. */
   laneIndices: Int32Array<ArrayBufferLike> = new Int32Array(INITIAL_CAP);
+  /** Per-render local index within the lane selected by laneIndices. */
+  laneLocalIndices: Uint32Array<ArrayBufferLike> = new Uint32Array(INITIAL_CAP);
   laneOrder: string[] = [];
   private laneKeyToOrder = new Map<string, number>();
   /** renderId → global column index for O(1) flag updates. */
   private renderToIndex = new Map<number, number>();
-  /** renderId → { laneKey, localIndex }. */
-  private renderToLane = new Map<number, { laneKey: string; index: number }>();
   private orderedCache: LaneColumns[] | null = null;
   private orderedNonQuietCache: { quietTotalMs: number; lanes: LaneColumns[] } | null = null;
   private quietSummaryCache: {
@@ -356,11 +453,12 @@ export class TimelineIndex {
     this.causes = growUint8(this.causes, gNeed);
     this.flags = growUint8(this.flags, gNeed);
     this.laneIndices = growInt32(this.laneIndices, gNeed);
+    this.laneLocalIndices = growUint32(this.laneLocalIndices, gNeed);
     const prefixNeed = gNeed + 1;
     this.selfPrefix = growFloat64(this.selfPrefix, prefixNeed);
     this.countPrefix = growUint32(this.countPrefix, prefixNeed);
-    this.wastedPrefix = growUint32(this.wastedPrefix, prefixNeed);
-    this.wastedSelfPrefix = growFloat64(this.wastedSelfPrefix, prefixNeed);
+    this.wastedTree.ensureCapacity(gNeed);
+    this.wastedSelfTree.ensureCapacity(gNeed);
 
     this.timestamps[g] = input.timestamp;
     this.durations[g] = input.duration;
@@ -372,8 +470,8 @@ export class TimelineIndex {
     this.flags[g] = flags;
     this.selfPrefix[g + 1] = this.selfPrefix[g]! + input.selfDuration;
     this.countPrefix[g + 1] = this.countPrefix[g]! + 1;
-    this.wastedPrefix[g + 1] = this.wastedPrefix[g]! + (wasted ? 1 : 0);
-    this.wastedSelfPrefix[g + 1] = this.wastedSelfPrefix[g]! + (wasted ? input.selfDuration : 0);
+    this.wastedTree.set(g, wasted ? 1 : 0);
+    this.wastedSelfTree.set(g, wasted ? input.selfDuration : 0);
 
     let laneOrd = this.laneKeyToOrder.get(input.laneKey);
     if (laneOrd === undefined) {
@@ -412,11 +510,12 @@ export class TimelineIndex {
     lane.causes[i] = input.cause;
     lane.flags[i] = flags;
     lane.rows[i] = row;
+    (lane.rowIndices[row] ??= []).push(i);
 
     lane.selfPrefix[i + 1] = lane.selfPrefix[i]! + input.selfDuration;
     lane.countPrefix[i + 1] = lane.countPrefix[i]! + 1;
-    lane.wastedPrefix[i + 1] = lane.wastedPrefix[i]! + (wasted ? 1 : 0);
-    lane.wastedSelfPrefix[i + 1] = lane.wastedSelfPrefix[i]! + (wasted ? input.selfDuration : 0);
+    lane.wastedTree.set(i, wasted ? 1 : 0);
+    lane.wastedSelfTree.set(i, wasted ? input.selfDuration : 0);
 
     lane.instanceIds.add(input.componentId);
     lane.firstT = Math.min(lane.firstT, input.timestamp);
@@ -438,8 +537,9 @@ export class TimelineIndex {
       }
     }
 
-    this.renderToLane.set(input.renderId, { laneKey: input.laneKey, index: i });
-    updateLod(lane, input, wasted);
+    this.laneLocalIndices[g] = i;
+    if (lane.lod) updateLod(lane, input, wasted);
+    else if (lane.count === LOD_ACTIVATION_THRESHOLD) buildLaneLod(lane);
     updateLodStates(this.activityLod, input, wasted);
 
     this.t0 = Math.min(this.t0, input.timestamp);
@@ -458,48 +558,17 @@ export class TimelineIndex {
     const next = on ? prev | flag : prev & ~flag;
     if (next === prev) return;
     this.flags[g] = next;
-    if (flag === RenderFlags.Wasted) {
-      for (let j = g; j < this.count; j++) {
-        const w = (this.flags[j]! & RenderFlags.Wasted) !== 0 ? 1 : 0;
-        this.wastedPrefix[j + 1] = this.wastedPrefix[j]! + w;
-        this.wastedSelfPrefix[j + 1] = this.wastedSelfPrefix[j]! + (w ? this.selfDurations[j]! : 0);
-      }
-    }
 
-    const loc = this.renderToLane.get(renderId);
-    if (!loc) return;
-    const lane = this.lanes.get(loc.laneKey);
+    const laneKey = this.laneOrder[this.laneIndices[g]!];
+    if (!laneKey) return;
+    const lane = this.lanes.get(laneKey);
     if (!lane) return;
-    const i = loc.index;
-    const wasWasted = (lane.flags[i]! & RenderFlags.Wasted) !== 0;
+    const i = this.laneLocalIndices[g]!;
     lane.flags[i] = next;
-    const isWasted = (next & RenderFlags.Wasted) !== 0;
-    if (wasWasted === isWasted || flag !== RenderFlags.Wasted) return;
-
-    // Rebuild wasted prefix from i onward (rare: analysis completes async).
-    if (isWasted) lane.wastedCount++;
-    else lane.wastedCount = Math.max(0, lane.wastedCount - 1);
-    for (let j = i; j < lane.count; j++) {
-      const w = (lane.flags[j]! & RenderFlags.Wasted) !== 0 ? 1 : 0;
-      lane.wastedPrefix[j + 1] = lane.wastedPrefix[j]! + w;
-      lane.wastedSelfPrefix[j + 1] = lane.wastedSelfPrefix[j]! + (w ? lane.selfDurations[j]! : 0);
-    }
-    // Update LOD wasted counts for the bucket containing this render.
-    const t = lane.timestamps[i]!;
-    for (const level of lane.lod) {
-      const start = Math.floor(t / level.bucketMs) * level.bucketMs;
-      const b = level.buckets.get(start);
-      if (!b) continue;
-      if (isWasted) b.wastedCount++;
-      else b.wastedCount = Math.max(0, b.wastedCount - 1);
-    }
   }
 
-  /** Batch wasted flag changes so prefix sums rebuild once per touched range. */
+  /** Batch wasted flag changes with O(log N) updates per touched render. */
   setWastedFlags(updates: ReadonlyArray<WastedFlagUpdate>): void {
-    let minGlobal = Number.POSITIVE_INFINITY;
-    const laneStarts = new Map<string, number>();
-
     for (const update of updates) {
       const g = this.renderToIndex.get(update.renderId);
       if (g === undefined) continue;
@@ -507,42 +576,27 @@ export class TimelineIndex {
       const next = update.wasted ? prev | RenderFlags.Wasted : prev & ~RenderFlags.Wasted;
       if (next === prev) continue;
       this.flags[g] = next;
-      minGlobal = Math.min(minGlobal, g);
+      const isWasted = (next & RenderFlags.Wasted) !== 0;
+      const delta = isWasted ? 1 : -1;
+      this.wastedTree.add(g, delta);
+      this.wastedSelfTree.add(g, delta * this.selfDurations[g]!);
 
-      const loc = this.renderToLane.get(update.renderId);
-      if (!loc) continue;
-      const lane = this.lanes.get(loc.laneKey);
+      const laneKey = this.laneOrder[this.laneIndices[g]!];
+      if (!laneKey) continue;
+      const lane = this.lanes.get(laneKey);
       if (!lane) continue;
-      const i = loc.index;
+      const i = this.laneLocalIndices[g]!;
       const wasWasted = (lane.flags[i]! & RenderFlags.Wasted) !== 0;
       lane.flags[i] = next;
-      const isWasted = (next & RenderFlags.Wasted) !== 0;
       if (wasWasted === isWasted) continue;
       if (isWasted) lane.wastedCount++;
       else lane.wastedCount = Math.max(0, lane.wastedCount - 1);
-      laneStarts.set(loc.laneKey, Math.min(laneStarts.get(loc.laneKey) ?? i, i));
+      lane.wastedTree.add(i, delta);
+      lane.wastedSelfTree.add(i, delta * lane.selfDurations[i]!);
 
       const t = lane.timestamps[i]!;
       setLodWastedAt(lane.lod, t, isWasted);
       setLodWastedAt(this.activityLod, t, isWasted);
-    }
-
-    if (Number.isFinite(minGlobal)) {
-      for (let j = minGlobal; j < this.count; j++) {
-        const w = (this.flags[j]! & RenderFlags.Wasted) !== 0 ? 1 : 0;
-        this.wastedPrefix[j + 1] = this.wastedPrefix[j]! + w;
-        this.wastedSelfPrefix[j + 1] = this.wastedSelfPrefix[j]! + (w ? this.selfDurations[j]! : 0);
-      }
-    }
-
-    for (const [laneKey, start] of laneStarts) {
-      const lane = this.lanes.get(laneKey);
-      if (!lane) continue;
-      for (let j = start; j < lane.count; j++) {
-        const w = (lane.flags[j]! & RenderFlags.Wasted) !== 0 ? 1 : 0;
-        lane.wastedPrefix[j + 1] = lane.wastedPrefix[j]! + w;
-        lane.wastedSelfPrefix[j + 1] = lane.wastedSelfPrefix[j]! + (w ? lane.selfDurations[j]! : 0);
-      }
     }
   }
 
@@ -566,13 +620,13 @@ export class TimelineIndex {
     this.flags = new Uint8Array(INITIAL_CAP);
     this.selfPrefix = new Float64Array(INITIAL_CAP + 1);
     this.countPrefix = new Uint32Array(INITIAL_CAP + 1);
-    this.wastedPrefix = new Uint32Array(INITIAL_CAP + 1);
-    this.wastedSelfPrefix = new Float64Array(INITIAL_CAP + 1);
+    this.wastedTree = new FenwickTree(INITIAL_CAP);
+    this.wastedSelfTree = new FenwickTree(INITIAL_CAP);
     this.laneIndices = new Int32Array(INITIAL_CAP);
+    this.laneLocalIndices = new Uint32Array(INITIAL_CAP);
     this.laneOrder = [];
     this.laneKeyToOrder.clear();
     this.renderToIndex.clear();
-    this.renderToLane.clear();
     this.orderedCache = null;
     this.orderedNonQuietCache = null;
     this.quietSummaryCache = null;

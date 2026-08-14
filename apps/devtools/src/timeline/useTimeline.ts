@@ -4,13 +4,7 @@ import type { TraceStore, CommitSummary } from "@reactlens/trace-engine";
 import type { Causality } from "@reactlens/causality";
 import { useTraceVersion } from "../useLens.js";
 import { derivationCache } from "../traceFresh.js";
-import {
-  isLaneVisible,
-  laneFilterActive,
-  laneVisibility,
-  type LaneFilter,
-  type LaneKey,
-} from "../laneFilter.js";
+import { laneFilterActive, laneVisibility, type LaneFilter, type LaneKey } from "../laneFilter.js";
 import type { TimeCursor } from "../timeCursor.js";
 import { lanesFromQueryResult, statsPairFromStore, type Lane } from "./model/lanes.js";
 import { chainFor, edgesForCommit, type CausalEdge } from "./model/edges.js";
@@ -111,6 +105,12 @@ export function useTimeline({
   const plotW = Math.max(1, state.width - nameWidthFor(state.width));
   const pxPerMs = plotW / Math.max(1, state.view.a1 - state.view.a0);
   const filterActive = laneFilterActive(laneFilter);
+  const serializedLaneFilter = filterActive
+    ? {
+        solo: [...laneFilter.solo],
+        muted: [...laneFilter.muted],
+      }
+    : undefined;
 
   // Materialize only the visible time window (+ pad) from columnar lanes.
   // Wastedness is a stored flag — no causality.why() sweep.
@@ -130,14 +130,7 @@ export function useTimeline({
     includeQuiet: state.shelfOpen,
     includeStats: false,
     includeActivity: false,
-    ...(filterActive
-      ? {
-          laneFilter: {
-            solo: [...laneFilter.solo],
-            muted: [...laneFilter.muted],
-          },
-        }
-      : {}),
+    ...(serializedLaneFilter ? { laneFilter: serializedLaneFilter } : {}),
   });
   const lanes: Lane[] = lanesFromQueryResult(timelineResult);
 
@@ -175,11 +168,8 @@ export function useTimeline({
   );
 
   const statsRange = state.region ?? { start: visible.start, end: visible.end };
-  const includeLane = filterActive
-    ? (key: string) => isLaneVisible(laneFilter, key as LaneKey)
-    : undefined;
   const statsPair = statsPairFromStore(store, statsRange.start, statsRange.end, {
-    ...(includeLane ? { includeLane } : {}),
+    ...(serializedLaneFilter ? { laneFilter: serializedLaneFilter } : {}),
   });
   const statsRaw = statsPair.raw;
   const stats = fixApplied ? statsPair.excludeWasted : statsRaw;

@@ -1,5 +1,12 @@
 import { describe, it, expect } from "vite-plus/test";
-import { CauseCode, RenderFlags, TimelineIndex, lowerBound, upperBound } from "./columnar.js";
+import {
+  CauseCode,
+  FenwickTree,
+  RenderFlags,
+  TimelineIndex,
+  lowerBound,
+  upperBound,
+} from "./columnar.js";
 import { hitTest, queryTimeline, statsInRange } from "./aggregates.js";
 
 function appendMany(index: TimelineIndex, n: number, lane = "App", start = 0): void {
@@ -34,6 +41,18 @@ describe("columnar TimelineIndex", () => {
     expect(lowerBound(ts, 5, 6)).toBe(3);
     expect(upperBound(ts, 5, 5)).toBe(3);
     expect(upperBound(ts, 5, 9)).toBe(5);
+  });
+
+  it("FenwickTree supports mutable range sums across growth", () => {
+    const tree = new FenwickTree(2);
+    tree.set(0, 1);
+    tree.set(1, 2);
+    tree.set(3, 4);
+    expect(tree.range(0, 4)).toBe(7);
+    expect(tree.range(1, 4)).toBe(6);
+    tree.add(1, -1);
+    expect(tree.range(0, 2)).toBe(2);
+    expect(tree.range(2, 4)).toBe(4);
   });
 
   it("prefix-sum stats match a naive scan", () => {
@@ -104,6 +123,23 @@ describe("columnar TimelineIndex", () => {
     expect(statsInRange(index, 0, 10).wasted).toBe(1);
   });
 
+  it("setWastedFlags updates old renders without invalidating later ranges", () => {
+    const index = new TimelineIndex();
+    appendMany(index, 20_000);
+
+    index.setWastedFlags([
+      { renderId: 1, wasted: true },
+      { renderId: 20_000, wasted: true },
+    ]);
+
+    expect(statsInRange(index, 0, 1).wasted).toBe(1);
+    expect(statsInRange(index, 19_999, 20_001).wasted).toBe(1);
+
+    index.setWastedFlags([{ renderId: 1, wasted: false }]);
+    expect(statsInRange(index, 0, 1).wasted).toBe(0);
+    expect(statsInRange(index, 0, 20_001).wasted).toBe(1);
+  });
+
   it("subtracts wasted self time exactly when excluded", () => {
     const index = new TimelineIndex();
     index.append({
@@ -161,6 +197,83 @@ describe("columnar TimelineIndex", () => {
     expect(result.columns!.count).toBeGreaterThan(0);
   });
 
+  it("keeps clips that start off-screen but still overlap the viewport", () => {
+    const index = new TimelineIndex();
+    index.append({
+      timestamp: 0,
+      duration: 1_000,
+      selfDuration: 1,
+      renderId: 1,
+      componentId: 1,
+      commitId: 1,
+      cause: CauseCode.state,
+      name: "App",
+      laneKey: "App",
+    });
+    for (let i = 0; i < 600; i++) {
+      index.append({
+        timestamp: i + 1,
+        duration: 0.1,
+        selfDuration: 0.1,
+        renderId: i + 2,
+        componentId: 1,
+        commitId: i + 2,
+        cause: CauseCode.props,
+        name: "App",
+        laneKey: "App",
+      });
+    }
+
+    const result = queryTimeline(index, {
+      t0: 500,
+      t1: 520,
+      rowStart: 0,
+      rowEnd: 10,
+      pixelWidth: 1400,
+    });
+
+    expect([...result.columns!.renderId.subarray(0, result.columns!.count)]).toContain(1);
+  });
+
+  it("does not scan all prior starts to recover an overlapping long clip", () => {
+    const index = new TimelineIndex();
+    index.append({
+      timestamp: 0,
+      duration: 20_000,
+      selfDuration: 1,
+      renderId: 1,
+      componentId: 1,
+      commitId: 1,
+      cause: CauseCode.state,
+      name: "App",
+      laneKey: "App",
+    });
+    for (let i = 0; i < 20_000; i++) {
+      index.append({
+        timestamp: i + 1,
+        duration: 0.1,
+        selfDuration: 0.1,
+        renderId: i + 2,
+        componentId: 1,
+        commitId: i + 2,
+        cause: CauseCode.props,
+        name: "App",
+        laneKey: "App",
+      });
+    }
+
+    const result = queryTimeline(index, {
+      t0: 10_000,
+      t1: 10_050,
+      rowStart: 0,
+      rowEnd: 10,
+      pixelWidth: 1000,
+    });
+
+    expect([...result.columns!.renderId.subarray(0, result.columns!.count)]).toContain(1);
+    expect(result.columns!.count).toBeLessThan(80);
+  });
+
   it("queryTimeline switches to LOD buckets when zoomed out", () => {
     const index = new TimelineIndex();
     appendMany(index, 10_000, "App", 0);
@@ -176,6 +289,24 @@ describe("columnar TimelineIndex", () => {
     expect(result.buckets).not.toBeNull();
     expect(result.buckets!.count).toBeLessThan(10_000);
     expect(result.buckets!.count).toBeLessThanOrEqual(10_000);
+  });
+
+  it("keeps sparse lanes out of persistent LOD while still bucket-rendering them", () => {
+    const index = new TimelineIndex();
+    appendMany(index, 20, "Sparse", 0);
+    expect(index.lanes.get("Sparse")!.lod).toBeNull();
+
+    const result = queryTimeline(index, {
+      t0: 0,
+      t1: 10_000,
+      rowStart: 0,
+      rowEnd: 10,
+      pixelWidth: 400,
+      lodEnterPx: 1,
+    });
+
+    expect(result.lod).toBe("buckets");
+    expect(result.buckets!.count).toBeGreaterThan(0);
   });
 
   it("query cost stays bounded as N grows (same viewport)", () => {

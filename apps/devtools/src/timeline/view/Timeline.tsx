@@ -1,5 +1,5 @@
 /* oxlint-disable react/react-compiler -- imperative canvas/gesture/derivation caches; not Compiler-safe by design */
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { ComponentId } from "@reactlens/protocol";
 import type { LaneControls } from "../../laneFilter.js";
 import type { TimeCursor } from "../../timeCursor.js";
@@ -49,6 +49,7 @@ const CAUSE_VAR: Record<(typeof CAUSE_KEYS)[number], string> = {
   context: "var(--tl-clip-context)",
   cascade: "var(--tl-clip-cascade)",
 };
+const HIT_BAND_PX = 24;
 
 const HELP: Array<[string, string]> = [
   ["click empty / ruler", "seek playhead (time-travel)"],
@@ -89,6 +90,20 @@ function findClipByRenderId(
     }
   }
   return null;
+}
+
+function indexClipRectsByBand(clipRects: Map<string, ClipRect>): Map<number, ClipRect[]> {
+  const bands = new Map<number, ClipRect[]>();
+  for (const rect of clipRects.values()) {
+    const first = Math.floor(rect.y0 / HIT_BAND_PX);
+    const last = Math.floor(rect.y1 / HIT_BAND_PX);
+    for (let band = first; band <= last; band++) {
+      const bucket = bands.get(band);
+      if (bucket) bucket.push(rect);
+      else bands.set(band, [rect]);
+    }
+  }
+  return bands;
 }
 
 export function Timeline({
@@ -192,6 +207,7 @@ export function Timeline({
   const layoutHRef = useRef(layout.totalH);
   layoutHRef.current = layout.totalH;
   const themeRef = useRef(readTimelineTheme(wrapRef.current?.closest(".rl-redesign") ?? null));
+  const clipRectsByBandRef = useRef(new Map<number, ClipRect[]>());
 
   const nameW = () => sizeRef.current.nameW;
 
@@ -237,6 +253,15 @@ export function Timeline({
     playheadRef.current = t;
     onCursor(historical ? { mode: "historical", t } : { mode: "live", t: model.bounds.t1 });
   };
+
+  const installClipGeometry = useCallback(
+    (clipRects: Map<string, ClipRect>, snapEdges: number[]) => {
+      clipRectsRef.current = clipRects;
+      clipRectsByBandRef.current = indexClipRectsByBand(clipRects);
+      snapEdgesRef.current = snapEdges;
+    },
+    [],
+  );
 
   /**
    * Hover chrome (tip / loupe / playhead chip) is driven from refs during paint
@@ -418,8 +443,7 @@ export function Timeline({
               theme,
             },
             (clipRects, snapEdges) => {
-              clipRectsRef.current = clipRects;
-              snapEdgesRef.current = snapEdges;
+              installClipGeometry(clipRects, snapEdges);
             },
           );
         } else if (bctx) {
@@ -437,8 +461,7 @@ export function Timeline({
             tOrigin: bounds.t0,
             theme,
           });
-          clipRectsRef.current = clipRects;
-          snapEdgesRef.current = snapEdges;
+          installClipGeometry(clipRects, snapEdges);
         }
       }
 
@@ -473,6 +496,7 @@ export function Timeline({
       arrows,
       model.pxPerMs,
       model.timelineResult,
+      installClipGeometry,
       drawLoupe,
       syncChrome,
     ],
@@ -711,7 +735,9 @@ export function Timeline({
   };
 
   const hitClip = (x: number, y: number): ClipRect | null => {
-    for (const r of clipRectsRef.current.values()) {
+    const band = Math.floor(y / HIT_BAND_PX);
+    const candidates = clipRectsByBandRef.current.get(band) ?? [];
+    for (const r of candidates) {
       if (x >= r.x0 - 2 && x <= r.x1 + 2 && y >= r.y0 && y <= r.y1) return r;
     }
     return null;
@@ -1225,19 +1251,6 @@ export function Timeline({
     }
   }, [state.playing, lanes, state.selectedLane, state.selectedRender]);
 
-  const navBlips = useMemo(() => {
-    const out: Clip[] = [];
-    let seen = 0;
-    for (const lane of lanes) {
-      for (const clip of lane.clips) {
-        if (clip.aggregate) continue;
-        if (seen % 6 === 0) out.push(clip);
-        seen++;
-      }
-    }
-    return out;
-  }, [lanes]);
-
   const liveAxis = axisLiveRef.current;
   const gapChips: Array<GapSeg & { x0: number; x1: number }> = [];
   const stitches: Array<{ id: string; x: number; ms: number }> = [];
@@ -1377,7 +1390,6 @@ export function Timeline({
         nameW={sizeRef.current.nameW}
         axis={liveAxis}
         view={state.view}
-        blips={navBlips}
         gaps={overviewGaps}
       />
 
@@ -1562,7 +1574,6 @@ export function Timeline({
         nameW={sizeRef.current.nameW}
         axis={liveAxis}
         view={state.view}
-        blips={navBlips}
         gaps={overviewGaps}
         onView={(a0, span, animate) => (animate ? animateView(a0, span) : setView(a0, span))}
       />

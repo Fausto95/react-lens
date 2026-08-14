@@ -1879,13 +1879,13 @@
     rgba(255, 255, 255, 0.04) 2px 4px
   );
 }
-.rl-redesign .tl-wall-blip {
+.rl-redesign .tl-wall-activity {
   position: absolute;
-  top: 4.5px;
-  width: 3px;
-  height: 6px;
-  border-radius: 1px;
-  opacity: 0.55;
+  top: 4px;
+  bottom: 4px;
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--accent) 58%, transparent);
+  opacity: 0.7;
 }
 
 .rl-redesign .tl-stage {
@@ -2153,12 +2153,13 @@
     color-mix(in srgb, var(--text-3) 22%, transparent) 3px 6px
   );
 }
-.rl-redesign .tl-nav-blip {
+.rl-redesign .tl-nav-activity {
   position: absolute;
-  width: 3px;
-  height: 5px;
-  border-radius: 1px;
-  opacity: 0.6;
+  top: 9px;
+  height: 7px;
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--accent) 62%, transparent);
+  opacity: 0.68;
 }
 .rl-redesign .tl-nav-window {
   position: absolute;

@@ -14,17 +14,42 @@ interface ColdRecord {
   t0: number;
   t1: number;
   count: number;
-  /** Serialized ArrayBuffers as plain arrays for IDB. */
-  timestamps: number[];
-  durations: number[];
-  selfDurations: number[];
-  renderIds: number[];
-  componentIds: number[];
-  commitIds: number[];
-  causes: number[];
-  flags: number[];
+  /** Typed-array payloads stored as structured-clonable buffers. */
+  timestamps: ArrayBuffer | number[];
+  durations: ArrayBuffer | number[];
+  selfDurations: ArrayBuffer | number[];
+  renderIds: ArrayBuffer | number[];
+  componentIds: ArrayBuffer | number[];
+  commitIds: ArrayBuffer | number[];
+  causes: ArrayBuffer | number[];
+  flags: ArrayBuffer | number[];
   laneKeys: string[];
-  laneIndices: number[];
+  laneIndices: ArrayBuffer | number[];
+}
+
+function exactBuffer(view: ArrayBufferView): ArrayBuffer {
+  if (
+    view.buffer instanceof ArrayBuffer &&
+    view.byteOffset === 0 &&
+    view.byteLength === view.buffer.byteLength
+  ) {
+    return view.buffer;
+  }
+  const out = new ArrayBuffer(view.byteLength);
+  new Uint8Array(out).set(new Uint8Array(view.buffer, view.byteOffset, view.byteLength));
+  return out;
+}
+
+function fromBufferOrArray<
+  T extends Float64Array | Float32Array | Uint32Array | Uint8Array | Int32Array,
+>(
+  value: ArrayBuffer | number[],
+  ctor: {
+    from(values: ArrayLike<number>): T;
+    new (buffer: ArrayBuffer): T;
+  },
+): T {
+  return value instanceof ArrayBuffer ? new ctor(value) : ctor.from(value);
 }
 
 function encode(chunk: ColumnarChunk, id: string): ColdRecord {
@@ -33,16 +58,16 @@ function encode(chunk: ColumnarChunk, id: string): ColdRecord {
     t0: chunk.t0,
     t1: chunk.t1,
     count: chunk.count,
-    timestamps: [...chunk.timestamps],
-    durations: [...chunk.durations],
-    selfDurations: [...chunk.selfDurations],
-    renderIds: [...chunk.renderIds],
-    componentIds: [...chunk.componentIds],
-    commitIds: [...chunk.commitIds],
-    causes: [...chunk.causes],
-    flags: [...chunk.flags],
+    timestamps: exactBuffer(chunk.timestamps),
+    durations: exactBuffer(chunk.durations),
+    selfDurations: exactBuffer(chunk.selfDurations),
+    renderIds: exactBuffer(chunk.renderIds),
+    componentIds: exactBuffer(chunk.componentIds),
+    commitIds: exactBuffer(chunk.commitIds),
+    causes: exactBuffer(chunk.causes),
+    flags: exactBuffer(chunk.flags),
     laneKeys: chunk.laneKeys,
-    laneIndices: [...chunk.laneIndices],
+    laneIndices: exactBuffer(chunk.laneIndices),
   };
 }
 
@@ -51,16 +76,16 @@ function decode(rec: ColdRecord): ColumnarChunk {
     t0: rec.t0,
     t1: rec.t1,
     count: rec.count,
-    timestamps: Float64Array.from(rec.timestamps),
-    durations: Float32Array.from(rec.durations),
-    selfDurations: Float32Array.from(rec.selfDurations),
-    renderIds: Uint32Array.from(rec.renderIds),
-    componentIds: Uint32Array.from(rec.componentIds),
-    commitIds: Uint32Array.from(rec.commitIds),
-    causes: Uint8Array.from(rec.causes),
-    flags: Uint8Array.from(rec.flags),
+    timestamps: fromBufferOrArray(rec.timestamps, Float64Array),
+    durations: fromBufferOrArray(rec.durations, Float32Array),
+    selfDurations: fromBufferOrArray(rec.selfDurations, Float32Array),
+    renderIds: fromBufferOrArray(rec.renderIds, Uint32Array),
+    componentIds: fromBufferOrArray(rec.componentIds, Uint32Array),
+    commitIds: fromBufferOrArray(rec.commitIds, Uint32Array),
+    causes: fromBufferOrArray(rec.causes, Uint8Array),
+    flags: fromBufferOrArray(rec.flags, Uint8Array),
     laneKeys: rec.laneKeys,
-    laneIndices: Int32Array.from(rec.laneIndices),
+    laneIndices: fromBufferOrArray(rec.laneIndices, Int32Array),
   };
 }
 

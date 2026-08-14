@@ -138,9 +138,9 @@ function sliceStatsWithWastedSelf(
   if (lo >= hi) return { renders: 0, wasted: 0, selfMs: 0, wastedSelfMs: 0 };
   return {
     renders: lane.countPrefix[hi]! - lane.countPrefix[lo]!,
-    wasted: lane.wastedPrefix[hi]! - lane.wastedPrefix[lo]!,
+    wasted: lane.wastedTree.range(lo, hi),
     selfMs: lane.selfPrefix[hi]! - lane.selfPrefix[lo]!,
-    wastedSelfMs: lane.wastedSelfPrefix[hi]! - lane.wastedSelfPrefix[lo]!,
+    wastedSelfMs: lane.wastedSelfTree.range(lo, hi),
   };
 }
 
@@ -155,9 +155,9 @@ function globalStats(
   if (lo >= hi) return { renders: 0, wasted: 0, selfMs: 0, wastedSelfMs: 0 };
   return {
     renders: index.countPrefix[hi]! - index.countPrefix[lo]!,
-    wasted: index.wastedPrefix[hi]! - index.wastedPrefix[lo]!,
+    wasted: index.wastedTree.range(lo, hi),
     selfMs: index.selfPrefix[hi]! - index.selfPrefix[lo]!,
-    wastedSelfMs: index.wastedSelfPrefix[hi]! - index.wastedSelfPrefix[lo]!,
+    wastedSelfMs: index.wastedSelfTree.range(lo, hi),
   };
 }
 
@@ -166,18 +166,29 @@ interface CompiledLaneFilter {
   solo: readonly string[];
   soloSet: ReadonlySet<string>;
   soloChains: ReadonlyArray<ReadonlySet<string>>;
+  key: string;
 }
+
+type LaneProjectionCache = {
+  base: readonly LaneColumns[];
+  projections: Map<string, LaneColumns[]>;
+};
+
+const laneProjectionCaches = new WeakMap<TimelineIndex, LaneProjectionCache>();
 
 function compileLaneFilter(
   filter: TimelineQuery["laneFilter"] | undefined,
 ): CompiledLaneFilter | null {
   if (!filter) return null;
   const solo = filter.solo ?? [];
+  const muted = filter.muted ?? [];
+  if (solo.length === 0 && muted.length === 0) return null;
   return {
-    muted: new Set(filter.muted ?? []),
+    muted: new Set(muted),
     solo,
     soloSet: new Set(solo),
     soloChains: solo.map((key) => new Set(laneChain(key))),
+    key: `${[...solo].sort().join("\u0001")}\u0002${[...muted].sort().join("\u0001")}`,
   };
 }
 
@@ -211,6 +222,48 @@ function includePasses(
   return laneFilterPasses(compiledFilter, lane.laneKey);
 }
 
+function projectedLanes(
+  index: TimelineIndex,
+  base: readonly LaneColumns[],
+  compiledFilter: CompiledLaneFilter | null,
+): readonly LaneColumns[] {
+  if (!compiledFilter) return base;
+  let cache = laneProjectionCaches.get(index);
+  if (!cache || cache.base !== base) {
+    cache = { base, projections: new Map() };
+    laneProjectionCaches.set(index, cache);
+  }
+  const hit = cache.projections.get(compiledFilter.key);
+  if (hit) return hit;
+  const lanes = base.filter((lane) => laneFilterPasses(compiledFilter, lane.laneKey));
+  cache.projections.set(compiledFilter.key, lanes);
+  if (cache.projections.size > 8) {
+    const first = cache.projections.keys().next().value;
+    if (first !== undefined) cache.projections.delete(first);
+  }
+  return lanes;
+}
+
+function orderedFilteredLanes(
+  index: TimelineIndex,
+  options: {
+    includeQuiet?: boolean;
+    quietTotalMs?: number;
+    includeLane?: (laneKey: string, name: string) => boolean;
+    laneFilter?: TimelineQuery["laneFilter"];
+    compiledFilter?: CompiledLaneFilter | null;
+  } = {},
+): readonly LaneColumns[] {
+  const base = index.orderedLanes({
+    includeQuiet: options.includeQuiet,
+    quietTotalMs: options.quietTotalMs,
+  });
+  const compiledFilter = options.compiledFilter ?? compileLaneFilter(options.laneFilter);
+  if (!options.includeLane) return projectedLanes(index, base, compiledFilter);
+  const projected = projectedLanes(index, base, compiledFilter);
+  return projected.filter((lane) => options.includeLane!(lane.laneKey, lane.name));
+}
+
 /** O(log N) region stats across all (or filtered) lanes. */
 export function statsInRange(
   index: TimelineIndex,
@@ -218,12 +271,13 @@ export function statsInRange(
   t1: number,
   options: {
     includeLane?: (laneKey: string, name: string) => boolean;
+    laneFilter?: TimelineQuery["laneFilter"];
     excludeWasted?: boolean;
   } = {},
 ): RegionStats {
   const lo = Math.min(t0, t1);
   const hi = Math.max(t0, t1);
-  if (!options.includeLane) {
+  if (!options.includeLane && !options.laneFilter) {
     const s = globalStats(index, lo, hi);
     if (!options.excludeWasted) return { renders: s.renders, wasted: s.wasted, selfMs: s.selfMs };
     return {
@@ -236,8 +290,11 @@ export function statsInRange(
   let renders = 0;
   let wasted = 0;
   let selfMs = 0;
-  for (const lane of index.lanes.values()) {
-    if (options.includeLane && !options.includeLane(lane.laneKey, lane.name)) continue;
+  const lanes = orderedFilteredLanes(index, {
+    includeLane: options.includeLane,
+    laneFilter: options.laneFilter,
+  });
+  for (const lane of lanes) {
     const s = sliceStatsWithWastedSelf(lane, lo, hi);
     if (options.excludeWasted) {
       renders += s.renders - s.wasted;
@@ -259,11 +316,12 @@ export function statsPairInRange(
   t1: number,
   options: {
     includeLane?: (laneKey: string, name: string) => boolean;
+    laneFilter?: TimelineQuery["laneFilter"];
   } = {},
 ): RegionStatsPair {
   const lo = Math.min(t0, t1);
   const hi = Math.max(t0, t1);
-  if (!options.includeLane) {
+  if (!options.includeLane && !options.laneFilter) {
     const s = globalStats(index, lo, hi);
     return {
       raw: { renders: s.renders, wasted: s.wasted, selfMs: s.selfMs },
@@ -280,8 +338,11 @@ export function statsPairInRange(
   let selfMs = 0;
   let keptRenders = 0;
   let keptSelfMs = 0;
-  for (const lane of index.lanes.values()) {
-    if (!options.includeLane(lane.laneKey, lane.name)) continue;
+  const lanes = orderedFilteredLanes(index, {
+    includeLane: options.includeLane,
+    laneFilter: options.laneFilter,
+  });
+  for (const lane of lanes) {
     const s = sliceStatsWithWastedSelf(lane, lo, hi);
     renders += s.renders;
     wasted += s.wasted;
@@ -382,20 +443,13 @@ export function hitTest(
   }
   const lanes = hasLaneWindow
     ? (() => {
-        const base = index.orderedLanes({
+        const filtered = orderedFilteredLanes(index, {
           includeQuiet: options.includeQuiet,
           quietTotalMs: QUIET_TOTAL_MS,
+          includeLane: options.includeLane,
+          laneFilter: options.laneFilter,
+          compiledFilter,
         });
-        const filtered =
-          options.includeLane || compiledFilter
-            ? base.filter((lane) =>
-                includePasses(
-                  { includeLane: options.includeLane, laneFilter: options.laneFilter },
-                  lane,
-                  compiledFilter,
-                ),
-              )
-            : base;
         const rowStart = Math.max(0, options.rowStart ?? 0);
         const rowEnd = Math.min(
           filtered.length,
@@ -411,9 +465,94 @@ export function hitTest(
   return best;
 }
 
+function lowerBoundLaneRow(lane: LaneColumns, indices: readonly number[], target: number): number {
+  let lo = 0;
+  let hi = indices.length;
+  while (lo < hi) {
+    const mid = (lo + hi) >>> 1;
+    if (lane.timestamps[indices[mid]!]! < target) lo = mid + 1;
+    else hi = mid;
+  }
+  return lo;
+}
+
+function upperBoundLaneRow(lane: LaneColumns, indices: readonly number[], target: number): number {
+  let lo = 0;
+  let hi = indices.length;
+  while (lo < hi) {
+    const mid = (lo + hi) >>> 1;
+    if (lane.timestamps[indices[mid]!]! <= target) lo = mid + 1;
+    else hi = mid;
+  }
+  return lo;
+}
+
+function includeViewportIndices(lane: LaneColumns, t0: number, t1: number): number[] {
+  const out: number[] = [];
+  for (const row of lane.rowIndices) {
+    if (!row || row.length === 0) continue;
+    const lo = lowerBoundLaneRow(lane, row, t0);
+    const hi = upperBoundLaneRow(lane, row, t1);
+    const start = lo > 0 ? lo - 1 : lo;
+    for (let p = start; p < hi; p++) {
+      const i = row[p]!;
+      const tStart = lane.timestamps[i]!;
+      if (tStart > t1) break;
+      if (tStart + lane.durations[i]! >= t0) out.push(i);
+    }
+  }
+  out.sort((a, b) => a - b);
+  return out;
+}
+
+function emptyBucket(start: number): LodBucket {
+  return {
+    start,
+    renderCount: 0,
+    wastedCount: 0,
+    totalTime: 0,
+    selfTime: 0,
+    maxDuration: 0,
+    propsCount: 0,
+    stateCount: 0,
+    contextCount: 0,
+  };
+}
+
+function collectSparseBuckets(
+  lane: LaneColumns,
+  level: LodLevel,
+  t0: number,
+  t1: number,
+): LodBucket[] {
+  const bucketMs = LOD_BUCKET_MS[level]!;
+  const out = new Map<number, LodBucket>();
+  const lo = lowerBound(lane.timestamps, lane.count, t0 - bucketMs);
+  const hi = upperBound(lane.timestamps, lane.count, t1);
+  for (let i = lo; i < hi; i++) {
+    const start = Math.floor(lane.timestamps[i]! / bucketMs) * bucketMs;
+    let b = out.get(start);
+    if (!b) {
+      b = emptyBucket(start);
+      out.set(start, b);
+    }
+    b.renderCount++;
+    if ((lane.flags[i]! & RenderFlags.Wasted) !== 0) b.wastedCount++;
+    const duration = lane.durations[i]!;
+    b.totalTime += duration;
+    b.selfTime += lane.selfDurations[i]!;
+    b.maxDuration = Math.max(b.maxDuration, duration);
+    const cause = lane.causes[i]!;
+    if (cause === CauseCode.props) b.propsCount++;
+    else if (cause === CauseCode.state || cause === CauseCode.mount) b.stateCount++;
+    else if (cause === CauseCode.context) b.contextCount++;
+  }
+  return [...out.values()].sort((a, b) => a.start - b.start);
+}
+
 function collectBuckets(lane: LaneColumns, level: LodLevel, t0: number, t1: number): LodBucket[] {
-  const state = lane.lod[level];
-  if (!state) return [];
+  const state = lane.lod?.[level];
+  if (!state) return collectSparseBuckets(lane, level, t0, t1);
   const out: LodBucket[] = [];
   if (!state.startsSorted) {
     state.starts.sort((a, b) => a - b);
@@ -460,10 +599,13 @@ export function queryTimeline(index: TimelineIndex, q: TimelineQuery): TimelineQ
   const includeQuiet = q.includeQuiet ?? true;
   const compiledFilter = compileLaneFilter(q.laneFilter);
   const hasLaneFilter = !!q.includeLane || !!compiledFilter;
-  const baseOrdered = index.orderedLanes({ includeQuiet, quietTotalMs: QUIET_TOTAL_MS });
-  const ordered = hasLaneFilter
-    ? baseOrdered.filter((lane) => includePasses(q, lane, compiledFilter))
-    : baseOrdered;
+  const ordered = orderedFilteredLanes(index, {
+    includeQuiet,
+    quietTotalMs: QUIET_TOTAL_MS,
+    includeLane: q.includeLane,
+    laneFilter: q.laneFilter,
+    compiledFilter,
+  });
 
   const rowStart = Math.max(0, q.rowStart);
   const rowEnd = Math.min(ordered.length, Math.max(rowStart, q.rowEnd));
@@ -482,25 +624,23 @@ export function queryTimeline(index: TimelineIndex, q: TimelineQuery): TimelineQ
     quiet: lane.totalDuration < QUIET_TOTAL_MS,
   }));
 
-  const statsInclude =
-    q.includeLane || q.laneFilter
-      ? (laneKey: string, name: string) => {
-          if (q.includeLane && !q.includeLane(laneKey, name)) return false;
-          return laneFilterPasses(compiledFilter, laneKey);
-        }
-      : undefined;
   const emptyStats = { renders: 0, wasted: 0, selfMs: 0 };
   const stats =
     q.includeStats === false
       ? emptyStats
-      : statsInRange(index, t0, t1, { includeLane: statsInclude });
+      : statsInRange(index, t0, t1, { includeLane: q.includeLane, laneFilter: q.laneFilter });
   const quietSummary: TimelineQuietSummary = hasLaneFilter
     ? (() => {
         let lanes = 0;
         let renders = 0;
         let selfMs = 0;
-        for (const lane of index.orderedLanes()) {
-          if (!includePasses(q, lane, compiledFilter)) continue;
+        const quietFiltered = orderedFilteredLanes(index, {
+          includeQuiet: true,
+          includeLane: q.includeLane,
+          laneFilter: q.laneFilter,
+          compiledFilter,
+        });
+        for (const lane of quietFiltered) {
           if (lane.totalDuration >= QUIET_TOTAL_MS) continue;
           lanes++;
           renders += lane.count;
@@ -564,27 +704,17 @@ export function queryTimeline(index: TimelineIndex, q: TimelineQuery): TimelineQ
 
   // Raw events in viewport
   let estimate = 0;
-  const ranges: Array<{ lane: LaneColumns; lo: number; hi: number }> = [];
+  const ranges: Array<{ lane: LaneColumns; indices: number[] }> = [];
   for (const lane of visibleLanes) {
-    const lo = lowerBound(lane.timestamps, lane.count, t0);
-    // Also include events that started before t0 but may still overlap: walk back a bit.
-    let start = lo;
-    while (start > 0) {
-      const prev = start - 1;
-      const pt0 = lane.timestamps[prev]!;
-      const pt1 = pt0 + lane.durations[prev]!;
-      if (pt1 < t0) break;
-      start = prev;
-    }
-    const hi = upperBound(lane.timestamps, lane.count, t1);
-    ranges.push({ lane, lo: start, hi });
-    estimate += Math.max(0, hi - start);
+    const indices = includeViewportIndices(lane, t0, t1);
+    ranges.push({ lane, indices });
+    estimate += indices.length;
   }
 
   const cap = 10_000;
   const stride = estimate > cap ? Math.ceil(estimate / cap) : 1;
   let count = 0;
-  for (const r of ranges) count += Math.ceil(Math.max(0, r.hi - r.lo) / stride);
+  for (const r of ranges) count += Math.ceil(r.indices.length / stride);
 
   const rowIndex = new Uint32Array(count);
   const x0 = new Float64Array(count);
@@ -598,8 +728,9 @@ export function queryTimeline(index: TimelineIndex, q: TimelineQuery): TimelineQ
 
   let k = 0;
   for (let ri = 0; ri < ranges.length; ri++) {
-    const { lane, lo, hi } = ranges[ri]!;
-    for (let i = lo; i < hi; i += stride) {
+    const { lane, indices } = ranges[ri]!;
+    for (let p = 0; p < indices.length; p += stride) {
+      const i = indices[p]!;
       const tStart = lane.timestamps[i]!;
       const dur = lane.durations[i]!;
       rowIndex[k] = ri;

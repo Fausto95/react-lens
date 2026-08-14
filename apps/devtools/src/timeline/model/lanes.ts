@@ -4,6 +4,7 @@ import {
   causeCodeToName,
   type HitTestResult,
   type TimelineIndex,
+  type TimelineQuery,
   type TimelineQueryResult,
 } from "@reactlens/trace-engine";
 import type { ComponentId, RenderEvent, RenderId } from "@reactlens/protocol";
@@ -377,6 +378,7 @@ export function statsFromStore(
   t1: number,
   options: {
     includeLane?: (laneKey: LaneKey, name: string) => boolean;
+    laneFilter?: TimelineQuery["laneFilter"];
     excludeWasted?: boolean;
   } = {},
 ): Omit<RegionStats, "byLane" | "byComponent"> & {
@@ -385,6 +387,7 @@ export function statsFromStore(
 } {
   const s = store.statsInRange(t0, t1, {
     includeLane: options.includeLane,
+    laneFilter: options.laneFilter,
     excludeWasted: options.excludeWasted,
   });
   return {
@@ -403,6 +406,7 @@ export function statsPairFromStore(
   t1: number,
   options: {
     includeLane?: (laneKey: LaneKey, name: string) => boolean;
+    laneFilter?: TimelineQuery["laneFilter"];
   } = {},
 ): {
   raw: Omit<RegionStats, "byLane" | "byComponent"> & {
@@ -416,6 +420,7 @@ export function statsPairFromStore(
 } {
   const pair = store.statsPairInRange(t0, t1, {
     includeLane: options.includeLane,
+    laneFilter: options.laneFilter,
   });
   const emptyLane = new Map<LaneKey, { renders: number; wasted: number; selfMs: number }>();
   const emptyComponent = new Map<
