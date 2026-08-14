@@ -30,7 +30,7 @@ function propsOf(fiber: Fiber): Record<string, unknown> | null {
 
 function functionLabel(value: unknown): string | undefined {
   if (typeof value !== "function") return undefined;
-  const fn = value as Function & { displayName?: string };
+  const fn = value as { readonly name?: string; displayName?: string };
   const raw = fn.displayName || fn.name;
   if (!raw) return undefined;
   const name = raw.replace(/^bound\s+/, "").trim();
@@ -44,7 +44,7 @@ function functionLabel(value: unknown): string | undefined {
  * installing wrappers around application handlers.
  *
  * React stores the committed JSX props on the host fiber. Starting at the
- * event target and walking the fiber return chain also handles delegated / 
+ * event target and walking the fiber return chain also handles delegated /
  * bubbling handlers such as a form `onSubmit` above the clicked button.
  * This is interaction-path work only (one short ancestor walk per user event),
  * never render-path work.
