@@ -3,24 +3,22 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>React Lens — React debugging with receipts</title>
+    <title>React Lens — See every render. Follow every cause.</title>
     <meta
       name="description"
-      content="Time travel through real state. Trace a render to its cause. Preview waste before you change code. Diff two moments — or two sessions in CI. Human or AI agent — every answer cites the exact render, component, and line. This site is inspecting itself."
+      content="Time-travel through React state, inspect interactions on a professional timeline, and trace render cascades from trigger to component. React debugging for humans and AI agents, grounded in evidence."
     />
     <link rel="canonical" href="https://www.reactlens.xyz/" />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <link rel="icon" href="/favicon.ico" sizes="any" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
 
-    <!-- Absolute OG URLs must match the live origin (WhatsApp/LinkedIn fetch
-         og:image directly — a dead domain or redirect breaks the preview). -->
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="React Lens" />
-    <meta property="og:title" content="React Lens — React debugging with receipts" />
+    <meta property="og:title" content="React Lens — See every render. Follow every cause." />
     <meta
       property="og:description"
-      content="Time travel through real state. Trace a render to its cause. Preview waste before you change code. Diff two moments — or two sessions in CI. Human or AI agent — every answer cites the exact render, component, and line."
+      content="Time travel, a professional interaction timeline, causal render cascades, AI diagnostics, session diffs, and CI — all grounded in React trace evidence."
     />
     <meta property="og:url" content="https://www.reactlens.xyz/" />
     <meta property="og:image" content="https://www.reactlens.xyz/og.png" />
@@ -30,42 +28,26 @@
     <meta property="og:image:height" content="630" />
     <meta
       property="og:image:alt"
-      content="React Lens — React debugging with receipts. Time travel, AI agent, render causes, AST Doctor, waste detection, Suspense &amp; RSC."
+      content="React Lens showing a render cascade and interaction timeline alongside the headline See every render. Follow every cause."
     />
 
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="React Lens — React debugging with receipts" />
+    <meta name="twitter:title" content="React Lens — See every render. Follow every cause." />
     <meta
       name="twitter:description"
-      content="Time travel through real state. Trace a render to its cause. Preview waste before you change code. Diff two moments — or two sessions in CI. Human or AI agent — every answer cites the exact render, component, and line."
+      content="Time travel, causal render cascades, an editing-style timeline, AI diagnostics, and CI — grounded in React trace evidence."
     />
     <meta name="twitter:image" content="https://www.reactlens.xyz/og.png" />
     <style>
-      :root {
-        color-scheme: dark;
-      }
-      html,
-      body {
-        margin: 0;
-        background: #0b0d10;
-      }
-      html[data-rl-theme="light"],
-      html[data-rl-theme="light"] body {
-        color-scheme: light;
-        background: #ffffff;
-      }
+      :root { color-scheme: dark; }
+      html, body { margin: 0; background: #0b0d10; }
+      html[data-rl-theme="light"], html[data-rl-theme="light"] body { color-scheme: light; background: #ffffff; }
     </style>
     <script>
-      /* Stamp theme before paint to avoid a dark→light flash.
-         Also seed panel prefs so the docked Lens chrome matches. */
       (function () {
         try {
           var pref = localStorage.getItem("react-lens/site-theme") || "system";
-          var light =
-            pref === "light" ||
-            (pref === "system" &&
-              window.matchMedia &&
-              window.matchMedia("(prefers-color-scheme: light)").matches);
+          var light = pref === "light" || (pref === "system" && window.matchMedia && window.matchMedia("(prefers-color-scheme: light)").matches);
           document.documentElement.dataset.rlTheme = light ? "light" : "dark";
           try {
             var raw = localStorage.getItem("react-lens/panel-prefs");
