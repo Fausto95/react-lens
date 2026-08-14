@@ -23,30 +23,17 @@ export const VIRTUAL_ROW_H = LANE_PAD + 2 * ROW_H;
 export const VIRTUAL_OVERSCAN_ROWS = 6;
 export const SNAP_PX = 5;
 export const IDLE_MS = 200;
-/**
- * Collapsed idle gap axis length. `0` fully stitches activity — idle takes no
- * horizontal space and is not drawn. Expand via `progress` still restores wall time.
- */
+/** Collapsed idle gap axis length. */
 export const GAP_AXIS_SEAM = 0;
-
-/** Name gutter width (clamped from stage width). */
 export const NAME_W_MIN = 88;
 export const NAME_W_MAX = 150;
 export const NAME_W_FRAC = 0.14;
-
-/** Default name gutter when unmeasured. */
 export const NAME_W = 148;
-
 export const MIN_CLIP_PX = 2;
 export const CLIP_LABEL_MIN_PX = 48;
-/** Floor on the axis view span — stop zooming in past this (axis units ≈ ms on activity). */
-export const VIEW_SPAN_MIN = 5;
-/**
- * Ceiling on the axis view span — allow zooming out past the session
- * (empty margins). Effective max is `max(axis.total, VIEW_SPAN_MAX)`.
- */
+/** ~6x deeper inspection than the previous 5ms floor. */
+export const VIEW_SPAN_MIN = 0.8;
 export const VIEW_SPAN_MAX = 12_400;
-
 export const ACCENT = "#6E9BFF";
 export const CAUSE_COLOR = {
   state: "#3ECF8E",
@@ -54,9 +41,7 @@ export const CAUSE_COLOR = {
   context: "#A78BFA",
   cascade: "#7A7A85",
 } as const;
-
 export const MONO = 'ui-monospace,"SF Mono",Menlo,monospace';
-
 export function nameWidthFor(stageW: number): number {
   return Math.max(NAME_W_MIN, Math.min(NAME_W_MAX, Math.round(stageW * NAME_W_FRAC)));
 }
