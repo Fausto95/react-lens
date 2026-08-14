@@ -1,19 +1,17 @@
 /**
  * Spawns the OffscreenCanvas timeline renderer for the base layer and transfers
  * control of that canvas into the worker. Overlay + pointer/keyboard stay on
- * the main thread. Falls back to null when OffscreenCanvas / Worker is
- * unavailable — Timeline keeps painting base via draw.ts.
+ * the main thread.
  */
 
 import type { AxisSnapshot, TimeSpan } from "./model/axis.js";
 import type { ViewWindow } from "./model/viewport.js";
 import type { LaneLayout } from "./model/rows.js";
 import type { TimelineTheme } from "./view/timelineTheme.js";
-import type { ClipRect } from "./view/draw.js";
+import type { ClipRect, TimelineViewMode } from "./view/draw.js";
 
 export type TimelineGeometryPayload = {
   count: number;
-  /** Row index into layout.rows */
   rowIndex: Uint32Array;
   x0: Float64Array;
   x1: Float64Array;
@@ -31,12 +29,7 @@ export type TimelineGeometryPayload = {
 export type TimelineBasePaintPayload = {
   axis: AxisSnapshot;
   view: ViewWindow;
-  /**
-   * Row metadata + (optionally stripped) clips. Prefer {@link geometry} for
-   * transferable columns so we do not structured-clone every Clip object.
-   */
   layout: LaneLayout;
-  /** Transferable columnar geometry for the visible viewport. */
   geometry?: TimelineGeometryPayload;
   region: TimeSpan | null;
   markers: ReadonlyArray<{ t: number; label: string; warn: boolean }>;
@@ -46,6 +39,7 @@ export type TimelineBasePaintPayload = {
   pxPerMs: number;
   tOrigin: number;
   theme: TimelineTheme;
+  viewMode?: TimelineViewMode;
 };
 
 export interface TimelineRendererClient {
@@ -57,21 +51,17 @@ export interface TimelineRendererClient {
   dispose(): void;
 }
 
-/** Survive React StrictMode remounts that reuse the same canvas node. */
 const liveRenderers = new WeakMap<HTMLCanvasElement, TimelineRendererClient>();
 
 export function createTimelineRenderer(canvas: HTMLCanvasElement): TimelineRendererClient | null {
   const existing = liveRenderers.get(canvas);
   if (existing) return existing;
-
   if (typeof OffscreenCanvas === "undefined" || typeof Worker === "undefined") return null;
   if (typeof canvas.transferControlToOffscreen !== "function") return null;
 
   let worker: Worker;
   try {
-    worker = new Worker(new URL("./timelineRendererWorker.ts", import.meta.url), {
-      type: "module",
-    });
+    worker = new Worker(new URL("./timelineRendererWorker.ts", import.meta.url), { type: "module" });
   } catch {
     return null;
   }
@@ -84,11 +74,7 @@ export function createTimelineRenderer(canvas: HTMLCanvasElement): TimelineRende
   let hitCb: ((clipRects: Map<string, ClipRect>, snapEdges: number[]) => void) | null = null;
 
   worker.onmessage = (
-    e: MessageEvent<{
-      type: string;
-      clipRects?: Array<[string, ClipRect]>;
-      snapEdges?: number[];
-    }>,
+    e: MessageEvent<{ type: string; clipRects?: Array<[string, ClipRect]>; snapEdges?: number[] }>,
   ) => {
     if (e.data?.type === "ready") {
       ready = true;
@@ -106,7 +92,6 @@ export function createTimelineRenderer(canvas: HTMLCanvasElement): TimelineRende
   try {
     offscreen = canvas.transferControlToOffscreen();
   } catch {
-    // Already transferred (remount race) or unsupported — fall back to main paint.
     worker.terminate();
     return null;
   }
@@ -147,7 +132,6 @@ export function createTimelineRenderer(canvas: HTMLCanvasElement): TimelineRende
       ]) {
         if (buf instanceof ArrayBuffer) transfer.push(buf);
       }
-      // Clips travel as columns — don't structured-clone Clip objects.
       const stripLaneClips = <T extends { clips: unknown[] }>(lane: T): T => ({
         ...lane,
         clips: [] as unknown[] as T["clips"],
