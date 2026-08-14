@@ -66,9 +66,41 @@ export function Timeline({
   const replayRaf = useRef(0);
   const replayGeneration = useRef(0);
   const transportRef = useRef(transport);
+  const gestureBoundaryRef = useRef<HTMLDivElement>(null);
   transportRef.current = transport;
   /** Toggle we invoked because replay needed restoration while the user's mode was off. */
   const autoTravelToggle = useRef<(() => void) | null>(null);
+
+  /**
+   * The graph owns wheel/trackpad/pinch gestures while the pointer is inside
+   * its stage. Cancel the browser/system default in a native, non-passive
+   * capture listener, then let the event keep propagating to Cascade's own
+   * React handler. This prevents Chrome zoom/history navigation and macOS
+   * overscroll without duplicating the graph's pan/zoom math here.
+   */
+  useEffect(() => {
+    const boundary = gestureBoundaryRef.current;
+    if (!boundary) return;
+
+    const belongsToStage = (target: EventTarget | null) =>
+      target instanceof Element && target.closest(".rl-cascade-stage") !== null;
+    const preventBrowserGesture = (event: Event) => {
+      if (belongsToStage(event.target)) event.preventDefault();
+    };
+    const options: AddEventListenerOptions = { capture: true, passive: false };
+
+    boundary.addEventListener("wheel", preventBrowserGesture, options);
+    boundary.addEventListener("gesturestart", preventBrowserGesture, options);
+    boundary.addEventListener("gesturechange", preventBrowserGesture, options);
+    boundary.addEventListener("gestureend", preventBrowserGesture, options);
+
+    return () => {
+      boundary.removeEventListener("wheel", preventBrowserGesture, true);
+      boundary.removeEventListener("gesturestart", preventBrowserGesture, true);
+      boundary.removeEventListener("gesturechange", preventBrowserGesture, true);
+      boundary.removeEventListener("gestureend", preventBrowserGesture, true);
+    };
+  }, []);
 
   const ensureReplayTravel = () => {
     const props = travelControlProps(transportRef.current);
@@ -264,14 +296,16 @@ export function Timeline({
   );
 
   return (
-    <Cascade
-      store={model.store}
-      model={model}
-      cursor={cursor}
-      onCursor={onCascadeCursor}
-      {...(onSelectComponent ? { onSelectComponent } : {})}
-      {...(onHighlight ? { onHighlight } : {})}
-      transport={cascadeTransport}
-    />
+    <div className="rl-cascade-gesture-boundary" ref={gestureBoundaryRef}>
+      <Cascade
+        store={model.store}
+        model={model}
+        cursor={cursor}
+        onCursor={onCascadeCursor}
+        {...(onSelectComponent ? { onSelectComponent } : {})}
+        {...(onHighlight ? { onHighlight } : {})}
+        transport={cascadeTransport}
+      />
+    </div>
   );
 }
