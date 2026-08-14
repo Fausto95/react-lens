@@ -1,9 +1,243 @@
-.rl-cascade-transport {
+.rl-cascade {
+  position: relative;
+  grid-template-rows: 44px minmax(0, 1fr) 28px;
+}
+
+/* Apple/Vercel/Linear-inspired command strip: one calm surface, compact
+   control islands, icon-first actions, and the temporal controls on the same
+   visual plane as graph navigation. */
+.rl-cascade-toolbar {
+  min-height: 44px;
+  gap: 5px;
+  padding: 5px 176px 5px 8px;
+  overflow: hidden;
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--text) 2.5%, transparent), transparent),
+    color-mix(in srgb, var(--panel) 97%, var(--bg));
+  border-bottom: 1px solid color-mix(in srgb, var(--line-strong) 72%, transparent);
+  box-shadow: inset 0 -1px 0 color-mix(in srgb, var(--bg) 38%, transparent);
+}
+
+.rl-cascade-toolbar button {
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+  flex: 0 0 auto;
+  min-width: 30px;
+  height: 30px;
+  padding: 0 8px;
+  border: 1px solid color-mix(in srgb, var(--line-strong) 54%, transparent);
+  border-radius: 9px;
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--text) 3%, transparent), transparent),
+    color-mix(in srgb, var(--panel-2) 86%, transparent);
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, var(--text) 5%, transparent),
+    0 1px 2px color-mix(in srgb, #000 7%, transparent);
+  color: var(--text-2);
+  font: 500 10px var(--mono);
+  cursor: pointer;
+  transition:
+    background 120ms ease,
+    border-color 120ms ease,
+    color 120ms ease,
+    box-shadow 120ms ease,
+    transform 100ms ease;
+}
+
+.rl-cascade-toolbar button:hover:not(:disabled) {
+  color: var(--text);
+  border-color: color-mix(in srgb, var(--line-strong) 84%, transparent);
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--text) 5%, transparent), transparent),
+    color-mix(in srgb, var(--panel-2) 96%, transparent);
+}
+
+.rl-cascade-toolbar button:active:not(:disabled) {
+  transform: translateY(1px);
+  box-shadow: inset 0 1px 2px color-mix(in srgb, #000 8%, transparent);
+}
+
+.rl-cascade-toolbar button.active {
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 44%, var(--line));
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--accent) 10%, transparent), transparent),
+    color-mix(in srgb, var(--accent) 11%, var(--panel-2));
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--accent) 11%, transparent),
+    0 1px 3px color-mix(in srgb, var(--accent) 10%, transparent);
+}
+
+.rl-cascade-toolbar button:disabled {
+  opacity: 0.34;
+  cursor: default;
+}
+
+/* Previous / next are a single segmented control. */
+.rl-cascade-toolbar button:nth-of-type(1) {
+  border-top-right-radius: 4px;
+  border-bottom-right-radius: 4px;
+  margin-right: -5px;
+}
+.rl-cascade-toolbar button:nth-of-type(2) {
+  border-top-left-radius: 4px;
+  border-bottom-left-radius: 4px;
+  margin-right: 6px;
+}
+
+/* Fit is icon-only. */
+.rl-cascade-toolbar button:nth-of-type(3) {
+  width: 32px;
+  padding: 0;
+  font-size: 0;
+}
+.rl-cascade-toolbar button:nth-of-type(3)::before {
+  content: "⛶";
+  font: 15px/1 var(--sans);
+}
+
+/* Canonical scale: 1:1 button + live zoom percentage. */
+.rl-cascade-toolbar button:nth-of-type(4) {
+  min-width: 42px;
+  padding: 0 7px;
+  font-size: 0;
+  border-top-right-radius: 4px;
+  border-bottom-right-radius: 4px;
+}
+.rl-cascade-toolbar button:nth-of-type(4)::before {
+  content: "1:1";
+  font: 550 9.5px var(--mono);
+}
+.rl-cascade-toolbar .rl-cascade-zoom {
+  display: inline-grid;
+  place-items: center;
+  min-width: 48px;
+  height: 30px;
+  margin-left: -5px;
+  margin-right: 6px;
+  padding: 0 8px;
+  border: 1px solid color-mix(in srgb, var(--line-strong) 54%, transparent);
+  border-left: 0;
+  border-radius: 4px 9px 9px 4px;
+  background: color-mix(in srgb, var(--panel-2) 82%, transparent);
+  color: var(--text-3);
+  font: 500 9.5px var(--mono);
+  text-align: center;
+}
+
+.rl-cascade-toolbar .rl-cascade-pill {
+  height: 30px;
+  margin-right: 6px;
+  padding: 0 11px;
+  border: 1px solid color-mix(in srgb, var(--line-strong) 54%, transparent);
+  border-radius: 10px;
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--text) 3%, transparent), transparent),
+    color-mix(in srgb, var(--panel-2) 84%, transparent);
+  color: var(--text-2);
+  font: 550 10px var(--mono);
+}
+
+/* Optional collapse action stays compact and icon-first. */
+.rl-cascade-toolbar button[title^="Collapse all expanded"] {
+  width: 32px;
+  padding: 0;
+  font-size: 0;
+  margin-right: 5px;
+}
+.rl-cascade-toolbar button[title^="Collapse all expanded"]::before {
+  content: "⊟";
+  font: 15px/1 var(--sans);
+}
+
+/* The final six graph controls are stable relative to the end even when the
+   optional Collapse button appears before them. */
+.rl-cascade-toolbar button:nth-last-of-type(6),
+.rl-cascade-toolbar button:nth-last-of-type(5),
+.rl-cascade-toolbar button:nth-last-of-type(4),
+.rl-cascade-toolbar button:nth-last-of-type(3),
+.rl-cascade-toolbar button:nth-last-of-type(2) {
+  width: 32px;
+  padding: 0;
+  font-size: 0;
+}
+
+.rl-cascade-toolbar button:nth-last-of-type(6)::before {
+  content: "▦";
+  font: 15px/1 var(--sans);
+}
+.rl-cascade-toolbar button:nth-last-of-type(5)::before {
+  content: "◇";
+  font: 17px/1 var(--sans);
+}
+.rl-cascade-toolbar button:nth-last-of-type(4)::before {
+  content: "⌘";
+  font: 15px/1 var(--sans);
+}
+.rl-cascade-toolbar button:nth-last-of-type(3)::before {
+  content: "↑";
+  font: 17px/1 var(--sans);
+}
+.rl-cascade-toolbar button:nth-last-of-type(2)::before {
+  content: "↓";
+  font: 17px/1 var(--sans);
+}
+
+/* Visually group focus modes and cause/effects without adding DOM wrappers. */
+.rl-cascade-toolbar button:nth-last-of-type(6) {
+  margin-left: auto;
+  border-top-right-radius: 4px;
+  border-bottom-right-radius: 4px;
+}
+.rl-cascade-toolbar button:nth-last-of-type(5) {
+  margin-left: -5px;
+  border-radius: 4px;
+}
+.rl-cascade-toolbar button:nth-last-of-type(4) {
+  margin-left: -5px;
+  margin-right: 7px;
+  border-top-left-radius: 4px;
+  border-bottom-left-radius: 4px;
+}
+.rl-cascade-toolbar button:nth-last-of-type(3) {
+  border-top-right-radius: 4px;
+  border-bottom-right-radius: 4px;
+}
+.rl-cascade-toolbar button:nth-last-of-type(2) {
+  margin-left: -5px;
+  margin-right: 7px;
+  border-top-left-radius: 4px;
+  border-bottom-left-radius: 4px;
+}
+
+/* Latest is the only graph action that keeps a label. */
+.rl-cascade-toolbar button:last-of-type {
+  min-width: 72px;
+  padding: 0 11px;
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 38%, var(--line));
+  background: color-mix(in srgb, var(--accent) 9%, var(--panel-2));
+  font-weight: 650;
+}
+.rl-cascade-toolbar button:last-of-type::before {
+  content: "✦";
+  margin-right: 5px;
+  font-size: 11px;
+}
+
+/* Transport still lives at the temporal adapter boundary in the DOM, but is
+   presented in the main command strip. This keeps ownership clean while
+   matching the approved UI. */
+.rl-cascade-footer .rl-cascade-transport {
+  position: absolute;
+  top: 6px;
+  right: 8px;
+  z-index: 12;
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  flex: 0 0 auto;
-  min-width: 0;
+  height: 32px;
 }
 
 .rl-cascade-transport-group,
@@ -12,122 +246,137 @@
   align-items: center;
   height: 32px;
   padding: 2px;
-  border: 1px solid color-mix(in srgb, var(--line-strong) 62%, transparent);
-  border-radius: 9px;
+  border: 1px solid color-mix(in srgb, var(--line-strong) 54%, transparent);
+  border-radius: 10px;
   background:
-    linear-gradient(180deg, color-mix(in srgb, var(--text) 4%, transparent), transparent),
-    color-mix(in srgb, var(--panel-2) 82%, transparent);
+    linear-gradient(180deg, color-mix(in srgb, var(--text) 3%, transparent), transparent),
+    color-mix(in srgb, var(--panel-2) 88%, transparent);
   box-shadow:
     inset 0 1px 0 color-mix(in srgb, var(--text) 5%, transparent),
-    0 1px 4px color-mix(in srgb, #000 9%, transparent);
-  backdrop-filter: blur(10px);
+    0 1px 3px color-mix(in srgb, #000 8%, transparent);
 }
 
 .rl-cascade-transport-button {
   display: inline-grid;
   place-items: center;
-  width: 28px;
+  width: 30px;
   height: 26px;
   padding: 0;
   border: 0;
-  border-radius: 7px;
+  border-radius: 8px;
   background: transparent;
-  color: var(--text-3);
+  color: var(--text-2);
   cursor: pointer;
-  transition:
-    color 120ms ease,
-    background 120ms ease,
-    box-shadow 120ms ease,
-    transform 100ms ease;
 }
-
 .rl-cascade-transport-button:hover:not(:disabled) {
   color: var(--text);
   background: color-mix(in srgb, var(--text) 6%, transparent);
 }
-
-.rl-cascade-transport-button:active:not(:disabled) {
-  transform: translateY(1px);
-}
-
 .rl-cascade-transport-button.active {
   color: var(--accent);
   background: color-mix(in srgb, var(--accent) 12%, transparent);
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 28%, transparent);
 }
-
-.rl-cascade-transport-button:disabled {
-  opacity: 0.36;
-  cursor: default;
-}
-
-.rl-cascade-transport-button + .rl-cascade-transport-button {
-  margin-left: 1px;
-}
-
 .rl-cascade-transport-button > span:last-child {
   display: none;
 }
-
 .rl-cascade-transport-icon {
   display: inline-grid;
   place-items: center;
   width: 15px;
   height: 15px;
-  color: currentColor;
-  text-align: center;
   font-size: 12px;
   line-height: 1;
 }
 
 .rl-cascade-travel-control {
-  gap: 0;
   padding: 2px;
 }
-
 .rl-cascade-travel-label {
   display: none;
 }
-
 .rl-cascade-travel-control .rl-icon-btn {
-  display: inline-grid;
-  place-items: center;
-  width: 27px;
+  width: 28px;
   height: 26px;
-  min-width: 27px;
+  min-width: 28px;
   padding: 0;
   border: 0;
-  border-radius: 7px;
+  border-radius: 8px;
   background: transparent;
-  color: var(--text-3);
-  transition:
-    background 120ms ease,
-    color 120ms ease,
-    box-shadow 120ms ease,
-    transform 100ms ease;
 }
-
 .rl-cascade-travel-control .rl-icon-btn:hover:not(:disabled) {
-  color: var(--text);
   background: color-mix(in srgb, var(--text) 6%, transparent);
 }
-
-.rl-cascade-travel-control .rl-icon-btn:active:not(:disabled) {
-  transform: translateY(1px);
-}
-
 .rl-cascade-travel-control .rl-icon-btn.active {
   color: var(--accent);
   background: color-mix(in srgb, var(--accent) 12%, transparent);
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 28%, transparent);
 }
 
-@media (max-width: 980px) {
-  .rl-cascade-transport {
-    gap: 3px;
-  }
+/* Footer is status only again. */
+.rl-cascade-footer {
+  min-height: 28px;
+  height: 28px;
+  gap: 8px;
+  padding: 0 8px 0 10px;
+  overflow: hidden;
+  background: var(--panel);
+  border-top: 1px solid color-mix(in srgb, var(--line-strong) 54%, transparent);
+  color: var(--text-3);
+}
+.rl-cascade-footer > span:first-child {
+  max-width: 44%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.rl-cascade-help {
+  margin-left: auto;
+  overflow: hidden;
+  color: color-mix(in srgb, var(--text-3) 66%, transparent);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 8.5px;
+}
 
-  .rl-cascade-travel-control {
+@media (max-width: 1120px) {
+  .rl-cascade-toolbar {
+    padding-right: 146px;
+  }
+  .rl-cascade-toolbar .rl-cascade-pill {
+    max-width: 76px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .rl-cascade-help {
     display: none;
+  }
+}
+
+@media (max-width: 860px) {
+  .rl-cascade-toolbar {
+    padding-right: 112px;
+  }
+  .rl-cascade-toolbar .rl-cascade-pill,
+  .rl-cascade-toolbar .rl-cascade-zoom {
+    display: none;
+  }
+  .rl-cascade-toolbar button:last-of-type {
+    min-width: 32px;
+    width: 32px;
+    padding: 0;
+    font-size: 0;
+  }
+  .rl-cascade-toolbar button:last-of-type::before {
+    margin: 0;
+    font-size: 13px;
+  }
+}
+
+@media (max-width: 680px) {
+  .rl-cascade-toolbar button:nth-last-of-type(5),
+  .rl-cascade-toolbar button:nth-last-of-type(4) {
+    display: none;
+  }
+  .rl-cascade-footer > span:first-child {
+    max-width: 100%;
   }
 }
