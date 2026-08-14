@@ -1543,12 +1543,13 @@
 /* Container contexts. `timeline` used to be declared on `.rl-tl`, which the
    rewrite removed — so every `@container timeline` query silently stopped
    matching. Re-establish both: the panel for toolbar-level decisions, the
-   timeline column for its own chrome. */
+   cascade column for its own chrome. */
 .rl-redesign {
   container-type: inline-size;
   container-name: panel;
 }
-.rl-redesign .tl {
+.rl-redesign .tl,
+.rl-redesign .col:has(.rl-cascade) {
   container-type: inline-size;
   container-name: timeline;
 }

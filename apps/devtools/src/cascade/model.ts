@@ -303,7 +303,8 @@ export function buildCascadeProjection(
   const aggregateByMember = new Map<string, string>();
   for (const aggregate of aggregates) {
     if (!visibleIds.has(aggregate.id)) continue;
-    for (const renderId of aggregate.renderIds) aggregateByMember.set(rawId(renderId), aggregate.id);
+    for (const renderId of aggregate.renderIds)
+      aggregateByMember.set(rawId(renderId), aggregate.id);
   }
 
   const edgePairs = new Map<

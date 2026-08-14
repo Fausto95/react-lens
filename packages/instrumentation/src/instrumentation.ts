@@ -448,9 +448,7 @@ export function createInstrumentation(deps: {
       interactionId: id,
       kind: kind === "keydown" ? "keypress" : kind,
       ...(handlerName ? { name: handlerName } : {}),
-      ...(target
-        ? { target: { selector: describe(targetNode!), componentId: target.id } }
-        : {}),
+      ...(target ? { target: { selector: describe(targetNode!), componentId: target.id } } : {}),
     };
     pendingEvents.push(interaction);
     scheduleFlush();

@@ -40,3 +40,20 @@ test("selecting via palette reveals a below-the-fold specimen", async ({ page })
   await jumpTo(page, "BigList");
   await expect.poll(async () => page.evaluate(() => window.scrollY)).toBeGreaterThan(50);
 });
+
+test("tree chevron collapses and expands a component's children", async ({ page }) => {
+  await boot(page);
+  const expanded = page.locator('[role="treeitem"][aria-expanded="true"]').first();
+  await expect(expanded).toBeVisible();
+  const name = (await expanded.locator(".rl-tree-name").innerText()).trim();
+  const row = page
+    .getByRole("treeitem")
+    .filter({ has: page.locator(".rl-tree-name", { hasText: new RegExp(`^${name}$`) }) })
+    .first();
+
+  await row.locator(".chev").click();
+  await expect(row).toHaveAttribute("aria-expanded", "false");
+
+  await row.locator(".chev").click();
+  await expect(row).toHaveAttribute("aria-expanded", "true");
+});

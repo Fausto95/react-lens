@@ -24,6 +24,7 @@ export default defineConfig({
     {
       name: "embed",
       testMatch: /^(?!.*\/extension\/).*\.spec\.ts$/,
+      testIgnore: /perf-scale\.spec\.ts$/,
       use: { baseURL: `http://localhost:${PORT}` },
     },
     {

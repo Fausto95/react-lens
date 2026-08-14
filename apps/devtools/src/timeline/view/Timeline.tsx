@@ -67,9 +67,12 @@ export function Timeline({
   const replayGeneration = useRef(0);
   const transportRef = useRef(transport);
   const gestureBoundaryRef = useRef<HTMLDivElement>(null);
-  transportRef.current = transport;
   /** Toggle we invoked because replay needed restoration while the user's mode was off. */
   const autoTravelToggle = useRef<(() => void) | null>(null);
+
+  useEffect(() => {
+    transportRef.current = transport;
+  }, [transport]);
 
   /**
    * The graph owns wheel/trackpad/pinch gestures while the pointer is inside
@@ -272,7 +275,9 @@ export function Timeline({
           }
           onClick={replaying ? stopReplay : replayInteraction}
         >
-          <span className="rl-cascade-transport-icon">{replayMode === "interaction" ? <IconStop size={12} /> : <IconRewind size={13} />}</span>
+          <span className="rl-cascade-transport-icon">
+            {replayMode === "interaction" ? <IconStop size={12} /> : <IconRewind size={13} />}
+          </span>
           <span>{replayMode === "interaction" ? "Stop" : "Replay"}</span>
         </button>
         <button
@@ -291,7 +296,9 @@ export function Timeline({
           }
           onClick={replaying ? stopReplay : replaySession}
         >
-          <span className="rl-cascade-transport-icon">{replayMode === "session" ? <IconStop size={12} /> : <IconPlay size={12} />}</span>
+          <span className="rl-cascade-transport-icon">
+            {replayMode === "session" ? <IconStop size={12} /> : <IconPlay size={12} />}
+          </span>
           <span>{replayMode === "session" ? "Stop" : "Replay all"}</span>
         </button>
       </span>

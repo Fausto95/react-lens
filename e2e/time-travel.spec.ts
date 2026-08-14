@@ -2,19 +2,16 @@ import { test, expect } from "@playwright/test";
 import {
   boot,
   bumpCounter,
-  counterLine,
+  cascadeToolbar,
   cartLine,
-  ensureTravelOn,
   clickInPage,
+  counterLine,
+  ensureTravelOn,
+  goLive,
+  replayAllButton,
 } from "./helpers.js";
 
-const tl = (page: import("@playwright/test").Page) => page.locator(".tl-toolbar");
-
-test("replay walks the app through history and returns live", async ({ page }) => {
-  await boot(page);
-  await bumpCounter(page, 3);
-  await ensureTravelOn(page);
-
+async function watchCounter(page: import("@playwright/test").Page): Promise<void> {
   await page.evaluate(() => {
     const w = window as unknown as { __seen: string[] };
     w.__seen = [];
@@ -29,49 +26,61 @@ test("replay walks the app through history and returns live", async ({ page }) =
       childList: true,
     });
   });
+}
 
-  await tl(page).getByRole("button", { name: "Play in reverse" }).click();
+function seenCounts(page: import("@playwright/test").Page): Promise<string[]> {
+  return page.evaluate(() => (window as unknown as { __seen: string[] }).__seen);
+}
+
+test("replay all walks the app through history and returns to the live count", async ({ page }) => {
+  await boot(page);
+  await bumpCounter(page, 3);
+  await ensureTravelOn(page);
+  await watchCounter(page);
+
+  await replayAllButton(page).click();
   await expect
-    .poll(() => page.evaluate(() => (window as unknown as { __seen: string[] }).__seen.length), {
-      timeout: 15_000,
-    })
-    .toBeGreaterThan(1);
-
-  // Return to live via End (go-live), not L — reverse play can leave the
-  // transport mid-history where L only changes speed.
-  await page.keyboard.press("End");
+    .poll(
+      async () => {
+        const seen = await seenCounts(page);
+        const joined = seen.join(" ");
+        return /count 1/.test(joined) && /count 2/.test(joined) && /count 3/.test(joined);
+      },
+      { timeout: 15_000 },
+    )
+    .toBe(true);
 
   await expect
-    .poll(async () => counterLine(page).innerText(), { timeout: 10_000 })
-    .toContain("count 3");
+    .poll(async () => replayAllButton(page).getAttribute("aria-label"), { timeout: 10_000 })
+    .toMatch(/^Replay all/);
+  await expect(counterLine(page)).toContainText("count 3");
 });
 
-test("End during active reverse play stops the transport and returns live", async ({ page }) => {
+test("Stop during Replay all, then Go live, restores the live counter", async ({ page }) => {
   await boot(page);
   await bumpCounter(page, 3);
   await ensureTravelOn(page);
 
-  await tl(page).getByRole("button", { name: "Play in reverse" }).click();
-  // Press End mid-play: a still-running transport tick must not re-seek the
-  // cursor historical and swallow the go-live.
+  await replayAllButton(page).click();
   await page.waitForTimeout(250);
-  await page.keyboard.press("End");
+  await replayAllButton(page).click();
 
+  await goLive(page);
   await expect
     .poll(async () => counterLine(page).innerText(), { timeout: 10_000 })
     .toContain("count 3");
-  await expect(tl(page).getByRole("button", { name: "Live" })).toHaveCount(0);
 });
 
-test("stepping to the previous commit rewinds the page; L returns live", async ({ page }) => {
+test("previous interaction rewinds the page; Latest returns to the live count", async ({
+  page,
+}) => {
   await boot(page);
   await bumpCounter(page, 2);
   await ensureTravelOn(page);
 
-  // Walk back until the page shows count 1 (commits may outnumber interactions).
   let saw = false;
   for (let i = 0; i < 12; i++) {
-    await tl(page).getByRole("button", { name: "Previous commit" }).click();
+    await cascadeToolbar(page).getByRole("button", { name: "Previous interaction" }).click();
     await page.waitForTimeout(80);
     if ((await counterLine(page).innerText()).includes("count 1")) {
       saw = true;
@@ -79,14 +88,14 @@ test("stepping to the previous commit rewinds the page; L returns live", async (
     }
   }
   expect(saw).toBe(true);
-  await expect(tl(page).getByRole("button", { name: "Live" })).toBeVisible();
 
-  await page.keyboard.press("l");
-  await expect(tl(page).getByRole("button", { name: "Live" })).toHaveCount(0);
-  await expect(counterLine(page)).toContainText("count 2");
+  await cascadeToolbar(page).getByRole("button", { name: "Follow the latest interaction" }).click();
+  await expect
+    .poll(async () => counterLine(page).innerText(), { timeout: 10_000 })
+    .toContain("count 2");
 });
 
-test("external store cart rewinds with the playhead", async ({ page }) => {
+test("external store cart rewinds with the selected interaction", async ({ page }) => {
   await boot(page);
   await ensureTravelOn(page);
 
@@ -99,7 +108,7 @@ test("external store cart rewinds with the playhead", async ({ page }) => {
 
   const seen = new Set<string>();
   for (let i = 0; i < 12; i++) {
-    await tl(page).getByRole("button", { name: "Previous commit" }).click();
+    await cascadeToolbar(page).getByRole("button", { name: "Previous interaction" }).click();
     await page.waitForTimeout(100);
     const text = await cartLine(page).innerText();
     seen.add(text);
@@ -108,7 +117,8 @@ test("external store cart rewinds with the playhead", async ({ page }) => {
   expect([...seen].some((t) => /cart: 1/.test(t))).toBe(true);
   expect([...seen].some((t) => /cart: 0/.test(t))).toBe(true);
 
-  await page.keyboard.press("l");
-  await expect(tl(page).getByRole("button", { name: "Live" })).toHaveCount(0);
-  await expect(cartLine(page)).toContainText("cart: 2");
+  await goLive(page);
+  await expect
+    .poll(async () => cartLine(page).innerText(), { timeout: 10_000 })
+    .toContain("cart: 2");
 });

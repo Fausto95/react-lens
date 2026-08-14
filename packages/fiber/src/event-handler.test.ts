@@ -44,10 +44,10 @@ describe("eventHandlerName", () => {
   });
 
   it("prefers displayName when available", () => {
-    const handler = Object.assign(function internalHandler() {}, { displayName: "savePreferences" });
-    expect(eventHandlerName(nodeFor(fiber({ onClick: handler })), "click")).toBe(
-      "savePreferences",
-    );
+    const handler = Object.assign(function internalHandler() {}, {
+      displayName: "savePreferences",
+    });
+    expect(eventHandlerName(nodeFor(fiber({ onClick: handler })), "click")).toBe("savePreferences");
   });
 
   it("returns undefined when React does not expose a useful named callback", () => {

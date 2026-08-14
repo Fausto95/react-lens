@@ -1,11 +1,6 @@
-/* Replay lives in the footer DOM so Cascade stays a graph renderer, but the
-   controls are painted onto the same command strip as graph navigation. */
+/* Replay lives in the Cascade toolbar so it shares the same wrapping/hiding. */
 
-.rl-cascade-footer .rl-cascade-transport {
-  position: absolute;
-  top: 6px;
-  right: 8px;
-  z-index: 12;
+.rl-cascade-transport {
   display: inline-flex;
   align-items: center;
   gap: 2px;
@@ -79,12 +74,14 @@
   border-top: 1px solid color-mix(in srgb, var(--line-strong) 50%, transparent);
   color: var(--text-3);
 }
+
 .rl-cascade-footer > span:first-child {
   max-width: 44%;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
 .rl-cascade-help {
   margin-left: auto;
   overflow: hidden;
@@ -94,16 +91,10 @@
   font-size: 8.5px;
 }
 
-@media (max-width: 1120px) {
-  .rl-cascade-footer .rl-cascade-transport {
-    right: 6px;
-  }
+@container cascade (max-width: 780px) {
   .rl-cascade-help {
     display: none;
   }
-}
-
-@media (max-width: 680px) {
   .rl-cascade-footer > span:first-child {
     max-width: 100%;
   }

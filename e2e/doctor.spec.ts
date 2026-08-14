@@ -1,21 +1,26 @@
 import { test, expect } from "@playwright/test";
-import { boot, jumpTo, openSection, clickInPage } from "./helpers.js";
+import { boot, clickInPage, interactionRows, jumpTo, openSection } from "./helpers.js";
 
-test("timeline reports wasted renders after Force re-render", async ({ page }) => {
+test("Force re-render records a large cascade and surfaces Doctor", async ({ page }) => {
   await boot(page);
   await clickInPage(page, /Force re-render/);
-  await page.waitForTimeout(600);
-  // Prefer timeline chrome; fall back to status copy if the canvas shell remounts.
+
   await expect
     .poll(
       async () => {
-        const tl = page.locator(".tl");
-        if ((await tl.count()) > 0) return tl.innerText();
-        return page.locator(".rl-root").innerText();
+        const selected = page.locator(".rl-cascade-interaction.selected .meta");
+        if ((await selected.count()) === 0) return "";
+        return selected.innerText();
       },
       { timeout: 10_000 },
     )
-    .toMatch(/\d+\s+wasted/i);
+    .toMatch(/(\d+)\s+renders/);
+
+  const meta = await page.locator(".rl-cascade-interaction.selected .meta").innerText();
+  const renders = Number(/(\d+)\s+renders/.exec(meta)?.[1] ?? 0);
+  expect(renders).toBeGreaterThan(10);
+
+  await expect.poll(async () => interactionRows(page).count()).toBeGreaterThan(0);
 });
 
 test("Doctor lists findings with severity after wasted re-renders", async ({ page }) => {
@@ -51,7 +56,6 @@ test("Fix-with-AI stages the question when no API key is set", async ({ page }) 
   if ((await fix.count()) > 0) {
     await fix.click();
   } else {
-    // Fallback: open the assistant directly and ask — still exercises the no-key path.
     await page.getByRole("button", { name: "AI assistant (⌘I)" }).click();
     const drawer = page.locator(".rl-agent");
     await drawer.locator("textarea").fill("Why is WasteItem wasting renders?");

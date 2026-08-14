@@ -29,16 +29,34 @@ function paint(view = lastView, cursorTime = lastCursor): void {
   lastCursor = cursorTime;
   drawCascadeBase(ctx, layout, lastView, theme, { cursorTime, maxSelfTime, dimAfterCursor: true });
 }
-self.onmessage = (event: MessageEvent<
-  | { type: "init"; canvas: OffscreenCanvas; width: number; height: number; dpr: number }
-  | { type: "resize"; width: number; height: number; dpr: number }
-  | { type: "frame"; layout: CascadeLayout; theme: TimelineTheme; maxSelfTime: number }
-  | { type: "paint"; view: CascadeViewport; cursorTime: number | null }
->) => {
+self.onmessage = (
+  event: MessageEvent<
+    | { type: "init"; canvas: OffscreenCanvas; width: number; height: number; dpr: number }
+    | { type: "resize"; width: number; height: number; dpr: number }
+    | { type: "frame"; layout: CascadeLayout; theme: TimelineTheme; maxSelfTime: number }
+    | { type: "paint"; view: CascadeViewport; cursorTime: number | null }
+  >,
+) => {
   const message = event.data;
-  if (message.type === "init") { canvas = message.canvas; ctx = canvas.getContext("2d"); resize(message.width, message.height, message.dpr); self.postMessage({ type: "ready" }); return; }
-  if (message.type === "resize") { resize(message.width, message.height, message.dpr); paint(); return; }
-  if (message.type === "frame") { layout = message.layout; theme = message.theme; maxSelfTime = Math.max(0.001, message.maxSelfTime); paint(); return; }
+  if (message.type === "init") {
+    canvas = message.canvas;
+    ctx = canvas.getContext("2d");
+    resize(message.width, message.height, message.dpr);
+    self.postMessage({ type: "ready" });
+    return;
+  }
+  if (message.type === "resize") {
+    resize(message.width, message.height, message.dpr);
+    paint();
+    return;
+  }
+  if (message.type === "frame") {
+    layout = message.layout;
+    theme = message.theme;
+    maxSelfTime = Math.max(0.001, message.maxSelfTime);
+    paint();
+    return;
+  }
   if (message.type === "paint") paint(message.view, message.cursorTime);
 };
 export {};

@@ -25,9 +25,18 @@ export function createCascadeRenderer(canvas: HTMLCanvasElement): CascadeRendere
   if (typeof Worker === "undefined" || typeof OffscreenCanvas === "undefined") return null;
   if (typeof canvas.transferControlToOffscreen !== "function") return null;
   let worker: Worker;
-  try { worker = new Worker(new URL("./rendererWorker.ts", import.meta.url), { type: "module" }); } catch { return null; }
+  try {
+    worker = new Worker(new URL("./rendererWorker.ts", import.meta.url), { type: "module" });
+  } catch {
+    return null;
+  }
   let offscreen: OffscreenCanvas;
-  try { offscreen = canvas.transferControlToOffscreen(); } catch { worker.terminate(); return null; }
+  try {
+    offscreen = canvas.transferControlToOffscreen();
+  } catch {
+    worker.terminate();
+    return null;
+  }
   let ready = false;
   const queue: unknown[] = [];
   worker.onmessage = (event: MessageEvent<{ type?: string }>) => {
@@ -36,15 +45,42 @@ export function createCascadeRenderer(canvas: HTMLCanvasElement): CascadeRendere
     for (const message of queue) worker.postMessage(message);
     queue.length = 0;
   };
-  const post = (message: unknown) => { if (ready) worker.postMessage(message); else queue.push(message); };
+  const post = (message: unknown) => {
+    if (ready) worker.postMessage(message);
+    else queue.push(message);
+  };
   const dpr = typeof devicePixelRatio === "number" ? devicePixelRatio : 1;
-  worker.postMessage({ type: "init", canvas: offscreen, width: Math.max(1, canvas.clientWidth || canvas.width), height: Math.max(1, canvas.clientHeight || canvas.height), dpr }, [offscreen]);
+  worker.postMessage(
+    {
+      type: "init",
+      canvas: offscreen,
+      width: Math.max(1, canvas.clientWidth || canvas.width),
+      height: Math.max(1, canvas.clientHeight || canvas.height),
+      dpr,
+    },
+    [offscreen],
+  );
   const client: CascadeRendererClient = {
     setFrame(layout, theme, maxSelfTime) {
-      post({ type: "frame", layout: { nodes: layout.nodes, edges: layout.edges, worldWidth: layout.worldWidth, worldHeight: layout.worldHeight, nodeById: new Map() }, theme, maxSelfTime });
+      post({
+        type: "frame",
+        layout: {
+          nodes: layout.nodes,
+          edges: layout.edges,
+          worldWidth: layout.worldWidth,
+          worldHeight: layout.worldHeight,
+          nodeById: new Map(),
+        },
+        theme,
+        maxSelfTime,
+      });
     },
-    paint(view, cursorTime) { post({ type: "paint", view, cursorTime }); },
-    resize(width, height, nextDpr) { post({ type: "resize", width, height, dpr: nextDpr }); },
+    paint(view, cursorTime) {
+      post({ type: "paint", view, cursorTime });
+    },
+    resize(width, height, nextDpr) {
+      post({ type: "resize", width, height, dpr: nextDpr });
+    },
     dispose() {
       if (pendingDispose.has(canvas)) return;
       const timer = setTimeout(() => {

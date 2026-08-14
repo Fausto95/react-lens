@@ -154,3 +154,87 @@ export async function saveDownload(download: Download, name: string): Promise<st
   await download.saveAs(dest);
   return dest;
 }
+
+export function cascade(page: Page) {
+  return page.locator(".rl-cascade");
+}
+
+export function cascadeToolbar(page: Page) {
+  return page.locator(".rl-cascade-toolbar");
+}
+
+/** Interaction replay (not Replay all). */
+export function replayButton(page: Page) {
+  return page.locator(".rl-cascade-transport-button:not(.session)");
+}
+
+/** Whole-session replay. */
+export function replayAllButton(page: Page) {
+  return page.locator(".rl-cascade-transport-button.session");
+}
+
+export function interactionRows(page: Page) {
+  return page.locator(".rl-cascade-interaction");
+}
+
+export async function waitForInteractions(page: Page, min = 1): Promise<void> {
+  await expect.poll(async () => interactionRows(page).count()).toBeGreaterThanOrEqual(min);
+}
+
+/** Return to live capture via the command palette. */
+export async function goLive(page: Page): Promise<void> {
+  await page.keyboard.press("ControlOrMeta+k");
+  const input = page.locator(".rl-cmdk-input");
+  await expect(input).toBeFocused();
+  await input.fill("Go live");
+  await page.keyboard.press("Enter");
+}
+
+export type PanelPane = "Components" | "Inspector";
+
+export async function collapsePane(page: Page, pane: PanelPane): Promise<void> {
+  await page.getByRole("button", { name: `Collapse ${pane}` }).click();
+  await expect(page.getByRole("button", { name: `Expand ${pane}` })).toBeVisible();
+}
+
+export async function expandPane(page: Page, pane: PanelPane): Promise<void> {
+  await page.getByRole("button", { name: `Expand ${pane}` }).click();
+  await expect(page.getByRole("button", { name: `Collapse ${pane}` })).toBeVisible();
+}
+
+export function cascadeZoom(page: Page) {
+  return page.locator(".rl-cascade-zoom");
+}
+
+export async function cascadeZoomPercent(page: Page): Promise<number> {
+  const text = (await cascadeZoom(page).textContent()) ?? "";
+  const n = Number(/^(\d+)%/.exec(text)?.[1]);
+  if (!Number.isFinite(n)) throw new Error(`Could not parse cascade zoom from "${text}"`);
+  return n;
+}
+
+/** Walk the graph until a node tooltip appears; return the stage-local hit. */
+export async function hoverCascadeNode(page: Page): Promise<{ x: number; y: number }> {
+  const stage = page.locator(".rl-cascade-stage");
+  await expect(stage).toBeVisible();
+  await page.getByRole("button", { name: "Fit the entire cascade" }).click();
+  const box = await stage.boundingBox();
+  if (!box) throw new Error("cascade stage has no box");
+  const tooltipOn = () =>
+    page.evaluate(() => {
+      const tip = document.querySelector(".rl-cascade-tooltip");
+      return tip instanceof HTMLElement && tip.style.display === "block";
+    });
+  const x0 = Math.max(16, box.width * 0.12);
+  const y0 = Math.max(16, box.height * 0.12);
+  const x1 = box.width * 0.88;
+  const y1 = box.height * 0.88;
+  const step = 22;
+  for (let y = y0; y <= y1; y += step) {
+    for (let x = x0; x <= x1; x += step) {
+      await page.mouse.move(box.x + x, box.y + y);
+      if (await tooltipOn()) return { x, y };
+    }
+  }
+  throw new Error("no cascade node produced a tooltip");
+}
