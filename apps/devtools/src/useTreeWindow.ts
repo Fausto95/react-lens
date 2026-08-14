@@ -1,3 +1,4 @@
+/* oxlint-disable react-hooks/exhaustive-deps -- args.version intentionally invalidates memoized reads from the mutable TraceStore */
 /* oxlint-disable react/react-compiler -- scroll window state */
 import { useMemo, useState } from "react";
 import type { TraceStore, VisibleTreeRow } from "@reactlens/trace-engine";
@@ -32,15 +33,7 @@ export function useTreeWindow(
       rowHeight,
       include,
     });
-  }, [
-    store,
-    args.version,
-    args.expanded,
-    args.scrollTop,
-    args.viewH,
-    rowHeight,
-    args.projection,
-  ]);
+  }, [store, args.version, args.expanded, args.scrollTop, args.viewH, rowHeight, args.projection]);
 }
 
 /** Local scroll state helper for tree panes. */

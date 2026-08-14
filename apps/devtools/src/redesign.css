@@ -1183,15 +1183,12 @@
   color: var(--accent);
   background: rgba(110, 155, 255, 0.14);
 }
-/* The "views are filtered" affordance is a chip, not an icon button. */
 .rl-redesign .rl-toolbar-actions .rl-filtered-chip {
-  width: auto;
-  padding: 0 8px;
-  font-size: 10.5px;
-  font-family: var(--mono);
   color: var(--accent);
   background: rgba(110, 155, 255, 0.14);
-  border: 1px solid rgba(110, 155, 255, 0.35);
+}
+.rl-redesign .rl-toolbar-actions .rl-doctor-btn {
+  margin-right: 10px;
 }
 .rl-redesign .rl-toolbar-actions .rl-icon-btn.recording .rl-rec-pulse {
   width: 9px;

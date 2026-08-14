@@ -26,6 +26,7 @@ import {
   inspectContexts,
   changedContexts,
   inspectClassState,
+  eventHandlerName,
 } from "@reactlens/fiber";
 import type { Serializer } from "@reactlens/serializer";
 import { snapshotDom } from "./dom-snapshot.js";
@@ -437,15 +438,18 @@ export function createInstrumentation(deps: {
     if (ev.target instanceof Node && fiber.isIgnoredNode(ev.target)) return;
     const id = nextInteractionId();
     currentInteraction = { id, until: now() + config.interactionWindowMs };
-    const target = ev.target instanceof Node ? fiber.resolveComponent(ev.target) : null;
+    const targetNode = ev.target instanceof Node ? ev.target : null;
+    const target = targetNode ? fiber.resolveComponent(targetNode) : null;
+    const handlerName = targetNode ? eventHandlerName(targetNode, kind) : undefined;
     const interaction: InteractionEvent = {
       id: nextEventId(),
       type: "interaction",
       timestamp: now(),
       interactionId: id,
       kind: kind === "keydown" ? "keypress" : kind,
+      ...(handlerName ? { name: handlerName } : {}),
       ...(target
-        ? { target: { selector: describe(ev.target as Node), componentId: target.id } }
+        ? { target: { selector: describe(targetNode!), componentId: target.id } }
         : {}),
     };
     pendingEvents.push(interaction);

@@ -27,7 +27,8 @@ export function OpsBoard() {
       <header className="demo-card-head">
         <h2>Ops board</h2>
         <p>
-          {ROW_COUNT.toLocaleString()} rows · tick {tick} · showing {visible.length.toLocaleString()}
+          {ROW_COUNT.toLocaleString()} rows · tick {tick} · showing{" "}
+          {visible.length.toLocaleString()}
         </p>
       </header>
       <div className="demo-card-actions">
