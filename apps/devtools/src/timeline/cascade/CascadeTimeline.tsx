@@ -24,6 +24,12 @@ interface ViewTransform {
   panY: number;
 }
 
+interface MinimapTransform {
+  x: number;
+  y: number;
+  scale: number;
+}
+
 type FocusMode = "all" | "expensive" | "roots" | "custom";
 
 export interface CascadeTimelineProps {
@@ -35,6 +41,9 @@ export interface CascadeTimelineProps {
   onHighlight?: (id: ComponentId | null) => void;
   transport?: React.ReactNode;
 }
+
+const MINIMAP_SIZE = 148;
+const MINIMAP_PAD = 8;
 
 function containingInteraction(
   interactions: TimelineModel["interactions"],
@@ -49,7 +58,6 @@ function containingInteraction(
     else hi = mid;
   }
   const candidate = interactions[Math.max(0, lo - 1)] ?? interactions[0]!;
-  if (time >= candidate.start && time <= candidate.end + 1) return candidate;
   return candidate;
 }
 
@@ -118,6 +126,88 @@ function fitTransform(layout: CascadeLayout, width: number, height: number): Vie
   };
 }
 
+/**
+ * Every newly selected cascade opens at a true 100%. We center a graph that is
+ * smaller than the stage and pin a larger graph to a comfortable top/left
+ * inset. "Fit" remains an explicit user action and may choose another scale.
+ */
+function initialTransform(layout: CascadeLayout, width: number, height: number): ViewTransform {
+  const inset = 28;
+  return {
+    zoom: 1,
+    panX: layout.worldWidth <= width ? (width - layout.worldWidth) / 2 : inset,
+    panY: layout.worldHeight <= height ? (height - layout.worldHeight) / 2 : inset,
+  };
+}
+
+function minimapTransform(layout: CascadeLayout, width: number, height: number): MinimapTransform {
+  const usableW = Math.max(1, width - MINIMAP_PAD * 2);
+  const usableH = Math.max(1, height - MINIMAP_PAD * 2);
+  const scale = Math.min(
+    usableW / Math.max(1, layout.worldWidth),
+    usableH / Math.max(1, layout.worldHeight),
+  );
+  return {
+    scale,
+    x: (width - layout.worldWidth * scale) / 2,
+    y: (height - layout.worldHeight * scale) / 2,
+  };
+}
+
+function miniNodeColor(theme: TimelineTheme, cause: CascadeProjection["nodes"][number]["cause"]): string {
+  switch (cause) {
+    case "state":
+      return theme.state;
+    case "props":
+      return theme.props;
+    case "context":
+      return theme.context;
+    case "parent":
+      return theme.cascade;
+    case "mount":
+      return theme.accent;
+    default:
+      return theme.text3;
+  }
+}
+
+function buildMinimapCache(
+  layout: CascadeLayout,
+  theme: TimelineTheme,
+  width: number,
+  height: number,
+  dpr: number,
+): HTMLCanvasElement | null {
+  if (typeof document === "undefined") return null;
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.max(1, Math.round(width * dpr));
+  canvas.height = Math.max(1, Math.round(height * dpr));
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return null;
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, width, height);
+  ctx.fillStyle = theme.panel;
+  ctx.fillRect(0, 0, width, height);
+  const mini = minimapTransform(layout, width, height);
+
+  // Deliberately omit graph edges here. At minimap scale they become visual
+  // noise and painting them would add O(edges) work to every layout refresh.
+  // Nodes alone preserve the topology/shape users need for spatial navigation.
+  for (const item of layout.nodes) {
+    const rect = item.rect;
+    ctx.fillStyle = miniNodeColor(theme, item.node.cause);
+    ctx.globalAlpha = item.node.kind === "aggregate" ? 0.9 : 0.66;
+    ctx.fillRect(
+      mini.x + rect.x * mini.scale,
+      mini.y + rect.y * mini.scale,
+      Math.max(1.5, rect.width * mini.scale),
+      Math.max(1.5, rect.height * mini.scale),
+    );
+  }
+  ctx.globalAlpha = 1;
+  return canvas;
+}
+
 export function CascadeTimeline({
   store,
   model,
@@ -131,6 +221,9 @@ export function CascadeTimeline({
   const stageRef = useRef<HTMLDivElement>(null);
   const baseRef = useRef<HTMLCanvasElement>(null);
   const overlayRef = useRef<HTMLCanvasElement>(null);
+  const minimapRef = useRef<HTMLCanvasElement>(null);
+  const minimapCacheRef = useRef<HTMLCanvasElement | null>(null);
+  const minimapDragRef = useRef<number | null>(null);
   const tooltipRef = useRef<HTMLDivElement>(null);
   const tooltipNameRef = useRef<HTMLElement>(null);
   const tooltipMetaRef = useRef<HTMLElement>(null);
@@ -148,7 +241,7 @@ export function CascadeTimeline({
     hitId: string | null;
     moved: boolean;
   }>(null);
-  const firstFitRef = useRef(true);
+  const resetViewRef = useRef(true);
 
   const latest = model.interactions[model.interactions.length - 1] ?? null;
   const initial = containingInteraction(model.interactions, cursor.t) ?? latest;
@@ -165,7 +258,7 @@ export function CascadeTimeline({
     if (!followLatest || !latest || selectedInteractionId === latest.id) return;
     setSelectedInteractionId(latest.id);
     setExpandedAggregates(new Set());
-    firstFitRef.current = true;
+    resetViewRef.current = true;
   }, [followLatest, latest, selectedInteractionId]);
 
   useEffect(() => {
@@ -173,11 +266,11 @@ export function CascadeTimeline({
     if (renderId === null) return;
     const render = store.getRender(renderId);
     if (!render) return;
-    const interaction = containingInteraction(model.interactions, render.timestamp);
-    if (interaction && interaction.id !== selectedInteractionId) {
-      setSelectedInteractionId(interaction.id);
-      setFollowLatest(interaction.id === latest?.id);
-      firstFitRef.current = true;
+    const nextInteraction = containingInteraction(model.interactions, render.timestamp);
+    if (nextInteraction && nextInteraction.id !== selectedInteractionId) {
+      setSelectedInteractionId(nextInteraction.id);
+      setFollowLatest(nextInteraction.id === latest?.id);
+      resetViewRef.current = true;
     }
     setLocalSelectedId(null);
   }, [latest?.id, model.interactions, model.state.selectedRender, selectedInteractionId, store]);
@@ -241,9 +334,51 @@ export function CascadeTimeline({
   const themeRef = useRef<TimelineTheme>(readTimelineTheme(null));
   const currentViewport = useCallback((): CascadeViewport => {
     const size = sizeRef.current;
-    const view = viewRef.current;
-    return { ...size, ...view };
+    return { ...size, ...viewRef.current };
   }, []);
+
+  const paintMinimap = useCallback(() => {
+    const canvas = minimapRef.current;
+    const cache = minimapCacheRef.current;
+    if (!canvas || !cache || !layout) return;
+    const dpr = sizeRef.current.dpr;
+    const width = canvas.clientWidth || MINIMAP_SIZE;
+    const height = canvas.clientHeight || MINIMAP_SIZE;
+    const targetW = Math.max(1, Math.round(width * dpr));
+    const targetH = Math.max(1, Math.round(height * dpr));
+    if (canvas.width !== targetW || canvas.height !== targetH) {
+      canvas.width = targetW;
+      canvas.height = targetH;
+    }
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, width, height);
+    ctx.drawImage(cache, 0, 0, cache.width, cache.height, 0, 0, width, height);
+
+    const mini = minimapTransform(layout, width, height);
+    const view = viewRef.current;
+    const stage = sizeRef.current;
+    const worldX = -view.panX / view.zoom;
+    const worldY = -view.panY / view.zoom;
+    const worldW = stage.width / view.zoom;
+    const worldH = stage.height / view.zoom;
+    ctx.fillStyle = "rgba(96,165,250,.08)";
+    ctx.strokeStyle = themeRef.current.accent;
+    ctx.lineWidth = 1;
+    ctx.fillRect(
+      mini.x + worldX * mini.scale,
+      mini.y + worldY * mini.scale,
+      worldW * mini.scale,
+      worldH * mini.scale,
+    );
+    ctx.strokeRect(
+      mini.x + worldX * mini.scale + 0.5,
+      mini.y + worldY * mini.scale + 0.5,
+      worldW * mini.scale,
+      worldH * mini.scale,
+    );
+  }, [layout]);
 
   const paintOverlay = useCallback(() => {
     const canvas = overlayRef.current;
@@ -279,13 +414,22 @@ export function CascadeTimeline({
   const paintAll = useCallback(() => {
     paintBase();
     paintOverlay();
+    paintMinimap();
     if (zoomRef.current) zoomRef.current.textContent = `${Math.round(viewRef.current.zoom * 100)}%`;
-  }, [paintBase, paintOverlay]);
+  }, [paintBase, paintMinimap, paintOverlay]);
 
   const fit = useCallback(() => {
     if (!layout) return;
     const size = sizeRef.current;
     viewRef.current = fitTransform(layout, size.width, size.height);
+    paintAll();
+  }, [layout, paintAll]);
+
+  const resetTo100 = useCallback(() => {
+    if (!layout) return;
+    const size = sizeRef.current;
+    viewRef.current = initialTransform(layout, size.width, size.height);
+    resetViewRef.current = false;
     paintAll();
   }, [layout, paintAll]);
 
@@ -308,9 +452,9 @@ export function CascadeTimeline({
         base.height = Math.max(1, Math.round(rect.height * dpr));
       }
       rendererRef.current?.resize(rect.width, rect.height, dpr);
-      if (firstFitRef.current && layout) {
-        firstFitRef.current = false;
-        viewRef.current = fitTransform(layout, rect.width, rect.height);
+      if (resetViewRef.current && layout) {
+        viewRef.current = initialTransform(layout, rect.width, rect.height);
+        resetViewRef.current = false;
       }
       paintAll();
     });
@@ -331,10 +475,23 @@ export function CascadeTimeline({
   useEffect(() => {
     themeRef.current = readTimelineTheme(rootRef.current?.closest(".rl-redesign") ?? null);
     if (layout) rendererRef.current?.setFrame(layout, themeRef.current, maxSelfTime);
-    if (layout && firstFitRef.current) {
-      const size = sizeRef.current;
-      firstFitRef.current = false;
-      viewRef.current = fitTransform(layout, size.width, size.height);
+    if (layout) {
+      const mini = minimapRef.current;
+      const width = mini?.clientWidth || MINIMAP_SIZE;
+      const height = mini?.clientHeight || MINIMAP_SIZE;
+      minimapCacheRef.current = buildMinimapCache(
+        layout,
+        themeRef.current,
+        width,
+        height,
+        sizeRef.current.dpr,
+      );
+      if (resetViewRef.current && sizeRef.current.width > 1 && sizeRef.current.height > 1) {
+        viewRef.current = initialTransform(layout, sizeRef.current.width, sizeRef.current.height);
+        resetViewRef.current = false;
+      }
+    } else {
+      minimapCacheRef.current = null;
     }
     paintAll();
   }, [layout, maxSelfTime, paintAll]);
@@ -355,6 +512,24 @@ export function CascadeTimeline({
       y: (sy - view.panY) / view.zoom,
     };
   }, []);
+
+  const recenterFromMinimap = useCallback(
+    (clientX: number, clientY: number) => {
+      const canvas = minimapRef.current;
+      if (!canvas || !layout) return;
+      const rect = canvas.getBoundingClientRect();
+      const mini = minimapTransform(layout, rect.width, rect.height);
+      const mx = clientX - rect.left;
+      const my = clientY - rect.top;
+      const wx = (mx - mini.x) / Math.max(0.0001, mini.scale);
+      const wy = (my - mini.y) / Math.max(0.0001, mini.scale);
+      const view = viewRef.current;
+      view.panX = sizeRef.current.width / 2 - wx * view.zoom;
+      view.panY = sizeRef.current.height / 2 - wy * view.zoom;
+      paintAll();
+    },
+    [layout, paintAll],
+  );
 
   const updateTooltip = useCallback((hit: CascadeLayoutNode | null, sx: number, sy: number) => {
     const tip = tooltipRef.current;
@@ -401,7 +576,6 @@ export function CascadeTimeline({
             next.add(key);
             return next;
           });
-          firstFitRef.current = true;
         }
         return;
       }
@@ -435,7 +609,7 @@ export function CascadeTimeline({
       setLocalSelectedId(null);
       setFocusMode("all");
       setCustomFocus(null);
-      firstFitRef.current = true;
+      resetViewRef.current = true;
       onCursor({ mode: "historical", t: next.start });
     },
     [latest?.id, model.interactions, onCursor],
@@ -466,8 +640,11 @@ export function CascadeTimeline({
         <button type="button" onClick={() => stepInteraction(1)} title="Next interaction">
           ▶
         </button>
-        <button type="button" onClick={fit}>
+        <button type="button" onClick={fit} title="Fit the entire cascade">
           Fit
+        </button>
+        <button type="button" onClick={resetTo100} title="Reset zoom to 100%">
+          100%
         </button>
         <span className="rl-cascade-zoom" ref={zoomRef}>
           100%
@@ -528,12 +705,12 @@ export function CascadeTimeline({
               key={item.id}
               className={`rl-cascade-interaction${item.id === interaction?.id ? " selected" : ""}`}
               onClick={() => chooseInteraction(item.id)}
-              title={item.label}
+              title={`${item.label} · ${item.kind}`}
             >
               <span className="title">{item.label}</span>
               <span className="time">{Math.round(item.start - model.bounds.t0)}ms</span>
               <span className="meta">
-                {item.metrics.renderCount.toLocaleString()} renders ·{" "}
+                {item.kind} · {item.metrics.renderCount.toLocaleString()} renders ·{" "}
                 {item.metrics.reactDuration.toFixed(1)}ms React
               </span>
             </button>
@@ -541,7 +718,7 @@ export function CascadeTimeline({
         </div>
 
         <div
-          className={`rl-cascade-stage${dragRef.current?.moved ? " dragging" : ""}`}
+          className="rl-cascade-stage"
           ref={stageRef}
           tabIndex={0}
           role="application"
@@ -638,9 +815,12 @@ export function CascadeTimeline({
           }}
           onKeyDown={(event) => {
             const key = event.key.toLowerCase();
-            if (key === "f" || key === "0") {
+            if (key === "f") {
               event.preventDefault();
               fit();
+            } else if (key === "0") {
+              event.preventDefault();
+              resetTo100();
             } else if (event.key === "ArrowLeft") {
               event.preventDefault();
               stepInteraction(-1);
@@ -667,6 +847,37 @@ export function CascadeTimeline({
             <strong ref={tooltipNameRef} />
             <span ref={tooltipMetaRef} />
           </div>
+          {layout ? (
+            <div className="rl-cascade-minimap-shell" onPointerDown={(event) => event.stopPropagation()}>
+              <canvas
+                ref={minimapRef}
+                className="rl-cascade-minimap"
+                aria-label="Cascade minimap"
+                onPointerDown={(event) => {
+                  event.stopPropagation();
+                  minimapDragRef.current = event.pointerId;
+                  event.currentTarget.setPointerCapture(event.pointerId);
+                  recenterFromMinimap(event.clientX, event.clientY);
+                }}
+                onPointerMove={(event) => {
+                  if (minimapDragRef.current !== event.pointerId) return;
+                  recenterFromMinimap(event.clientX, event.clientY);
+                }}
+                onPointerUp={(event) => {
+                  if (minimapDragRef.current !== event.pointerId) return;
+                  minimapDragRef.current = null;
+                  try {
+                    event.currentTarget.releasePointerCapture(event.pointerId);
+                  } catch {
+                    // Pointer capture may already be released.
+                  }
+                }}
+                onPointerCancel={() => {
+                  minimapDragRef.current = null;
+                }}
+              />
+            </div>
+          ) : null}
         </div>
       </div>
 
@@ -674,7 +885,7 @@ export function CascadeTimeline({
         <span>{footer}</span>
         <span className="spacer" />
         <span className="rl-cascade-help">
-          drag pan · ⌘/ctrl+wheel zoom · double-click seek · F fit · ←/→ interactions
+          drag pan · ⌘/ctrl+wheel zoom · 0 = 100% · F fit · minimap drag · ←/→ interactions
         </span>
         {transport}
       </div>
