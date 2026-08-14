@@ -24,6 +24,7 @@ describe("snapshotDom limits", () => {
       depth++;
     }
     expect(depth).toBe(6);
+    expect(snap.root.visual).toBeUndefined();
   });
 
   it("accepts a larger budget for whole-page commit captures", () => {
@@ -44,5 +45,29 @@ describe("snapshotDom limits", () => {
     for (let i = 0; i < 40; i++) root.appendChild(document.createElement("li"));
     expect(snapshotDom(root)!.root.children).toHaveLength(32);
     expect(snapshotDom(root, { maxChildren: 5 })!.root.children).toHaveLength(5);
+  });
+});
+
+describe("snapshotDom visual history", () => {
+  it("captures resolved CSS independently of how the style was authored", () => {
+    const root = document.createElement("div");
+    root.style.display = "flex";
+    root.style.opacity = "0.5";
+    root.style.setProperty("--panel-width", "320px");
+    document.body.appendChild(root);
+
+    const snap = snapshotDom(root, { captureVisuals: true })!;
+    expect(snap.root.visual?.computedStyle?.display).toBe("flex");
+    expect(snap.root.visual?.computedStyle?.opacity).toBe("0.5");
+    expect(snap.root.visual?.customProperties?.["--panel-width"]).toBe("320px");
+    expect(snap.root.visual?.rect).toBeDefined();
+
+    root.remove();
+  });
+
+  it("can explicitly disable visual capture for custom structural budgets", () => {
+    const root = document.createElement("div");
+    const snap = snapshotDom(root, { maxDepth: 12, captureVisuals: false })!;
+    expect(snap.root.visual).toBeUndefined();
   });
 });
