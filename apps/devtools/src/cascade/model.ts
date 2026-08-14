@@ -157,7 +157,10 @@ function buildRawGraph(store: TraceStore, interaction: Interaction): RawGraph {
 
   for (const render of renders) {
     const cause = causeOf(render);
-    if (cause === "state" || cause === "mount") continue;
+    // A state update is an explanatory root. Mount is *not* a structural root:
+    // on initial load every component has a mount reason, but the rendered
+    // ancestors still form the useful App -> subtree cascade.
+    if (cause === "state") continue;
     const parent = nearestRenderingAncestor(store, render, byCommitComponent);
     if (parent === null || !renderSet.has(parent) || parent === render.renderId) continue;
     parentByRender.set(render.renderId, parent);
@@ -223,7 +226,6 @@ export function buildCascadeProjection(
     });
   }
 
-  // Collapse repeated leaf siblings (ProductCard × N is the common case).
   const leafGroups = new Map<string, CascadeRenderNode[]>();
   for (const node of rawNodes.values()) {
     if (node.childCount !== 0) continue;
@@ -263,8 +265,6 @@ export function buildCascadeProjection(
   let nodes: CascadeNode[] = [...rawNodes.values()].filter((node) => !hidden.has(node.id));
   nodes.push(...aggregates);
 
-  // Hard guard for huge fan-out that did not share component names. Preserve all
-  // non-leaves, roots and the most expensive leaves; summarize the rest.
   if (nodes.length > maxVisibleNodes) {
     const structural = nodes.filter(
       (node) => node.kind === "aggregate" || node.childCount > 0 || node.depth === 0,
@@ -303,8 +303,7 @@ export function buildCascadeProjection(
   const aggregateByMember = new Map<string, string>();
   for (const aggregate of aggregates) {
     if (!visibleIds.has(aggregate.id)) continue;
-    for (const renderId of aggregate.renderIds)
-      aggregateByMember.set(rawId(renderId), aggregate.id);
+    for (const renderId of aggregate.renderIds) aggregateByMember.set(rawId(renderId), aggregate.id);
   }
 
   const edgePairs = new Map<
