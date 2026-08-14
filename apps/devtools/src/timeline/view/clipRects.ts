@@ -1,6 +1,6 @@
 /** Shared clip geometry. Paint and hit testing consume the same rectangles. */
 import type { Clip } from "../model/lanes.js";
-import type { LaneLayout } from "../model/rows.js";
+import type { LaneLayout, LayoutRow } from "../model/rows.js";
 import { WAVE_MIN_MS } from "../model/wave.js";
 import {
   LANE_PAD,
@@ -31,6 +31,27 @@ export interface ClipRect {
 
 export interface ClipRectProjectors {
   wToX: (t: number) => number;
+}
+
+/**
+ * Maps an engine stackRow to a unique visual slot.
+ *
+ * Virtualized lanes intentionally keep a fixed outer height so row lookup and
+ * scroll math remain O(visible rows). When overlap depth exceeds the number of
+ * full-size 24px tracks that fit, tracks compress vertically instead of
+ * wrapping with modulo and hiding events under each other.
+ */
+export function stackClipVerticalGeometry(
+  row: Pick<LayoutRow, "y" | "h" | "depth">,
+  stackRow: number,
+): { y: number; height: number } {
+  const depth = Math.max(1, row.depth, stackRow + 1);
+  const usable = Math.max(1, row.h - LANE_PAD - 3);
+  const slotHeight = Math.min(ROW_H, usable / depth);
+  const gap = slotHeight >= 8 ? 2 : Math.min(1, slotHeight * 0.2);
+  const height = Math.max(1, Math.min(ROW_H - 6, slotHeight - gap));
+  const y = row.y + LANE_PAD / 2 + stackRow * slotHeight + 1.5;
+  return { y, height };
 }
 
 export function buildClipRect(
@@ -106,9 +127,11 @@ export function computeClipRects(
       if (c.aggregate) continue;
       const x0 = wToX(c.t0);
       const x1 = wToX(c.t1);
-      const clipH = ROW_H - 6;
-      const cy = row.y + LANE_PAD / 2 + (c.row ?? 0) * ROW_H + 1.5;
-      clipRects.set(String(c.renderId), buildClipRect(c, x0, cy, clipH, Math.max(0, x1 - x0)));
+      const vertical = stackClipVerticalGeometry(row, c.row ?? 0);
+      clipRects.set(
+        String(c.renderId),
+        buildClipRect(c, x0, vertical.y, vertical.height, Math.max(0, x1 - x0)),
+      );
       snapEdges.push(c.t0, c.t1);
     }
   }
