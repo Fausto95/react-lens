@@ -1,15 +1,10 @@
-/**
- * Clip port geometry — pure, canvas-free.
- *
- * Ports are computed for EVERY clip, on-screen or not: causal arrows must keep
- * their anchors when an endpoint scrolls past the stage edge, so viewport
- * culling belongs to painting, never to port registration.
- */
-
+/** Shared clip geometry. Paint and hit testing consume the same rectangles. */
 import type { Clip } from "../model/lanes.js";
 import type { LaneLayout } from "../model/rows.js";
 import { WAVE_MIN_MS } from "../model/wave.js";
-import { LANE_PAD, MIN_CLIP_PX, ROW_H } from "./metrics.js";
+import { LANE_PAD, MIN_HIT_TARGET_PX, MIN_VISUAL_EVENT_PX, ROW_H, TICK_THRESHOLD_PX } from "./metrics.js";
+
+export interface RectGeometry { x: number; y: number; width: number; height: number }
 
 export interface ClipRect {
   x0: number;
@@ -17,12 +12,55 @@ export interface ClipRect {
   y0: number;
   y1: number;
   clip: Clip;
-  /** True when the port is a wave-lane stand-in (no stack bar). */
   wave?: boolean;
+  visual: RectGeometry;
+  hit: RectGeometry;
+  representation: "tick" | "clip" | "wave";
 }
 
-export interface ClipRectProjectors {
-  wToX: (t: number) => number;
+export interface ClipRectProjectors { wToX: (t: number) => number }
+
+export function buildClipRect(
+  clip: Clip,
+  x0: number,
+  y: number,
+  height: number,
+  trueWidth: number,
+): ClipRect {
+  const representation = trueWidth < TICK_THRESHOLD_PX ? "tick" : "clip";
+  const visualWidth = representation === "tick"
+    ? Math.max(1, Math.min(TICK_THRESHOLD_PX, Math.max(trueWidth, MIN_VISUAL_EVENT_PX)))
+    : Math.max(trueWidth, MIN_VISUAL_EVENT_PX);
+  const center = x0 + visualWidth / 2;
+  const hitWidth = Math.max(MIN_HIT_TARGET_PX, visualWidth);
+  const visual = { x: x0, y, width: visualWidth, height };
+  const hit = { x: center - hitWidth / 2, y: y - 3, width: hitWidth, height: height + 6 };
+  return {
+    x0: visual.x,
+    x1: visual.x + visual.width,
+    y0: visual.y,
+    y1: visual.y + visual.height,
+    clip,
+    visual,
+    hit,
+    representation,
+  };
+}
+
+export function buildWaveRect(clip: Clip, centerX: number, centerY: number): ClipRect {
+  const visual = { x: centerX - 1, y: centerY - 8, width: 2, height: 16 };
+  const hit = { x: centerX - MIN_HIT_TARGET_PX / 2, y: centerY - 11, width: MIN_HIT_TARGET_PX, height: 22 };
+  return {
+    x0: visual.x,
+    x1: visual.x + visual.width,
+    y0: visual.y,
+    y1: visual.y + visual.height,
+    clip,
+    wave: true,
+    visual,
+    hit,
+    representation: "wave",
+  };
 }
 
 export function computeClipRects(
@@ -38,17 +76,8 @@ export function computeClipRects(
       const mid = row.y + row.h / 2;
       for (const c of row.clips) {
         if (c.aggregate) continue;
-        // Aim at the painted histogram span [t0, t0 + self] — the inclusive
-        // midpoint floats past the drawn column when total covers a cascade.
         const xc = wToX(c.t0 + Math.max(c.self, WAVE_MIN_MS) / 2);
-        clipRects.set(String(c.renderId), {
-          x0: xc - 3,
-          x1: xc + 3,
-          y0: mid - 8,
-          y1: mid + 8,
-          clip: c,
-          wave: true,
-        });
+        clipRects.set(String(c.renderId), buildWaveRect(c, xc, mid));
         snapEdges.push(c.t0, c.t1);
       }
       continue;
@@ -58,10 +87,9 @@ export function computeClipRects(
       if (c.aggregate) continue;
       const x0 = wToX(c.t0);
       const x1 = wToX(c.t1);
-      const w = Math.max(x1 - x0, MIN_CLIP_PX);
       const clipH = ROW_H - 6;
       const cy = row.y + LANE_PAD / 2 + (c.row ?? 0) * ROW_H + 1.5;
-      clipRects.set(String(c.renderId), { x0, x1: x0 + w, y0: cy, y1: cy + clipH, clip: c });
+      clipRects.set(String(c.renderId), buildClipRect(c, x0, cy, clipH, Math.max(0, x1 - x0)));
       snapEdges.push(c.t0, c.t1);
     }
   }
