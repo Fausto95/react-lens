@@ -84,8 +84,6 @@ type WorkerMessage =
 const liveRenderers = new WeakMap<HTMLCanvasElement, RendererRecord>();
 
 export function isTimelineCanvasTransferred(_canvas: HTMLCanvasElement): boolean {
-  // Kept for callers/tests from the previous implementation. The DOM canvas is
-  // intentionally never transferred anymore.
   return false;
 }
 
@@ -189,6 +187,9 @@ export function createTimelineRenderer(canvas: HTMLCanvasElement): TimelineRende
     }
     lastApplied = message.requestId;
 
+    // Resize the backing store only when a replacement frame is ready. Doing
+    // this eagerly in resize() clears the visible canvas and leaves a blank
+    // panel until another interaction happens to trigger a paint.
     sizeDomCanvas();
     ctx.save();
     ctx.setTransform(1, 0, 0, 1, 0, 0);
@@ -216,26 +217,23 @@ export function createTimelineRenderer(canvas: HTMLCanvasElement): TimelineRende
     const id = ++requestId;
     callbacks.set(id, item.onHit);
 
-    // Do not transfer the query's source buffers: transfer would detach them and
-    // make subsequent paints/hover updates observe empty arrays. Structured clone
-    // is bounded by the viewport primitive cap and preserves the authoritative
-    // query result on the panel side.
     const p = item.payload;
     const keepLaneClips = p.viewMode === "density" || p.pxPerMs < 2;
-    const payload = !p.geometry || keepLaneClips
-      ? p
-      : {
-          ...p,
-          layout: {
-            ...p.layout,
-            rows: p.layout.rows.map((row) => ({
-              ...row,
-              lane: { ...row.lane, clips: [] },
-              clips: [] as typeof row.clips,
-            })),
-            quietLanes: [],
-          },
-        };
+    const payload =
+      !p.geometry || keepLaneClips
+        ? p
+        : {
+            ...p,
+            layout: {
+              ...p.layout,
+              rows: p.layout.rows.map((row) => ({
+                ...row,
+                lane: { ...row.lane, clips: [] },
+                clips: [] as typeof row.clips,
+              })),
+              quietLanes: [],
+            },
+          };
     worker.postMessage({ type: "paint", requestId: id, payload, wantHit: !!item.onHit });
   }
 
@@ -254,7 +252,11 @@ export function createTimelineRenderer(canvas: HTMLCanvasElement): TimelineRende
       width = Math.max(1, nextWidth);
       height = Math.max(1, nextHeight);
       dpr = Math.max(1, nextDpr);
-      sizeDomCanvas();
+      // Keep the previous bitmap visible while React schedules the next paint.
+      // CSS can stretch it for a frame; the next worker frame resizes the
+      // backing store and replaces it atomically.
+      canvas.style.width = `${width}px`;
+      canvas.style.height = `${height}px`;
       if (!failed) worker.postMessage({ type: "resize", width, height, dpr });
     },
     paint(payload, onHit) {
@@ -265,7 +267,6 @@ export function createTimelineRenderer(canvas: HTMLCanvasElement): TimelineRende
         return;
       }
       if (!ready) {
-        // Coalesce startup churn. Only the freshest viewport deserves a frame.
         pending = item;
         return;
       }
