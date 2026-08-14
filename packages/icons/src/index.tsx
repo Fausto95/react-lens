@@ -316,6 +316,15 @@ export function IconSliders(props: IconProps) {
   );
 }
 
+/** Active lane filter. */
+export function IconFilter(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <path d="M3 3.5h10l-3.5 5v4.2l-3 1.6V8.5z" />
+    </Svg>
+  );
+}
+
 /** Upstream / cause. */
 export function IconArrowUp(props: IconProps) {
   return (

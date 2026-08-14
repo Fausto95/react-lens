@@ -41,6 +41,7 @@ import {
   IconCrosshair,
   IconSliders,
   IconRewind,
+  IconFilter,
 } from "@reactlens/icons";
 import { PanelMenu, type Retention } from "./PanelMenu.js";
 import { DoctorIssuesMenu } from "./DoctorIssuesMenu.js";
@@ -706,11 +707,13 @@ export function Panel({
             )}
             {lanesFiltered && (
               <button
+                type="button"
                 className="rl-icon-btn rl-filtered-chip"
                 onClick={lanes.clear}
                 title={`Views are filtered — ${laneFilter.solo.size} soloed, ${laneFilter.muted.size} muted. Click to show all lanes.`}
+                aria-label="Clear lane filters"
               >
-                filtered
+                <IconFilter size={14} />
               </button>
             )}
             <span className="rl-menu-anchor">
@@ -761,7 +764,7 @@ export function Panel({
 
       {/* Status bar: the panel's at-a-glance counters. Kept below the concept's
           three columns — it's the one piece of v1 chrome the concept has no
-          equivalent for, and it's load-bearing (event counts, Doctor issues). */}
+          equivalent for, and it's load-bearing (event counts). */}
       <div className="rl-statusbar">
         <span
           className="rl-status-metric"
@@ -775,20 +778,6 @@ export function Panel({
         <span className="rl-status-metric" title="Components seen">
           <span className="rl-status-k">cmp</span> {stats.components}
         </span>
-        {issueCount > 0 && (
-          <button
-            type="button"
-            className="rl-status-metric rl-status-doctor rl-status-action"
-            title="Doctor issues"
-            onClick={openDoctor}
-            aria-expanded={doctorOpen}
-          >
-            <span className="rl-doctor-btn">
-              <IconDoctor size={11} />
-              <span className="rl-doctor-badge">{issueCount}</span>
-            </span>
-          </button>
-        )}
         <span className="rl-spacer" />
         <span
           className={`rl-status-metric rl-status-rec${recording ? " on" : ""}`}
