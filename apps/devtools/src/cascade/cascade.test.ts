@@ -67,6 +67,39 @@ function fixture() {
   return { store, interaction };
 }
 
+function mountFixture() {
+  const renders = new Map<RenderId, RenderEvent>();
+  renders.set(rid(1), render(1, 1, { type: "mount" }, 10));
+  renders.set(rid(2), render(2, 2, { type: "mount" }, 10.1));
+  renders.set(rid(3), render(3, 3, { type: "mount" }, 10.2));
+  const instances = new Map<number, { id: ComponentId; name: string; parentId?: ComponentId }>([
+    [1, { id: cid(1), name: "App" }],
+    [2, { id: cid(2), name: "Storefront", parentId: cid(1) }],
+    [3, { id: cid(3), name: "Catalog", parentId: cid(2) }],
+  ]);
+  const store = {
+    getRender: (id: RenderId) => renders.get(id),
+    instance: (id: ComponentId) => instances.get(id as number),
+  } as unknown as TraceStore;
+  const interaction: Interaction = {
+    id: "load",
+    label: "Load",
+    kind: "load",
+    start: 10,
+    end: 11,
+    renderIds: [...renders.keys()],
+    commitIds: [commit(1)],
+    metrics: {
+      totalDuration: 1,
+      reactDuration: 1,
+      renderCount: renders.size,
+      stateUpdates: 0,
+      componentIds: [...instances.values()].map((x) => x.id),
+    },
+  };
+  return { store, interaction };
+}
+
 describe("cascade projection", () => {
   it("builds causal depth from the interaction only", () => {
     const { store, interaction } = fixture();
@@ -76,6 +109,17 @@ describe("cascade projection", () => {
     expect(projection.nodes.find((node) => node.id === "r:1")?.depth).toBe(0);
     expect(projection.nodes.find((node) => node.id === "r:2")?.depth).toBe(1);
     expect(projection.nodes.find((node) => node.id === "r:3")?.depth).toBe(2);
+  });
+
+  it("keeps mount as the cause while preserving structural ancestry", () => {
+    const { store, interaction } = mountFixture();
+    const projection = buildCascadeProjection(store, interaction, { aggregateThreshold: 99 });
+    expect(projection.roots).toEqual(["r:1"]);
+    expect(projection.nodes.find((node) => node.id === "r:1")?.name).toBe("App");
+    expect(projection.nodes.find((node) => node.id === "r:1")?.depth).toBe(0);
+    expect(projection.nodes.find((node) => node.id === "r:2")?.depth).toBe(1);
+    expect(projection.nodes.find((node) => node.id === "r:3")?.depth).toBe(2);
+    expect(projection.nodes.every((node) => node.cause === "mount")).toBe(true);
   });
 
   it("collapses repeated leaf siblings instead of flooding the canvas", () => {
