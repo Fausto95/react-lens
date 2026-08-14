@@ -13,6 +13,7 @@ const WAVE_MAX_NODES = 400;
 const WAVE_MAX_MS = 1600;
 
 function EmbeddedPanel({ runtime, host }: { runtime: LensRuntime; host: HTMLElement }) {
+  const [visible, setVisible] = useState(true);
   const [overlayOn, setOverlayOn] = useState(false);
   const [inspecting, setInspecting] = useState(false);
   const [pickedId, setPickedId] = useState<ComponentId | null>(null);
@@ -96,35 +97,61 @@ function EmbeddedPanel({ runtime, host }: { runtime: LensRuntime; host: HTMLElem
   };
 
   return (
-    <Panel
-      store={runtime.store}
-      causality={runtime.causality}
-      recording
-      embedded
-      overlayEnabled={overlayOn}
-      inspecting={inspecting}
-      onToggleInspect={onToggleInspect}
-      selectComponent={pickedId}
-      onSelectConsumed={() => setPickedId(null)}
-      onToggleOverlay={() => {
-        if (overlayOn) overlay.disable();
-        else overlay.enable();
-        setOverlayOn((v) => !v);
-      }}
-      onReplayCommit={replayWave}
-      timeTravel={runtime.timeTravel}
-      {...(edit ? { edit } : {})}
-      onHighlight={(id: ComponentId | null, opts?: { reveal?: boolean }) => {
-        if (id === null) {
-          if (waveTimers.current.length > 0) return;
-          highlighter.hide();
-          return;
-        }
-        const nodes = runtime.domNodesOf(id);
-        if (opts?.reveal) highlighter.reveal(nodes);
-        else highlighter.show(nodes);
-      }}
-    />
+    <>
+      <div style={{ display: visible ? "contents" : "none" }} aria-hidden={!visible}>
+        <Panel
+          store={runtime.store}
+          causality={runtime.causality}
+          recording
+          embedded
+          overlayEnabled={overlayOn}
+          inspecting={inspecting}
+          onToggleInspect={onToggleInspect}
+          selectComponent={pickedId}
+          onSelectConsumed={() => setPickedId(null)}
+          onToggleOverlay={() => {
+            if (overlayOn) overlay.disable();
+            else overlay.enable();
+            setOverlayOn((v) => !v);
+          }}
+          onReplayCommit={replayWave}
+          timeTravel={runtime.timeTravel}
+          {...(edit ? { edit } : {})}
+          onHighlight={(id: ComponentId | null, opts?: { reveal?: boolean }) => {
+            if (id === null) {
+              if (waveTimers.current.length > 0) return;
+              highlighter.hide();
+              return;
+            }
+            const nodes = runtime.domNodesOf(id);
+            if (opts?.reveal) highlighter.reveal(nodes);
+            else highlighter.show(nodes);
+          }}
+        />
+      </div>
+      <button
+        type="button"
+        aria-expanded={visible}
+        title={visible ? "Hide embedded React Lens DevTools" : "Show embedded React Lens DevTools"}
+        onClick={() => setVisible((value) => !value)}
+        style={{
+          position: "fixed",
+          right: 12,
+          bottom: 12,
+          zIndex: 2147483100,
+          border: "1px solid var(--rl-border-strong, #2f3644)",
+          borderRadius: 999,
+          background: "var(--rl-bg-raised, #12151a)",
+          color: "var(--rl-text, #e6e9ef)",
+          boxShadow: "0 8px 24px rgba(0, 0, 0, 0.28)",
+          font: "600 12px/1 ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+          padding: "8px 11px",
+          cursor: "pointer",
+        }}
+      >
+        {visible ? "Hide DevTools" : "Show DevTools"}
+      </button>
+    </>
   );
 }
 
