@@ -6,6 +6,7 @@ import {
   laneChain,
   laneVisibility,
   isLaneVisible,
+  isComponentReplayMuted,
   parentLaneKey,
   serializeLaneFilter,
   toggleMute,
@@ -89,6 +90,26 @@ describe("visibility", () => {
     expect(laneVisibility(soloed, badge)).toBe("visible");
     expect(laneVisibility(soloed, list)).toBe("unsoloed");
     expect(laneVisibility(toggleMute(EMPTY_LANE_FILTER, list), list)).toBe("muted");
+  });
+});
+
+describe("replay mute", () => {
+  it("mutes every instance when the component type is muted", () => {
+    const filter = toggleMute(EMPTY_LANE_FILTER, typeLaneKey("Analytics"));
+    expect(isComponentReplayMuted(filter, "Analytics", id(1))).toBe(true);
+    expect(isComponentReplayMuted(filter, "Analytics", id(2))).toBe(true);
+    expect(isComponentReplayMuted(filter, "Cart", id(3))).toBe(false);
+  });
+
+  it("can mute one instance without muting its siblings", () => {
+    const filter = toggleMute(EMPTY_LANE_FILTER, instanceLaneKey("Player", id(7)));
+    expect(isComponentReplayMuted(filter, "Player", id(7))).toBe(true);
+    expect(isComponentReplayMuted(filter, "Player", id(8))).toBe(false);
+  });
+
+  it("does not turn solo into replay exclusion", () => {
+    const filter = toggleSolo(EMPTY_LANE_FILTER, typeLaneKey("Cart"));
+    expect(isComponentReplayMuted(filter, "Analytics", id(1))).toBe(false);
   });
 });
 
