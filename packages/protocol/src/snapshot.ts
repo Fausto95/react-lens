@@ -1,11 +1,30 @@
 import type { CommitId, ComponentId, ComponentType, RenderId } from "./ids.js";
 import type { SerializedValue } from "./value.js";
 
+export interface DOMRectSnapshot {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+/** Browser-resolved visual output. Styling-library agnostic by design. */
+export interface DOMVisualSnapshot {
+  /** Selected computed CSS properties whose resolved values affect appearance/layout. */
+  computedStyle?: Record<string, string>;
+  /** Resolved CSS custom properties visible on the element. */
+  customProperties?: Record<string, string>;
+  /** Viewport-relative border box at capture time. */
+  rect?: DOMRectSnapshot;
+}
+
 export interface DOMNodeSnapshot {
   nodeName: string;
   attributes?: Record<string, string>;
   text?: string;
   children?: DOMNodeSnapshot[];
+  /** Present for commit-level visual captures; omitted from cheap per-render snapshots. */
+  visual?: DOMVisualSnapshot;
 }
 
 export interface DOMSnapshot {
