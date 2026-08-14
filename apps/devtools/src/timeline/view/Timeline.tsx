@@ -1,5 +1,6 @@
 /* oxlint-disable react/react-compiler -- imperative canvas/gesture state is intentional */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { ReactNode } from "react";
 import type { ComponentId } from "@reactlens/protocol";
 import type { LaneControls } from "../../laneFilter.js";
 import type { TimeCursor } from "../../timeCursor.js";
@@ -10,12 +11,12 @@ import { geometryFromQueryResult } from "./geometryFromLayout.js";
 import { createTimelineRenderer, type TimelineRendererClient } from "../timelineRendererClient.js";
 import { drawBase, drawOverlay, ensureHatchPattern, type ClipRect, type TimelineViewMode } from "./draw.js";
 import { hitTestClipRects } from "./hitTest.js";
-import { NAME_W, RULER_H, VIEW_SPAN_MAX, VIEW_SPAN_MIN, nameWidthFor } from "./metrics.js";
+import { NAME_W, VIEW_SPAN_MAX, VIEW_SPAN_MIN, nameWidthFor } from "./metrics.js";
 import { readTimelineTheme } from "./timelineTheme.js";
 import { WallStrip } from "./WallStrip.js";
 import { Footer } from "./Footer.js";
 import { Shelf } from "./Shelf.js";
-import type { Clip } from "../model/lanes.js";
+import { clipCauseColor, type Clip } from "../model/lanes.js";
 
 const MODE_LABELS: Array<[TimelineViewMode, string]> = [
   ["density", "Density"],
@@ -64,7 +65,7 @@ export function Timeline({
   fixApplied?: boolean;
   onSelectComponent?: (id: ComponentId) => void;
   onHighlight?: (id: ComponentId | null) => void;
-  transport?: React.ReactNode;
+  transport?: ReactNode;
 }) {
   const { state, dispatch, axis, bounds, layout, markers, arrows, lanes, commits } = model;
   const rootRef = useRef<HTMLDivElement>(null);
@@ -77,10 +78,13 @@ export function Timeline({
   const hitBandsRef = useRef(new Map<number, ClipRect[]>());
   const snapEdgesRef = useRef<number[]>([]);
   const dragRef = useRef<null | { kind: "scrub" } | { kind: "range"; start: number } | { kind: "pan"; x: number; a0: number }>(null);
+  const playheadRef = useRef(cursor.mode === "live" ? bounds.t1 : cursor.t);
   const [viewMode, setViewMode] = useState<TimelineViewMode>("events");
   const [hoverId, setHoverId] = useState<string | null>(null);
   const [tip, setTip] = useState<{ clip: Clip; x: number; y: number } | null>(null);
   const [size, setSize] = useState({ width: state.width, height: state.viewportHeight });
+
+  playheadRef.current = cursor.mode === "live" ? bounds.t1 : cursor.t;
 
   const nameW = nameWidthFor(size.width || NAME_W);
   const plotW = Math.max(1, size.width - nameW);
@@ -89,7 +93,10 @@ export function Timeline({
   const semantic = semanticZoomForPxPerMs(pxPerMs);
   const paintH = layout.paintH ?? layout.totalH;
   const stageScrollTop = layout.scrollTop ?? state.scrollTop;
-  const theme = useMemo(() => readTimelineTheme(rootRef.current?.closest(".rl-redesign") ?? null), [size.width, viewMode]);
+  const theme = useMemo(
+    () => readTimelineTheme(rootRef.current?.closest(".rl-redesign") ?? null),
+    [size.width, viewMode],
+  );
 
   const aToX = useCallback(
     (a: number) => nameW + ((a - state.view.a0) / Math.max(1e-6, state.view.a1 - state.view.a0)) * plotW,
@@ -100,7 +107,10 @@ export function Timeline({
     [nameW, plotW, state.view.a0, state.view.a1],
   );
   const wToX = useCallback((t: number) => aToX(axis.wallToAxis(t)), [aToX, axis]);
-  const xToW = useCallback((x: number) => axis.axisToWall(clamp(xToA(x), 0, axis.total)), [axis, xToA]);
+  const xToW = useCallback(
+    (x: number) => axis.axisToWall(clamp(xToA(x), 0, axis.total)),
+    [axis, xToA],
+  );
 
   const installGeometry = useCallback((rects: Map<string, ClipRect>, edges: number[]) => {
     clipRectsRef.current = rects;
@@ -117,6 +127,7 @@ export function Timeline({
     const proj = { aToX, wToX, nameW, stageW: size.width, pxPerMs };
     const geometry = geometryFromQueryResult(model.timelineResult);
     const renderer = rendererRef.current;
+
     if (renderer) {
       renderer.paint(
         {
@@ -134,34 +145,52 @@ export function Timeline({
           theme,
           viewMode,
         },
-        installGeometry,
+        (rects, edges) => {
+          installGeometry(rects, edges);
+          const nextOverlay = overlayRef.current?.getContext("2d");
+          if (!nextOverlay) return;
+          drawOverlay({
+            ctx: nextOverlay,
+            stageW: size.width,
+            totalH: paintH,
+            nameW,
+            clipRects: rects,
+            edges: arrows,
+            selectedRender: state.selectedRender,
+            marquee: null,
+            hoverId,
+            ghostT: null,
+            playheadT: playheadRef.current,
+            wToX,
+            dragging: dragRef.current != null,
+            theme,
+            viewMode,
+          });
+        },
       );
     } else {
       const bctx = base.getContext("2d");
       if (bctx) {
         if (!patternRef.current) patternRef.current = ensureHatchPattern(bctx);
-        installGeometry(
-          ...(() => {
-            const r = drawBase({
-              ctx: bctx,
-              axis,
-              view: state.view,
-              layout,
-              ...(geometry.count ? { geometry } : {}),
-              region: state.region,
-              markers,
-              selectedRender: state.selectedRender,
-              proj,
-              pattern: patternRef.current,
-              tOrigin: bounds.t0,
-              theme,
-              viewMode,
-            });
-            return [r.clipRects, r.snapEdges] as const;
-          })(),
-        );
+        const result = drawBase({
+          ctx: bctx,
+          axis,
+          view: state.view,
+          layout,
+          ...(geometry.count ? { geometry } : {}),
+          region: state.region,
+          markers,
+          selectedRender: state.selectedRender,
+          proj,
+          pattern: patternRef.current,
+          tOrigin: bounds.t0,
+          theme,
+          viewMode,
+        });
+        installGeometry(result.clipRects, result.snapEdges);
       }
     }
+
     drawOverlay({
       ctx: octx,
       stageW: size.width,
@@ -173,13 +202,24 @@ export function Timeline({
       marquee: null,
       hoverId,
       ghostT: null,
-      playheadT: cursor.mode === "live" ? bounds.t1 : cursor.t,
+      playheadT: playheadRef.current,
       wToX,
       dragging: dragRef.current != null,
       theme,
       viewMode,
     });
-  }, [aToX, arrows, axis, bounds.t0, bounds.t1, cursor, hoverId, installGeometry, layout, markers, model.timelineResult, nameW, paintH, pxPerMs, size.width, state.region, state.selectedRender, state.view, theme, viewMode, wToX]);
+  }, [aToX, arrows, axis, bounds.t0, hoverId, installGeometry, layout, markers, model.timelineResult, nameW, paintH, pxPerMs, size.width, state.region, state.selectedRender, state.view, theme, viewMode, wToX]);
+
+  // Transfer the base canvas before anyone asks it for a 2D context.
+  useEffect(() => {
+    const base = baseRef.current;
+    if (!base || rendererRef.current) return;
+    rendererRef.current = createTimelineRenderer(base);
+    return () => {
+      rendererRef.current?.dispose();
+      rendererRef.current = null;
+    };
+  }, []);
 
   useEffect(() => {
     const stage = stageRef.current;
@@ -215,20 +255,6 @@ export function Timeline({
   }, [dispatch, paintH]);
 
   useEffect(() => {
-    const base = baseRef.current;
-    if (!base || rendererRef.current) return;
-    rendererRef.current = createTimelineRenderer(base);
-    if (rendererRef.current) {
-      const dpr = window.devicePixelRatio || 1;
-      rendererRef.current.resize(size.width, paintH, dpr);
-    }
-    return () => {
-      rendererRef.current?.dispose();
-      rendererRef.current = null;
-    };
-  }, []);
-
-  useEffect(() => {
     const id = requestAnimationFrame(paint);
     return () => cancelAnimationFrame(id);
   }, [paint]);
@@ -240,21 +266,41 @@ export function Timeline({
     const tick = (now: number) => {
       const dt = now - last;
       last = now;
-      const dir = state.playDir;
-      const current = cursor.mode === "live" ? bounds.t1 : cursor.t;
-      let next = current + dt * state.speed * dir;
+      let next = playheadRef.current + dt * state.speed * state.playDir;
       if (state.region) {
-        if (dir > 0 && next > state.region.end) next = state.region.start;
-        if (dir < 0 && next < state.region.start) next = state.region.end;
+        if (state.playDir > 0 && next > state.region.end) next = state.region.start;
+        if (state.playDir < 0 && next < state.region.start) next = state.region.end;
       } else {
         next = clamp(next, bounds.t0, bounds.t1);
       }
+      playheadRef.current = next;
       onCursor({ mode: "historical", t: next });
       raf = requestAnimationFrame(tick);
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
-  }, [bounds.t0, bounds.t1, cursor, onCursor, state.playDir, state.playing, state.region, state.speed]);
+  }, [bounds.t0, bounds.t1, onCursor, state.playDir, state.playing, state.region, state.speed]);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (target?.tagName === "INPUT" || target?.tagName === "TEXTAREA") return;
+      if (e.code === "Space") {
+        e.preventDefault();
+        dispatch(state.playing ? { type: "pause" } : { type: "play", dir: 1 });
+      } else if (e.key.toLowerCase() === "f") {
+        dispatch({ type: "fit" });
+      } else if (e.key === "Escape") {
+        dispatch({ type: "clearClip" });
+        dispatch({ type: "setRegion", span: null });
+      } else if (e.key === "1") setViewMode("density");
+      else if (e.key === "2") setViewMode("events");
+      else if (e.key === "3") setViewMode("cost");
+      else if (e.key === "4") setViewMode("causality");
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [dispatch, state.playing]);
 
   const local = (clientX: number, clientY: number) => {
     const r = stageRef.current!.getBoundingClientRect();
@@ -277,7 +323,10 @@ export function Timeline({
     let bestD = 6;
     for (const edge of snapEdgesRef.current) {
       const d = Math.abs(wToX(edge) - x);
-      if (d < bestD) { bestD = d; best = edge; }
+      if (d < bestD) {
+        bestD = d;
+        best = edge;
+      }
     }
     return best;
   };
@@ -303,6 +352,7 @@ export function Timeline({
       return;
     }
     const t = nearestSnap(xToW(x), x);
+    playheadRef.current = t;
     onCursor({ mode: "historical", t });
     dragRef.current = { kind: "scrub" };
     e.currentTarget.setPointerCapture(e.pointerId);
@@ -312,7 +362,9 @@ export function Timeline({
     const { x, y } = local(e.clientX, e.clientY);
     const drag = dragRef.current;
     if (drag?.kind === "scrub") {
-      onCursor({ mode: "historical", t: nearestSnap(xToW(x), x) });
+      const t = nearestSnap(xToW(x), x);
+      playheadRef.current = t;
+      onCursor({ mode: "historical", t });
       return;
     }
     if (drag?.kind === "range") {
@@ -329,12 +381,16 @@ export function Timeline({
     const nextId = hit ? String(hit.clip.renderId) : null;
     if (nextId !== hoverId) setHoverId(nextId);
     onHighlight?.(hit?.clip.componentId ?? null);
-    setTip(hit ? { clip: hit.clip, x: Math.min(size.width - 210, x + 14), y: y + 14 } : null);
+    setTip(hit ? { clip: hit.clip, x: Math.min(size.width - 220, x + 14), y: y + 14 } : null);
   };
 
   const onPointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
     dragRef.current = null;
-    try { e.currentTarget.releasePointerCapture(e.pointerId); } catch { /* noop */ }
+    try {
+      e.currentTarget.releasePointerCapture(e.pointerId);
+    } catch {
+      // no capture
+    }
   };
 
   const onWheel = (e: React.WheelEvent<HTMLDivElement>) => {
@@ -352,26 +408,37 @@ export function Timeline({
   const fit = () => dispatch({ type: "fit" });
   const zoomPercent = (() => {
     const maxSpan = Math.max(axis.total, VIEW_SPAN_MAX);
-    const p = (Math.log(maxSpan) - Math.log(span)) / (Math.log(maxSpan) - Math.log(VIEW_SPAN_MIN));
+    const denom = Math.log(maxSpan) - Math.log(VIEW_SPAN_MIN);
+    const p = denom <= 0 ? 1 : (Math.log(maxSpan) - Math.log(span)) / denom;
     return clamp(p * 100, 0, 100);
   })();
   const setZoomPercent = (p: number) => {
     const maxSpan = Math.max(axis.total, VIEW_SPAN_MAX);
-    const nextSpan = Math.exp(Math.log(maxSpan) - (p / 100) * (Math.log(maxSpan) - Math.log(VIEW_SPAN_MIN)));
+    const nextSpan = Math.exp(
+      Math.log(maxSpan) - (p / 100) * (Math.log(maxSpan) - Math.log(VIEW_SPAN_MIN)),
+    );
     const center = (state.view.a0 + state.view.a1) / 2;
     dispatch({ type: "setView", a0: center - nextSpan / 2, span: nextSpan });
   };
 
   const stepCommit = (dir: -1 | 1) => {
     if (!commits.length) return;
-    const t = cursor.mode === "live" ? bounds.t1 : cursor.t;
+    const t = playheadRef.current;
     const ordered = commits.map((c) => c.timestamp).sort((a, b) => a - b);
-    const next = dir > 0 ? ordered.find((x) => x > t + 0.001) : [...ordered].reverse().find((x) => x < t - 0.001);
-    if (next != null) onCursor({ mode: "historical", t: next });
+    const next = dir > 0
+      ? ordered.find((x) => x > t + 0.001)
+      : [...ordered].reverse().find((x) => x < t - 0.001);
+    if (next != null) {
+      playheadRef.current = next;
+      onCursor({ mode: "historical", t: next });
+    }
   };
 
   const selection = state.selectedRender != null ? findClip(lanes, state.selectedRender) : null;
-  const idleCollapsedMs = axis.segs.reduce((sum, s) => s.type === "gap" && s.a1 - s.a0 < 1e-6 ? sum + (s.w1 - s.w0) : sum, 0);
+  const idleCollapsedMs = axis.segs.reduce(
+    (sum, s) => (s.type === "gap" && s.a1 - s.a0 < 1e-6 ? sum + (s.w1 - s.w0) : sum),
+    0,
+  );
   const narrow = size.width < 720;
 
   return (
@@ -382,19 +449,32 @@ export function Timeline({
         <button
           type="button"
           className={`tl-btn${state.playing ? " on" : ""}`}
-          onClick={() => dispatch({ type: state.playing ? "pause" : "play", ...(state.playing ? {} : { dir: 1 as const }) })}
-        >{state.playing ? "⏸" : "▶"}</button>
+          onClick={() => dispatch(state.playing ? { type: "pause" } : { type: "play", dir: 1 })}
+          title={state.playing ? "Pause (Space)" : "Play (Space)"}
+        >
+          {state.playing ? "⏸" : "▶"}
+        </button>
         <button type="button" className="tl-btn" onClick={() => stepCommit(1)} title="Next commit">›</button>
-        <span className="tl-toolbar-time" style={{ fontFamily: "var(--mono)", fontSize: 10, color: "var(--text-2)" }}>
-          {(cursor.mode === "live" ? bounds.t1 : cursor.t - bounds.t0).toFixed(2)}ms
+        <span style={{ fontFamily: "var(--mono)", fontSize: 10, color: "var(--text-2)", minWidth: 72 }}>
+          {(playheadRef.current - bounds.t0).toFixed(2)}ms
         </span>
         {transport && <><span className="tl-toolbar-sep" /><span className="tl-toolbar-transport">{transport}</span></>}
         <span className="tl-toolbar-sep" />
-        {MODE_LABELS.map(([mode, label]) => (
-          <button key={mode} type="button" className={`tl-btn${viewMode === mode ? " on" : ""}`} onClick={() => setViewMode(mode)}>{label}</button>
+        {MODE_LABELS.map(([mode, label], index) => (
+          <button
+            key={mode}
+            type="button"
+            className={`tl-btn${viewMode === mode ? " on" : ""}`}
+            onClick={() => setViewMode(mode)}
+            title={`${label} (${index + 1})`}
+          >
+            {label}
+          </button>
         ))}
         <span style={{ flex: 1 }} />
-        <span className="tl-zoom-level" style={{ fontFamily: "var(--mono)", fontSize: 10, color: "var(--accent)" }}>{semantic}</span>
+        <span style={{ fontFamily: "var(--mono)", fontSize: 10, color: "var(--accent)", textTransform: "capitalize" }}>
+          {semantic}
+        </span>
         <button type="button" className="tl-btn" onClick={fit}>Fit</button>
         <span style={{ color: "var(--text-3)" }}>−</span>
         <input
@@ -404,7 +484,7 @@ export function Timeline({
           max={100}
           value={zoomPercent}
           onChange={(e) => setZoomPercent(Number(e.currentTarget.value))}
-          style={{ width: 110 }}
+          style={{ width: 110, accentColor: "var(--accent)" }}
         />
         <span style={{ color: "var(--text-3)" }}>+</span>
       </div>
@@ -424,9 +504,17 @@ export function Timeline({
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
         onPointerCancel={onPointerUp}
-        onPointerLeave={() => { setHoverId(null); setTip(null); onHighlight?.(null); }}
+        onPointerLeave={() => {
+          setHoverId(null);
+          setTip(null);
+          onHighlight?.(null);
+        }}
         onWheel={onWheel}
-        onScroll={(e) => dispatch({ type: "setScroll", scrollTop: e.currentTarget.scrollTop, viewportHeight: e.currentTarget.clientHeight })}
+        onScroll={(e) => dispatch({
+          type: "setScroll",
+          scrollTop: e.currentTarget.scrollTop,
+          viewportHeight: e.currentTarget.clientHeight,
+        })}
         onDoubleClick={(e) => {
           const { x, y } = local(e.clientX, e.clientY);
           const hit = hitAt(x, y);
@@ -435,17 +523,33 @@ export function Timeline({
             const a1 = axis.wallToAxis(hit.clip.t1);
             const nextSpan = Math.max(VIEW_SPAN_MIN, (a1 - a0) * 3);
             dispatch({ type: "setView", a0: (a0 + a1) / 2 - nextSpan / 2, span: nextSpan });
-          } else fit();
+          } else {
+            fit();
+          }
         }}
       >
         <div className="tl-stage-spacer" style={{ height: layout.totalH }} />
         <canvas
           ref={baseRef}
-          style={{ position: "absolute", left: 0, top: stageScrollTop, display: "block", width: size.width, height: paintH }}
+          style={{
+            position: "absolute",
+            left: 0,
+            top: stageScrollTop,
+            display: "block",
+            width: size.width,
+            height: paintH,
+          }}
         />
         <canvas
           ref={overlayRef}
-          style={{ position: "absolute", left: 0, top: stageScrollTop, pointerEvents: "none", width: size.width, height: paintH }}
+          style={{
+            position: "absolute",
+            left: 0,
+            top: stageScrollTop,
+            pointerEvents: "none",
+            width: size.width,
+            height: paintH,
+          }}
         />
 
         {layout.rows.map((row) => (
@@ -459,7 +563,9 @@ export function Timeline({
               width: nameW - 1,
               height: row.h,
               color: row.dim ? "var(--text-3)" : "var(--text-2)",
-              background: state.selectedLane === row.key ? "color-mix(in srgb, var(--accent) 9%, var(--bg))" : undefined,
+              background: state.selectedLane === row.key
+                ? "color-mix(in srgb, var(--accent) 9%, var(--bg))"
+                : undefined,
               boxShadow: state.selectedLane === row.key ? "inset 2px 0 var(--accent)" : undefined,
             }}
             onPointerDown={(e) => e.stopPropagation()}
@@ -469,20 +575,44 @@ export function Timeline({
             {row.lane.instanceCount > 1 && <span className="tl-lname-count">×{row.lane.instanceCount}</span>}
             {laneControls && (
               <span className="tl-lname-acts">
-                <span className={`tl-ra${laneControls.filter.solo.has(row.key) ? " on" : ""}`} onClick={(e) => { e.stopPropagation(); laneControls.toggleSolo(row.key); }}>S</span>
-                <span className={`tl-ra${laneControls.filter.muted.has(row.key) ? " on" : ""}`} onClick={(e) => { e.stopPropagation(); laneControls.toggleMute(row.key); }}>M</span>
+                <span
+                  className={`tl-ra${laneControls.filter.solo.has(row.key) ? " on" : ""}`}
+                  title="Solo"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    laneControls.toggleSolo(row.key);
+                  }}
+                >S</span>
+                <span
+                  className={`tl-ra${laneControls.filter.muted.has(row.key) ? " on" : ""}`}
+                  title="Mute"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    laneControls.toggleMute(row.key);
+                  }}
+                >M</span>
               </span>
             )}
           </div>
         ))}
 
         {tip && (
-          <div className="tl-tip" style={{ display: "block", left: tip.x, top: stageScrollTop + tip.y, pointerEvents: "none" }}>
+          <div
+            className="tl-tip"
+            style={{
+              display: "block",
+              left: tip.x,
+              top: stageScrollTop + tip.y,
+              pointerEvents: "none",
+            }}
+          >
             <div className="tl-tip-name">{tip.clip.name} #{tip.clip.componentId}</div>
-            <div style={{ color: `var(--tl-clip-${tip.clip.cause === "parent" ? "cascade" : tip.clip.cause})` }}>{String(tip.clip.cause)}</div>
+            <div style={{ color: `var(--tl-clip-${clipCauseColor(tip.clip.cause)})` }}>
+              {clipCauseColor(tip.clip.cause)}
+              {tip.clip.wasted && <span style={{ color: "var(--warn)" }}> · wasted</span>}
+            </div>
             <div className="tl-tip-meta">
               start {(tip.clip.t0 - bounds.t0).toFixed(2)}ms · duration {tip.clip.total.toFixed(2)}ms · self {tip.clip.self.toFixed(2)}ms
-              {tip.clip.wasted ? " · wasted" : ""}
             </div>
           </div>
         )}
