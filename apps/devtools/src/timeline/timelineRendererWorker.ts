@@ -1,29 +1,14 @@
 /// <reference lib="webworker" />
-/**
- * OffscreenCanvas timeline base-layer renderer.
- * Overlay + pointer/keyboard stay on the main thread.
- *
- * Prefers transferable columnar geometry; reconstructs Clip adapters for
- * drawBase so we never structured-clone millions of JS objects.
- */
-
 import { hydrateAxis } from "./model/axis.js";
 import { drawBase, ensureHatchPattern, type ClipRect } from "./view/draw.js";
 import type { TimelineBasePaintPayload } from "./timelineRendererClient.js";
 
 type InMessage =
-  | {
-      type: "init";
-      canvas: OffscreenCanvas;
-      width: number;
-      height: number;
-      dpr: number;
-    }
+  | { type: "init"; canvas: OffscreenCanvas; width: number; height: number; dpr: number }
   | { type: "resize"; width: number; height: number; dpr: number }
   | { type: "paint"; payload: TimelineBasePaintPayload; wantHit?: boolean };
 
 const scope = self as unknown as DedicatedWorkerGlobalScope;
-
 let canvas: OffscreenCanvas | null = null;
 let g: OffscreenCanvasRenderingContext2D | null = null;
 let pattern: CanvasPattern | null = null;
@@ -66,6 +51,7 @@ scope.onmessage = (e: MessageEvent<InMessage>) => {
         pattern,
         tOrigin: p.tOrigin,
         theme: p.theme,
+        viewMode: p.viewMode,
       });
       if (msg.wantHit) {
         scope.postMessage({
@@ -76,10 +62,7 @@ scope.onmessage = (e: MessageEvent<InMessage>) => {
       }
     }
   } catch (err) {
-    scope.postMessage({
-      type: "error",
-      message: err instanceof Error ? err.message : String(err),
-    });
+    scope.postMessage({ type: "error", message: err instanceof Error ? err.message : String(err) });
   }
 };
 
