@@ -10,14 +10,29 @@ export interface CascadeRendererClient {
 }
 
 const live = new WeakMap<HTMLCanvasElement, CascadeRendererClient>();
+const pendingDispose = new WeakMap<HTMLCanvasElement, ReturnType<typeof setTimeout>>();
 
 /**
  * Base graph paint runs off-main-thread when supported. Pointer geometry and
  * overlay stay on main thread, so hover never round-trips through the worker.
+ *
+ * Disposal is deferred by one task. React Strict Mode intentionally performs
+ * effect setup -> cleanup -> setup on the same DOM node in development. Once a
+ * canvas has transferred control to OffscreenCanvas it can never be transferred
+ * again (and getContext() can no longer be used on the HTMLCanvasElement), so
+ * eagerly terminating/removing the renderer during that probe would orphan the
+ * canvas. A synchronous re-acquire cancels the pending disposal instead.
  */
 export function createCascadeRenderer(canvas: HTMLCanvasElement): CascadeRendererClient | null {
   const existing = live.get(canvas);
-  if (existing) return existing;
+  if (existing) {
+    const pending = pendingDispose.get(canvas);
+    if (pending !== undefined) {
+      clearTimeout(pending);
+      pendingDispose.delete(canvas);
+    }
+    return existing;
+  }
   if (typeof Worker === "undefined" || typeof OffscreenCanvas === "undefined") return null;
   if (typeof canvas.transferControlToOffscreen !== "function") return null;
 
@@ -85,8 +100,14 @@ export function createCascadeRenderer(canvas: HTMLCanvasElement): CascadeRendere
       post({ type: "resize", width, height, dpr: nextDpr });
     },
     dispose() {
-      live.delete(canvas);
-      worker.terminate();
+      if (pendingDispose.has(canvas)) return;
+      const timer = setTimeout(() => {
+        pendingDispose.delete(canvas);
+        if (live.get(canvas) !== client) return;
+        live.delete(canvas);
+        worker.terminate();
+      }, 0);
+      pendingDispose.set(canvas, timer);
     },
   };
   live.set(canvas, client);
