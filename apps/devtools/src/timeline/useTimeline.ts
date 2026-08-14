@@ -8,7 +8,7 @@ import { laneFilterActive, laneVisibility, type LaneFilter, type LaneKey } from 
 import type { TimeCursor } from "../timeCursor.js";
 import { lanesFromQueryResult, statsPairFromStore, type Lane } from "./model/lanes.js";
 import { chainFor, edgesForCommit, type CausalEdge } from "./model/edges.js";
-import { buildActivity, buildAxis, mergeActive, type TimeSpan } from "./model/axis.js";
+import { buildAxis, mergeActive, type TimeSpan } from "./model/axis.js";
 import { computeLayout } from "./model/rows.js";
 import type { LaneMode } from "./model/wave.js";
 import { nameWidthFor, RULER_H, VIRTUAL_OVERSCAN_ROWS, VIRTUAL_ROW_H } from "./view/metrics.js";
@@ -39,12 +39,10 @@ export function useTimeline({
 }: UseTimelineArgs) {
   const version = useTraceVersion(store, { kind: "global" });
 
-  // Version-keyed caches: the store mutates in place; pan/zoom re-renders must
-  // not redo lane materialization from the full session.
   const caches = useRef({
     commits: derivationCache<CommitSummary[]>(),
     interactions: derivationCache<ReturnType<TraceStore["interactions"]>>(),
-    activity: derivationCache<ReturnType<typeof buildActivity>>(),
+    activity: derivationCache<Array<[number, number]>>(),
     active: derivationCache<Array<[number, number]>>(),
     markers: derivationCache<Array<{ t: number; label: string; warn: boolean }>>(),
     arrows: derivationCache<CausalEdge[]>(),
@@ -52,21 +50,29 @@ export function useTimeline({
 
   const commits = caches.commits.read([store, version], () => store.commits());
   const interactions = caches.interactions.read([store, version], () => store.interactions());
-
-  // O(1) running bounds from the columnar index.
   const bounds = store.timeBounds();
 
   const gapProgRef = useRef(new Map<string, number>());
   const laneModesRef = useRef(new Map<LaneKey, LaneMode>());
 
-  // Activity from LOD summary — not every clip.
+  // The session overview/time-compression axis is commit-derived. The previous
+  // activity LOD used broad buckets/padding and made the minimap claim there was
+  // work in empty regions. Merge only genuinely overlapping commit intervals.
   const acts = caches.activity.read([store, version], () => {
-    const fromIndex = store.activityIntervals(64);
-    const iv: Array<[number, number]> = fromIndex.length > 0 ? [...fromIndex] : [];
-    for (const c of commits) iv.push([c.timestamp, c.endTimestamp]);
-    for (const it of interactions) iv.push([it.start, it.end]);
-    if (iv.length === 0) iv.push([bounds.t0, bounds.t1]);
-    return buildActivity(iv);
+    const intervals = commits
+      .map(
+        (commit) =>
+          [commit.timestamp, Math.max(commit.endTimestamp, commit.timestamp + 0.05)] as [number, number],
+      )
+      .sort((a, b) => a[0] - b[0]);
+    if (intervals.length === 0) return [[bounds.t0, Math.max(bounds.t1, bounds.t0 + 0.05)]];
+    const merged: Array<[number, number]> = [];
+    for (const [start, end] of intervals) {
+      const last = merged[merged.length - 1];
+      if (last && start <= last[1]) last[1] = Math.max(last[1], end);
+      else merged.push([start, end]);
+    }
+    return merged;
   });
 
   const active = caches.active.read([store, version], () => {
@@ -101,7 +107,6 @@ export function useTimeline({
   ctxRef.current = { bounds, axis: liveAxis };
 
   const visible = wallWindow(liveAxis, state.view);
-
   const plotW = Math.max(1, state.width - nameWidthFor(state.width));
   const pxPerMs = plotW / Math.max(1, state.view.a1 - state.view.a0);
   const filterActive = laneFilterActive(laneFilter);
@@ -112,11 +117,6 @@ export function useTimeline({
       }
     : undefined;
 
-  // Materialize only the visible time window (+ pad) from columnar lanes.
-  // Keep raw events in the viewport. The query already caps them at 10k, while
-  // the canvas renderer decides how to represent them at each semantic zoom.
-  // Returning bucket rows here made Events/Cost/Causality lose every selectable
-  // clip because aggregate buckets intentionally have no render identity.
   const pad = Math.max(50, (visible.end - visible.start) * 0.1);
   const scrollTop = Math.max(0, state.scrollTop);
   const viewportHeight = Math.max(RULER_H + 40, state.viewportHeight);
@@ -131,7 +131,9 @@ export function useTimeline({
     rowEnd,
     pixelWidth: plotW,
     lodEnterPx: Number.POSITIVE_INFINITY,
-    includeQuiet: state.shelfOpen,
+    // Quiet-component auto-tucking is gone. Virtualization is the scalability
+    // mechanism; sparse components should not disappear from the timeline.
+    includeQuiet: true,
     includeStats: false,
     includeActivity: false,
     ...(serializedLaneFilter ? { laneFilter: serializedLaneFilter } : {}),
@@ -144,11 +146,13 @@ export function useTimeline({
   }
 
   const layout = computeLayout(lanes, laneDepth, {
-    shelfOpen: state.shelfOpen,
+    // Keep every lane. Shelf state is retained in the reducer only for backward
+    // compatibility while the old Shelf component is a no-op.
+    shelfOpen: true,
     pxPerMs,
     visible: { t0: visible.start, t1: visible.end },
     prevModes: laneModesRef.current,
-    quietSummary: timelineResult.quietSummary,
+    quietSummary: { lanes: 0, renders: 0, selfMs: 0 },
     virtual: {
       rowStart,
       totalRows: timelineResult.totalRows,
@@ -177,7 +181,6 @@ export function useTimeline({
   });
   const statsRaw = statsPair.raw;
   const stats = fixApplied ? statsPair.excludeWasted : statsRaw;
-
   const playhead = cursor.mode === "live" ? bounds.t1 : cursor.t;
 
   const markers = caches.markers.read([store, version], () => {
