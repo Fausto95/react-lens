@@ -524,9 +524,19 @@ export function Cascade({
     setFocusMode("custom");
   }, [projection, selectedId]);
 
+  const collapseGroups = useCallback(() => {
+    setExpandedAggregates((previous) => (previous.size === 0 ? previous : new Set()));
+    setLocalSelectedId(null);
+    resetViewRef.current = true;
+  }, []);
+
   const chooseInteraction = useCallback((id: string) => {
     const next = model.interactions.find((item) => item.id === id);
     if (!next) return;
+    // A selected render belongs to the previous interaction. Clear it first so
+    // the selected-render synchronization effect cannot immediately navigate
+    // Cascade back to that interaction after this explicit user choice.
+    model.dispatch({ type: "clearClip" });
     setSelectedInteractionId(id);
     setFollowLatest(id === latest?.id);
     setExpandedAggregates(new Set());
@@ -535,7 +545,7 @@ export function Cascade({
     setCustomFocus(null);
     resetViewRef.current = true;
     onCursor({ mode: "historical", t: next.start });
-  }, [latest?.id, model.interactions, onCursor]);
+  }, [latest?.id, model, onCursor]);
 
   const stepInteraction = useCallback((delta: number) => {
     if (!interaction || model.interactions.length === 0) return;
@@ -558,6 +568,9 @@ export function Cascade({
         <button type="button" onClick={resetTo100} title="Reset zoom to 100%">100%</button>
         <span className="rl-cascade-zoom" ref={zoomRef}>100%</span>
         <span className="rl-cascade-pill">{interaction?.kind ?? "idle"}</span>
+        {expandedAggregates.size > 0 ? (
+          <button type="button" onClick={collapseGroups} title="Collapse all expanded render groups (C)">Collapse groups</button>
+        ) : null}
         <span className="spacer" />
         <button type="button" className={focusMode === "all" ? "active" : ""} onClick={() => { setFocusMode("all"); setCustomFocus(null); }}>All</button>
         <button type="button" className={focusMode === "expensive" ? "active" : ""} onClick={() => setFocusMode("expensive")}>Expensive</button>
@@ -656,6 +669,7 @@ export function Cascade({
             const key = event.key.toLowerCase();
             if (key === "f") { event.preventDefault(); fit(); }
             else if (key === "0") { event.preventDefault(); resetTo100(); }
+            else if (key === "c" && expandedAggregates.size > 0) { event.preventDefault(); collapseGroups(); }
             else if (event.key === "ArrowLeft") { event.preventDefault(); stepInteraction(-1); }
             else if (event.key === "ArrowRight") { event.preventDefault(); stepInteraction(1); }
             else if (event.key === "Escape") {
@@ -699,7 +713,7 @@ export function Cascade({
       <div className="rl-cascade-footer">
         <span>{footer}</span>
         <span className="spacer" />
-        <span className="rl-cascade-help">drag pan · ⌘/ctrl+wheel zoom · 0 = 100% · F fit · minimap drag · ←/→ interactions</span>
+        <span className="rl-cascade-help">drag pan · ⌘/ctrl+wheel zoom · 0 = 100% · C collapse groups · F fit · minimap drag · ←/→ interactions</span>
         {transport}
       </div>
     </div>
