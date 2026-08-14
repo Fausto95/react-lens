@@ -21,7 +21,6 @@ import { NAME_W, VIEW_SPAN_MAX, VIEW_SPAN_MIN, nameWidthFor } from "./metrics.js
 import { readTimelineTheme } from "./timelineTheme.js";
 import { WallStrip } from "./WallStrip.js";
 import { Footer } from "./Footer.js";
-import { Shelf } from "./Shelf.js";
 import { clipCauseColor, type Clip } from "../model/lanes.js";
 
 const MODE_LABELS: Array<[TimelineViewMode, string]> = [
@@ -95,7 +94,9 @@ export function Timeline({
   const [tip, setTip] = useState<{ clip: Clip; x: number; y: number } | null>(null);
   const [size, setSize] = useState({ width: state.width, height: state.viewportHeight });
 
-  playheadRef.current = cursor.mode === "live" ? bounds.t1 : cursor.t;
+  if (!(state.playing && cursor.mode === "live")) {
+    playheadRef.current = cursor.mode === "live" ? bounds.t1 : cursor.t;
+  }
 
   const nameW = nameWidthFor(size.width || NAME_W);
   const plotW = Math.max(1, size.width - nameW);
@@ -228,7 +229,6 @@ export function Timeline({
     wToX,
   ]);
 
-  // Transfer the base canvas before anyone asks it for a 2D context.
   useEffect(() => {
     const base = baseRef.current;
     if (!base || rendererRef.current) return;
@@ -245,7 +245,7 @@ export function Timeline({
     const measure = () => {
       const width = Math.max(1, stage.clientWidth);
       const height = Math.max(1, stage.clientHeight);
-      setSize({ width, height });
+      setSize((prev) => (prev.width === width && prev.height === height ? prev : { width, height }));
       dispatch({ type: "measure", width, viewportHeight: height, scrollTop: stage.scrollTop });
       const dpr = window.devicePixelRatio || 1;
       const base = baseRef.current;
@@ -277,6 +277,13 @@ export function Timeline({
     return () => cancelAnimationFrame(id);
   }, [paint]);
 
+  const goLive = useCallback(() => {
+    if (state.playing) dispatch({ type: "pause" });
+    playheadRef.current = bounds.t1;
+    onCursor({ mode: "live", t: bounds.t1 });
+    requestAnimationFrame(() => paintOverlay());
+  }, [bounds.t1, dispatch, onCursor, paintOverlay, state.playing]);
+
   useEffect(() => {
     if (!state.playing) return;
     let raf = 0;
@@ -288,8 +295,14 @@ export function Timeline({
       if (state.region) {
         if (state.playDir > 0 && next > state.region.end) next = state.region.start;
         if (state.playDir < 0 && next < state.region.start) next = state.region.end;
-      } else {
-        next = clamp(next, bounds.t0, bounds.t1);
+      } else if (state.playDir > 0 && next >= bounds.t1) {
+        playheadRef.current = bounds.t1;
+        dispatch({ type: "pause" });
+        onCursor({ mode: "live", t: bounds.t1 });
+        return;
+      } else if (state.playDir < 0 && next <= bounds.t0) {
+        next = bounds.t0;
+        dispatch({ type: "pause" });
       }
       playheadRef.current = next;
       onCursor({ mode: "historical", t: next });
@@ -297,7 +310,7 @@ export function Timeline({
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
-  }, [bounds.t0, bounds.t1, onCursor, state.playDir, state.playing, state.region, state.speed]);
+  }, [bounds.t0, bounds.t1, dispatch, onCursor, state.playDir, state.playing, state.region, state.speed]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -308,6 +321,8 @@ export function Timeline({
         dispatch(state.playing ? { type: "pause" } : { type: "play", dir: 1 });
       } else if (e.key.toLowerCase() === "f") {
         dispatch({ type: "fit" });
+      } else if (e.key === "End" || e.key === ".") {
+        goLive();
       } else if (e.key === "Escape") {
         dispatch({ type: "clearClip" });
         dispatch({ type: "setRegion", span: null });
@@ -318,7 +333,7 @@ export function Timeline({
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [dispatch, state.playing]);
+  }, [dispatch, goLive, state.playing]);
 
   const local = (clientX: number, clientY: number) => {
     const r = stageRef.current!.getBoundingClientRect();
@@ -453,6 +468,8 @@ export function Timeline({
     if (next != null) {
       playheadRef.current = next;
       onCursor({ mode: "historical", t: next });
+    } else if (dir > 0) {
+      goLive();
     }
   };
 
@@ -461,7 +478,6 @@ export function Timeline({
     (sum, s) => (s.type === "gap" && s.a1 - s.a0 < 1e-6 ? sum + (s.w1 - s.w0) : sum),
     0,
   );
-  const narrow = size.width < 720;
 
   return (
     <div ref={rootRef} className="tl tl-canvas-root">
@@ -494,6 +510,11 @@ export function Timeline({
         >
           {(playheadRef.current - bounds.t0).toFixed(2)}ms
         </span>
+        {cursor.mode === "historical" && (
+          <button type="button" className="tl-btn on" onClick={goLive} title="Go live (End / .)">
+            Live
+          </button>
+        )}
         {transport && (
           <>
             <span className="tl-toolbar-sep" />
@@ -543,6 +564,8 @@ export function Timeline({
         nameW={nameW}
         axis={axis}
         view={state.view}
+        bounds={bounds}
+        commits={commits}
         onView={(a0, nextSpan) => dispatch({ type: "setView", a0, span: nextSpan })}
       />
 
@@ -629,6 +652,9 @@ export function Timeline({
             {row.lane.instanceCount > 1 && (
               <span className="tl-lname-count">×{row.lane.instanceCount}</span>
             )}
+            {row.mode === "stack" && row.depth > 1 && (
+              <span className="tl-lname-count">▤×{Math.min(row.depth, 4)}</span>
+            )}
             {laneControls && (
               <span className="tl-lname-acts">
                 <span
@@ -680,14 +706,6 @@ export function Timeline({
           </div>
         )}
       </div>
-
-      <Shelf
-        quietLanes={layout.quietLanes}
-        quietSummary={layout.quietSummary}
-        open={state.shelfOpen}
-        narrow={narrow}
-        onToggle={() => dispatch({ type: "toggleShelf" })}
-      />
 
       <Footer
         selection={selection}
