@@ -1,7 +1,15 @@
 /* oxlint-disable react/react-compiler -- imperative canvas/gesture refs; pointer hot paths intentionally bypass React state */
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { TraceStore } from "@reactlens/trace-engine";
 import type { ComponentId } from "@reactlens/protocol";
+import {
+  IconArrowDown,
+  IconArrowUp,
+  IconChevronLeft,
+  IconChevronRight,
+  IconCollapse,
+  IconSparkle,
+} from "@reactlens/icons";
 import { typeLaneKey } from "../laneFilter.js";
 import type { TimeCursor } from "../timeCursor.js";
 import type { Timeline as TimelineModel } from "./useTimeline.js";
@@ -17,6 +25,7 @@ import {
 import { createCascadeRenderer, type CascadeRendererClient } from "./rendererClient.js";
 import { CascadeSpatialIndex } from "./spatial.js";
 import "./cascade.css";
+import "./transport.css";
 
 interface ViewTransform {
   zoom: number;
@@ -191,6 +200,44 @@ function buildMinimapCache(
   }
   ctx.globalAlpha = 1;
   return canvas;
+}
+
+function Island({ label, className, children }: { label: string; className?: string; children: ReactNode }) {
+  return (
+    <div className={`rl-cascade-island${className ? ` ${className}` : ""}`} role="group" aria-label={label}>
+      {children}
+    </div>
+  );
+}
+
+function Tool({
+  title,
+  active,
+  disabled,
+  className,
+  onClick,
+  children,
+}: {
+  title: string;
+  active?: boolean;
+  disabled?: boolean;
+  className?: string;
+  onClick: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      className={`rl-cascade-tool${active ? " active" : ""}${className ? ` ${className}` : ""}`}
+      title={title}
+      aria-label={title}
+      aria-pressed={active}
+      disabled={disabled}
+      onClick={onClick}
+    >
+      {children}
+    </button>
+  );
 }
 
 export function Cascade({
@@ -562,22 +609,63 @@ export function Cascade({
   return (
     <div className="rl-cascade" ref={rootRef}>
       <div className="rl-cascade-toolbar">
-        <button type="button" onClick={() => stepInteraction(-1)} title="Previous interaction">◀</button>
-        <button type="button" onClick={() => stepInteraction(1)} title="Next interaction">▶</button>
-        <button type="button" onClick={fit} title="Fit the entire cascade">Fit</button>
-        <button type="button" onClick={resetTo100} title="Reset zoom to 100%">100%</button>
-        <span className="rl-cascade-zoom" ref={zoomRef}>100%</span>
+        <Island label="Interactions">
+          <Tool title="Previous interaction" onClick={() => stepInteraction(-1)}>
+            <IconChevronLeft size={14} />
+          </Tool>
+          <Tool title="Next interaction" onClick={() => stepInteraction(1)}>
+            <IconChevronRight size={14} />
+          </Tool>
+        </Island>
+        <span className="rl-cascade-sep" aria-hidden="true" />
+        <Island label="Viewport">
+          <Tool className="rl-cascade-tool-text" title="Fit the entire cascade" onClick={fit}>
+            Fit
+          </Tool>
+          <Tool className="rl-cascade-tool-text" title="Reset zoom to 100%" onClick={resetTo100}>
+            1:1
+          </Tool>
+          <span className="rl-cascade-zoom" ref={zoomRef}>100%</span>
+        </Island>
+        <span className="rl-cascade-sep rl-cascade-sep-kind" aria-hidden="true" />
         <span className="rl-cascade-pill">{interaction?.kind ?? "idle"}</span>
         {expandedAggregates.size > 0 ? (
-          <button type="button" onClick={collapseGroups} title="Collapse all expanded render groups (C)">Collapse groups</button>
+          <Tool title="Collapse all expanded render groups (C)" onClick={collapseGroups}>
+            <IconCollapse size={14} />
+          </Tool>
         ) : null}
         <span className="spacer" />
-        <button type="button" className={focusMode === "all" ? "active" : ""} onClick={() => { setFocusMode("all"); setCustomFocus(null); }}>All</button>
-        <button type="button" className={focusMode === "expensive" ? "active" : ""} onClick={() => setFocusMode("expensive")}>Expensive</button>
-        <button type="button" className={focusMode === "roots" ? "active" : ""} onClick={() => setFocusMode("roots")}>Roots</button>
-        <button type="button" onClick={() => focusDirection("upstream")} disabled={!selectedId}>↑ cause</button>
-        <button type="button" onClick={() => focusDirection("downstream")} disabled={!selectedId}>↓ effects</button>
-        <button type="button" className={followLatest ? "active" : ""} onClick={() => { setFollowLatest(true); if (latest) chooseInteraction(latest.id); }}>Latest</button>
+        <Island className="rl-cascade-seg" label="Focus">
+          <Tool className="rl-cascade-tool-text" title="All renders" active={focusMode === "all"} onClick={() => { setFocusMode("all"); setCustomFocus(null); }}>
+            All
+          </Tool>
+          <Tool className="rl-cascade-tool-text rl-cascade-tool-expensive" title="Expensive renders" active={focusMode === "expensive"} onClick={() => setFocusMode("expensive")}>
+            Expensive
+          </Tool>
+          <Tool className="rl-cascade-tool-text rl-cascade-tool-roots" title="Interaction roots" active={focusMode === "roots"} onClick={() => setFocusMode("roots")}>
+            Roots
+          </Tool>
+        </Island>
+        <Island label="Cause and effects">
+          <Tool className="rl-cascade-tool-text" title="Focus cause" disabled={!selectedId} onClick={() => focusDirection("upstream")}>
+            <IconArrowUp size={12} />
+            Cause
+          </Tool>
+          <Tool className="rl-cascade-tool-text" title="Focus effects" disabled={!selectedId} onClick={() => focusDirection("downstream")}>
+            <IconArrowDown size={12} />
+            Effects
+          </Tool>
+        </Island>
+        <button
+          type="button"
+          className={`rl-cascade-latest${followLatest ? " active" : ""}`}
+          title="Follow the latest interaction"
+          aria-pressed={followLatest}
+          onClick={() => { setFollowLatest(true); if (latest) chooseInteraction(latest.id); }}
+        >
+          <IconSparkle size={12} />
+          <span className="rl-cascade-latest-label">Latest</span>
+        </button>
       </div>
 
       <div className="rl-cascade-body">

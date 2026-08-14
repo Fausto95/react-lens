@@ -1,10 +1,10 @@
 import { isValidElement, useEffect, useRef, useState } from "react";
 import type { ComponentId } from "@reactlens/protocol";
+import { IconPlay, IconRewind, IconStop } from "@reactlens/icons";
 import { typeLaneKey, type LaneControls } from "../../laneFilter.js";
 import type { TimeCursor } from "../../timeCursor.js";
 import type { Timeline as TimelineModel } from "../useTimeline.js";
 import { Cascade } from "../../cascade/Cascade.js";
-import "../../cascade/transport.css";
 
 function interactionAtCursor(model: TimelineModel, cursor: TimeCursor) {
   const interactions = model.interactions;
@@ -263,9 +263,16 @@ export function Timeline({
                 ? `Replay ${interaction.label}`
                 : "No interaction to replay"
           }
+          aria-label={
+            replayMode === "interaction"
+              ? "Stop replay"
+              : interaction
+                ? `Replay ${interaction.label}`
+                : "No interaction to replay"
+          }
           onClick={replaying ? stopReplay : replayInteraction}
         >
-          <span className="rl-cascade-transport-icon">{replayMode === "interaction" ? "■" : "↻"}</span>
+          <span className="rl-cascade-transport-icon">{replayMode === "interaction" ? <IconStop size={12} /> : <IconRewind size={13} />}</span>
           <span>{replayMode === "interaction" ? "Stop" : "Replay"}</span>
         </button>
         <button
@@ -277,9 +284,14 @@ export function Timeline({
               ? "Stop session replay"
               : `Replay all ${model.interactions.length.toLocaleString()} interactions in order`
           }
+          aria-label={
+            replayMode === "session"
+              ? "Stop session replay"
+              : `Replay all ${model.interactions.length.toLocaleString()} interactions in order`
+          }
           onClick={replaying ? stopReplay : replaySession}
         >
-          <span className="rl-cascade-transport-icon">{replayMode === "session" ? "■" : "▶"}</span>
+          <span className="rl-cascade-transport-icon">{replayMode === "session" ? <IconStop size={12} /> : <IconPlay size={12} />}</span>
           <span>{replayMode === "session" ? "Stop" : "Replay all"}</span>
         </button>
       </span>

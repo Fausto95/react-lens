@@ -188,6 +188,15 @@ export function IconChevronRight(props: IconProps) {
   );
 }
 
+/** Previous. */
+export function IconChevronLeft(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <path d="m10 3.5-5 4.5 5 4.5" />
+    </Svg>
+  );
+}
+
 /** Expanded. */
 export function IconChevronDown(props: IconProps) {
   return (
@@ -303,6 +312,43 @@ export function IconSliders(props: IconProps) {
       <path d="M2.5 5.5h11M2.5 10.5h11" />
       <circle cx="6" cy="5.5" r="1.7" fill="var(--rl-bg, #0b0d10)" />
       <circle cx="10" cy="10.5" r="1.7" fill="var(--rl-bg, #0b0d10)" />
+    </Svg>
+  );
+}
+
+/** Upstream / cause. */
+export function IconArrowUp(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <path d="M8 12.6V3.4M4.4 7 8 3.4 11.6 7" />
+    </Svg>
+  );
+}
+
+/** Downstream / effects. */
+export function IconArrowDown(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <path d="M8 3.4v9.2M4.4 9 8 12.6 11.6 9" />
+    </Svg>
+  );
+}
+
+/** Collapse expanded groups. */
+export function IconCollapse(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <rect x="2.5" y="3" width="11" height="10" rx="1.5" />
+      <path d="M5.2 8h5.6" />
+    </Svg>
+  );
+}
+
+/** Stop playback. */
+export function IconStop(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <rect x="4.4" y="4.4" width="7.2" height="7.2" rx="1.5" fill="currentColor" stroke="none" />
     </Svg>
   );
 }

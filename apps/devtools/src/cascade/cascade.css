@@ -7,11 +7,14 @@
 
 .rl-cascade {
   --cascade-rail: clamp(170px, 22%, 230px);
+  --cascade-bar: 40px;
+  --cascade-chip: 28px;
+  --cascade-r: 6px;
   position: relative;
   height: 100%;
   min-height: 0;
   display: grid;
-  grid-template-rows: 42px minmax(0, 1fr) 28px;
+  grid-template-rows: var(--cascade-bar) minmax(0, 1fr) 28px;
   background: var(--bg);
   color: var(--text);
   overflow: hidden;
@@ -22,31 +25,23 @@
 .rl-cascade-footer {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 2px;
   min-width: 0;
-  padding: 0 8px;
+  padding: 0 10px;
   background: var(--panel);
   border-bottom: 1px solid var(--line);
-  font-size: 10px;
+  font-size: 12px;
 }
 
 .rl-cascade-toolbar {
-  gap: 3px;
-  padding: 5px 252px 5px 8px;
-  background:
-    linear-gradient(180deg, color-mix(in srgb, var(--panel-2) 42%, transparent), transparent),
-    color-mix(in srgb, var(--panel) 96%, transparent);
-  backdrop-filter: blur(14px) saturate(1.15);
-}
-
-.rl-cascade-toolbar::after {
-  content: "";
-  position: absolute;
-  top: 8px;
-  right: 244px;
-  width: 1px;
-  height: 26px;
-  background: color-mix(in srgb, var(--line-strong) 72%, transparent);
+  z-index: 2;
+  gap: 8px;
+  padding: 6px 160px 6px 10px;
+  overflow: visible;
+  white-space: nowrap;
+  background: color-mix(in srgb, var(--panel) 92%, var(--bg));
+  border-bottom: 1px solid color-mix(in srgb, var(--line-strong) 55%, transparent);
+  user-select: none;
 }
 
 .rl-cascade-footer {
@@ -55,101 +50,175 @@
   color: var(--text-3);
   font-family: var(--mono);
   padding: 0 10px;
-  background: color-mix(in srgb, var(--panel) 96%, transparent);
+  background: var(--panel);
 }
 
-.rl-cascade-toolbar button {
-  position: relative;
-  display: inline-grid;
-  place-items: center;
-  min-width: 30px;
-  height: 30px;
-  padding: 0 8px;
-  border: 1px solid transparent;
-  border-radius: 8px;
+/* Kill native button chrome — every control in this bar is a ghost. */
+.rl-cascade-toolbar button,
+.rl-cascade-transport button {
+  appearance: none;
+  -webkit-appearance: none;
+  margin: 0;
+  border: 0;
   background: transparent;
-  color: var(--text-3);
-  font: 500 10px var(--mono);
+  box-shadow: none;
+  color: var(--text-2);
+  font: 500 12px/1 var(--sans);
+  letter-spacing: -0.02em;
   cursor: pointer;
+}
+
+.rl-cascade-island,
+.rl-cascade-pill,
+.rl-cascade-latest,
+.rl-cascade-sep {
+  flex: 0 0 auto;
+}
+
+.rl-cascade-island {
+  display: inline-flex;
+  align-items: center;
+  gap: 1px;
+}
+
+.rl-cascade-sep {
+  width: 1px;
+  height: 14px;
+  margin: 0;
+  background: color-mix(in srgb, var(--text) 10%, transparent);
+}
+
+.rl-cascade-tool,
+.rl-cascade-latest,
+.rl-cascade-transport-button,
+.rl-cascade-travel-control .rl-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  height: var(--cascade-chip);
+  min-width: var(--cascade-chip);
+  padding: 0;
+  border-radius: var(--cascade-r);
   transition:
     color 120ms ease,
-    background 120ms ease,
-    border-color 120ms ease,
-    box-shadow 120ms ease,
-    transform 100ms ease;
+    background 120ms ease;
 }
 
-.rl-cascade-toolbar button:hover:not(:disabled) {
+.rl-cascade-tool {
+  width: var(--cascade-chip);
+}
+
+.rl-cascade-tool-text {
+  width: auto;
+  gap: 5px;
+  padding: 0 8px;
+}
+
+.rl-cascade-tool:hover:not(:disabled),
+.rl-cascade-transport-button:hover:not(:disabled),
+.rl-cascade-travel-control .rl-icon-btn:hover:not(:disabled) {
   color: var(--text);
-  border-color: color-mix(in srgb, var(--line-strong) 64%, transparent);
-  background: color-mix(in srgb, var(--panel-2) 88%, transparent);
-  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--text) 5%, transparent);
+  background: color-mix(in srgb, var(--text) 6%, transparent);
 }
 
-.rl-cascade-toolbar button:active:not(:disabled) {
-  transform: translateY(1px);
-}
-
-.rl-cascade-toolbar button.active {
-  color: var(--accent);
-  border-color: color-mix(in srgb, var(--accent) 38%, var(--line));
-  background: color-mix(in srgb, var(--accent) 10%, var(--panel-2));
-  box-shadow:
-    inset 0 1px 0 color-mix(in srgb, var(--text) 7%, transparent),
-    0 1px 4px color-mix(in srgb, var(--accent) 9%, transparent);
-}
-
-.rl-cascade-toolbar button:disabled {
-  opacity: 0.35;
+.rl-cascade-tool:disabled,
+.rl-cascade-transport-button:disabled {
+  opacity: 0.34;
   cursor: default;
 }
 
-/* Navigation + viewport are icon-first. */
-.rl-cascade-toolbar button[title="Previous interaction"],
-.rl-cascade-toolbar button[title="Next interaction"],
-.rl-cascade-toolbar button[title="Fit the entire cascade"],
-.rl-cascade-toolbar button[title="Reset zoom to 100%"],
-.rl-cascade-toolbar button[title^="Collapse all expanded"] {
-  font-size: 0;
-  width: 30px;
-  padding: 0;
+.rl-cascade-tool:focus-visible,
+.rl-cascade-latest:focus-visible,
+.rl-cascade-transport-button:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 50%, transparent);
+  outline-offset: 1px;
 }
-.rl-cascade-toolbar button[title="Previous interaction"]::before { content: "◀"; font-size: 10px; }
-.rl-cascade-toolbar button[title="Next interaction"]::before { content: "▶"; font-size: 10px; }
-.rl-cascade-toolbar button[title="Fit the entire cascade"]::before { content: "⛶"; font-size: 15px; font-family: var(--sans); }
-.rl-cascade-toolbar button[title="Reset zoom to 100%"]::before { content: "1:1"; font: 600 9px var(--mono); }
-.rl-cascade-toolbar button[title^="Collapse all expanded"]::before { content: "⊟"; font-size: 15px; font-family: var(--sans); }
 
-/* The six focus/navigation controls at the end are stable even when the
-   optional collapse-groups button appears earlier in the toolbar. */
-.rl-cascade-toolbar button:nth-last-of-type(-n + 6) {
-  width: 30px;
-  padding: 0;
-  font-size: 0;
+/* Apple segmented control — one quiet track, raised thumb for the active item. */
+.rl-cascade-seg {
+  padding: 2px;
+  gap: 1px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--text) 5%, transparent);
 }
-.rl-cascade-toolbar button:nth-last-of-type(6)::before { content: "▦"; font-size: 15px; font-family: var(--sans); }
-.rl-cascade-toolbar button:nth-last-of-type(5)::before { content: "◇"; font-size: 17px; font-family: var(--sans); }
-.rl-cascade-toolbar button:nth-last-of-type(4)::before { content: "⌘"; font-size: 14px; font-family: var(--sans); }
-.rl-cascade-toolbar button:nth-last-of-type(3)::before { content: "↑"; font-size: 17px; font-family: var(--sans); }
-.rl-cascade-toolbar button:nth-last-of-type(2)::before { content: "↓"; font-size: 17px; font-family: var(--sans); }
-.rl-cascade-toolbar button:nth-last-of-type(1) {
-  width: auto;
-  min-width: 68px;
-  padding: 0 10px;
-  font-size: 0;
+
+.rl-cascade-seg .rl-cascade-tool {
+  height: 24px;
+  min-width: 24px;
+}
+
+.rl-cascade-seg .rl-cascade-tool.active {
+  color: var(--text);
+  background: var(--bg);
+  box-shadow: 0 1px 1px color-mix(in srgb, #000 8%, transparent);
+  font-weight: 600;
+}
+
+.rl-cascade-zoom {
+  display: inline-flex;
+  align-items: center;
+  min-width: 36px;
+  height: var(--cascade-chip);
+  padding: 0 6px 0 4px;
+  color: var(--text-3);
+  font: 500 12px/1 var(--sans);
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+}
+
+.rl-cascade-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: var(--cascade-chip);
+  padding: 0 8px;
+  border-radius: var(--cascade-r);
+  background: color-mix(in srgb, var(--text) 5%, transparent);
+  color: var(--text-2);
+  font: 500 12px/1 var(--sans);
+  letter-spacing: -0.02em;
+  white-space: nowrap;
+}
+
+.rl-cascade-pill::before {
+  content: "";
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+.rl-cascade-latest {
+  gap: 5px;
+  padding: 0 9px;
   color: var(--accent);
-  border-color: color-mix(in srgb, var(--accent) 30%, var(--line));
-  background: color-mix(in srgb, var(--accent) 8%, var(--panel));
+  font-weight: 600;
 }
-.rl-cascade-toolbar button:nth-last-of-type(1)::before {
-  content: "✦  Latest";
-  font: 600 10px var(--sans);
-  letter-spacing: -0.01em;
+
+.rl-cascade-latest:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+
+.rl-cascade-latest.active {
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
+.rl-cascade-latest svg {
+  flex: none;
 }
 
 .rl-cascade-toolbar .spacer,
 .rl-cascade-footer .spacer {
   flex: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rl-cascade-tool,
+  .rl-cascade-latest,
+  .rl-cascade-transport-button {
+    transition: none;
+  }
 }
 
 .rl-cascade-body {
@@ -345,28 +414,6 @@
   touch-action: none;
 }
 
-.rl-cascade-pill {
-  display: inline-flex;
-  align-items: center;
-  height: 26px;
-  padding: 0 9px;
-  border: 1px solid color-mix(in srgb, var(--line-strong) 68%, transparent);
-  border-radius: 8px;
-  background: color-mix(in srgb, var(--panel-2) 76%, transparent);
-  color: var(--text-2);
-  white-space: nowrap;
-  font: 500 10px var(--mono);
-  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--text) 4%, transparent);
-}
-
-.rl-cascade-zoom {
-  min-width: 38px;
-  padding: 0 4px;
-  color: var(--text-3);
-  font-family: var(--mono);
-  text-align: right;
-}
-
 .rl-cascade-help {
   color: var(--text-3);
   white-space: nowrap;
@@ -380,29 +427,42 @@
    graph renderer while giving Cascade one coherent control surface. */
 .rl-cascade-footer .rl-cascade-transport {
   position: absolute;
-  top: 5px;
+  top: 6px;
   right: 8px;
   z-index: 12;
 }
 
-@media (max-width: 980px) {
+@media (max-width: 1120px) {
   .rl-cascade-toolbar {
-    padding-right: 168px;
-  }
-  .rl-cascade-toolbar::after {
-    right: 160px;
+    padding-right: 150px;
   }
   .rl-cascade-footer .rl-cascade-transport {
-    right: 6px;
+    right: 8px;
   }
-  .rl-cascade-toolbar button:nth-last-of-type(1) {
-    min-width: 30px;
-    width: 30px;
+}
+
+@media (max-width: 980px) {
+  .rl-cascade-toolbar {
+    padding-right: 146px;
+  }
+}
+
+@media (max-width: 860px) {
+  .rl-cascade-toolbar {
+    padding-right: 118px;
+  }
+  .rl-cascade-pill,
+  .rl-cascade-zoom,
+  .rl-cascade-sep-kind {
+    display: none;
+  }
+  .rl-cascade-latest {
+    width: var(--cascade-chip);
     padding: 0;
+    justify-content: center;
   }
-  .rl-cascade-toolbar button:nth-last-of-type(1)::before {
-    content: "✦";
-    font-size: 15px;
+  .rl-cascade-latest-label {
+    display: none;
   }
 }
 
@@ -423,16 +483,19 @@
   }
 }
 
-@media (max-width: 640px) {
-  .rl-cascade-toolbar .rl-cascade-pill,
-  .rl-cascade-toolbar .rl-cascade-zoom {
-    display: none;
-  }
+@media (max-width: 680px) {
   .rl-cascade-toolbar {
-    padding-right: 126px;
+    padding-right: 112px;
   }
-  .rl-cascade-toolbar::after {
+  .rl-cascade-tool-expensive,
+  .rl-cascade-tool-roots {
     display: none;
+  }
+}
+
+@media (max-width: 640px) {
+  .rl-cascade-toolbar {
+    padding-right: 112px;
   }
 }
 
