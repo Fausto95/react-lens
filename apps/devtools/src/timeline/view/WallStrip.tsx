@@ -6,23 +6,28 @@ export function WallStrip({
   nameW,
   axis,
   view,
-  gaps,
+  bounds,
+  commits,
   onView,
 }: {
   nameW: number;
   axis: TimeAxis;
   view: ViewWindow;
-  gaps?: readonly Extract<TimeAxis["segs"][number], { type: "gap" }>[];
+  bounds: { t0: number; t1: number };
+  commits: ReadonlyArray<{ timestamp: number; endTimestamp: number }>;
   onView?: (a0: number, span: number) => void;
 }) {
-  const total = Math.max(1, axis.total);
-  const pct = (a: number) => (a / total) * 100;
-  const commits = axis.segs.filter(
-    (s): s is Extract<(typeof axis.segs)[number], { type: "act" }> => s.type === "act",
+  const wallSpan = Math.max(0.001, bounds.t1 - bounds.t0);
+  const wallPct = (t: number) => ((t - bounds.t0) / wallSpan) * 100;
+  const viewWall0 = axis.axisToWall(Math.max(0, view.a0));
+  const viewWall1 = axis.axisToWall(Math.min(axis.total, view.a1));
+  const left = Math.max(0, Math.min(100, wallPct(viewWall0)));
+  const right = Math.max(left, Math.min(100, wallPct(viewWall1)));
+  const width = Math.max(right - left, 0.5);
+  const maxDuration = Math.max(
+    0.01,
+    ...commits.map((commit) => Math.max(0, commit.endTimestamp - commit.timestamp)),
   );
-  const left = Math.max(0, pct(view.a0));
-  const width = Math.max(Math.min(100, pct(view.a1)) - left, 0.5);
-  const maxDuration = Math.max(0.01, ...commits.map((s) => s.w1 - s.w0));
 
   return (
     <div className="tl-wall" style={{ height: WALL_H }}>
@@ -31,39 +36,29 @@ export function WallStrip({
       </div>
       <div
         className="tl-wall-track"
-        title="Session overview · bars represent commit activity · click to navigate"
+        title="Session overview · exact commit spans · click to navigate"
         onPointerDown={(e) => {
           if (!onView) return;
           const r = e.currentTarget.getBoundingClientRect();
           const ratio = Math.max(0, Math.min(1, (e.clientX - r.left) / Math.max(1, r.width)));
+          const wallT = bounds.t0 + ratio * wallSpan;
+          const centerA = axis.wallToAxis(wallT);
           const span = view.a1 - view.a0;
-          onView(ratio * total - span / 2, span);
+          onView(centerA - span / 2, span);
         }}
       >
-        {(
-          gaps ??
-          axis.segs.filter((s): s is Extract<(typeof axis.segs)[number], { type: "gap" }> => {
-            return s.type === "gap" && s.a1 - s.a0 > 1e-6;
-          })
-        ).map((s) => (
-          <div
-            key={s.id}
-            className="tl-wall-gap"
-            style={{ left: `${pct(s.a0)}%`, width: `${Math.max(pct(s.a1) - pct(s.a0), 0.15)}%` }}
-          />
-        ))}
-
-        {commits.map((s, i) => {
-          const duration = Math.max(0, s.w1 - s.w0);
-          const strength = 0.38 + 0.5 * Math.min(1, duration / maxDuration);
+        {commits.map((commit, i) => {
+          const duration = Math.max(0, commit.endTimestamp - commit.timestamp);
+          const strength = 0.42 + 0.46 * Math.min(1, duration / maxDuration);
           return (
             <i
-              key={`${s.w0}:${s.w1}:${i}`}
+              key={`${commit.timestamp}:${commit.endTimestamp}:${i}`}
               className="tl-wall-activity"
-              title={`${duration.toFixed(2)}ms commit activity`}
+              title={`${duration.toFixed(2)}ms commit`}
               style={{
-                left: `${pct(s.a0)}%`,
-                width: `${Math.max(pct(s.a1) - pct(s.a0), 0.08)}%`,
+                left: `${Math.max(0, Math.min(100, wallPct(commit.timestamp)))}%`,
+                width: `${Math.max(0, Math.min(100, (duration / wallSpan) * 100))}%`,
+                minWidth: duration > 0 ? 1 : 0,
                 opacity: strength,
                 background: "var(--state)",
               }}
