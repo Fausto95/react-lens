@@ -132,23 +132,32 @@ export function createTimelineRenderer(canvas: HTMLCanvasElement): TimelineRende
       ]) {
         if (buf instanceof ArrayBuffer) transfer.push(buf);
       }
-      const stripLaneClips = <T extends { clips: unknown[] }>(lane: T): T => ({
-        ...lane,
-        clips: [] as unknown[] as T["clips"],
-      });
-      const slim = {
-        ...payload,
-        layout: {
-          ...payload.layout,
-          rows: payload.layout.rows.map((r) => ({
-            ...r,
-            lane: stripLaneClips(r.lane),
-            clips: [] as typeof r.clips,
-          })),
-          quietLanes: payload.layout.quietLanes.map(stripLaneClips),
-        },
-      };
-      worker.postMessage({ type: "paint", payload: slim, wantHit: !!onHit }, transfer);
+
+      // At far semantic zoom the worker paints aggregate density from the
+      // viewport lane clips. Keep those lightweight LOD clips; detailed zoom
+      // strips objects and uses only transferable columns.
+      const keepLaneClips = payload.viewMode === "density" || payload.pxPerMs < 30;
+      if (!keepLaneClips) {
+        const stripLaneClips = <T extends { clips: unknown[] }>(lane: T): T => ({
+          ...lane,
+          clips: [] as unknown[] as T["clips"],
+        });
+        const slim = {
+          ...payload,
+          layout: {
+            ...payload.layout,
+            rows: payload.layout.rows.map((r) => ({
+              ...r,
+              lane: stripLaneClips(r.lane),
+              clips: [] as typeof r.clips,
+            })),
+            quietLanes: payload.layout.quietLanes.map(stripLaneClips),
+          },
+        };
+        worker.postMessage({ type: "paint", payload: slim, wantHit: !!onHit }, transfer);
+        return;
+      }
+      worker.postMessage({ type: "paint", payload, wantHit: !!onHit }, transfer);
       return;
     }
     worker.postMessage({ type: "paint", payload, wantHit: !!onHit });
