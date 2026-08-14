@@ -386,6 +386,13 @@ export function drawBase(args: DrawBaseArgs): {
     geometry && geoRanges
       ? clipRectsFromGeometry(layout, geometry, geoRanges, proj, detailed)
       : computeClipRects(layout, proj);
+  const rectsByLane = new Map<string, ClipRect[]>();
+  for (const rect of clipRects.values()) {
+    const key = String(rect.clip.laneKey);
+    const laneRects = rectsByLane.get(key);
+    if (laneRects) laneRects.push(rect);
+    else rectsByLane.set(key, [rect]);
+  }
 
   for (const row of layout.rows) {
     ctx.strokeStyle = hexAlpha(theme.line, 0.55);
@@ -402,8 +409,7 @@ export function drawBase(args: DrawBaseArgs): {
     }
 
     const labelSpans: LabelSpan[] = [];
-    for (const rect of clipRects.values()) {
-      if (rect.clip.laneKey !== row.key) continue;
+    for (const rect of rectsByLane.get(String(row.key)) ?? []) {
       if (rect.visual.x + rect.visual.width < NW || rect.visual.x > W) continue;
       drawClipFill(ctx, rect, theme, args.pattern, viewMode === "cost");
       const text = labelForClip(rect.visual.width, rect.clip);

@@ -1,5 +1,8 @@
 name: CI
 
+# Unit (Vitest) + Playwright e2e against apps/e2e-fixture. Runs on every PR and
+# on pushes to main so release workflows can assume the suite is green.
+
 on:
   push:
     branches: [main]
@@ -10,7 +13,7 @@ concurrency:
   cancel-in-progress: true
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   unit:
@@ -19,8 +22,6 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
-        with:
-          ref: ${{ github.head_ref }}
 
       - uses: voidzero-dev/setup-vp@v1.17.0
         with:
@@ -29,93 +30,18 @@ jobs:
 
       - run: vp install
 
-      - name: Remove timeline hot-path regressions
-        run: |
-          python - <<'PY'
-          from pathlib import Path
+      - run: vp check
 
-          p = Path('apps/devtools/src/timeline/view/Timeline.tsx')
-          s = p.read_text()
-          s = s.replace(
-            '  const [hoverId, setHoverId] = useState<string | null>(null);',
-            '  const hoverRef = useRef<string | null>(null);',
-          )
-          s = s.replace(
-            '  const theme = readTimelineTheme(rootRef.current?.closest(".rl-redesign") ?? null);',
-            '  const themeRef = useRef(readTimelineTheme(null));\n  themeRef.current = readTimelineTheme(rootRef.current?.closest(".rl-redesign") ?? null);',
-          )
-
-          needle = '''  const installGeometry = useCallback((rects: Map<string, ClipRect>, edges: number[]) => {\n    clipRectsRef.current = rects;\n    hitBandsRef.current = indexByBand(rects);\n    snapEdgesRef.current = edges;\n  }, []);\n\n  const paint = useCallback(() => {'''
-          replacement = '''  const installGeometry = useCallback((rects: Map<string, ClipRect>, edges: number[]) => {\n    clipRectsRef.current = rects;\n    hitBandsRef.current = indexByBand(rects);\n    snapEdgesRef.current = edges;\n  }, []);\n\n  const paintOverlay = useCallback(\n    (rects: Map<string, ClipRect> = clipRectsRef.current) => {\n      const overlay = overlayRef.current;\n      const ctx = overlay?.getContext("2d");\n      if (!ctx) return;\n      drawOverlay({\n        ctx,\n        stageW: size.width,\n        totalH: paintH,\n        nameW,\n        clipRects: rects,\n        edges: arrows,\n        selectedRender: state.selectedRender,\n        marquee: null,\n        hoverId: hoverRef.current,\n        ghostT: null,\n        playheadT: playheadRef.current,\n        wToX,\n        dragging: dragRef.current != null,\n        theme: themeRef.current,\n        viewMode,\n      });\n    },\n    [arrows, nameW, paintH, size.width, state.selectedRender, viewMode, wToX],\n  );\n\n  const paint = useCallback(() => {'''
-          if needle not in s:
-            raise SystemExit('installGeometry insertion point not found')
-          s = s.replace(needle, replacement)
-
-          s = s.replace(
-            '''    const base = baseRef.current;\n    const overlay = overlayRef.current;\n    if (!base || !overlay) return;\n    const octx = overlay.getContext("2d");\n    if (!octx) return;''',
-            '''    const base = baseRef.current;\n    if (!base) return;\n    const theme = themeRef.current;''',
-          )
-
-          old_callback = '''        (rects, edges) => {\n          installGeometry(rects, edges);\n          const nextOverlay = overlayRef.current?.getContext("2d");\n          if (!nextOverlay) return;\n          drawOverlay({\n            ctx: nextOverlay,\n            stageW: size.width,\n            totalH: paintH,\n            nameW,\n            clipRects: rects,\n            edges: arrows,\n            selectedRender: state.selectedRender,\n            marquee: null,\n            hoverId,\n            ghostT: null,\n            playheadT: playheadRef.current,\n            wToX,\n            dragging: dragRef.current != null,\n            theme,\n            viewMode,\n          });\n        },'''
-          new_callback = '''        (rects, edges) => {\n          installGeometry(rects, edges);\n          paintOverlay(rects);\n        },'''
-          if old_callback not in s:
-            raise SystemExit('worker overlay callback not found')
-          s = s.replace(old_callback, new_callback)
-
-          old_overlay = '''\n    drawOverlay({\n      ctx: octx,\n      stageW: size.width,\n      totalH: paintH,\n      nameW,\n      clipRects: clipRectsRef.current,\n      edges: arrows,\n      selectedRender: state.selectedRender,\n      marquee: null,\n      hoverId,\n      ghostT: null,\n      playheadT: playheadRef.current,\n      wToX,\n      dragging: dragRef.current != null,\n      theme,\n      viewMode,\n    });'''
-          if old_overlay not in s:
-            raise SystemExit('final overlay block not found')
-          s = s.replace(old_overlay, '\n    paintOverlay();')
-
-          old_deps = '''  }, [\n    aToX,\n    arrows,\n    axis,\n    bounds.t0,\n    hoverId,\n    installGeometry,\n    layout,\n    markers,\n    model.timelineResult,\n    nameW,\n    paintH,\n    pxPerMs,\n    size.width,\n    state.region,\n    state.selectedRender,\n    state.view,\n    theme,\n    viewMode,\n    wToX,\n  ]);'''
-          new_deps = '''  }, [\n    aToX,\n    axis,\n    bounds.t0,\n    installGeometry,\n    layout,\n    markers,\n    model.timelineResult,\n    nameW,\n    paintOverlay,\n    pxPerMs,\n    size.width,\n    state.region,\n    state.selectedRender,\n    state.view,\n    viewMode,\n    wToX,\n  ]);'''
-          if old_deps not in s:
-            raise SystemExit('paint dependency block not found')
-          s = s.replace(old_deps, new_deps)
-
-          old_hover = '''    const hit = hitAt(x, y);\n    const nextId = hit ? String(hit.clip.renderId) : null;\n    if (nextId !== hoverId) setHoverId(nextId);\n    onHighlight?.(hit?.clip.componentId ?? null);\n    setTip(hit ? { clip: hit.clip, x: Math.min(size.width - 220, x + 14), y: y + 14 } : null);'''
-          new_hover = '''    const hit = hitAt(x, y);\n    const nextId = hit ? String(hit.clip.renderId) : null;\n    if (nextId !== hoverRef.current) {\n      hoverRef.current = nextId;\n      onHighlight?.(hit?.clip.componentId ?? null);\n      setTip(hit ? { clip: hit.clip, x: Math.min(size.width - 220, x + 14), y: y + 14 } : null);\n      paintOverlay();\n    }'''
-          if old_hover not in s:
-            raise SystemExit('hover block not found')
-          s = s.replace(old_hover, new_hover)
-
-          s = s.replace(
-            '''        onPointerLeave={() => {\n          setHoverId(null);\n          setTip(null);\n          onHighlight?.(null);\n        }}''',
-            '''        onPointerLeave={() => {\n          hoverRef.current = null;\n          setTip(null);\n          onHighlight?.(null);\n          paintOverlay();\n        }}''',
-          )
-          p.write_text(s)
-
-          p = Path('apps/devtools/src/timeline/view/draw.ts')
-          s = p.read_text()
-          needle = '''  const { clipRects, snapEdges } =\n    geometry && geoRanges\n      ? clipRectsFromGeometry(layout, geometry, geoRanges, proj, detailed)\n      : computeClipRects(layout, proj);\n\n  for (const row of layout.rows) {'''
-          replacement = '''  const { clipRects, snapEdges } =\n    geometry && geoRanges\n      ? clipRectsFromGeometry(layout, geometry, geoRanges, proj, detailed)\n      : computeClipRects(layout, proj);\n  const rectsByLane = new Map<string, ClipRect[]>();\n  for (const rect of clipRects.values()) {\n    const key = String(rect.clip.laneKey);\n    const laneRects = rectsByLane.get(key);\n    if (laneRects) laneRects.push(rect);\n    else rectsByLane.set(key, [rect]);\n  }\n\n  for (const row of layout.rows) {'''
-          if needle not in s:
-            raise SystemExit('clip rect grouping insertion point not found')
-          s = s.replace(needle, replacement)
-          s = s.replace(
-            '''    for (const rect of clipRects.values()) {\n      if (rect.clip.laneKey !== row.key) continue;''',
-            '''    for (const rect of rectsByLane.get(String(row.key)) ?? []) {''',
-          )
-          p.write_text(s)
-          PY
-
-          vp check --fix
-          vp check
-
-      - name: Commit hot-path fixes
-        run: |
-          git fetch origin more-perf --depth=1
-          git show origin/more-perf:.github/workflows/ci.yml > .github/workflows/ci.yml
-          git config user.name "react-lens-ci"
-          git config user.email "actions@users.noreply.github.com"
-          git add -A
-          if ! git diff --cached --quiet; then
-            git commit -m "perf(timeline): keep hover and lane painting viewport-local"
-            git push origin HEAD:${{ github.head_ref }}
-          fi
-
+      # Every file must stay compiled: one `"use no memo"` silently drops a
+      # whole file, and the panel's files are the expensive ones.
+      # Use `vp run` — setup-vp does not put pnpm on PATH.
       - run: vp run check:compiled
+
+      # Bundle must carry Compiler output (memo_cache_sentinel), not just
+      # pass the directive ban — a misconfigured sources filter would otherwise
+      # ship unoptimized panel code silently. Runs on every PR + main push.
       - run: vp run check:compiled:build
+
       - run: vp test run
 
   e2e:
@@ -132,6 +58,8 @@ jobs:
 
       - run: vp install
 
+      # Chromium only — matches the default Playwright project and keeps the
+      # download small. --with-deps installs the OS libraries Ubuntu needs.
       - name: Install Playwright Chromium
         run: vp exec playwright install --with-deps chromium
 

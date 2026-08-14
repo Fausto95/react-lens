@@ -91,7 +91,7 @@ export function Timeline({
   >(null);
   const playheadRef = useRef(cursor.mode === "live" ? bounds.t1 : cursor.t);
   const [viewMode, setViewMode] = useState<TimelineViewMode>("events");
-  const [hoverId, setHoverId] = useState<string | null>(null);
+  const hoverRef = useRef<string | null>(null);
   const [tip, setTip] = useState<{ clip: Clip; x: number; y: number } | null>(null);
   const [size, setSize] = useState({ width: state.width, height: state.viewportHeight });
 
@@ -104,7 +104,8 @@ export function Timeline({
   const semantic = semanticZoomForPxPerMs(pxPerMs);
   const paintH = layout.paintH ?? layout.totalH;
   const stageScrollTop = layout.scrollTop ?? state.scrollTop;
-  const theme = readTimelineTheme(rootRef.current?.closest(".rl-redesign") ?? null);
+  const themeRef = useRef(readTimelineTheme(null));
+  themeRef.current = readTimelineTheme(rootRef.current?.closest(".rl-redesign") ?? null);
 
   const aToX = useCallback(
     (a: number) =>
@@ -128,12 +129,36 @@ export function Timeline({
     snapEdgesRef.current = edges;
   }, []);
 
+  const paintOverlay = useCallback(
+    (rects: Map<string, ClipRect> = clipRectsRef.current) => {
+      const overlay = overlayRef.current;
+      const ctx = overlay?.getContext("2d");
+      if (!ctx) return;
+      drawOverlay({
+        ctx,
+        stageW: size.width,
+        totalH: paintH,
+        nameW,
+        clipRects: rects,
+        edges: arrows,
+        selectedRender: state.selectedRender,
+        marquee: null,
+        hoverId: hoverRef.current,
+        ghostT: null,
+        playheadT: playheadRef.current,
+        wToX,
+        dragging: dragRef.current != null,
+        theme: themeRef.current,
+        viewMode,
+      });
+    },
+    [arrows, nameW, paintH, size.width, state.selectedRender, viewMode, wToX],
+  );
+
   const paint = useCallback(() => {
     const base = baseRef.current;
-    const overlay = overlayRef.current;
-    if (!base || !overlay) return;
-    const octx = overlay.getContext("2d");
-    if (!octx) return;
+    if (!base) return;
+    const theme = themeRef.current;
     const proj = { aToX, wToX, nameW, stageW: size.width, pxPerMs };
     const geometry = geometryFromQueryResult(model.timelineResult);
     const renderer = rendererRef.current;
@@ -157,25 +182,7 @@ export function Timeline({
         },
         (rects, edges) => {
           installGeometry(rects, edges);
-          const nextOverlay = overlayRef.current?.getContext("2d");
-          if (!nextOverlay) return;
-          drawOverlay({
-            ctx: nextOverlay,
-            stageW: size.width,
-            totalH: paintH,
-            nameW,
-            clipRects: rects,
-            edges: arrows,
-            selectedRender: state.selectedRender,
-            marquee: null,
-            hoverId,
-            ghostT: null,
-            playheadT: playheadRef.current,
-            wToX,
-            dragging: dragRef.current != null,
-            theme,
-            viewMode,
-          });
+          paintOverlay(rects);
         },
       );
     } else {
@@ -201,41 +208,22 @@ export function Timeline({
       }
     }
 
-    drawOverlay({
-      ctx: octx,
-      stageW: size.width,
-      totalH: paintH,
-      nameW,
-      clipRects: clipRectsRef.current,
-      edges: arrows,
-      selectedRender: state.selectedRender,
-      marquee: null,
-      hoverId,
-      ghostT: null,
-      playheadT: playheadRef.current,
-      wToX,
-      dragging: dragRef.current != null,
-      theme,
-      viewMode,
-    });
+    paintOverlay();
   }, [
     aToX,
-    arrows,
     axis,
     bounds.t0,
-    hoverId,
     installGeometry,
     layout,
     markers,
     model.timelineResult,
     nameW,
-    paintH,
+    paintOverlay,
     pxPerMs,
     size.width,
     state.region,
     state.selectedRender,
     state.view,
-    theme,
     viewMode,
     wToX,
   ]);
@@ -409,9 +397,12 @@ export function Timeline({
     }
     const hit = hitAt(x, y);
     const nextId = hit ? String(hit.clip.renderId) : null;
-    if (nextId !== hoverId) setHoverId(nextId);
-    onHighlight?.(hit?.clip.componentId ?? null);
-    setTip(hit ? { clip: hit.clip, x: Math.min(size.width - 220, x + 14), y: y + 14 } : null);
+    if (nextId !== hoverRef.current) {
+      hoverRef.current = nextId;
+      onHighlight?.(hit?.clip.componentId ?? null);
+      setTip(hit ? { clip: hit.clip, x: Math.min(size.width - 220, x + 14), y: y + 14 } : null);
+      paintOverlay();
+    }
   };
 
   const onPointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
@@ -564,9 +555,10 @@ export function Timeline({
         onPointerUp={onPointerUp}
         onPointerCancel={onPointerUp}
         onPointerLeave={() => {
-          setHoverId(null);
+          hoverRef.current = null;
           setTip(null);
           onHighlight?.(null);
+          paintOverlay();
         }}
         onWheel={onWheel}
         onScroll={(e) =>
