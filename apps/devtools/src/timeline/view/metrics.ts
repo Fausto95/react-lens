@@ -9,7 +9,12 @@ export const WAVE_H = 44;
 export const QUIET_MAX = 2;
 export const QUIET_TOTAL_MS = 8;
 export const STACK_MAX = 4;
-export const VIRTUAL_ROW_H = LANE_PAD + 2 * ROW_H;
+/**
+ * Fixed virtual lane slot. Reserve enough vertical room for the engine's stack
+ * rows so overlapping renders are shown on separate tracks instead of being
+ * folded onto two visual rows.
+ */
+export const VIRTUAL_ROW_H = LANE_PAD + STACK_MAX * ROW_H;
 export const VIRTUAL_OVERSCAN_ROWS = 6;
 export const SNAP_PX = 5;
 export const IDLE_MS = 200;
@@ -31,8 +36,8 @@ export const CLIP_LABEL_GAP_PX = 8;
 export const MIN_CLIP_PX = TICK_THRESHOLD_PX;
 export const CLIP_LABEL_MIN_PX = CLIP_CAUSE_LABEL_PX;
 
-/** Roughly six times deeper than the previous 5ms zoom floor. */
-export const VIEW_SPAN_MIN = 0.8;
+/** Restore the original inspection zoom floor. */
+export const VIEW_SPAN_MIN = 5;
 export const VIEW_SPAN_MAX = 12_400;
 
 export const ACCENT = "#6E9BFF";
