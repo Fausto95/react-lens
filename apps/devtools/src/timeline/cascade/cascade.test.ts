@@ -87,6 +87,17 @@ describe("cascade projection", () => {
     expect(projection.nodes.length).toBe(3);
   });
 
+  it("enforces the visible-node budget for pathological fan-out", () => {
+    const { store, interaction } = fixture();
+    const projection = buildCascadeProjection(store, interaction, {
+      aggregateThreshold: 99,
+      maxVisibleNodes: 4,
+    });
+    expect(projection.nodes.length).toBeLessThanOrEqual(4);
+    expect(projection.nodes.some((node) => node.id === "g:overflow")).toBe(true);
+    expect(projection.totalRenderCount).toBe(9);
+  });
+
   it("is deterministic across repeated layout passes", () => {
     const { store, interaction } = fixture();
     const projection = buildCascadeProjection(store, interaction, { aggregateThreshold: 99 });
