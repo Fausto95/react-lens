@@ -3,11 +3,13 @@ import type { DOMNodeSnapshot, DOMSnapshot } from "@reactlens/protocol";
 import { timeAxis } from "@reactlens/ui";
 
 const MAX_RENDERED_NODES = 400;
+const STYLE_PREVIEW = ["display", "width", "height", "opacity", "color", "background-color", "transform"];
 
 /**
- * Offline playback: the page's captured DOM at the cursor, as a structural
- * tree (deliberately not a pixel reconstruction). Shown for imported sessions
- * where real state restoration has no live page to write to.
+ * Offline playback: the page's captured DOM at the cursor, including the
+ * browser-resolved visual state when available. The visual layer is styling-
+ * library agnostic: Tailwind, CSS Modules, CSS-in-JS and inline styles all
+ * converge on the same computed CSS/layout representation here.
  */
 export function DomSnapshotView({ dom, atOffsetMs }: { dom: DOMSnapshot; atOffsetMs: number }) {
   const [open, setOpen] = useState(true);
@@ -23,7 +25,7 @@ export function DomSnapshotView({ dom, atOffsetMs }: { dom: DOMSnapshot; atOffse
         <span className="rl-tl-domsnap-caret">{open ? "▾" : "▸"}</span>
         Page snapshot · {timeAxis(atOffsetMs)}
         <span className="rl-tl-domsnap-hint">
-          imported session — structural DOM at the playhead
+          imported session — DOM + resolved visual state at the playhead
         </span>
       </button>
       {open && (
@@ -62,10 +64,35 @@ function DomNode({
         {id && <span className="rl-tl-domsnap-attr">#{id}</span>}
         {cls && <span className="rl-tl-domsnap-attr">.{cls.split(/\s+/).join(".")}</span>}
         {node.text && <span className="rl-tl-domsnap-inline">“{node.text}”</span>}
+        <VisualPreview node={node} />
       </div>
       {node.children?.map((child, i) => (
         <DomNode key={i} node={child} depth={depth + 1} spend={spend} />
       ))}
     </>
+  );
+}
+
+function VisualPreview({ node }: { node: DOMNodeSnapshot }) {
+  const visual = node.visual;
+  if (!visual) return null;
+
+  const parts: string[] = [];
+  const rect = visual.rect;
+  if (rect) parts.push(`${rect.width}×${rect.height} @ ${rect.x},${rect.y}`);
+
+  for (const property of STYLE_PREVIEW) {
+    const value = visual.computedStyle?.[property];
+    if (value) parts.push(`${property}: ${value}`);
+  }
+
+  const vars = Object.keys(visual.customProperties ?? {}).length;
+  if (vars) parts.push(`${vars} CSS var${vars === 1 ? "" : "s"}`);
+  if (!parts.length) return null;
+
+  return (
+    <span className="rl-tl-domsnap-inline" title={parts.join(" · ")}>
+      {" "}· {parts.slice(0, 2).join(" · ")}
+    </span>
   );
 }
