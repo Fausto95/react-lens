@@ -1,39 +1,40 @@
-/**
- * Shared pixel / layout constants for the canvas timeline.
- * Match SynthesisTimelinePro so draw, DOM chrome, and hit-testing agree.
- */
-
+/** Shared pixel / layout constants for the canvas timeline. */
 export const RULER_H = 40;
-export const WALL_H = 15;
+export const WALL_H = 18;
 export const NAV_H = 28;
 export const SHELF_H = 27;
-export const ROW_H = 22;
+export const ROW_H = 24;
 export const LANE_PAD = 10;
 export const WAVE_H = 44;
 export const QUIET_MAX = 2;
-/**
- * Inclusive ms budget for a "quiet" lane. Sparse lanes that still cover a
- * real cascade (App once at 40 ms total) stay on stage; Tooltip/Analytics
- * with a couple of sub‑ms renders go to the shelf.
- */
 export const QUIET_TOTAL_MS = 8;
 export const STACK_MAX = 4;
-/** Fixed row slot for virtual timeline scrolling. Deep lanes switch to wave in the slot. */
 export const VIRTUAL_ROW_H = LANE_PAD + 2 * ROW_H;
 export const VIRTUAL_OVERSCAN_ROWS = 6;
 export const SNAP_PX = 5;
 export const IDLE_MS = 200;
-/** Collapsed idle gap axis length. */
 export const GAP_AXIS_SEAM = 0;
-export const NAME_W_MIN = 88;
-export const NAME_W_MAX = 150;
-export const NAME_W_FRAC = 0.14;
-export const NAME_W = 148;
-export const MIN_CLIP_PX = 2;
-export const CLIP_LABEL_MIN_PX = 48;
-/** ~6x deeper inspection than the previous 5ms floor. */
+export const NAME_W_MIN = 104;
+export const NAME_W_MAX = 180;
+export const NAME_W_FRAC = 0.16;
+export const NAME_W = 156;
+
+/** Paint truthful time widths; only hit geometry gets widened. */
+export const MIN_VISUAL_EVENT_PX = 0.75;
+export const TICK_THRESHOLD_PX = 2;
+export const MIN_HIT_TARGET_PX = 10;
+export const CLIP_SHORT_LABEL_PX = 18;
+export const CLIP_CAUSE_LABEL_PX = 34;
+export const CLIP_FULL_LABEL_PX = 72;
+export const CLIP_LABEL_GAP_PX = 8;
+/** Compatibility aliases for older tests/callers. */
+export const MIN_CLIP_PX = TICK_THRESHOLD_PX;
+export const CLIP_LABEL_MIN_PX = CLIP_CAUSE_LABEL_PX;
+
+/** Roughly six times deeper than the previous 5ms zoom floor. */
 export const VIEW_SPAN_MIN = 0.8;
 export const VIEW_SPAN_MAX = 12_400;
+
 export const ACCENT = "#6E9BFF";
 export const CAUSE_COLOR = {
   state: "#3ECF8E",
@@ -42,6 +43,7 @@ export const CAUSE_COLOR = {
   cascade: "#7A7A85",
 } as const;
 export const MONO = 'ui-monospace,"SF Mono",Menlo,monospace';
+
 export function nameWidthFor(stageW: number): number {
   return Math.max(NAME_W_MIN, Math.min(NAME_W_MAX, Math.round(stageW * NAME_W_FRAC)));
 }
