@@ -10,6 +10,7 @@ import { lanesFromQueryResult, statsPairFromStore, type Lane } from "./model/lan
 import { chainFor, edgesForCommit, type CausalEdge } from "./model/edges.js";
 import { buildAxis, mergeActive, type TimeSpan } from "./model/axis.js";
 import { computeLayout } from "./model/rows.js";
+import { packIntervals } from "./model/stacking.js";
 import type { LaneMode } from "./model/wave.js";
 import { nameWidthFor, RULER_H, VIRTUAL_OVERSCAN_ROWS, VIRTUAL_ROW_H } from "./view/metrics.js";
 import { wallWindow } from "./model/viewport.js";
@@ -55,9 +56,6 @@ export function useTimeline({
   const gapProgRef = useRef(new Map<string, number>());
   const laneModesRef = useRef(new Map<LaneKey, LaneMode>());
 
-  // The session overview/time-compression axis is commit-derived. The previous
-  // activity LOD used broad buckets/padding and made the minimap claim there was
-  // work in empty regions. Merge only genuinely overlapping commit intervals.
   const acts = caches.activity.read([store, version], () => {
     const intervals = commits
       .map(
@@ -131,8 +129,6 @@ export function useTimeline({
     rowEnd,
     pixelWidth: plotW,
     lodEnterPx: Number.POSITIVE_INFINITY,
-    // Quiet-component auto-tucking is gone. Virtualization is the scalability
-    // mechanism; sparse components should not disappear from the timeline.
     includeQuiet: true,
     includeStats: false,
     includeActivity: false,
@@ -140,14 +136,20 @@ export function useTimeline({
   });
   const lanes: Lane[] = lanesFromQueryResult(timelineResult);
 
+  // Visual stack depth is derived from the intervals in this viewport, not the
+  // persisted stackRow/depth hints. That guarantees one vertical slot per
+  // simultaneously-overlapping event, regardless of cause/type.
   const laneDepth = new Map<string, number>();
   for (const lane of lanes) {
-    laneDepth.set(lane.key, Math.max(1, lane.depth ?? 1));
+    const packed = packIntervals(
+      lane.clips
+        .filter((clip) => !clip.aggregate)
+        .map((clip) => ({ key: String(clip.renderId), start: clip.t0, end: clip.t1 })),
+    );
+    laneDepth.set(lane.key, packed.depth);
   }
 
   const layout = computeLayout(lanes, laneDepth, {
-    // Keep every lane. Shelf state is retained in the reducer only for backward
-    // compatibility while the old Shelf component is a no-op.
     shelfOpen: true,
     pxPerMs,
     visible: { t0: visible.start, t1: visible.end },
