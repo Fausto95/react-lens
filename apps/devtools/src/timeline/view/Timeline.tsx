@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { isValidElement, useEffect, useRef, useState } from "react";
 import type { ComponentId } from "@reactlens/protocol";
 import { typeLaneKey, type LaneControls } from "../../laneFilter.js";
 import type { TimeCursor } from "../../timeCursor.js";
@@ -23,6 +23,16 @@ function interactionAtCursor(model: TimelineModel, cursor: TimeCursor) {
 function playbackDuration(interaction: TimelineModel["interactions"][number]): number {
   const traceSpan = Math.max(1, interaction.end - interaction.start);
   return Math.max(650, Math.min(3_000, traceSpan * 4));
+}
+
+type TravelControlProps = {
+  "aria-pressed"?: boolean;
+  disabled?: boolean;
+  onClick?: () => void;
+};
+
+function travelControlProps(node: React.ReactNode): TravelControlProps | null {
+  return isValidElement<TravelControlProps>(node) ? node.props : null;
 }
 
 /**
@@ -55,11 +65,33 @@ export function Timeline({
   const [replayMode, setReplayMode] = useState<"interaction" | "session" | null>(null);
   const replayRaf = useRef(0);
   const replayGeneration = useRef(0);
+  const transportRef = useRef(transport);
+  transportRef.current = transport;
+  /** Toggle we invoked because replay needed restoration while the user's mode was off. */
+  const autoTravelToggle = useRef<(() => void) | null>(null);
+
+  const ensureReplayTravel = () => {
+    const props = travelControlProps(transportRef.current);
+    if (!props || props.disabled || props["aria-pressed"] === true || !props.onClick) return;
+    autoTravelToggle.current = props.onClick;
+    props.onClick();
+  };
+
+  const releaseReplayTravel = () => {
+    const toggle = autoTravelToggle.current;
+    autoTravelToggle.current = null;
+    if (!toggle) return;
+    // Respect a manual user change during playback. If the user already turned
+    // restoration off, do not toggle it back on while cleaning up replay.
+    const props = travelControlProps(transportRef.current);
+    if (props?.["aria-pressed"] === true) toggle();
+  };
 
   useEffect(
     () => () => {
       replayGeneration.current++;
       cancelAnimationFrame(replayRaf.current);
+      releaseReplayTravel();
     },
     [],
   );
@@ -69,6 +101,7 @@ export function Timeline({
     cancelAnimationFrame(replayRaf.current);
     replayRaf.current = 0;
     setReplayMode(null);
+    releaseReplayTravel();
   };
 
   /**
@@ -120,12 +153,14 @@ export function Timeline({
     if (!interaction) return;
 
     stopReplay();
+    ensureReplayTravel();
     const generation = ++replayGeneration.current;
     setReplayMode("interaction");
     highlightInteraction(interaction);
     playInteraction(interaction, generation, () => {
       if (generation !== replayGeneration.current) return;
       setReplayMode(null);
+      releaseReplayTravel();
     });
   };
 
@@ -133,6 +168,7 @@ export function Timeline({
     if (model.interactions.length === 0) return;
 
     stopReplay();
+    ensureReplayTravel();
     const generation = ++replayGeneration.current;
     setReplayMode("session");
 
@@ -142,6 +178,7 @@ export function Timeline({
       if (!interaction) {
         model.dispatch({ type: "clearClip" });
         setReplayMode(null);
+        releaseReplayTravel();
         return;
       }
       highlightInteraction(interaction);
