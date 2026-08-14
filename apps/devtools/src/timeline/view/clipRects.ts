@@ -33,19 +33,91 @@ export interface ClipRectProjectors {
   wToX: (t: number) => number;
 }
 
+export interface PackedClipRows {
+  rows: ReadonlyMap<string, number>;
+  depth: number;
+}
+
+interface ActiveSlot {
+  end: number;
+  slot: number;
+}
+
+function heapPush(heap: ActiveSlot[], value: ActiveSlot): void {
+  let i = heap.length;
+  heap.push(value);
+  while (i > 0) {
+    const parent = (i - 1) >>> 1;
+    if (heap[parent]!.end <= value.end) break;
+    heap[i] = heap[parent]!;
+    i = parent;
+  }
+  heap[i] = value;
+}
+
+function heapPop(heap: ActiveSlot[]): ActiveSlot | undefined {
+  const first = heap[0];
+  const last = heap.pop();
+  if (!first || !last || heap.length === 0) return first;
+  let i = 0;
+  while (true) {
+    const left = i * 2 + 1;
+    if (left >= heap.length) break;
+    const right = left + 1;
+    const child = right < heap.length && heap[right]!.end < heap[left]!.end ? right : left;
+    if (heap[child]!.end >= last.end) break;
+    heap[i] = heap[child]!;
+    i = child;
+  }
+  heap[i] = last;
+  return first;
+}
+
 /**
- * Maps an engine stackRow to a unique visual slot.
+ * Interval-partitions every visible clip in a component lane.
  *
- * Virtualized lanes intentionally keep a fixed outer height so row lookup and
- * scroll math remain O(visible rows). When overlap depth exceeds the number of
- * full-size 24px tracks that fit, tracks compress vertically instead of
- * wrapping with modulo and hiding events under each other.
+ * This deliberately ignores the engine-provided `clip.row`. That value is an
+ * ingest/indexing hint and may collide after viewport projection. The visual
+ * invariant is stronger: two clips whose wall-time intervals overlap can NEVER
+ * occupy the same vertical slot, regardless of cause (props/state/context/etc).
+ *
+ * Complexity is O(n log depth) for the viewport-sized lane materialization.
+ */
+export function packClipRows(clips: readonly Clip[]): PackedClipRows {
+  const ordered = clips
+    .filter((clip) => !clip.aggregate)
+    .slice()
+    .sort((a, b) => a.t0 - b.t0 || a.t1 - b.t1 || Number(a.renderId) - Number(b.renderId));
+  const rows = new Map<string, number>();
+  const active: ActiveSlot[] = [];
+  const freeSlots: number[] = [];
+  let depth = 0;
+
+  for (const clip of ordered) {
+    while (active[0] && active[0].end <= clip.t0) {
+      const freed = heapPop(active)!;
+      freeSlots.push(freed.slot);
+    }
+
+    const slot = freeSlots.length > 0 ? freeSlots.pop()! : depth++;
+    rows.set(String(clip.renderId), slot);
+    heapPush(active, { end: Math.max(clip.t1, clip.t0), slot });
+  }
+
+  return { rows, depth: Math.max(1, depth) };
+}
+
+/**
+ * Maps one collision-free visual slot into the lane's fixed virtualized height.
+ * Deep stacks compress vertically instead of wrapping or overlapping. Keeping
+ * the outer lane height fixed preserves O(visible rows) scroll virtualization.
  */
 export function stackClipVerticalGeometry(
-  row: Pick<LayoutRow, "y" | "h" | "depth">,
+  row: Pick<LayoutRow, "y" | "h">,
   stackRow: number,
+  stackDepth: number,
 ): { y: number; height: number } {
-  const depth = Math.max(1, row.depth, stackRow + 1);
+  const depth = Math.max(1, stackDepth);
   const usable = Math.max(1, row.h - LANE_PAD - 3);
   const slotHeight = Math.min(ROW_H, usable / depth);
   const gap = slotHeight >= 8 ? 2 : Math.min(1, slotHeight * 0.2);
@@ -123,11 +195,13 @@ export function computeClipRects(
       continue;
     }
 
+    const packed = packClipRows(row.clips);
     for (const c of row.clips) {
       if (c.aggregate) continue;
       const x0 = wToX(c.t0);
       const x1 = wToX(c.t1);
-      const vertical = stackClipVerticalGeometry(row, c.row ?? 0);
+      const visualRow = packed.rows.get(String(c.renderId)) ?? 0;
+      const vertical = stackClipVerticalGeometry(row, visualRow, packed.depth);
       clipRects.set(
         String(c.renderId),
         buildClipRect(c, x0, vertical.y, vertical.height, Math.max(0, x1 - x0)),
