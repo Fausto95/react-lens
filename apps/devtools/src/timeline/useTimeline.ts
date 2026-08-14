@@ -113,7 +113,10 @@ export function useTimeline({
     : undefined;
 
   // Materialize only the visible time window (+ pad) from columnar lanes.
-  // Wastedness is a stored flag — no causality.why() sweep.
+  // Keep raw events in the viewport. The query already caps them at 10k, while
+  // the canvas renderer decides how to represent them at each semantic zoom.
+  // Returning bucket rows here made Events/Cost/Causality lose every selectable
+  // clip because aggregate buckets intentionally have no render identity.
   const pad = Math.max(50, (visible.end - visible.start) * 0.1);
   const scrollTop = Math.max(0, state.scrollTop);
   const viewportHeight = Math.max(RULER_H + 40, state.viewportHeight);
@@ -127,6 +130,7 @@ export function useTimeline({
     rowStart,
     rowEnd,
     pixelWidth: plotW,
+    lodEnterPx: Number.POSITIVE_INFINITY,
     includeQuiet: state.shelfOpen,
     includeStats: false,
     includeActivity: false,
