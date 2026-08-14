@@ -2,12 +2,11 @@ import type { ComponentId } from "@reactlens/protocol";
 import type { LaneControls } from "../../laneFilter.js";
 import type { TimeCursor } from "../../timeCursor.js";
 import type { Timeline as TimelineModel } from "../useTimeline.js";
-import { CascadeTimeline } from "../cascade/CascadeTimeline.js";
+import { Cascade } from "../../cascade/Cascade.js";
 
 /**
- * Cascade is the timeline presentation now. The trace/query model remains the
- * same `useTimeline` model so the existing columnar indexes, viewport stats,
- * tree heat and inspector selection contracts keep working unchanged.
+ * @deprecated Compatibility adapter for callers that still mount the old
+ * Timeline view entry point. Cascade is now the product/view abstraction.
  */
 export function Timeline({
   model,
@@ -29,7 +28,7 @@ export function Timeline({
   transport?: React.ReactNode;
 }) {
   return (
-    <CascadeTimeline
+    <Cascade
       store={model.store}
       model={model}
       cursor={cursor}
