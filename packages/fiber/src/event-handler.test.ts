@@ -43,9 +43,8 @@ describe("eventHandlerName", () => {
     expect(eventHandlerName(nodeFor(button), "submit")).toBe("submitCheckout");
   });
 
-  it("prefers displayName and strips bound prefixes", () => {
-    const handler = function internalHandler() {};
-    handler.displayName = "savePreferences";
+  it("prefers displayName when available", () => {
+    const handler = Object.assign(function internalHandler() {}, { displayName: "savePreferences" });
     expect(eventHandlerName(nodeFor(fiber({ onClick: handler })), "click")).toBe(
       "savePreferences",
     );
