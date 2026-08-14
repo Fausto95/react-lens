@@ -1,14 +1,23 @@
 /**
- * Spawns the OffscreenCanvas timeline renderer for the base layer and transfers
- * control of that canvas into the worker. Overlay + pointer/keyboard stay on
- * the main thread.
+ * Worker-backed timeline renderer.
+ *
+ * The DOM canvas stays owned by the panel. Heavy layout/paint runs on a worker-
+ * owned OffscreenCanvas and arrives as an ImageBitmap; the main thread only
+ * performs a cheap bitmap blit. If the worker fails, the normal DOM canvas is
+ * still usable for a correctness fallback — unlike transferControlToOffscreen.
  */
 
 import type { AxisSnapshot, TimeSpan } from "./model/axis.js";
+import { hydrateAxis } from "./model/axis.js";
 import type { ViewWindow } from "./model/viewport.js";
 import type { LaneLayout } from "./model/rows.js";
 import type { TimelineTheme } from "./view/timelineTheme.js";
-import type { ClipRect, TimelineViewMode } from "./view/draw.js";
+import {
+  drawBase,
+  ensureHatchPattern,
+  type ClipRect,
+  type TimelineViewMode,
+} from "./view/draw.js";
 
 export type TimelineGeometryPayload = {
   count: number;
@@ -56,145 +65,182 @@ type RendererRecord = {
   cancelDispose: () => void;
 };
 
-/**
- * `transferControlToOffscreen()` is permanent for a DOM canvas. React Strict
- * Mode mounts effects, cleans them up, then mounts them again while reusing the
- * same canvas node, so renderer disposal must be deferred long enough for that
- * remount to reclaim the worker.
- */
-const liveRenderers = new WeakMap<HTMLCanvasElement, RendererRecord>();
-const transferredCanvases = new WeakSet<HTMLCanvasElement>();
+type PendingPaint = {
+  payload: TimelineBasePaintPayload;
+  onHit?: (clipRects: Map<string, ClipRect>, snapEdges: number[]) => void;
+};
 
-export function isTimelineCanvasTransferred(canvas: HTMLCanvasElement): boolean {
-  return transferredCanvases.has(canvas);
+type WorkerMessage =
+  | { type: "ready" }
+  | {
+      type: "frame";
+      requestId: number;
+      bitmap: ImageBitmap;
+      clipRects?: Array<[string, ClipRect]>;
+      snapEdges?: number[];
+    }
+  | { type: "error"; requestId?: number; message: string };
+
+const liveRenderers = new WeakMap<HTMLCanvasElement, RendererRecord>();
+
+export function isTimelineCanvasTransferred(_canvas: HTMLCanvasElement): boolean {
+  // Kept for callers/tests from the previous implementation. The DOM canvas is
+  // intentionally never transferred anymore.
+  return false;
 }
 
 export function createTimelineRenderer(canvas: HTMLCanvasElement): TimelineRendererClient | null {
-  // Correctness first: once a canvas is transferred to OffscreenCanvas, a
-  // worker/bootstrap error leaves the base layer permanently blank because the
-  // DOM canvas can no longer fall back to getContext("2d"). Keep the existing
-  // worker implementation available for explicit testing, but default the
-  // production timeline to the viewport-capped main-thread renderer until the
-  // worker has an acknowledged/error fallback handshake.
-  if (canvas.dataset.timelineWorker !== "on") return null;
-
   const existing = liveRenderers.get(canvas);
   if (existing) {
     existing.cancelDispose();
     return existing.client;
   }
   if (typeof OffscreenCanvas === "undefined" || typeof Worker === "undefined") return null;
-  if (typeof canvas.transferControlToOffscreen !== "function") return null;
-  // A transferred canvas can never fall back to DOM 2D or be transferred a
-  // second time. If no live renderer owns it, fail closed rather than throwing.
-  if (transferredCanvases.has(canvas)) return null;
+
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return null;
 
   let worker: Worker;
   try {
-    worker = new Worker(new URL("./timelineRendererWorker.ts", import.meta.url), {
-      type: "module",
-    });
+    worker = new Worker(new URL("./timelineRendererWorker.ts", import.meta.url), { type: "module" });
   } catch {
     return null;
   }
 
+  let width = Math.max(1, canvas.clientWidth || canvas.width || 1);
+  let height = Math.max(1, canvas.clientHeight || canvas.height || 1);
+  let dpr = typeof devicePixelRatio === "number" ? devicePixelRatio : 1;
   let ready = false;
-  const pending: Array<{
-    payload: TimelineBasePaintPayload;
-    onHit?: (clipRects: Map<string, ClipRect>, snapEdges: number[]) => void;
-  }> = [];
-  let hitCb: ((clipRects: Map<string, ClipRect>, snapEdges: number[]) => void) | null = null;
+  let failed = false;
+  let requestId = 0;
+  let lastApplied = 0;
+  let pending: PendingPaint | null = null;
+  let lastSubmitted: PendingPaint | null = null;
+  const callbacks = new Map<
+    number,
+    ((clipRects: Map<string, ClipRect>, snapEdges: number[]) => void) | undefined
+  >();
+  let fallbackPattern: CanvasPattern | null = null;
 
-  worker.onmessage = (
-    e: MessageEvent<{ type: string; clipRects?: Array<[string, ClipRect]>; snapEdges?: number[] }>,
-  ) => {
-    if (e.data?.type === "ready") {
-      ready = true;
-      for (const p of pending) paintNow(p.payload, p.onHit);
-      pending.length = 0;
-      return;
-    }
-    if (e.data?.type === "hit" && e.data.clipRects && e.data.snapEdges) {
-      hitCb?.(new Map(e.data.clipRects), e.data.snapEdges);
-      hitCb = null;
-    }
+  const sizeDomCanvas = () => {
+    canvas.width = Math.max(1, Math.ceil(width * dpr));
+    canvas.height = Math.max(1, Math.ceil(height * dpr));
+    canvas.style.width = `${width}px`;
+    canvas.style.height = `${height}px`;
   };
 
-  let offscreen: OffscreenCanvas;
-  try {
-    offscreen = canvas.transferControlToOffscreen();
-    transferredCanvases.add(canvas);
-  } catch {
+  const fallbackPaint = (item: PendingPaint) => {
+    sizeDomCanvas();
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    if (!fallbackPattern) fallbackPattern = ensureHatchPattern(ctx);
+    const p = item.payload;
+    const axis = hydrateAxis(p.axis);
+    const aToX = (a: number) =>
+      p.nameW + ((a - p.view.a0) / (p.view.a1 - p.view.a0 || 1)) * (p.stageW - p.nameW);
+    const wToX = (t: number) => aToX(axis.wallToAxis(t));
+    const result = drawBase({
+      ctx,
+      axis,
+      view: p.view,
+      layout: p.layout,
+      ...(p.geometry ? { geometry: p.geometry } : {}),
+      region: p.region,
+      markers: p.markers,
+      selectedRender: p.selectedRender,
+      proj: { aToX, wToX, nameW: p.nameW, stageW: p.stageW, pxPerMs: p.pxPerMs },
+      pattern: fallbackPattern,
+      tOrigin: p.tOrigin,
+      theme: p.theme,
+      viewMode: p.viewMode,
+    });
+    item.onHit?.(result.clipRects, result.snapEdges);
+  };
+
+  const fail = () => {
+    if (failed) return;
+    failed = true;
     worker.terminate();
-    return null;
-  }
+    callbacks.clear();
+    const item = lastSubmitted ?? pending;
+    pending = null;
+    if (item) fallbackPaint(item);
+  };
 
-  const dpr = typeof devicePixelRatio === "number" ? devicePixelRatio : 1;
-  worker.postMessage(
-    {
-      type: "init",
-      canvas: offscreen,
-      width: canvas.clientWidth || canvas.width,
-      height: canvas.clientHeight || canvas.height,
-      dpr,
-    },
-    [offscreen],
-  );
-
-  function paintNow(
-    payload: TimelineBasePaintPayload,
-    onHit?: (clipRects: Map<string, ClipRect>, snapEdges: number[]) => void,
-  ): void {
-    if (onHit) hitCb = onHit;
-    const transfer: Transferable[] = [];
-    const geo = payload.geometry;
-    if (geo && geo.count > 0) {
-      for (const buf of [
-        geo.rowIndex.buffer,
-        geo.x0.buffer,
-        geo.x1.buffer,
-        geo.self.buffer,
-        geo.renderId.buffer,
-        geo.componentId.buffer,
-        geo.cause.buffer,
-        geo.flags.buffer,
-        geo.stackRow.buffer,
-        geo.aggregate.buffer,
-        geo.renderCount.buffer,
-        geo.wastedCount.buffer,
-      ]) {
-        if (buf instanceof ArrayBuffer) transfer.push(buf);
-      }
-
-      // At far semantic zoom the worker paints aggregate density from the
-      // viewport lane clips. Keep those lightweight LOD clips; detailed zoom
-      // strips objects and uses only transferable columns.
-      const keepLaneClips = payload.viewMode === "density" || payload.pxPerMs < 30;
-      if (!keepLaneClips) {
-        const stripLaneClips = <T extends { clips: unknown[] }>(lane: T): T => ({
-          ...lane,
-          clips: [] as unknown[] as T["clips"],
-        });
-        const slim = {
-          ...payload,
-          layout: {
-            ...payload.layout,
-            rows: payload.layout.rows.map((r) => ({
-              ...r,
-              lane: stripLaneClips(r.lane),
-              clips: [] as typeof r.clips,
-            })),
-            quietLanes: payload.layout.quietLanes.map(stripLaneClips),
-          },
-        };
-        worker.postMessage({ type: "paint", payload: slim, wantHit: !!onHit }, transfer);
-        return;
-      }
-      worker.postMessage({ type: "paint", payload, wantHit: !!onHit }, transfer);
+  worker.onmessage = (event: MessageEvent<WorkerMessage>) => {
+    const message = event.data;
+    if (message.type === "ready") {
+      ready = true;
+      const item = pending;
+      pending = null;
+      if (item) sendPaint(item);
       return;
     }
-    worker.postMessage({ type: "paint", payload, wantHit: !!onHit });
+    if (message.type === "error") {
+      fail();
+      return;
+    }
+    if (message.type !== "frame") return;
+
+    const callback = callbacks.get(message.requestId);
+    callbacks.delete(message.requestId);
+    if (message.requestId < lastApplied) {
+      message.bitmap.close();
+      return;
+    }
+    lastApplied = message.requestId;
+
+    sizeDomCanvas();
+    ctx.save();
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(message.bitmap, 0, 0, canvas.width, canvas.height);
+    ctx.restore();
+    message.bitmap.close();
+
+    if (callback && message.clipRects && message.snapEdges) {
+      callback(new Map(message.clipRects), message.snapEdges);
+    }
+    for (const id of callbacks.keys()) {
+      if (id < lastApplied) callbacks.delete(id);
+    }
+  };
+  worker.onerror = () => fail();
+  worker.onmessageerror = () => fail();
+
+  function sendPaint(item: PendingPaint): void {
+    if (failed) {
+      fallbackPaint(item);
+      return;
+    }
+    lastSubmitted = item;
+    const id = ++requestId;
+    callbacks.set(id, item.onHit);
+
+    // Do not transfer the query's source buffers: transfer would detach them and
+    // make subsequent paints/hover updates observe empty arrays. Structured clone
+    // is bounded by the viewport primitive cap and preserves the authoritative
+    // query result on the panel side.
+    const p = item.payload;
+    const keepLaneClips = p.viewMode === "density" || p.pxPerMs < 2;
+    const payload = !p.geometry || keepLaneClips
+      ? p
+      : {
+          ...p,
+          layout: {
+            ...p.layout,
+            rows: p.layout.rows.map((row) => ({
+              ...row,
+              lane: { ...row.lane, clips: [] },
+              clips: [] as typeof row.clips,
+            })),
+            quietLanes: [],
+          },
+        };
+    worker.postMessage({ type: "paint", requestId: id, payload, wantHit: !!item.onHit });
   }
+
+  sizeDomCanvas();
+  worker.postMessage({ type: "init", width, height, dpr });
 
   let disposeTimer: ReturnType<typeof setTimeout> | null = null;
   const cancelDispose = () => {
@@ -204,19 +250,28 @@ export function createTimelineRenderer(canvas: HTMLCanvasElement): TimelineRende
   };
 
   const client: TimelineRendererClient = {
-    resize(width, height, nextDpr) {
-      worker.postMessage({ type: "resize", width, height, dpr: nextDpr });
+    resize(nextWidth, nextHeight, nextDpr) {
+      width = Math.max(1, nextWidth);
+      height = Math.max(1, nextHeight);
+      dpr = Math.max(1, nextDpr);
+      sizeDomCanvas();
+      if (!failed) worker.postMessage({ type: "resize", width, height, dpr });
     },
     paint(payload, onHit) {
-      if (!ready) {
-        pending.push({ payload, onHit });
+      const item = { payload, onHit };
+      lastSubmitted = item;
+      if (failed) {
+        fallbackPaint(item);
         return;
       }
-      paintNow(payload, onHit);
+      if (!ready) {
+        // Coalesce startup churn. Only the freshest viewport deserves a frame.
+        pending = item;
+        return;
+      }
+      sendPaint(item);
     },
     dispose() {
-      // Strict Mode immediately remounts and calls createTimelineRenderer on
-      // the same node. A macrotask delay lets that remount cancel disposal.
       if (disposeTimer !== null) return;
       disposeTimer = setTimeout(() => {
         disposeTimer = null;
