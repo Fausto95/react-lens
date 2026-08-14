@@ -3,814 +3,104 @@
   <head>
     <meta charset="UTF-8" />
     <title>React Lens — OG card source</title>
-    <!--
-      Source of truth for apps/site/public/og.png. Screenshot it with
-      `pnpm og:site` (apps/site/scripts/og.mjs) after any headline change.
-
-      Self-contained on purpose: loaded over file://, so no bundler, no network
-      fonts, no imports. The palette below is copied from src/site.css so the
-      card and the product read as one instrument.
-    -->
     <style>
       :root {
         --bg: #0b0d10;
-        --raised: #12151a;
-        --hover: #171b22;
-        --border: #232833;
-        --border-strong: #2f3644;
+        --panel: #12151a;
+        --surface: #0d1015;
+        --border: #2f3644;
         --text: #e6e9ef;
         --dim: #99a1b3;
         --faint: #5f6878;
         --accent: #a78bfa;
         --green: #4ade80;
         --orange: #fb923c;
-        --font: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-        --mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, monospace;
+        --cyan: #5eead4;
+        font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
       }
-      * {
-        box-sizing: border-box;
-      }
-      html,
+      * { box-sizing: border-box; }
+      html, body { margin: 0; width: 1200px; height: 630px; overflow: hidden; background: var(--bg); color: var(--text); }
       body {
-        margin: 0;
-      }
-      body {
-        width: 1200px;
-        height: 630px;
-        background: var(--bg);
-        color: var(--text);
-        font-family: var(--font);
-        -webkit-font-smoothing: antialiased;
-        overflow: hidden;
-      }
-      .card {
-        position: relative;
-        width: 1200px;
-        height: 630px;
-        display: grid;
-        grid-template-columns: 592px 608px;
-      }
-      /* Faint instrument grid, fading out to the left. */
-      .grid {
-        position: absolute;
-        inset: 0;
-        background-image:
-          linear-gradient(to right, #ffffff0a 1px, transparent 1px),
-          linear-gradient(to bottom, #ffffff0a 1px, transparent 1px);
+        background-image: linear-gradient(#ffffff08 1px, transparent 1px), linear-gradient(90deg, #ffffff08 1px, transparent 1px);
         background-size: 40px 40px;
-        mask-image: linear-gradient(to right, transparent, #000 55%);
-        -webkit-mask-image: linear-gradient(to right, transparent, #000 55%);
       }
-
-      /* ---- Left: pitch ---- */
-      .pitch {
-        position: relative;
-        padding: 62px 40px 56px 72px;
-        display: flex;
-        flex-direction: column;
-      }
-      .brand {
-        display: flex;
-        align-items: center;
-        gap: 12px;
-        font-size: 26px;
-        font-weight: 600;
-        letter-spacing: -0.01em;
-      }
-      .brand svg {
-        color: var(--accent);
-      }
-      h1 {
-        margin: 52px 0 0;
-        font-size: 48px;
-        font-weight: 700;
-        line-height: 1.08;
-        letter-spacing: -0.03em;
-        max-width: 14ch;
-      }
-      h1 .accent {
-        color: var(--accent);
-      }
-      .sub {
-        margin: 22px 0 0;
-        font-size: 18px;
-        line-height: 1.45;
-        color: var(--dim);
-        max-width: 28rem;
-      }
-      .features {
-        margin-top: auto;
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: 18px 32px;
-        font-size: 19px;
-      }
-      .feature {
-        display: flex;
-        align-items: center;
-        gap: 12px;
-        white-space: nowrap;
-      }
-      .feature svg {
-        color: var(--accent);
-        flex: none;
-      }
-
-      /* ---- Right: panel mock ---- */
-      .panel-wrap {
-        position: relative;
-        /* Grid items size to content by default; the panel must obey the
-           608px column so nothing spills past the 1200px card. */
-        min-width: 0;
-        padding: 56px 24px 56px 0;
-      }
-      .panel {
-        height: 100%;
-        width: 100%;
-        border: 1px solid var(--border);
-        border-radius: 14px;
-        background: var(--raised);
-        overflow: hidden;
-        display: grid;
-        /* The implicit column would be max-content and blow past the panel. */
-        grid-template-columns: minmax(0, 1fr);
-        grid-template-rows: 48px 1fr auto 24px;
-        font-size: 13px;
-      }
-      .topbar {
-        display: flex;
-        align-items: center;
-        gap: 10px;
-        padding: 0 14px;
-        border-bottom: 1px solid var(--border);
-      }
-      .topbar .name {
-        display: flex;
-        align-items: center;
-        gap: 9px;
-        font-size: 14px;
-        font-weight: 600;
-      }
-      .topbar .name svg {
-        color: var(--accent);
-      }
-      .topbar .tools {
-        margin-left: auto;
-        display: flex;
-        align-items: center;
-        gap: 14px;
-        color: var(--dim);
-      }
-      .topbar .rec {
-        color: #f87171;
-      }
-
-      .cols {
-        display: grid;
-        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-        border-bottom: 1px solid var(--border);
-        min-height: 0;
-      }
-      .col {
-        min-width: 0;
-        padding: 10px 0 12px;
-      }
-      .col + .col {
-        border-left: 1px solid var(--border);
-      }
-      .col-head {
-        padding: 0 12px 8px;
-        font-size: 10px;
-        letter-spacing: 0.12em;
-        color: var(--faint);
-      }
-      .chips {
-        display: flex;
-        gap: 6px;
-        padding: 0 12px 10px;
-      }
-      .chip {
-        padding: 3px 9px;
-        border: 1px solid var(--border-strong);
-        border-radius: 999px;
-        font-size: 11px;
-        color: var(--dim);
-      }
-      .chip.on {
-        background: #a78bfa22;
-        border-color: #a78bfa66;
-        color: var(--text);
-      }
-      .chip.warn {
-        border-color: #fb923c66;
-        color: var(--orange);
-      }
-      .filter {
-        margin: 0 12px 8px;
-        padding: 5px 9px;
-        border: 1px solid var(--border);
-        border-radius: 7px;
-        color: var(--faint);
-        font-size: 11px;
-      }
-      .row {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        padding: 3px 12px;
-        font-size: 12.5px;
-      }
-      .row.sel {
-        background: #a78bfa1f;
-        box-shadow: inset 2px 0 0 var(--accent);
-      }
-      .row .bullet {
-        color: var(--faint);
-      }
-      .row .nm {
-        color: var(--text);
-      }
-      .row .metrics {
-        margin-left: auto;
-        display: flex;
-        gap: 10px;
-        font-family: var(--mono);
-        font-size: 11.5px;
-        color: var(--dim);
-      }
-      .row.sel .metrics {
-        color: var(--accent);
-      }
-      .badge {
-        padding: 1px 6px;
-        border-radius: 5px;
-        font-size: 10.5px;
-        background: #fb923c22;
-        color: var(--orange);
-      }
-
-      .kv {
-        display: flex;
-        align-items: baseline;
-        gap: 10px;
-        padding: 4px 12px;
-        color: var(--dim);
-        font-size: 12.5px;
-      }
-      .kv .v {
-        margin-left: auto;
-        font-family: var(--mono);
-        font-size: 11.5px;
-        color: var(--text);
-      }
-      .sig {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        padding: 0 12px 8px;
-        font-family: var(--mono);
-        font-size: 13px;
-      }
-      .agent {
-        margin: 10px 12px 0;
-        padding: 9px 11px;
-        border: 1px solid #a78bfa44;
-        border-radius: 9px;
-        background: #a78bfa14;
-      }
-      .agent .hd {
-        display: flex;
-        align-items: center;
-        gap: 7px;
-        color: var(--accent);
-        font-size: 12px;
-        font-weight: 600;
-        margin-bottom: 5px;
-      }
-      .agent p {
-        margin: 0;
-        font-size: 12px;
-        line-height: 1.5;
-        color: var(--text);
-      }
-      code {
-        font-family: var(--mono);
-        font-size: 11px;
-        padding: 1px 5px;
-        border-radius: 4px;
-        background: #ffffff12;
-      }
-      code.id {
-        color: var(--accent);
-        background: #a78bfa22;
-      }
-
-      /* Timeline */
-      .tl-tools {
-        display: flex;
-        align-items: center;
-        gap: 14px;
-        padding: 8px 14px;
-        color: var(--dim);
-        border-bottom: 1px solid var(--border);
-      }
-      .tl-tools .on {
-        color: var(--accent);
-        border: 1px solid #a78bfa66;
-        border-radius: 6px;
-        padding: 2px 4px;
-        background: #a78bfa1f;
-        display: inline-flex;
-      }
-      .tl-tools .fit {
-        font-size: 11px;
-        color: var(--faint);
-      }
-      .tl-tools .past {
-        margin-left: auto;
-        display: flex;
-        align-items: center;
-        gap: 6px;
-        padding: 2px 9px;
-        border: 1px solid #a78bfa66;
-        border-radius: 999px;
-        background: #a78bfa1f;
-        color: var(--accent);
-        font-size: 11px;
-      }
-      .ticks {
-        display: flex;
-        gap: 0;
-        padding: 6px 14px 4px 58px;
-        font-family: var(--mono);
-        font-size: 10px;
-        color: var(--faint);
-      }
-      .ticks span {
-        width: 91px;
-      }
-      .lane {
-        display: grid;
-        grid-template-columns: 44px 1fr;
-        align-items: center;
-        gap: 0;
-        padding: 3px 14px 3px 14px;
-      }
-      .lane .lbl {
-        font-family: var(--mono);
-        font-size: 10px;
-        color: var(--faint);
-      }
-      .lane .track {
-        position: relative;
-        height: 18px;
-      }
-      .bar {
-        position: absolute;
-        top: 2px;
-        height: 15px;
-        border-radius: 4px;
-        font-family: var(--mono);
-        font-size: 10.5px;
-        line-height: 15px;
-        padding: 0 6px;
-        white-space: nowrap;
-        overflow: hidden;
-      }
-      .bar.ixn {
-        background: #171b22;
-        border: 1px solid var(--border-strong);
-        color: var(--text);
-      }
-      .bar.cmp {
-        background: #a78bfa26;
-        border: 1px solid #a78bfa5c;
-        color: var(--text);
-      }
-      .cmt {
-        position: absolute;
-        top: 1px;
-        width: 4px;
-        height: 17px;
-        border-radius: 2px;
-        background: var(--orange);
-      }
-      /* Playhead parked in the past — the rewind story, made visible. */
-      .playhead {
-        position: absolute;
-        top: 0;
-        bottom: 0;
-        width: 2px;
-        background: var(--accent);
-      }
-      .playhead::after {
-        content: "";
-        position: absolute;
-        top: -4px;
-        left: -4px;
-        width: 10px;
-        height: 10px;
-        border-radius: 3px;
-        background: var(--accent);
-      }
-      .tl-body {
-        position: relative;
-        padding-bottom: 8px;
-      }
-      .statusbar {
-        display: flex;
-        align-items: center;
-        gap: 14px;
-        padding: 0 14px;
-        border-top: 1px solid var(--border);
-        font-family: var(--mono);
-        font-size: 10.5px;
-        color: var(--faint);
-      }
-      .statusbar .right {
-        margin-left: auto;
-        display: flex;
-        align-items: center;
-        gap: 6px;
-        color: var(--accent);
-      }
-      .dot {
-        width: 6px;
-        height: 6px;
-        border-radius: 50%;
-        background: currentColor;
-        display: inline-block;
-      }
+      .card { width: 1200px; height: 630px; display: grid; grid-template-columns: 610px 590px; }
+      .pitch { padding: 58px 40px 54px 70px; display: flex; flex-direction: column; }
+      .brand { display: flex; align-items: center; gap: 12px; font-size: 27px; font-weight: 700; }
+      .lens { width: 30px; height: 30px; border: 3px solid var(--accent); border-radius: 50%; position: relative; }
+      .lens::after { content: ""; width: 8px; height: 8px; background: var(--accent); border-radius: 50%; position: absolute; inset: 0; margin: auto; }
+      h1 { margin: 62px 0 0; font-size: 55px; line-height: 1.08; letter-spacing: -0.04em; }
+      h1 span { display: block; color: var(--accent); }
+      .sub { margin-top: 24px; color: var(--dim); font-size: 20px; line-height: 1.5; max-width: 500px; }
+      .features { margin-top: auto; display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+      .feature { border: 1px solid var(--border); border-radius: 10px; background: var(--panel); padding: 10px 13px; }
+      .feature b { display: block; color: var(--accent); font-size: 11px; letter-spacing: .08em; margin-bottom: 4px; }
+      .feature span { font-size: 14px; }
+      .stage { padding: 54px 40px 54px 4px; }
+      .panel { width: 100%; height: 100%; border: 1px solid var(--border); border-radius: 16px; background: var(--panel); padding: 16px; }
+      .top { display: flex; justify-content: space-between; align-items: center; font-size: 13px; font-weight: 700; margin-bottom: 14px; }
+      .tabs { color: var(--dim); font-weight: 500; }
+      .tabs b { color: var(--accent); margin-left: 12px; }
+      .cascade { height: 332px; border: 1px solid #232833; border-radius: 12px; background: var(--surface); position: relative; overflow: hidden; }
+      .label { position: absolute; left: 14px; top: 12px; color: var(--faint); font-size: 10px; letter-spacing: .08em; font-weight: 700; }
+      svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+      .node { position: absolute; min-width: 102px; padding: 8px 10px; border: 1px solid var(--accent); border-radius: 8px; background: #161a22; font-size: 11px; font-weight: 700; }
+      .node small { display: block; color: var(--faint); font-size: 9px; margin-top: 3px; font-weight: 500; }
+      .n1 { left: 26px; top: 94px; border-color: var(--accent); }
+      .n2 { left: 192px; top: 82px; border-color: var(--green); }
+      .n3 { left: 354px; top: 52px; border-color: var(--cyan); }
+      .n4 { left: 354px; top: 124px; border-color: var(--orange); }
+      .n5 { left: 192px; top: 194px; border-color: var(--accent); }
+      .n6 { left: 354px; top: 214px; border-color: var(--green); }
+      .focus { position: absolute; left: 16px; bottom: 14px; border: 1px solid #a78bfa66; background: #a78bfa15; color: var(--accent); padding: 6px 10px; border-radius: 8px; font-size: 10px; }
+      .timeline { margin-top: 16px; }
+      .timeline-head { color: var(--faint); font-size: 10px; letter-spacing: .08em; font-weight: 700; margin-bottom: 10px; }
+      .track { height: 54px; position: relative; border-top: 1px solid var(--border); }
+      .clip { position: absolute; top: 12px; height: 22px; border: 1px solid var(--accent); background: #a78bfa18; border-radius: 5px; }
+      .c1 { left: 14px; width: 104px; }
+      .c2 { left: 132px; width: 150px; border-color: var(--green); background: #4ade8014; }
+      .c3 { left: 298px; width: 114px; border-color: var(--orange); background: #fb923c14; }
+      .c4 { left: 428px; width: 68px; }
+      .playhead { position: absolute; left: 342px; top: -10px; bottom: 0; width: 2px; background: var(--accent); }
+      .status { color: var(--dim); font-size: 10px; margin-top: -2px; }
     </style>
   </head>
   <body>
     <div class="card">
-      <div class="grid"></div>
-
       <section class="pitch">
-        <div class="brand">
-          <!-- IconLens @ 34 -->
-          <svg
-            width="34"
-            height="34"
-            viewBox="0 0 16 16"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="1.4"
-          >
-            <circle cx="8" cy="8" r="6" />
-            <circle cx="8" cy="8" r="2.2" fill="currentColor" stroke="none" />
-          </svg>
-          React Lens
-        </div>
-
-        <h1>React debugging with <span class="accent">receipts</span>.</h1>
-        <p class="sub">
-          Time travel through real state. Trace a render to its cause. Preview waste before you
-          change code. Diff two moments — or two sessions in CI. Human or AI agent — every answer
-          cites the exact render, component, and line.
-        </p>
-
+        <div class="brand"><span class="lens"></span> React Lens</div>
+        <h1>See every render.<span>Follow every cause.</span></h1>
+        <p class="sub">Time-travel through React state, inspect interactions on a professional timeline, and trace render cascades from trigger to component.</p>
         <div class="features">
-          <div class="feature">
-            <!-- IconRewind -->
-            <svg
-              width="22"
-              height="22"
-              viewBox="0 0 16 16"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="1.4"
-              stroke-linecap="round"
-            >
-              <path d="M3 8a5 5 0 1 1 1.5 3.6" />
-              <path d="M3 8V5M3 8h3" />
+          <div class="feature"><b>TIME TRAVEL</b><span>Rewind real React state</span></div>
+          <div class="feature"><b>CASCADE</b><span>See causal render paths</span></div>
+          <div class="feature"><b>AI + MCP</b><span>Diagnose with Lens IDs</span></div>
+          <div class="feature"><b>CI DIFFS</b><span>Compare sessions</span></div>
+        </div>
+      </section>
+      <section class="stage">
+        <div class="panel">
+          <div class="top"><span>React Lens</span><span class="tabs">Timeline <b>Cascade</b></span></div>
+          <div class="cascade">
+            <div class="label">CASCADE · INTERACTION → RENDER FANOUT</div>
+            <svg viewBox="0 0 520 332" fill="none" stroke="#6d5bb0" stroke-width="3">
+              <path d="M133 116 C160 116 170 103 192 103"/><path d="M294 103 C320 103 326 75 354 75"/><path d="M294 103 C326 103 327 146 354 146"/><path d="M133 116 C160 116 170 215 192 215"/><path d="M294 215 C322 215 327 235 354 235"/>
             </svg>
-            Time travel
+            <div class="node n1">Add to cart<small>interaction</small></div>
+            <div class="node n2">Cart<small>state</small></div>
+            <div class="node n3">Header<small>parent</small></div>
+            <div class="node n4">CartBadge<small>context</small></div>
+            <div class="node n5">Shop<small>props</small></div>
+            <div class="node n6">ProductRow<small>parent</small></div>
+            <div class="focus">Focus: expensive · roots · upstream/downstream</div>
           </div>
-          <div class="feature">
-            <!-- IconSparkle -->
-            <svg width="22" height="22" viewBox="0 0 16 16" fill="none">
-              <path
-                d="M8 2.5c.5 2.6 1.4 3.5 4 4-2.6.5-3.5 1.4-4 4-.5-2.6-1.4-3.5-4-4 2.6-.5 3.5-1.4 4-4z"
-                fill="currentColor"
-              />
-              <path
-                d="M12.6 10.4c.25 1.3.7 1.75 2 2-1.3.25-1.75.7-2 2-.25-1.3-.7-1.75-2-2 1.3-.25 1.75-.7 2-2z"
-                fill="currentColor"
-              />
-            </svg>
-            AI agent, BYOK
-          </div>
-          <div class="feature">
-            <!-- IconCrosshair -->
-            <svg
-              width="22"
-              height="22"
-              viewBox="0 0 16 16"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="1.4"
-              stroke-linecap="round"
-            >
-              <circle cx="8" cy="8" r="3.5" />
-              <path d="M8 1.5v2.5M8 12v2.5M1.5 8h2.5M12 8h2.5" />
-            </svg>
-            Render causes
-          </div>
-          <div class="feature">
-            <!-- IconDoctor -->
-            <svg
-              width="22"
-              height="22"
-              viewBox="0 0 16 16"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="1.4"
-              stroke-linecap="round"
-            >
-              <path d="M5 2v3.5a3 3 0 0 0 6 0V2" />
-              <path d="M8 8.5v2.5a3 3 0 0 0 5 0" />
-              <circle cx="13" cy="10.5" r="1.4" />
-            </svg>
-            AST Doctor
-          </div>
-          <div class="feature">
-            <!-- IconBolt -->
-            <svg width="22" height="22" viewBox="0 0 16 16" fill="none">
-              <path d="M9 1.5 3.5 9H8l-1 5.5L12.5 7H8z" fill="currentColor" />
-            </svg>
-            Waste detection
-          </div>
-          <div class="feature">
-            <!-- Suspense boundary — a deferred branch -->
-            <svg
-              width="22"
-              height="22"
-              viewBox="0 0 16 16"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="1.4"
-              stroke-linecap="round"
-            >
-              <path d="M4 2v9a2 2 0 0 0 2 2h6" />
-              <path d="M12 4H8" stroke-dasharray="2 2" />
-            </svg>
-            Suspense &amp; RSC
+          <div class="timeline">
+            <div class="timeline-head">TIMELINE</div>
+            <div class="track"><span class="clip c1"></span><span class="clip c2"></span><span class="clip c3"></span><span class="clip c4"></span><span class="playhead"></span></div>
+            <div class="status">interaction #42 · 6 renders · 2 wasted · 12.4ms</div>
           </div>
         </div>
       </section>
-
-      <div class="panel-wrap">
-        <div class="panel">
-          <div class="topbar">
-            <div class="name">
-              <svg
-                width="17"
-                height="17"
-                viewBox="0 0 16 16"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="1.4"
-              >
-                <circle cx="8" cy="8" r="6" />
-                <circle cx="8" cy="8" r="2.2" fill="currentColor" stroke="none" />
-              </svg>
-              React Lens
-            </div>
-            <div class="tools">
-              <svg width="15" height="15" viewBox="0 0 16 16" fill="none">
-                <path
-                  d="M8 2.5c.5 2.6 1.4 3.5 4 4-2.6.5-3.5 1.4-4 4-.5-2.6-1.4-3.5-4-4 2.6-.5 3.5-1.4 4-4z"
-                  fill="currentColor"
-                />
-              </svg>
-              <svg
-                width="15"
-                height="15"
-                viewBox="0 0 16 16"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="1.4"
-                stroke-linecap="round"
-              >
-                <path d="M8 3.5v9M3.5 8h9" />
-              </svg>
-              <svg
-                width="15"
-                height="15"
-                viewBox="0 0 16 16"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="1.4"
-                stroke-linecap="round"
-              >
-                <circle cx="7" cy="7" r="4.5" />
-                <path d="m11 11 3 3" />
-              </svg>
-              <svg
-                width="15"
-                height="15"
-                viewBox="0 0 16 16"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="1.4"
-                stroke-linecap="round"
-              >
-                <path d="M2.5 5.5h11M2.5 10.5h11" />
-                <circle cx="6" cy="5.5" r="1.7" fill="#12151a" />
-                <circle cx="10" cy="10.5" r="1.7" fill="#12151a" />
-              </svg>
-              <svg class="rec" width="15" height="15" viewBox="0 0 16 16" fill="none">
-                <circle cx="8" cy="8" r="4.5" fill="currentColor" />
-              </svg>
-            </div>
-          </div>
-
-          <div class="cols">
-            <div class="col">
-              <div class="col-head">TREE</div>
-              <div class="chips">
-                <span class="chip on">All</span>
-                <span class="chip">△</span>
-                <span class="chip warn">Waste</span>
-              </div>
-              <div class="filter">Filter by name, /regex/, render…</div>
-              <div class="row">
-                <span class="bullet">·</span><span class="nm">App</span
-                ><span class="metrics"><span>1×</span><span>5.7ms</span></span>
-              </div>
-              <div class="row" style="padding-left: 24px">
-                <span class="bullet">·</span><span class="nm">Hero</span
-                ><span class="metrics"><span>1×</span><span>2.6ms</span></span>
-              </div>
-              <div class="row" style="padding-left: 36px">
-                <span class="bullet">·</span><span class="nm">ProductList</span
-                ><span class="metrics"><span>3×</span><span>14.2ms</span></span>
-              </div>
-              <div class="row sel" style="padding-left: 48px">
-                <span class="nm">FilterBar</span><span class="badge">waste ×6</span
-                ><span class="metrics"><span>6×</span><span>3.1ms</span></span>
-              </div>
-              <div class="row" style="padding-left: 48px">
-                <span class="nm">PriceCell</span
-                ><span class="metrics"><span>1×</span><span>0.4ms</span></span>
-              </div>
-              <div class="row" style="padding-left: 24px">
-                <span class="bullet">·</span><span class="nm">ProductGrid</span
-                ><span class="metrics"><span>1×</span><span>6.8ms</span></span>
-              </div>
-            </div>
-
-            <div class="col">
-              <div class="col-head">INSPECTOR</div>
-              <div class="sig">
-                <span>&lt;FilterBar&gt;</span>
-                <span class="badge">wasted ×6</span>
-              </div>
-              <div class="kv">Why did it render?<span class="v">props: options</span></div>
-              <div class="kv">Visible change<span class="v">none · 6 of 6</span></div>
-              <div class="agent">
-                <div class="hd">
-                  <svg width="13" height="13" viewBox="0 0 16 16" fill="none">
-                    <path
-                      d="M8 2.5c.5 2.6 1.4 3.5 4 4-2.6.5-3.5 1.4-4 4-.5-2.6-1.4-3.5-4-4 2.6-.5 3.5-1.4 4-4z"
-                      fill="currentColor"
-                    />
-                  </svg>
-                  Agent
-                </div>
-                <p>
-                  Parent passes a new inline <code>options</code> object each commit
-                  <code class="id">rl:cmt-41</code>. Hoist it or derive it in the store.
-                </p>
-              </div>
-            </div>
-          </div>
-
-          <div>
-            <div class="tl-tools">
-              <svg
-                width="15"
-                height="15"
-                viewBox="0 0 16 16"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="1.4"
-                stroke-linecap="round"
-              >
-                <path d="M3 5.5V3h2.5M13 5.5V3h-2.5M3 10.5V13h2.5M13 10.5V13h-2.5" />
-              </svg>
-              <svg width="15" height="15" viewBox="0 0 16 16" fill="none">
-                <path
-                  d="M3.5 3.5v9"
-                  stroke="currentColor"
-                  stroke-width="1.4"
-                  stroke-linecap="round"
-                />
-                <path d="M12.5 3.5v9L5.5 8z" fill="currentColor" />
-              </svg>
-              <svg width="15" height="15" viewBox="0 0 16 16" fill="none">
-                <path d="M5.5 3.5v9l8-4.5z" fill="currentColor" />
-              </svg>
-              <svg width="15" height="15" viewBox="0 0 16 16" fill="none">
-                <path
-                  d="M12.5 3.5v9"
-                  stroke="currentColor"
-                  stroke-width="1.4"
-                  stroke-linecap="round"
-                />
-                <path d="M3.5 3.5v9L10.5 8z" fill="currentColor" />
-              </svg>
-              <span class="on">
-                <svg
-                  width="15"
-                  height="15"
-                  viewBox="0 0 16 16"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="1.4"
-                  stroke-linecap="round"
-                >
-                  <path d="M3 8a5 5 0 1 1 1.5 3.6" />
-                  <path d="M3 8V5M3 8h3" />
-                </svg>
-              </span>
-              <svg
-                width="15"
-                height="15"
-                viewBox="0 0 16 16"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="1.4"
-                stroke-linecap="round"
-              >
-                <path d="M3.5 8h9" />
-              </svg>
-              <span class="fit">fit</span>
-              <svg
-                width="15"
-                height="15"
-                viewBox="0 0 16 16"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="1.4"
-                stroke-linecap="round"
-              >
-                <path d="M8 3.5v9M3.5 8h9" />
-              </svg>
-              <span class="past"><span class="dot"></span> REWOUND · 2.4ms</span>
-            </div>
-
-            <div class="tl-body">
-              <div class="ticks">
-                <span>0ms</span><span>1ms</span><span>2ms</span><span>3ms</span><span>4ms</span
-                ><span>5ms</span>
-              </div>
-              <div class="lane">
-                <span class="lbl">IXN</span>
-                <span class="track"
-                  ><span class="bar ixn" style="left: 0; right: 18%">Click ▸ FilterBar</span></span
-                >
-              </div>
-              <div class="lane">
-                <span class="lbl">CMT</span>
-                <span class="track">
-                  <span class="cmt" style="left: 0%"></span>
-                  <span class="cmt" style="left: 34%"></span>
-                  <span class="cmt" style="left: 61%"></span>
-                </span>
-              </div>
-              <div class="lane">
-                <span class="lbl">CMP</span>
-                <span class="track"
-                  ><span class="bar cmp" style="left: 0; right: 4%">ProductList 14.2ms</span></span
-                >
-              </div>
-              <div class="lane">
-                <span class="lbl"></span>
-                <span class="track"
-                  ><span class="bar cmp" style="left: 5%; right: 25%">FilterBar 3.1ms</span></span
-                >
-              </div>
-              <div class="lane">
-                <span class="lbl"></span>
-                <span class="track"
-                  ><span class="bar cmp" style="left: 52%; right: 3%">PriceCell 0.4ms</span></span
-                >
-              </div>
-              <!-- 14px lane padding + 44px label gutter + 61% of the 512px
-                   track — parked on the third commit, same as the markers. -->
-              <span class="playhead" style="left: calc(58px + 0.61 * 512px); top: 22px"></span>
-            </div>
-          </div>
-
-          <div class="statusbar">
-            <span>EV 19</span><span>RND 19</span><span>CMP 19</span>
-            <span class="right"><span class="dot"></span> past · cmt-41</span>
-          </div>
-        </div>
-      </div>
     </div>
   </body>
 </html>
