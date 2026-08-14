@@ -1,23 +1,20 @@
-/**
- * Canvas base-layer paint: gaps, region, ruler, markers, lanes (stack/wave).
- */
-
 import type { CausalEdge } from "../model/edges.js";
 import { clipCauseColor, type Clip } from "../model/lanes.js";
-import type { TimeAxis } from "../model/axis.js";
+import type { TimeAxis, TimeSpan } from "../model/axis.js";
 import { niceStep } from "../model/axis.js";
 import type { LaneLayout } from "../model/rows.js";
-import type { TimeSpan } from "../model/axis.js";
 import type { ViewWindow } from "../model/viewport.js";
-import { WAVE_MIN_MS, waveBins, type WaveBin } from "../model/wave.js";
 import type { TimelineGeometryPayload } from "../timelineRendererClient.js";
-import { LANE_PAD, MIN_CLIP_PX, ROW_H, RULER_H } from "./metrics.js";
+import { semanticZoomForPxPerMs } from "../model/semanticZoom.js";
+import { LANE_PAD, ROW_H, RULER_H } from "./metrics.js";
 import { arrowSpanVisible, drawCausalArrow, planCausalArrows, routeCausalArrow } from "./arrows.js";
-import { computeClipRects, type ClipRect } from "./clipRects.js";
+import { buildClipRect, buildWaveRect, computeClipRects, type ClipRect } from "./clipRects.js";
+import { labelForClip, reserveLabelSpan, type LabelSpan } from "./clipLabels.js";
 import { causeColor, clipPaint, hexAlpha, type TimelineTheme } from "./timelineTheme.js";
 import { RenderFlags, causeCodeToName } from "@reactlens/trace-engine";
 
 export type { ClipRect } from "./clipRects.js";
+export type TimelineViewMode = "density" | "events" | "cost" | "causality";
 
 export interface Projectors {
   aToX: (a: number) => number;
@@ -38,9 +35,9 @@ export interface DrawBaseArgs {
   selectedRender: string | number | null;
   proj: Projectors;
   pattern: CanvasPattern | null;
-  /** Session-relative origin for labels (bounds.t0). */
   tOrigin: number;
   theme: TimelineTheme;
+  viewMode?: TimelineViewMode;
 }
 
 const fmt = (t: number) => Math.round(t).toLocaleString("en-US");
@@ -74,10 +71,7 @@ function visibleAxisSegs(axis: TimeAxis, view: ViewWindow): TimeAxis["segs"] {
   return out;
 }
 
-function geometryRowRanges(
-  layout: LaneLayout,
-  geo: TimelineGeometryPayload,
-): Array<[number, number]> {
+function geometryRowRanges(layout: LaneLayout, geo: TimelineGeometryPayload): Array<[number, number]> {
   const ranges: Array<[number, number]> = layout.rows.map(() => [0, 0]);
   const seen = new Uint8Array(layout.rows.length);
   for (let i = 0; i < geo.count; i++) {
@@ -93,11 +87,7 @@ function geometryRowRanges(
   return ranges;
 }
 
-function clipFromGeometry(
-  layout: LaneLayout,
-  geo: TimelineGeometryPayload,
-  i: number,
-): Clip | null {
+function clipFromGeometry(layout: LaneLayout, geo: TimelineGeometryPayload, i: number): Clip | null {
   const row = layout.rows[geo.rowIndex[i]!];
   if (!row) return null;
   const t0 = geo.x0[i]!;
@@ -120,99 +110,41 @@ function clipFromGeometry(
   };
 }
 
-function computeClipRectsFromGeometry(
+function clipRectsFromGeometry(
   layout: LaneLayout,
   geo: TimelineGeometryPayload,
   ranges: ReadonlyArray<[number, number]>,
   proj: Projectors,
+  detailed: boolean,
 ): { clipRects: Map<string, ClipRect>; snapEdges: number[] } {
-  const { wToX } = proj;
   const clipRects = new Map<string, ClipRect>();
   const snapEdges: number[] = [];
   for (let ri = 0; ri < layout.rows.length; ri++) {
     const row = layout.rows[ri]!;
     const [start, end] = ranges[ri]!;
-    if (row.mode === "wave") {
-      const mid = row.y + row.h / 2;
-      for (let i = start; i < end; i++) {
-        if (geo.aggregate[i] === 1) continue;
-        const c = clipFromGeometry(layout, geo, i);
-        if (!c) continue;
-        const xc = wToX(c.t0 + Math.max(c.self, WAVE_MIN_MS) / 2);
-        clipRects.set(String(c.renderId), {
-          x0: xc - 3,
-          x1: xc + 3,
-          y0: mid - 8,
-          y1: mid + 8,
-          clip: c,
-          wave: true,
-        });
-        snapEdges.push(c.t0, c.t1);
-      }
-      continue;
-    }
-
     for (let i = start; i < end; i++) {
       if (geo.aggregate[i] === 1) continue;
-      const c = clipFromGeometry(layout, geo, i);
-      if (!c) continue;
-      const x0 = wToX(c.t0);
-      const x1 = wToX(c.t1);
-      const w = Math.max(x1 - x0, MIN_CLIP_PX);
-      const clipH = ROW_H - 6;
-      const cy = row.y + LANE_PAD / 2 + (c.row ?? 0) * ROW_H + 1.5;
-      clipRects.set(String(c.renderId), { x0, x1: x0 + w, y0: cy, y1: cy + clipH, clip: c });
-      snapEdges.push(c.t0, c.t1);
+      const clip = clipFromGeometry(layout, geo, i);
+      if (!clip) continue;
+      const x0 = proj.wToX(clip.t0);
+      const x1 = proj.wToX(clip.t1);
+      if (row.mode === "wave" && !detailed) {
+        const centerX = proj.wToX(clip.t0 + Math.max(clip.self, 0.15) / 2);
+        clipRects.set(String(clip.renderId), buildWaveRect(clip, centerX, row.y + row.h / 2));
+      } else {
+        const clipH = ROW_H - 6;
+        const stackRow = detailed ? (clip.row ?? 0) % Math.max(1, Math.floor((row.h - LANE_PAD) / ROW_H)) : 0;
+        const y = row.y + LANE_PAD / 2 + stackRow * ROW_H + 1.5;
+        clipRects.set(String(clip.renderId), buildClipRect(clip, x0, y, clipH, Math.max(0, x1 - x0)));
+      }
+      snapEdges.push(clip.t0, clip.t1);
     }
   }
   return { clipRects, snapEdges };
 }
 
-function waveBinsFromGeometry(
-  geo: TimelineGeometryPayload,
-  start: number,
-  end: number,
-  wallToX: (t: number) => number,
-  nameW: number,
-  stageW: number,
-  binW = 3,
-): { bins: WaveBin[]; max: number } {
-  const plotW = Math.max(binW, stageW - nameW);
-  const n = Math.max(1, Math.ceil(plotW / binW));
-  const bins: WaveBin[] = Array.from({ length: n }, () => ({ count: 0, wasted: 0 }));
-  for (let i = start; i < end; i++) {
-    const selfMs = Math.max(geo.self[i]!, WAVE_MIN_MS);
-    const weight = Math.max(1, geo.renderCount[i] || 1);
-    const wastedWeight = Math.max(
-      0,
-      geo.wastedCount[i] || ((geo.flags[i]! & RenderFlags.Wasted) !== 0 ? weight : 0),
-    );
-    const x0 = wallToX(geo.x0[i]!);
-    const x1 = wallToX(geo.x0[i]! + selfMs);
-    if (x1 < nameW || x0 > stageW) continue;
-    let b0 = Math.floor((x0 - nameW) / binW);
-    let b1 = Math.floor((x1 - nameW) / binW);
-    if (!Number.isFinite(b0) || !Number.isFinite(b1)) continue;
-    if (b1 < b0) b1 = b0;
-    b0 = Math.max(0, Math.min(n - 1, b0));
-    b1 = Math.max(0, Math.min(n - 1, b1));
-    for (let b = b0; b <= b1; b++) {
-      const bin = bins[b]!;
-      bin.count += weight;
-      bin.wasted += wastedWeight;
-    }
-  }
-  let max = 1;
-  for (const b of bins) if (b.count > max) max = b.count;
-  return { bins, max };
-}
-
 export function ensureHatchPattern(ctx: CanvasRenderingContext2D): CanvasPattern | null {
-  // OffscreenCanvas workers have no `document`; prefer OffscreenCanvas when available.
-  const p =
-    typeof OffscreenCanvas !== "undefined"
-      ? new OffscreenCanvas(6, 6)
-      : document.createElement("canvas");
+  const p = typeof OffscreenCanvas !== "undefined" ? new OffscreenCanvas(6, 6) : document.createElement("canvas");
   p.width = p.height = 6;
   const pc = p.getContext("2d");
   if (!pc) return null;
@@ -225,129 +157,159 @@ export function ensureHatchPattern(ctx: CanvasRenderingContext2D): CanvasPattern
   return ctx.createPattern(p as CanvasImageSource, "repeat");
 }
 
-export function drawBase(args: DrawBaseArgs): {
-  clipRects: Map<string, ClipRect>;
-  snapEdges: number[];
-} {
-  const {
-    ctx,
-    axis,
-    view,
-    layout,
-    geometry,
-    region,
-    markers,
-    selectedRender,
-    proj,
-    tOrigin,
-    theme,
-  } = args;
-  const { nameW: NW, stageW: W, wToX, aToX, pxPerMs } = proj;
+function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number): void {
+  ctx.beginPath();
+  if (typeof ctx.roundRect === "function") ctx.roundRect(x, y, w, h, r);
+  else ctx.rect(x, y, w, h);
+}
+
+function drawClipFill(
+  ctx: CanvasRenderingContext2D,
+  rect: ClipRect,
+  theme: TimelineTheme,
+  pattern: CanvasPattern | null,
+  costMode: boolean,
+): void {
+  const c = rect.clip;
+  const col = causeColor(theme, clipCauseColor(c.cause));
+  const paint = clipPaint(theme, col);
+  const r = rect.visual;
+  ctx.save();
+  if (costMode) ctx.globalAlpha = Math.min(1, 0.28 + c.self / Math.max(c.total, 0.001));
+
+  if (rect.representation === "tick") {
+    ctx.fillStyle = c.wasted ? theme.warn : col;
+    ctx.fillRect(Math.round(r.x), r.y, Math.max(1, r.width), r.height);
+    ctx.restore();
+    return;
+  }
+
+  if (c.wasted && pattern) {
+    ctx.fillStyle = hexAlpha(theme.warn, 0.14);
+    roundRect(ctx, r.x, r.y, r.width, r.height, 4);
+    ctx.fill();
+    ctx.fillStyle = pattern;
+    ctx.fill();
+    ctx.strokeStyle = hexAlpha(theme.warn, 0.55);
+    ctx.setLineDash([3, 2]);
+    ctx.stroke();
+    ctx.setLineDash([]);
+  } else {
+    const grad = ctx.createLinearGradient(0, r.y, 0, r.y + r.height);
+    grad.addColorStop(0, paint.fillTop);
+    grad.addColorStop(1, paint.fillBottom);
+    ctx.fillStyle = grad;
+    roundRect(ctx, r.x, r.y, r.width, r.height, 4);
+    ctx.fill();
+    ctx.strokeStyle = paint.stroke;
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+function drawSelectionRing(ctx: CanvasRenderingContext2D, rect: ClipRect, theme: TimelineTheme): void {
+  const r = rect.visual;
+  ctx.save();
+  ctx.shadowColor = hexAlpha(theme.accent, 0.6);
+  ctx.shadowBlur = 8;
+  ctx.lineWidth = 5;
+  ctx.strokeStyle = hexAlpha(theme.accent, 0.32);
+  roundRect(ctx, r.x - 3, r.y - 3, r.width + 6, r.height + 6, 7);
+  ctx.stroke();
+  ctx.shadowBlur = 0;
+  ctx.lineWidth = 2;
+  ctx.strokeStyle = theme.accent;
+  roundRect(ctx, r.x - 2, r.y - 2, r.width + 4, r.height + 4, 7);
+  ctx.stroke();
+  ctx.lineWidth = 1;
+  ctx.strokeStyle = hexAlpha(theme.text, 0.92);
+  roundRect(ctx, r.x - 0.5, r.y - 0.5, r.width + 1, r.height + 1, 5.5);
+  ctx.stroke();
+  ctx.restore();
+}
+
+function drawDensityRow(
+  ctx: CanvasRenderingContext2D,
+  clips: readonly Clip[],
+  row: LaneLayout["rows"][number],
+  proj: Projectors,
+  theme: TimelineTheme,
+): void {
+  const binW = 4;
+  const n = Math.max(1, Math.ceil((proj.stageW - proj.nameW) / binW));
+  const bins = new Float32Array(n);
+  let max = 1;
+  for (const clip of clips) {
+    const x = proj.wToX(clip.t0);
+    const bi = Math.floor((x - proj.nameW) / binW);
+    if (bi < 0 || bi >= n) continue;
+    bins[bi] += Math.max(1, clip.renderCount ?? 1);
+    max = Math.max(max, bins[bi]!);
+  }
+  for (let i = 0; i < n; i++) {
+    const value = bins[i]!;
+    if (!value) continue;
+    const hh = 3 + (value / max) * Math.max(6, row.h - 14);
+    ctx.fillStyle = hexAlpha(theme.context, 0.3 + 0.45 * (value / max));
+    ctx.fillRect(proj.nameW + i * binW, row.y + row.h - 4 - hh, binW - 1, hh);
+  }
+}
+
+export function drawBase(args: DrawBaseArgs): { clipRects: Map<string, ClipRect>; snapEdges: number[] } {
+  const { ctx, axis, view, layout, geometry, region, markers, proj, tOrigin, theme } = args;
+  const viewMode = args.viewMode ?? "events";
   const H = layout.paintH ?? layout.totalH;
-  const pattern = args.pattern;
-  const MONO = theme.mono;
+  const { nameW: NW, stageW: W, wToX, aToX, pxPerMs } = proj;
   const segs = visibleAxisSegs(axis, view);
+  const semantic = semanticZoomForPxPerMs(pxPerMs);
+  const detailed = semantic === "renders" || semantic === "details";
   const geoRanges = geometry ? geometryRowRanges(layout, geometry) : null;
 
   ctx.clearRect(0, 0, W, H);
   ctx.fillStyle = theme.bg;
   ctx.fillRect(0, 0, W, H);
-  ctx.textBaseline = "alphabetic";
-
-  const hline = (y: number, style: string) => {
-    ctx.strokeStyle = style;
-    ctx.beginPath();
-    ctx.moveTo(0, y + 0.5);
-    ctx.lineTo(W, y + 0.5);
-    ctx.stroke();
-  };
-  const vline = (x: number, y0: number, y1: number, style: string, dash?: number[]) => {
-    ctx.strokeStyle = style;
-    if (dash) ctx.setLineDash(dash);
-    ctx.beginPath();
-    ctx.moveTo(Math.round(x) + 0.5, y0);
-    ctx.lineTo(Math.round(x) + 0.5, y1);
-    ctx.stroke();
-    if (dash) ctx.setLineDash([]);
-  };
 
   for (const s of segs) {
-    if (s.type !== "gap") continue;
-    // Collapsed gaps have zero axis width — skip. Only paint when expanded to wall.
-    if (s.a1 - s.a0 < 1e-6) continue;
+    if (s.type !== "gap" || s.a1 - s.a0 < 1e-6) continue;
     const x0 = aToX(s.a0);
     const x1 = aToX(s.a1);
-    if (x1 < NW || x0 > W) continue;
-    ctx.fillStyle = hexAlpha(theme.lineStrong, 0.14);
+    ctx.fillStyle = hexAlpha(theme.lineStrong, 0.12);
     ctx.fillRect(x0, RULER_H, x1 - x0, H - RULER_H);
-    vline(x0, RULER_H, H, hexAlpha(theme.lineStrong, 0.65), [2, 4]);
-    vline(x1, RULER_H, H, hexAlpha(theme.lineStrong, 0.65), [2, 4]);
   }
 
   if (region) {
     const x0 = wToX(region.start);
     const x1 = wToX(region.end);
-    ctx.fillStyle = hexAlpha(theme.accent, 0.05);
+    ctx.fillStyle = hexAlpha(theme.accent, 0.055);
     ctx.fillRect(x0, 0, x1 - x0, H);
-    vline(x0, 0, H, hexAlpha(theme.accent, 0.4));
-    vline(x1, 0, H, hexAlpha(theme.accent, 0.4));
-    ctx.fillStyle = hexAlpha(theme.accent, 0.65);
-    ctx.font = `8.5px ${MONO}`;
-    ctx.fillText("I", x0 + 3, 9);
-    ctx.fillText("O", x1 - 9, 9);
+    ctx.strokeStyle = hexAlpha(theme.accent, 0.4);
+    ctx.beginPath(); ctx.moveTo(x0, 0); ctx.lineTo(x0, H); ctx.moveTo(x1, 0); ctx.lineTo(x1, H); ctx.stroke();
   }
 
-  hline(RULER_H - 1, hexAlpha(theme.lineStrong, 0.75));
+  ctx.strokeStyle = hexAlpha(theme.lineStrong, 0.7);
+  ctx.beginPath(); ctx.moveTo(0, RULER_H - 0.5); ctx.lineTo(W, RULER_H - 0.5); ctx.stroke();
 
-  // Compressed idle stitches: hairline so wall-time jumps stay visible.
-  for (const s of segs) {
-    if (s.type !== "gap" || s.a1 - s.a0 >= 1e-6) continue;
-    const x = aToX(s.a0);
-    if (x < NW || x > W) continue;
-    vline(x, RULER_H, H, hexAlpha(theme.lineStrong, 0.4), [2, 3]);
-    ctx.fillStyle = hexAlpha(theme.text3, 0.85);
-    ctx.beginPath();
-    ctx.moveTo(x, 2);
-    ctx.lineTo(x + 3.5, 7);
-    ctx.lineTo(x, 12);
-    ctx.lineTo(x - 3.5, 7);
-    ctx.closePath();
-    ctx.fill();
-  }
-
-  // Ruler ticks + labels; cull major labels that would collide at stitches.
-  const LABEL_MIN_PX = 44;
   let lastLabelX = -Infinity;
   for (const s of segs) {
     if (s.type !== "act") continue;
-    const step = niceStep(70 / Math.max(pxPerMs, 1e-6));
+    const step = niceStep(110 / Math.max(pxPerMs, 1e-6));
     const minor = step / 5;
     for (let t = Math.ceil(s.w0 / minor) * minor; t <= s.w1; t += minor) {
       const x = wToX(t);
       if (x < NW || x > W) continue;
       const major = Math.abs(t / step - Math.round(t / step)) < 1e-6;
-      vline(
-        x,
-        RULER_H - (major ? 8 : 4),
-        RULER_H,
-        major ? hexAlpha(theme.lineStrong, 0.9) : hexAlpha(theme.line, 0.85),
-      );
-      if (major && x - lastLabelX >= LABEL_MIN_PX) {
+      ctx.strokeStyle = major ? hexAlpha(theme.lineStrong, 0.8) : hexAlpha(theme.line, 0.7);
+      ctx.beginPath(); ctx.moveTo(Math.round(x) + 0.5, RULER_H - (major ? 10 : 5)); ctx.lineTo(Math.round(x) + 0.5, H); ctx.stroke();
+      if (major && x - lastLabelX > 54) {
         ctx.fillStyle = theme.text3;
-        ctx.font = `9.5px ${MONO}`;
-        ctx.fillText(fmt(t - tOrigin), x + 4, RULER_H - 8);
+        ctx.font = `9.5px ${theme.mono}`;
+        ctx.fillText(`${fmt(t - tOrigin)}ms`, x + 4, RULER_H - 12);
         lastLabelX = x;
       }
     }
   }
 
-  // Diamonds always; labels only when they fit. Ruler ticks already cull —
-  // markers used to paint every string on one baseline and piled up on clicks.
-  // Long-task labels claim space first so dense "Click Button" spam yields to them.
-  const MARKER_LABEL_GAP = 10;
-  const markerLabelYs = [14, 26] as const;
-  const markerLabelSpans: Array<Array<{ left: number; right: number }>> = [[], []];
-  const visibleMarkers: Array<{ x: number; label: string; warn: boolean }> = [];
+  const markerRows: Array<Array<{ left: number; right: number }>> = [[], []];
   for (const s of segs) {
     if (s.type !== "act") continue;
     const lo = lowerBoundMarker(markers, s.w0);
@@ -356,206 +318,61 @@ export function drawBase(args: DrawBaseArgs): {
       const m = markers[i]!;
       const x = wToX(m.t);
       if (x < NW || x > W) continue;
-      ctx.fillStyle = m.warn ? theme.warn : theme.text2;
-      ctx.beginPath();
-      ctx.moveTo(x, 6);
-      ctx.lineTo(x + 4.5, 11);
-      ctx.lineTo(x, 16);
-      ctx.lineTo(x - 4.5, 11);
-      ctx.closePath();
-      ctx.fill();
-      if (pxPerMs > 0.3) visibleMarkers.push({ x, label: m.label, warn: m.warn });
+      ctx.fillStyle = m.warn ? theme.warn : theme.accent;
+      ctx.beginPath(); ctx.moveTo(x, 5); ctx.lineTo(x + 4, 9); ctx.lineTo(x, 13); ctx.lineTo(x - 4, 9); ctx.closePath(); ctx.fill();
+      if (semantic === "session") continue;
+      ctx.font = `9px ${theme.mono}`;
+      const width = ctx.measureText(m.label).width;
+      const left = x + 8;
+      const right = left + width;
+      const row = markerRows.findIndex((spans) => spans.every((r) => right + 8 <= r.left || left >= r.right + 8));
+      if (row >= 0) {
+        markerRows[row]!.push({ left, right });
+        ctx.fillStyle = m.warn ? theme.warn : theme.text3;
+        ctx.fillText(m.label, left, 14 + row * 11);
+      }
     }
   }
-  const labelFits = (row: number, left: number, right: number) =>
-    markerLabelSpans[row]!.every(
-      (s) => right + MARKER_LABEL_GAP <= s.left || left >= s.right + MARKER_LABEL_GAP,
-    );
-  const placeMarkerLabels = (items: typeof visibleMarkers) => {
-    for (const m of items) {
-      ctx.font = `9px ${MONO}`;
-      const left = m.x + 8;
-      const right = left + ctx.measureText(m.label).width;
-      let row = -1;
-      for (let r = 0; r < markerLabelYs.length; r++) {
-        if (labelFits(r, left, right)) {
-          row = r;
-          break;
-        }
-      }
-      if (row < 0) continue;
-      ctx.fillStyle = m.warn ? theme.warn : theme.text3;
-      ctx.fillText(m.label, left, markerLabelYs[row]!);
-      markerLabelSpans[row]!.push({ left, right });
-    }
-  };
-  placeMarkerLabels(visibleMarkers.filter((m) => m.warn).sort((a, b) => a.x - b.x));
-  placeMarkerLabels(visibleMarkers.filter((m) => !m.warn).sort((a, b) => a.x - b.x));
 
-  // Ports for every clip, visible or not — arrows keep anchors off-screen.
-  const { clipRects, snapEdges } =
-    geometry && geoRanges
-      ? computeClipRectsFromGeometry(layout, geometry, geoRanges, proj)
-      : computeClipRects(layout, proj);
+  const { clipRects, snapEdges } = geometry && geoRanges
+    ? clipRectsFromGeometry(layout, geometry, geoRanges, proj, detailed)
+    : computeClipRects(layout, proj);
 
-  for (let rowIndex = 0; rowIndex < layout.rows.length; rowIndex++) {
-    const row = layout.rows[rowIndex]!;
-    hline(row.y + row.h - 1, hexAlpha(theme.line, 0.55));
-    if (row.mode === "wave") {
-      const range = geoRanges?.[rowIndex];
-      const { bins, max } =
-        geometry && range
-          ? waveBinsFromGeometry(geometry, range[0], range[1], wToX, NW, W, 3)
-          : waveBins(row.clips, wToX, NW, W, 3);
-      const mid = row.y + row.h / 2;
-      ctx.globalAlpha = row.dim ? 0.25 : 1;
-      for (let b = 0; b < bins.length; b++) {
-        const bin = bins[b]!;
-        if (!bin.count) continue;
-        const hh = 2 + (bin.count / max) * (row.h - 16);
-        const ratio = bin.wasted / bin.count;
-        ctx.fillStyle = ratio > 0.3 ? hexAlpha(theme.bad, 0.55) : hexAlpha(theme.props, 0.5);
-        const x = NW + b * 3;
-        roundRect(ctx, x, mid - hh / 2, 2.3, hh, 1.2);
-        ctx.fill();
-      }
-      ctx.globalAlpha = 1;
+  for (const row of layout.rows) {
+    ctx.strokeStyle = hexAlpha(theme.line, 0.55);
+    ctx.beginPath(); ctx.moveTo(0, row.y + row.h - 0.5); ctx.lineTo(W, row.y + row.h - 0.5); ctx.stroke();
+
+    const useDensity = viewMode === "density" || semantic === "session" || semantic === "interactions";
+    if (useDensity) {
+      drawDensityRow(ctx, row.clips, row, proj, theme);
       continue;
     }
 
-    if (geometry && geoRanges) {
-      const [start, end] = geoRanges[rowIndex]!;
-      for (let i = start; i < end; i++) {
-        if (geometry.aggregate[i] === 1) continue;
-        const x0 = wToX(geometry.x0[i]!);
-        const x1 = wToX(geometry.x1[i]!);
-        if (x1 < NW || x0 > W) continue;
-        const w = Math.max(x1 - x0, MIN_CLIP_PX);
-        const clipH = ROW_H - 6;
-        const cy = row.y + LANE_PAD / 2 + (geometry.stackRow[i] ?? 0) * ROW_H + 1.5;
-        const causeKey = clipCauseColor(causeCodeToName(geometry.cause[i]!));
-        const col = causeColor(theme, causeKey);
-        const paint = clipPaint(theme, col);
-        const wasted = (geometry.flags[i]! & RenderFlags.Wasted) !== 0;
-        ctx.globalAlpha = row.dim ? 0.25 : 1;
-
-        if (wasted && pattern) {
-          ctx.fillStyle = pattern;
-          roundRect(ctx, x0, cy, w, clipH, 4);
-          ctx.fill();
-          ctx.strokeStyle = hexAlpha(theme.text3, 0.55);
-          ctx.setLineDash([3, 2]);
-          ctx.stroke();
-          ctx.setLineDash([]);
-        } else {
-          const grad = ctx.createLinearGradient(0, cy, 0, cy + clipH);
-          grad.addColorStop(0, paint.fillTop);
-          grad.addColorStop(1, paint.fillBottom);
-          ctx.fillStyle = grad;
-          roundRect(ctx, x0, cy, w, clipH, 4);
-          ctx.fill();
-          ctx.strokeStyle = paint.stroke;
-          ctx.stroke();
-          if (w > 74) {
-            let px = x0 + 1;
-            const barAlpha = theme.light ? 0.65 : 0.55;
-            for (const frac of [0.6, 0.25, 0.15] as const) {
-              ctx.fillStyle = hexAlpha(col, barAlpha);
-              roundRect(ctx, px, cy + clipH - 4.5, frac * (w - 2), 3, 1.5);
-              ctx.fill();
-              px += frac * (w - 2);
-            }
-          }
-        }
-
-        if (selectedRender === geometry.renderId[i]) {
-          ctx.strokeStyle = theme.accent;
-          ctx.lineWidth = 1.5;
-          ctx.shadowColor = hexAlpha(theme.accent, 0.5);
-          ctx.shadowBlur = 6;
-          roundRect(ctx, x0 - 1.5, cy - 1.5, w + 3, clipH + 3, 5);
-          ctx.stroke();
-          ctx.shadowBlur = 0;
-          ctx.lineWidth = 1;
-        }
-
-        if (w > 48) {
-          ctx.fillStyle = wasted ? hexAlpha(theme.text3, 0.85) : paint.label;
-          ctx.font = `9px ${MONO}`;
-          const total = geometry.x1[i]! - geometry.x0[i]!;
-          const lbl = wasted ? "wasted" : `${causeKey} · ${total.toFixed(0)}ms`;
-          ctx.fillText(lbl.slice(0, Math.floor(w / 5.5)), x0 + 5, cy + clipH / 2 + 3);
-        }
-        ctx.globalAlpha = 1;
-      }
-      continue;
-    }
-
-    for (const c of row.clips) {
-      if (c.aggregate) continue;
-      const x0 = wToX(c.t0);
-      const x1 = wToX(c.t1);
-      if (x1 < NW || x0 > W) continue;
-      const w = Math.max(x1 - x0, MIN_CLIP_PX);
-      const clipH = ROW_H - 6;
-      const cy = row.y + LANE_PAD / 2 + (c.row ?? 0) * ROW_H + 1.5;
-      const col = causeColor(theme, clipCauseColor(c.cause));
-      const paint = clipPaint(theme, col);
-      ctx.globalAlpha = row.dim ? 0.25 : 1;
-
-      if (c.wasted && pattern) {
-        ctx.fillStyle = pattern;
-        roundRect(ctx, x0, cy, w, clipH, 4);
-        ctx.fill();
-        ctx.strokeStyle = hexAlpha(theme.text3, 0.55);
-        ctx.setLineDash([3, 2]);
-        ctx.stroke();
-        ctx.setLineDash([]);
-      } else {
-        const grad = ctx.createLinearGradient(0, cy, 0, cy + clipH);
-        grad.addColorStop(0, paint.fillTop);
-        grad.addColorStop(1, paint.fillBottom);
-        ctx.fillStyle = grad;
-        roundRect(ctx, x0, cy, w, clipH, 4);
-        ctx.fill();
-        ctx.strokeStyle = paint.stroke;
-        ctx.stroke();
-        if (w > 74) {
-          let px = x0 + 1;
-          const barAlpha = theme.light ? 0.65 : 0.55;
-          for (const frac of [0.6, 0.25, 0.15] as const) {
-            ctx.fillStyle = hexAlpha(col, barAlpha);
-            roundRect(ctx, px, cy + clipH - 4.5, frac * (w - 2), 3, 1.5);
-            ctx.fill();
-            px += frac * (w - 2);
-          }
-        }
-      }
-
-      if (selectedRender === c.renderId) {
-        ctx.strokeStyle = theme.accent;
-        ctx.lineWidth = 1.5;
-        ctx.shadowColor = hexAlpha(theme.accent, 0.5);
-        ctx.shadowBlur = 6;
-        roundRect(ctx, x0 - 1.5, cy - 1.5, w + 3, clipH + 3, 5);
-        ctx.stroke();
-        ctx.shadowBlur = 0;
-        ctx.lineWidth = 1;
-      }
-
-      if (w > 48) {
-        ctx.fillStyle = c.wasted ? hexAlpha(theme.text3, 0.85) : paint.label;
-        ctx.font = `9px ${MONO}`;
-        const lbl = c.wasted ? "wasted" : `${clipCauseColor(c.cause)} · ${c.total.toFixed(0)}ms`;
-        ctx.fillText(lbl.slice(0, Math.floor(w / 5.5)), x0 + 5, cy + clipH / 2 + 3);
-      }
-      ctx.globalAlpha = 1;
+    const labelSpans: LabelSpan[] = [];
+    for (const rect of clipRects.values()) {
+      if (rect.clip.laneKey !== row.key) continue;
+      if (rect.visual.x + rect.visual.width < NW || rect.visual.x > W) continue;
+      drawClipFill(ctx, rect, theme, args.pattern, viewMode === "cost");
+      const text = labelForClip(rect.visual.width, rect.clip);
+      if (!text || semantic === "interactions") continue;
+      ctx.font = `600 9px ${theme.mono}`;
+      const tw = ctx.measureText(text).width;
+      if (tw > rect.visual.width - 10) continue;
+      const left = rect.visual.x + 5;
+      const right = left + tw;
+      if (!reserveLabelSpan(labelSpans, left, right)) continue;
+      ctx.fillStyle = rect.clip.wasted ? theme.warn : clipPaint(theme, causeColor(theme, clipCauseColor(rect.clip.cause))).label;
+      ctx.save();
+      ctx.beginPath(); ctx.rect(rect.visual.x + 3, rect.visual.y, Math.max(0, rect.visual.width - 6), rect.visual.height); ctx.clip();
+      ctx.fillText(text, left, rect.visual.y + rect.visual.height / 2 + 3);
+      ctx.restore();
     }
   }
 
   ctx.fillStyle = theme.bg;
   ctx.fillRect(0, 0, NW, H);
-  vline(NW - 1, 0, H, hexAlpha(theme.lineStrong, 0.75));
+  ctx.strokeStyle = hexAlpha(theme.lineStrong, 0.75);
+  ctx.beginPath(); ctx.moveTo(NW - 0.5, 0); ctx.lineTo(NW - 0.5, H); ctx.stroke();
 
   return { clipRects, snapEdges };
 }
@@ -575,81 +392,47 @@ export interface DrawOverlayArgs {
   wToX: (t: number) => number;
   dragging: boolean;
   theme: TimelineTheme;
+  viewMode?: TimelineViewMode;
 }
 
 export function drawOverlay(args: DrawOverlayArgs): void {
-  const {
-    ctx,
-    stageW: W,
-    totalH: H,
-    nameW: NW,
-    clipRects,
-    edges,
-    selectedRender,
-    marquee,
-    hoverId,
-    ghostT,
-    playheadT,
-    wToX,
-    dragging,
-    theme,
-  } = args;
-
+  const { ctx, stageW: W, totalH: H, nameW: NW, clipRects, edges, selectedRender, marquee, hoverId, ghostT, playheadT, wToX, dragging, theme } = args;
+  const viewMode = args.viewMode ?? "events";
   ctx.clearRect(0, 0, W, H);
 
   const sel = selectedRender != null ? String(selectedRender) : null;
-  const edgeList = edges
-    .filter((e) => {
-      const a = String(e.from);
-      const b = String(e.to);
-      if (sel && a !== sel && b !== sel) return false;
-      return true;
-    })
-    .map((e) => ({
-      from: String(e.from),
-      to: String(e.to),
-      causeKey: clipCauseColor(e.cause),
-    }));
-
-  const ports = new Map(
-    [...clipRects.entries()].map(([id, r]) => [
-      id,
-      {
-        x0: r.x0,
-        x1: r.x1,
-        y0: r.y0,
-        y1: r.y1,
-        t0: r.clip.t0,
-        wave: r.wave,
-        laneKey: String(r.clip.laneKey),
-      },
-    ]),
-  );
-
-  const planned = planCausalArrows(edgeList, ports);
-  for (const p of planned) {
-    if (!arrowSpanVisible(p.from, p.to, NW, W)) continue;
-    const route = routeCausalArrow(p.from, p.to, p.slot, p.slotCount);
-    const col = hexAlpha(causeColor(theme, p.causeKey), 0.92);
-    drawCausalArrow({
-      ctx,
-      x1: route.x1,
-      y1: route.y1,
-      x2: route.x2,
-      y2: route.y2,
-      side: route.side,
-      fanSpread: route.fanSpread,
-      color: col,
-      lineWidth: p.slotCount > 6 ? 1.1 : 1.35,
-      headSize: 7,
-      orderLabel: p.order,
-    });
+  const shouldDrawArrows = viewMode === "causality" || (viewMode === "events" && sel != null);
+  if (shouldDrawArrows) {
+    const edgeList = edges
+      .filter((e) => !sel || viewMode === "causality" || String(e.from) === sel || String(e.to) === sel)
+      .slice(0, 100)
+      .map((e) => ({ from: String(e.from), to: String(e.to), causeKey: clipCauseColor(e.cause) }));
+    const ports = new Map([...clipRects.entries()].map(([id, r]) => [id, {
+      x0: r.x0, x1: r.x1, y0: r.y0, y1: r.y1, t0: r.clip.t0, wave: r.wave, laneKey: String(r.clip.laneKey),
+    }]));
+    for (const p of planCausalArrows(edgeList, ports)) {
+      if (!arrowSpanVisible(p.from, p.to, NW, W)) continue;
+      const route = routeCausalArrow(p.from, p.to, p.slot, p.slotCount);
+      drawCausalArrow({
+        ctx,
+        x1: route.x1,
+        y1: route.y1,
+        x2: route.x2,
+        y2: route.y2,
+        side: route.side,
+        fanSpread: route.fanSpread,
+        color: hexAlpha(theme.accent, 0.9),
+        lineWidth: p.slotCount > 6 ? 1.05 : 1.3,
+        headSize: 7,
+        orderLabel: p.order,
+      });
+    }
   }
 
   if (marquee) {
     const x0 = Math.min(marquee.x0, marquee.x1);
     const x1 = Math.max(marquee.x0, marquee.x1);
-    ctx.fillStyle = hexAlpha(theme.accent, 0.09);
+    ctx.fillStyle = hexAlpha(theme.accent, 0.08);
     ctx.fillRect(x0, RULER_H, x1 - x0, H - RULER_H);
     ctx.strokeStyle = hexAlpha(theme.accent, 0.6);
     ctx.setLineDash([4, 3]);
@@ -657,58 +440,34 @@ export function drawOverlay(args: DrawOverlayArgs): void {
     ctx.setLineDash([]);
   }
 
-  const hv = hoverId && clipRects.get(hoverId);
-  if (hv) {
-    ctx.strokeStyle = hexAlpha(theme.text, theme.light ? 0.45 : 0.55);
-    roundRect(ctx, hv.x0 - 0.5, hv.y0 - 0.5, hv.x1 - hv.x0 + 1, hv.y1 - hv.y0 + 1, 4.5);
+  const hv = hoverId ? clipRects.get(hoverId) : null;
+  if (hv && String(hv.clip.renderId) !== sel) {
+    const r = hv.visual;
+    ctx.strokeStyle = hexAlpha(theme.text, 0.65);
+    ctx.lineWidth = 1;
+    roundRect(ctx, r.x - 1, r.y - 1, r.width + 2, r.height + 2, 5);
     ctx.stroke();
+  }
+
+  if (sel) {
+    const selected = clipRects.get(sel);
+    if (selected) drawSelectionRing(ctx, selected, theme);
   }
 
   if (ghostT != null && !dragging) {
     const gx = wToX(ghostT);
-    if (gx > NW) {
-      ctx.strokeStyle = hexAlpha(theme.accent, 0.22);
-      ctx.beginPath();
-      ctx.moveTo(Math.round(gx) + 0.5, 0);
-      ctx.lineTo(Math.round(gx) + 0.5, H);
-      ctx.stroke();
+    if (gx > NW && gx < W) {
+      ctx.strokeStyle = hexAlpha(theme.accent, 0.18);
+      ctx.beginPath(); ctx.moveTo(Math.round(gx) + 0.5, 0); ctx.lineTo(Math.round(gx) + 0.5, H); ctx.stroke();
     }
   }
 
   const x = wToX(playheadT);
   if (x >= NW && x <= W) {
     ctx.strokeStyle = theme.accent;
-    ctx.lineWidth = 1.5;
-    ctx.shadowColor = hexAlpha(theme.accent, 0.55);
-    ctx.shadowBlur = 8;
-    ctx.beginPath();
-    ctx.moveTo(x, 0);
-    ctx.lineTo(x, H);
-    ctx.stroke();
-    ctx.shadowBlur = 0;
-    ctx.lineWidth = 1;
+    ctx.lineWidth = 1.25;
+    ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke();
     ctx.fillStyle = theme.accent;
-    ctx.beginPath();
-    ctx.moveTo(x - 5.5, 0);
-    ctx.lineTo(x + 5.5, 0);
-    ctx.lineTo(x, 8);
-    ctx.closePath();
-    ctx.fill();
-  }
-}
-
-function roundRect(
-  ctx: CanvasRenderingContext2D,
-  x: number,
-  y: number,
-  w: number,
-  h: number,
-  r: number,
-): void {
-  ctx.beginPath();
-  if (typeof ctx.roundRect === "function") {
-    ctx.roundRect(x, y, w, h, r);
-  } else {
-    ctx.rect(x, y, w, h);
+    ctx.beginPath(); ctx.moveTo(x - 5, 0); ctx.lineTo(x + 5, 0); ctx.lineTo(x, 7); ctx.closePath(); ctx.fill();
   }
 }
