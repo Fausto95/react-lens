@@ -51,13 +51,35 @@ export interface TimelineRendererClient {
   dispose(): void;
 }
 
-const liveRenderers = new WeakMap<HTMLCanvasElement, TimelineRendererClient>();
+type RendererRecord = {
+  client: TimelineRendererClient;
+  cancelDispose: () => void;
+};
+
+/**
+ * `transferControlToOffscreen()` is permanent for a DOM canvas. React Strict
+ * Mode mounts effects, cleans them up, then mounts them again while reusing the
+ * same canvas node, so renderer disposal must be deferred long enough for that
+ * remount to reclaim the worker.
+ */
+const liveRenderers = new WeakMap<HTMLCanvasElement, RendererRecord>();
+const transferredCanvases = new WeakSet<HTMLCanvasElement>();
+
+export function isTimelineCanvasTransferred(canvas: HTMLCanvasElement): boolean {
+  return transferredCanvases.has(canvas);
+}
 
 export function createTimelineRenderer(canvas: HTMLCanvasElement): TimelineRendererClient | null {
   const existing = liveRenderers.get(canvas);
-  if (existing) return existing;
+  if (existing) {
+    existing.cancelDispose();
+    return existing.client;
+  }
   if (typeof OffscreenCanvas === "undefined" || typeof Worker === "undefined") return null;
   if (typeof canvas.transferControlToOffscreen !== "function") return null;
+  // A transferred canvas can never fall back to DOM 2D or be transferred a
+  // second time. If no live renderer owns it, fail closed rather than throwing.
+  if (transferredCanvases.has(canvas)) return null;
 
   let worker: Worker;
   try {
@@ -93,6 +115,7 @@ export function createTimelineRenderer(canvas: HTMLCanvasElement): TimelineRende
   let offscreen: OffscreenCanvas;
   try {
     offscreen = canvas.transferControlToOffscreen();
+    transferredCanvases.add(canvas);
   } catch {
     worker.terminate();
     return null;
@@ -165,6 +188,13 @@ export function createTimelineRenderer(canvas: HTMLCanvasElement): TimelineRende
     worker.postMessage({ type: "paint", payload, wantHit: !!onHit });
   }
 
+  let disposeTimer: ReturnType<typeof setTimeout> | null = null;
+  const cancelDispose = () => {
+    if (disposeTimer === null) return;
+    clearTimeout(disposeTimer);
+    disposeTimer = null;
+  };
+
   const client: TimelineRendererClient = {
     resize(width, height, nextDpr) {
       worker.postMessage({ type: "resize", width, height, dpr: nextDpr });
@@ -177,10 +207,19 @@ export function createTimelineRenderer(canvas: HTMLCanvasElement): TimelineRende
       paintNow(payload, onHit);
     },
     dispose() {
-      liveRenderers.delete(canvas);
-      worker.terminate();
+      // Strict Mode immediately remounts and calls createTimelineRenderer on
+      // the same node. A macrotask delay lets that remount cancel disposal.
+      if (disposeTimer !== null) return;
+      disposeTimer = setTimeout(() => {
+        disposeTimer = null;
+        const record = liveRenderers.get(canvas);
+        if (!record || record.client !== client) return;
+        liveRenderers.delete(canvas);
+        worker.terminate();
+      }, 0);
     },
   };
-  liveRenderers.set(canvas, client);
+
+  liveRenderers.set(canvas, { client, cancelDispose });
   return client;
 }
