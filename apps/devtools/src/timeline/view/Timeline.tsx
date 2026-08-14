@@ -90,6 +90,33 @@ export function Timeline({
     replayRaf.current = requestAnimationFrame(tick);
   };
 
+  /**
+   * Cascade navigation is not a scrub. When its interaction list asks to seek
+   * to the start of a *different* interaction, show the completed cascade by
+   * placing the shared cursor at that interaction's end. Otherwise every node
+   * after the start is painted as future-of-cursor and looks disabled.
+   *
+   * Exact node seeks inside the current interaction still pass through
+   * unchanged, so double-click time travel keeps its progressive/future dim.
+   * Replay bypasses this adapter and explicitly animates start -> end above.
+   */
+  const onCascadeCursor = (next: TimeCursor) => {
+    if (next.mode === "historical") {
+      const currentInteraction = interactionAtCursor(model, cursor);
+      const targetInteraction = interactionAtCursor(model, next);
+      const navigatingInteraction =
+        targetInteraction !== null &&
+        targetInteraction.id !== currentInteraction?.id &&
+        Math.abs(next.t - targetInteraction.start) < 0.001;
+
+      if (navigatingInteraction) {
+        onCursor({ mode: "historical", t: targetInteraction.end });
+        return;
+      }
+    }
+    onCursor(next);
+  };
+
   const interaction = interactionAtCursor(model, cursor);
   const cascadeTransport = (
     <span className="rl-cascade-transport">
@@ -109,7 +136,10 @@ export function Timeline({
         {replaying ? "■ Stop" : "↻ Replay"}
       </button>
       {transport ? (
-        <span className="rl-cascade-travel-control" title="Restore the inspected page while replaying or seeking">
+        <span
+          className="rl-cascade-travel-control"
+          title="Restore the inspected page while replaying or seeking"
+        >
           <span className="rl-cascade-travel-label">Time travel</span>
           {transport}
         </span>
@@ -122,7 +152,7 @@ export function Timeline({
       store={model.store}
       model={model}
       cursor={cursor}
-      onCursor={onCursor}
+      onCursor={onCascadeCursor}
       {...(onSelectComponent ? { onSelectComponent } : {})}
       {...(onHighlight ? { onHighlight } : {})}
       transport={cascadeTransport}
