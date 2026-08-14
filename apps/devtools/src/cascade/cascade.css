@@ -1,3 +1,10 @@
+.rl-cascade-gesture-boundary {
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+
 .rl-cascade {
   --cascade-rail: clamp(170px, 22%, 230px);
   position: relative;
@@ -8,6 +15,7 @@
   background: var(--bg);
   color: var(--text);
   overflow: hidden;
+  overscroll-behavior: none;
 }
 
 .rl-cascade-toolbar,
@@ -155,6 +163,7 @@
   min-width: 0;
   min-height: 0;
   overflow: auto;
+  overscroll-behavior: contain;
   border-right: 1px solid var(--line);
   background: var(--panel);
 }
@@ -231,8 +240,13 @@
   min-width: 0;
   min-height: 0;
   overflow: hidden;
+  overscroll-behavior: none;
+  overscroll-behavior-x: none;
+  overscroll-behavior-y: none;
   background: var(--bg);
   touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
   cursor: grab;
 }
 
@@ -312,6 +326,7 @@
   height: 148px;
   padding: 4px;
   overflow: hidden;
+  overscroll-behavior: none;
   border: 1px solid var(--line-strong);
   border-radius: 8px;
   background: color-mix(in srgb, var(--panel) 94%, transparent);
