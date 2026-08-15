@@ -40,30 +40,31 @@ export function WhySection() {
   return (
     <section id="why">
       <div className="sec-kicker">
-        <span className="dot" /> WHY · cause, then fix
+        <span className="dot" /> CASCADE · cause, fanout, cost
       </div>
-      <h2>Trace a render to its cause.</h2>
+      <h2>See how one change becomes a render cascade.</h2>
       <p className="sec-lead">
-        Cycle the context and select a <code>Consumer</code> in the panel: the cause chain names the
-        exact reason and the fanout across every consumer — then source maps and Doctor findings
-        land on <code>file:line</code>. Receipts, not guesses.
+        Pick an interaction and switch to Cascade: React Lens projects its renders into a causal
+        graph, preserving order and cause so you can follow the path from the trigger to every
+        component that re-rendered. Focus expensive work, roots, or a custom path without losing the
+        surrounding graph.
       </p>
 
       <div className="card">
         <CauseSpecimen />
         <div className="card-hint">
-          <span>▶ One context change → four consumer renders.</span>
+          <span>▶ One context change → four consumers. Timeline shows when; Cascade shows why.</span>
         </div>
       </div>
 
       <div className="changelog">
         <article className="change">
-          <span className="tag">Cause chain</span>
-          <h3>Props, state, hooks, or parent</h3>
+          <span className="tag">Causal graph</span>
+          <h3>Props, state, context, parent</h3>
           <p>
-            Every render gets a ranked cause with diff evidence and a confidence level — including a
-            “no observable change” verdict when it was avoidable. Compiler bailouts count as
-            evidence; recommendations stay evidence-backed.
+            Nodes carry the render cause and edges preserve the fanout. Pan, zoom, fit, use the
+            minimap, and focus upstream/downstream paths to turn a large interaction into a readable
+            explanation.
           </p>
         </article>
         <article className="change">
@@ -72,7 +73,7 @@ export function WhySection() {
           <p>
             <kbd>⌘I</kbd> opens an assistant that answers through typed tools over the live trace
             (OpenAI / Anthropic / Z.AI — your key stays in the browser). Claims cite clickable Lens
-            IDs; the agent can propose fixes citing <code>file:line</code> against your source.
+            IDs and source locations instead of inventing a diagnosis.
           </p>
         </article>
       </div>

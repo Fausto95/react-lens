@@ -6,8 +6,12 @@ interface Feature {
 /** One line each — the sections above carry the depth. */
 const FEATURES: Feature[] = [
   {
+    title: "Cascade",
+    body: "Turn one interaction into a causal render graph. Follow upstream and downstream paths, isolate roots or expensive work, and keep the whole fanout readable with focus mode and a minimap.",
+  },
+  {
     title: "Interaction timeline",
-    body: "A normalized log of commits and interactions, grouped into the things you actually did, with real self-time per component.",
+    body: "A zoomable, scrollable editing-style timeline of interactions, commits, component work, ordering, and the playhead you use for time travel.",
   },
   {
     title: "Bidirectional selection",
@@ -61,7 +65,7 @@ export function Features() {
       <div className="sec-kicker">
         <span className="dot" /> Features
       </div>
-      <h2>Everything else in the box.</h2>
+      <h2>A debugging workspace, not another component tree.</h2>
       <div className="feats">
         {FEATURES.map((f) => (
           <article className="feat" key={f.title}>

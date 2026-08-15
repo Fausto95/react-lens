@@ -9,12 +9,12 @@ export function Hero() {
         <IconLens size={18} /> React Lens
       </div>
       <h1>
-        React debugging with <span className="accent">receipts</span>.
+        See every render. <span className="accent">Follow every cause.</span>
       </h1>
       <p className="hero-sub">
-        Time travel through real state. Trace a render to its cause. Preview waste before you change
-        code. Diff two moments — or two sessions in CI. Human or AI agent — every answer cites the
-        exact render, component, and line.
+        Time-travel through real React state, inspect interactions on a professional timeline, and
+        trace render cascades from the event that started them to the components that paid the cost.
+        Human or AI agent — every conclusion stays grounded in Lens evidence.
       </p>
       <div className="cta-row">
         <a

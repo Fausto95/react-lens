@@ -249,6 +249,40 @@ function ring(
   ctx.strokeStyle = color;
   ctx.stroke();
 }
+/**
+ * Dim the whole cascade for focus modes, then cut holes over focused nodes.
+ * Per-node veils left edges at full opacity while translucent node fills
+ * disappeared underneath — which read as orphaned arrows.
+ */
+function dimUnfocused(
+  ctx: Canvas2D,
+  layout: CascadeLayout,
+  view: CascadeViewport,
+  theme: TimelineTheme,
+  focusedIds: ReadonlySet<string>,
+): void {
+  if (focusedIds.size === 0) return;
+  const z = Math.max(0.001, view.zoom);
+  const x0 = -view.panX / z;
+  const y0 = -view.panY / z;
+  ctx.fillStyle = hexAlpha(theme.bg, theme.light ? 0.52 : 0.58);
+  ctx.fillRect(x0, y0, view.width / z, view.height / z);
+  ctx.globalCompositeOperation = "destination-out";
+  for (const item of layout.nodes) {
+    if (!focusedIds.has(item.node.id)) continue;
+    roundedRect(
+      ctx,
+      item.rect.x - 5,
+      item.rect.y - 5,
+      item.rect.width + 10,
+      item.rect.height + 10,
+      8,
+    );
+    ctx.fill();
+  }
+  ctx.globalCompositeOperation = "source-over";
+}
+
 export function drawCascadeOverlay(
   ctx: Canvas2D,
   layout: CascadeLayout,
@@ -258,21 +292,7 @@ export function drawCascadeOverlay(
 ): void {
   setupScreen(ctx, view);
   setupWorld(ctx, view);
-  if (options.focusedIds) {
-    for (const item of layout.nodes) {
-      if (options.focusedIds.has(item.node.id)) continue;
-      ctx.fillStyle = hexAlpha(theme.bg, 0.66);
-      roundedRect(
-        ctx,
-        item.rect.x - 2,
-        item.rect.y - 2,
-        item.rect.width + 4,
-        item.rect.height + 4,
-        7,
-      );
-      ctx.fill();
-    }
-  }
+  if (options.focusedIds) dimUnfocused(ctx, layout, view, theme, options.focusedIds);
   if (options.hoveredId && options.hoveredId !== options.selectedId) {
     const item = layout.nodeById.get(options.hoveredId);
     if (item) ring(ctx, item.rect, hexAlpha(theme.text, 0.72), 1, 1.5);

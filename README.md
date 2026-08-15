@@ -1,14 +1,13 @@
 <p align="center">
-  <img src="apps/site/public/og.png" alt="React Lens — React debugging with receipts. Time travel, AI agent, render causes, AST Doctor, waste detection, Suspense & RSC." width="800" />
+  <img src="apps/site/public/og.png" alt="React Lens — see every render, follow every cause" width="800" />
 </p>
 
 <h1 align="center">React Lens</h1>
 
 <p align="center">
-  <strong>React debugging with receipts.</strong><br />
-  Time travel through real state. Trace a render to its cause. Preview waste
-  before you change code. Diff two moments — or two sessions in CI. Human or AI
-  agent — every answer cites the exact render, component, and line.
+  <strong>See every render. Follow every cause.</strong><br />
+  Time-travel through real React state, inspect interactions on a professional timeline,
+  and trace render cascades from the event that started them to the components that paid the cost.
 </p>
 
 <p align="center">
@@ -19,105 +18,29 @@
 
 ---
 
-The debugging platform for React — built for humans and AI agents, with proof.
-Every click, commit, and render lands in one event log, so answers are backed
-by evidence instead of guesses.
+React Lens is a React debugging workspace built around one idea: **debug from evidence, not guesses**.
+Every interaction, commit, render, cause, diff, and diagnostic lands in one trace that humans, AI agents,
+the CLI, MCP clients, and CI can all query.
 
-## Features
+## What makes it different
 
-- **Time travel** — scrub the commit timeline and (in dev builds) restore real
-  page state as you go: raw `useState` / `useReducer` / class state, put back
-  through React's own override API.
-- **AI agent, BYOK** — ⌘I opens an in-panel assistant (OpenAI / Anthropic /
-  Z.AI; your key never leaves the browser) that answers through typed tools
-  over the live trace. Every claim cites a Lens ID — clickable chips that jump
-  to the exact render, component, or interaction.
-- **Render causes** — why-did-this-render at three levels of depth, with
-  confidence levels and a "no observable change" verdict when a render was
-  avoidable.
-- **Diffs, per render and across time** — value + DOM diffs for one commit;
-  A/B any two commits for a whole-app index of what ended up different.
-- **Interaction timeline** — a normalized event log of commits and
-  interactions, grouped into what you actually did, with commit heat and a
-  component waterfall.
-- **Pick it, find it** — ⌘\\ picks an element on the page and selects it in the
-  tree; selecting in the panel outlines it and scrolls off-screen targets into
-  view (so ↑/↓ doesn't drag the app around).
-- **Inspector** — props, state, hooks, DOM, and source for the selection, with
-  live edit through the dev renderer.
-- **Replay with fix** — preview the panel tree with wasted renders hidden.
-  Fix with AI opens the BYOK agent on a Doctor finding; it proposes a patch and
-  does not write to disk.
-- **AST Doctor** — static analysis (OXC when available, regex fallback in the
-  panel) fused with runtime evidence; findings are scoped to a component's
-  definition and stamped `file:line`.
-- **Waste detection** — after an interaction settles, a banner flags renders
-  that produced no visible change and jumps you to the worst offender.
-- **Explain this interaction** — one click produces a ranked narrative: cost,
-  cause chain, Doctor findings, suggested next step.
-- **Effect debugger** — timed effect run/cleanup events, durations, and a
-  "possible loop" badge when an effect fires on nearly every render.
-- **Suspense & RSC aware** — suspense boundaries, server-component roles, and
-  server actions are detected from client fiber heuristics and badged in the
-  tree and inspector.
-- **Sessions** — export/import the whole trace as a `.json` file; recent
-  sessions persist in IndexedDB and reload from ⌘K.
-- **React 19 + Compiler aware** — compiled components are badged ✓;
-  compiler bailouts are first-class evidence. Recommendations stay
-  evidence-backed (including memo when the data supports it).
+- **Time travel through real React state** — scrub the playhead and, in development builds, restore captured `useState`, `useReducer`, and class state through React's own override API.
+- **Cascade** — turn an interaction into a causal render graph. Follow upstream/downstream paths, inspect fanout, focus expensive work or roots, pan/zoom/fit, and keep large graphs navigable with a minimap.
+- **Professional interaction timeline** — a zoomable, scrollable editing-style timeline for interactions, commits, component work, ordering, and time-travel playback.
+- **Render causes** — ranked explanations for props, state, hooks, context, parent renders, mounts, and avoidable work, with confidence and diff evidence.
+- **Per-render and A/B diffs** — inspect what one render changed, or compare two commits for a whole-app index of what ended up different.
+- **Bidirectional selection** — pick an element on the page and jump to its component; select a component in Lens and highlight/scroll the real DOM target.
+- **Inspector** — props, state, hooks, DOM, source, and development-only live editing through the renderer.
+- **Waste detection** — flag renders that produced no visible change and jump straight to the worst offender.
+- **AST Doctor** — fuse static source analysis with runtime evidence and stamp findings with `file:line`.
+- **Effect debugger** — effect run/cleanup timing plus possible-loop detection.
+- **Suspense, RSC, and Compiler awareness** — surface boundaries, server roles/actions, compiled components, and compiler bailouts as first-class evidence.
+- **Sessions** — export/import portable trace JSON and keep recent sessions in IndexedDB.
+- **AI agent, BYOK** — ⌘I opens an in-panel assistant using OpenAI, Anthropic, or Z.AI. Your key stays in the browser and answers cite clickable Lens IDs.
 
-### Agents, CLI, and CI
+## Agents, CLI, MCP, and CI
 
-- **CLI** — `react-lens analyze` turns a session file into a markdown report;
-  `react-lens ci` compares baseline vs actual session files (paired by filename)
-  for regressions.
-- **MCP** — `react-lens mcp` exposes the same 23 typed tools over stdio so
-  Cursor, Claude, or any MCP host can diagnose from a session file.
-- **Playwright verify** — name interactions in tests, export sessions, and
-  `compare_sessions` (or `react-lens ci`) before vs after a fix.
-- **Session files** — portable v1 JSON: export from the panel, analyze
-  headlessly, hand to an agent. See [docs/sessions.md](docs/sessions.md).
-
-## Quick start
-
-Requires Node ≥ 20 and [pnpm](https://pnpm.io). Full walkthrough:
-[docs/getting-started.md](docs/getting-started.md). Live demo:
-[reactlens.xyz](https://www.reactlens.xyz/).
-
-```bash
-pnpm install
-```
-
-### Try it in the playground (no extension needed)
-
-```bash
-pnpm dev:playground
-```
-
-Open the page and click a product in the Shop. The in-page panel records the
-interaction, flags avoidable re-renders, and can **Explain** the cost.
-
-### Chrome extension
-
-```bash
-pnpm build:extension
-```
-
-Load `apps/extension/dist` as an unpacked extension (`chrome://extensions` →
-Developer mode → Load unpacked), then open DevTools → **React Lens**.
-
-### The site (inspects itself)
-
-```bash
-pnpm dev:site
-```
-
-The product site runs Lens on its own component tree — everything in the
-panel is the page you're looking at.
-
-## For agents
-
-Same tools the panel agent uses, over a session file:
+React Lens exposes the same trace-grounded model outside the panel:
 
 ```bash
 pnpm react-lens analyze path/to/session.json
@@ -125,59 +48,80 @@ pnpm react-lens mcp --session path/to/session.json
 pnpm react-lens ci --baseline ./baselines --actual ./actual
 ```
 
-- [docs/cli.md](docs/cli.md) — analyze + CI flags
-- [docs/mcp.md](docs/mcp.md) — MCP setup and tool catalog
-- [packages/mcp/AGENTS.md](packages/mcp/AGENTS.md) — symptom → tool playbook
-- [docs/verify.md](docs/verify.md) — Playwright + named interactions
+- `react-lens analyze` turns a session into a Markdown report.
+- `react-lens mcp` exposes typed tools over stdio for Cursor, Claude, and other MCP hosts.
+- `react-lens ci` compares matching baseline/actual sessions for regressions.
+- Playwright helpers let tests name interactions, export sessions, and verify before/after behavior.
+
+See [docs/cli.md](docs/cli.md), [docs/mcp.md](docs/mcp.md), [docs/verify.md](docs/verify.md), and [docs/sessions.md](docs/sessions.md).
+
+## Quick start
+
+Requires Node ≥ 20 and [pnpm](https://pnpm.io).
+
+```bash
+pnpm install
+pnpm dev:playground
+```
+
+The playground needs no extension: interact with the demo app and the embedded React Lens panel records the trace.
+
+### Chrome extension
+
+```bash
+pnpm build:extension
+```
+
+Load `apps/extension/dist` as an unpacked extension, then open DevTools → **React Lens**.
+
+### Product site
+
+```bash
+pnpm dev:site
+```
+
+The site is also a live demo: it inspects its own React tree while you use it.
+
+Full walkthrough: [docs/getting-started.md](docs/getting-started.md). Live site: [reactlens.xyz](https://www.reactlens.xyz/).
 
 ## How it works
 
-A pure analysis core — plain data in, plain data out, zero framework
-dependencies — sits behind a small page-side capture half, bridged by a shared
-protocol. Dependencies flow one way; the panel is just a consumer of the
-event log.
+A pure analysis core sits behind a small page-side capture layer. The panel, CLI, MCP server, and CI are consumers of the same event log rather than separate debugging implementations.
 
-```
+```text
 packages/
-  protocol/         shared event + message + session contract
-  serializer/       safe value serialization (never throws)
-  diff-engine/      value + DOM diff
+  protocol/         shared events, messages, sessions
+  serializer/       safe value serialization
+  diff-engine/      value + DOM diffing
   trace-engine/     event log, queries, subscriptions
   causality/        why-did-this-render + verdicts
-  fiber/            owned React hook, DOM ↔ fiber resolution
+  fiber/            React ownership + DOM ↔ fiber resolution
   instrumentation/  commits + interactions → events
-  diagnostics/      Doctor rules (runtime + static AST)
+  diagnostics/      runtime + static Doctor rules
   explain/          deterministic interaction narratives
-  agent/            trace-grounded tool loop, BYOK providers
-  agent-tools/      shared tool handlers (panel, CLI, MCP)
+  agent/            trace-grounded BYOK tool loop
+  agent-tools/      shared panel / CLI / MCP handlers
   cli/              analyze · mcp · ci
-  mcp/              stdio MCP server + AGENTS.md playbook
-  playwright/       named-interaction helpers for the verify loop
-  dev-channel/      live WebSocket frame sink + Vite plugin
+  mcp/              stdio MCP server
+  playwright/       named-interaction verification helpers
   source-maps/      runtime component ↔ original source
-  tree/ graph/      semantic tree + graph projections
-  ui/ icons/        shared panel primitives
-  demo-ui/          shared demo primitives (playground / e2e)
+  tree/ graph/      semantic projections
+  ui/ icons/        shared primitives
 apps/
-  devtools/         the React 19 panel
+  devtools/         React Lens panel, timeline, Cascade, inspector
   playground/       demo app engineered to misbehave
   extension/        MV3 Chrome extension shell
-  site/             product site (inspects itself)
-  e2e-fixture/      Playwright / CI fixture app
+  site/             product site that inspects itself
+  e2e-fixture/      Playwright / CI fixture
 ```
 
-User guides live in [docs/](docs/). Architecture:
-[DESIGN.md](DESIGN.md). Package contracts: [INTERFACES.md](INTERFACES.md).
+Architecture: [DESIGN.md](DESIGN.md). Package contracts: [INTERFACES.md](INTERFACES.md). Roadmap: [ROADMAP.md](ROADMAP.md).
 
 ## Status
 
-The core is demoable end-to-end: fiber capture, semantic tree, inspector,
-timeline with time travel, Explain, Doctor, the AI agent, sessions, CLI/MCP,
-the verify loop, and the extension shell. [ROADMAP.md](ROADMAP.md) is the
-living checklist of what's built and what's next.
+The core is demoable end-to-end: React capture, semantic tree, inspector, interaction timeline, real-state time travel, Cascade, render causes, Doctor, waste detection, AI agent, sessions, CLI/MCP, CI verification, and the Chrome extension shell.
 
-Not yet: npm-published packages (still `0.0.0`; release pipeline is ready),
-Firefox/Safari extensions, network adapters.
+Not yet: npm-published packages, Firefox/Safari extensions, and network adapters.
 
 ## Contributing
 
@@ -185,19 +129,12 @@ Issues and PRs are welcome.
 
 ```bash
 pnpm install
-pnpm test             # vitest across all packages
-pnpm typecheck        # strict tsc -b
-pnpm dev:playground   # fastest feedback loop
+pnpm test
+pnpm typecheck
+pnpm dev:playground
 ```
 
-A few ground rules:
-
-- Keep the core pure — `trace-engine` / `diff-engine` / `causality` take
-  plain data and return plain data; framework coupling stays in the adapter
-  layers.
-- Match the existing TypeScript and UI patterns in `apps/devtools`.
-- Tests first: pure logic gets plain unit tests, integration behavior gets a
-  contract test against real React 19.
+Keep the analysis core pure, match the existing TypeScript/UI patterns, and prefer tests around behavior and contracts.
 
 ## License
 
