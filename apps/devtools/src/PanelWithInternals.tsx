@@ -1,6 +1,6 @@
 import { useState } from "react";
 import type { ComponentId } from "@reactlens/protocol";
-import type { PanelProps } from "./Panel.js";
+import type { PanelProps as BasePanelProps } from "./Panel.js";
 import { Panel as CascadePanel } from "./Panel.js";
 import { ReactInternalsPanel } from "./react-internals/ReactInternalsPanel.js";
 
@@ -18,13 +18,13 @@ export type {
   PanelProps,
 } from "./Panel.js";
 
-export function Panel(props: PanelProps) {
+export function Panel(props: BasePanelProps) {
   const [workspace, setWorkspace] = useState<"cascade" | "internals">("cascade");
   const [internalsSelected, setInternalsSelected] = useState<ComponentId | null>(null);
 
   if (workspace === "cascade") {
     return (
-      <div style={{ position: "relative", width: "100%", height: "100%", minHeight: 0 }}>
+      <div style={{ width: "100%", height: "100%", minHeight: 0 }}>
         <CascadePanel {...props} />
         <WorkspaceSwitch value={workspace} onChange={setWorkspace} />
       </div>
@@ -102,10 +102,10 @@ function WorkspaceSwitch({
       role="tablist"
       aria-label="React Lens workspace"
       style={{
-        position: "absolute",
+        position: "fixed",
         top: 8,
         left: "50%",
-        zIndex: 40,
+        zIndex: 2147483050,
         transform: "translateX(-50%)",
         display: "inline-flex",
         alignItems: "center",
