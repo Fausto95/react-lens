@@ -39,10 +39,38 @@ const FALLBACK: TimelineTheme = {
   light: false,
 };
 
+/**
+ * Custom properties return their authored token text from getComputedStyle.
+ * For aliases such as `--bg: var(--rl-bg)` that means Canvas would receive
+ * `var(--rl-bg)`, which is invalid for fillStyle/strokeStyle. Resolve nested
+ * var() references to concrete values before handing colors to Canvas.
+ */
+export function resolveCanvasToken(
+  styles: CSSStyleDeclaration,
+  value: string,
+  depth = 0,
+): string {
+  if (!value.includes("var(") || depth > 8) return value.trim();
+  const next = value.replace(
+    /var\(\s*(--[\w-]+)\s*(?:,\s*([^)]*))?\)/g,
+    (_match, name: string, fallback: string | undefined) => {
+      const resolved = styles.getPropertyValue(name).trim();
+      if (resolved) return resolveCanvasToken(styles, resolved, depth + 1);
+      return fallback?.trim() ?? "";
+    },
+  );
+  return next === value ? next.trim() : resolveCanvasToken(styles, next, depth + 1);
+}
+
 export function readTimelineTheme(root: Element | null): TimelineTheme {
   if (!root) return FALLBACK;
   const s = getComputedStyle(root);
-  const pick = (name: string, fb: string) => s.getPropertyValue(name).trim() || fb;
+  const pick = (name: string, fb: string) => {
+    const authored = s.getPropertyValue(name).trim();
+    if (!authored) return fb;
+    const resolved = resolveCanvasToken(s, authored);
+    return resolved && !resolved.includes("var(") ? resolved : fb;
+  };
   const light =
     document.documentElement.dataset.rlTheme === "light" ||
     root.closest("[data-rl-theme='light']") != null;
