@@ -19,8 +19,8 @@ pnpm dev:playground
 ```
 
 Open the URL Vite prints. Click a product in the Shop — the panel records the
-interaction, flags avoidable re-renders, and can **Explain** the cost. Try
-⌘K for search / commands and ⌘I for the BYOK agent.
+interaction on **Cascade**, flags avoidable re-renders, and can **Explain** the
+cost. Try ⌘K for search / commands and ⌘I for the BYOK agent.
 
 ## 2. Chrome extension
 
@@ -43,10 +43,10 @@ pnpm dev:site
 ```
 
 The marketing page boots the capture runtime and docks the real panel on the
-right. Everything in the tree is the page you are reading.
+right. Everything in the tree — and on Cascade — is the page you are reading.
 
 ## Next
 
-- [Panel guide](panel.md) — shortcuts, timeline, filters, sessions
+- [Panel guide](panel.md) — shortcuts, Cascade, filters, sessions
 - [Sessions](sessions.md) — export a `.json` for CLI / MCP
 - [CLI](cli.md) / [MCP](mcp.md) / [Verify](verify.md) — agents and CI

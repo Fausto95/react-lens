@@ -12,9 +12,9 @@ export function Hero() {
         React debugging with <span className="accent">receipts</span>.
       </h1>
       <p className="hero-sub">
-        Time travel through real state. Trace a render to its cause. Preview waste before you change
-        code. Diff two moments — or two sessions in CI. Human or AI agent — every answer cites the
-        exact render, component, and line.
+        Scrub Cascade to rewind real state. Trace a render to its cause. Preview waste before you
+        change code. Diff two moments — or two sessions in CI. Human or AI agent — every answer cites
+        the exact render, component, and line.
       </p>
       <div className="cta-row">
         <a

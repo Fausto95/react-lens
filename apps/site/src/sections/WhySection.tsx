@@ -44,15 +44,15 @@ export function WhySection() {
       </div>
       <h2>Trace a render to its cause.</h2>
       <p className="sec-lead">
-        Cycle the context and select a <code>Consumer</code> in the panel: the cause chain names the
-        exact reason and the fanout across every consumer — then source maps and Doctor findings
-        land on <code>file:line</code>. Receipts, not guesses.
+        Cycle the context and select a <code>Consumer</code> in the panel: Cascade draws the fanout,
+        the cause chain names the exact reason, and source maps plus Doctor findings land on{" "}
+        <code>file:line</code>. Receipts, not guesses.
       </p>
 
       <div className="card">
         <CauseSpecimen />
         <div className="card-hint">
-          <span>▶ One context change → four consumer renders.</span>
+          <span>▶ One context change → four consumer renders on Cascade.</span>
         </div>
       </div>
 

@@ -45,8 +45,8 @@ export function TimeTravelSection() {
             <kbd> doesn't become a sibling column. */}
         <div className="card-hint">
           <span>
-            ▶ Click a few times, then drag the timeline playhead left (or press <kbd>←</kbd>). Press{" "}
-            <kbd>End</kbd> or <kbd>.</kbd> to go live again.
+            ▶ Click a few times, then use <b>Replay</b> on Cascade (or step ← / → through
+            interactions). Open ⌘K → <b>Go live</b> to resume capture.
           </span>
         </div>
       </div>

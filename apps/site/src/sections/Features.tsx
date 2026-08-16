@@ -6,8 +6,8 @@ interface Feature {
 /** One line each — the sections above carry the depth. */
 const FEATURES: Feature[] = [
   {
-    title: "Interaction timeline",
-    body: "A normalized log of commits and interactions, grouped into the things you actually did, with real self-time per component.",
+    title: "Cascade",
+    body: "Causal render graph for the selected interaction — Fit / 1:1, focus modes, Cause / Effects, aggregation, minimap, and replay transport on one toolbar.",
   },
   {
     title: "Bidirectional selection",

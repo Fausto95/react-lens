@@ -62,9 +62,9 @@ export function ChangeSection() {
           <span className="tag orange">A → B</span>
           <h3>What two moments apart did</h3>
           <p>
-            Mark <b>A</b> and <b>B</b> on the timeline (<kbd>[</kbd> / <kbd>]</kbd>) — a whole-app
-            index that reads <code>1 changed · 881 unchanged</code>. In CI, export matching session
-            files and run <code>react-lens ci</code> to catch interaction regressions.
+            Compare two Lens commits from the inspector / command palette for a whole-app index that
+            reads <code>1 changed · 881 unchanged</code>. In CI, export matching session files and
+            run <code>react-lens ci</code> to catch interaction regressions.
           </p>
         </article>
       </div>

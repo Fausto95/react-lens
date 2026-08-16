@@ -1,4 +1,4 @@
-import { StrictMode, useState, useMemo, useEffect, useRef, useCallback } from "react";
+import { StrictMode, useState, useMemo, useEffect, useLayoutEffect, useRef, useCallback } from "react";
 import { createRoot } from "react-dom/client";
 import type { ComponentId } from "@reactlens/protocol";
 import { Panel } from "./Panel.js";
@@ -12,7 +12,24 @@ const WAVE_MAX_GROUPS = 300;
 const WAVE_MAX_NODES = 400;
 const WAVE_MAX_MS = 1600;
 
-function EmbeddedPanel({ runtime, host }: { runtime: LensRuntime; host: HTMLElement }) {
+/** Match the site's mobile breakpoint — dock starts hidden on narrow viewports. */
+const EMBED_VISIBLE_MQ = "(min-width: 901px)";
+
+function initialEmbedVisible(): boolean {
+  if (typeof window === "undefined") return true;
+  return window.matchMedia(EMBED_VISIBLE_MQ).matches;
+}
+
+function EmbeddedPanel({
+  runtime,
+  host,
+  initiallyVisible,
+}: {
+  runtime: LensRuntime;
+  host: HTMLElement;
+  initiallyVisible: boolean;
+}) {
+  const [visible, setVisible] = useState(initiallyVisible);
   const [overlayOn, setOverlayOn] = useState(false);
   const [inspecting, setInspecting] = useState(false);
   const [pickedId, setPickedId] = useState<ComponentId | null>(null);
@@ -44,6 +61,10 @@ function EmbeddedPanel({ runtime, host }: { runtime: LensRuntime; host: HTMLElem
   useEffect(() => () => highlighter.dispose(), [highlighter]);
   useEffect(() => () => overlay.dispose(), [overlay]);
   useEffect(() => () => inspect.dispose(), [inspect]);
+
+  useLayoutEffect(() => {
+    document.documentElement.dataset.rlPanel = visible ? "open" : "hidden";
+  }, [visible]);
 
   const cancelWave = useCallback(() => {
     for (const t of waveTimers.current) clearTimeout(t);
@@ -96,35 +117,51 @@ function EmbeddedPanel({ runtime, host }: { runtime: LensRuntime; host: HTMLElem
   };
 
   return (
-    <Panel
-      store={runtime.store}
-      causality={runtime.causality}
-      recording
-      embedded
-      overlayEnabled={overlayOn}
-      inspecting={inspecting}
-      onToggleInspect={onToggleInspect}
-      selectComponent={pickedId}
-      onSelectConsumed={() => setPickedId(null)}
-      onToggleOverlay={() => {
-        if (overlayOn) overlay.disable();
-        else overlay.enable();
-        setOverlayOn((v) => !v);
-      }}
-      onReplayCommit={replayWave}
-      timeTravel={runtime.timeTravel}
-      {...(edit ? { edit } : {})}
-      onHighlight={(id: ComponentId | null, opts?: { reveal?: boolean }) => {
-        if (id === null) {
-          if (waveTimers.current.length > 0) return;
-          highlighter.hide();
-          return;
-        }
-        const nodes = runtime.domNodesOf(id);
-        if (opts?.reveal) highlighter.reveal(nodes);
-        else highlighter.show(nodes);
-      }}
-    />
+    <>
+      <div
+        className={`rl-embed-shell${visible ? "" : " rl-embed-shell-hidden"}`}
+        aria-hidden={!visible}
+      >
+        <Panel
+          store={runtime.store}
+          causality={runtime.causality}
+          recording
+          embedded
+          overlayEnabled={overlayOn}
+          inspecting={inspecting}
+          onToggleInspect={onToggleInspect}
+          selectComponent={pickedId}
+          onSelectConsumed={() => setPickedId(null)}
+          onToggleOverlay={() => {
+            if (overlayOn) overlay.disable();
+            else overlay.enable();
+            setOverlayOn((v) => !v);
+          }}
+          onReplayCommit={replayWave}
+          timeTravel={runtime.timeTravel}
+          {...(edit ? { edit } : {})}
+          onHighlight={(id: ComponentId | null, opts?: { reveal?: boolean }) => {
+            if (id === null) {
+              if (waveTimers.current.length > 0) return;
+              highlighter.hide();
+              return;
+            }
+            const nodes = runtime.domNodesOf(id);
+            if (opts?.reveal) highlighter.reveal(nodes);
+            else highlighter.show(nodes);
+          }}
+        />
+      </div>
+      <button
+        type="button"
+        className="rl-embed-toggle"
+        aria-expanded={visible}
+        title={visible ? "Hide embedded React Lens DevTools" : "Show embedded React Lens DevTools"}
+        onClick={() => setVisible((value) => !value)}
+      >
+        {visible ? "Hide DevTools" : "Show DevTools"}
+      </button>
+    </>
   );
 }
 
@@ -139,14 +176,17 @@ export function mountEmbedded(runtime: LensRuntime): () => void {
   host.id = "react-lens-overlay";
   document.body.appendChild(host);
   runtime.ignoreContainer(host);
+  const initiallyVisible = initialEmbedVisible();
+  document.documentElement.dataset.rlPanel = initiallyVisible ? "open" : "hidden";
   const root = createRoot(host);
   root.render(
     <StrictMode>
-      <EmbeddedPanel runtime={runtime} host={host} />
+      <EmbeddedPanel runtime={runtime} host={host} initiallyVisible={initiallyVisible} />
     </StrictMode>,
   );
   return () => {
     root.unmount();
     host.remove();
+    delete document.documentElement.dataset.rlPanel;
   };
 }

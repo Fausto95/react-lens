@@ -24,6 +24,8 @@
         --accent: #a78bfa;
         --green: #4ade80;
         --orange: #fb923c;
+        --state: #60a5fa;
+        --props: #c084fc;
         --font: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
         --mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, monospace;
       }
@@ -50,7 +52,6 @@
         display: grid;
         grid-template-columns: 592px 608px;
       }
-      /* Faint instrument grid, fading out to the left. */
       .grid {
         position: absolute;
         inset: 0;
@@ -62,7 +63,6 @@
         -webkit-mask-image: linear-gradient(to right, transparent, #000 55%);
       }
 
-      /* ---- Left: pitch ---- */
       .pitch {
         position: relative;
         padding: 62px 40px 56px 72px;
@@ -116,11 +116,8 @@
         flex: none;
       }
 
-      /* ---- Right: panel mock ---- */
       .panel-wrap {
         position: relative;
-        /* Grid items size to content by default; the panel must obey the
-           608px column so nothing spills past the 1200px card. */
         min-width: 0;
         padding: 56px 24px 56px 0;
       }
@@ -132,9 +129,8 @@
         background: var(--raised);
         overflow: hidden;
         display: grid;
-        /* The implicit column would be max-content and blow past the panel. */
         grid-template-columns: minmax(0, 1fr);
-        grid-template-rows: 48px 1fr auto 24px;
+        grid-template-rows: 44px minmax(0, 1fr) 196px 24px;
         font-size: 13px;
       }
       .topbar {
@@ -305,118 +301,166 @@
         background: #a78bfa22;
       }
 
-      /* Timeline */
-      .tl-tools {
-        display: flex;
-        align-items: center;
-        gap: 14px;
-        padding: 8px 14px;
-        color: var(--dim);
-        border-bottom: 1px solid var(--border);
+      /* Cascade */
+      .cascade {
+        display: grid;
+        grid-template-rows: 36px 1fr;
+        min-height: 0;
       }
-      .tl-tools .on {
-        color: var(--accent);
-        border: 1px solid #a78bfa66;
-        border-radius: 6px;
-        padding: 2px 4px;
-        background: #a78bfa1f;
-        display: inline-flex;
-      }
-      .tl-tools .fit {
-        font-size: 11px;
-        color: var(--faint);
-      }
-      .tl-tools .past {
-        margin-left: auto;
+      .cas-tools {
         display: flex;
         align-items: center;
         gap: 6px;
-        padding: 2px 9px;
-        border: 1px solid #a78bfa66;
-        border-radius: 999px;
-        background: #a78bfa1f;
+        padding: 0 10px;
+        color: var(--dim);
+        border-bottom: 1px solid var(--border);
+        font-size: 11px;
+        font-weight: 500;
+      }
+      .cas-tools .seg {
+        display: inline-flex;
+        align-items: center;
+        gap: 1px;
+        padding: 2px;
+        border-radius: 6px;
+        background: #ffffff08;
+      }
+      .cas-tools .seg span {
+        padding: 3px 7px;
+        border-radius: 4px;
+        color: var(--faint);
+      }
+      .cas-tools .seg .on {
+        background: #a78bfa22;
         color: var(--accent);
+      }
+      .cas-tools .ghost {
+        padding: 3px 7px;
+        border-radius: 4px;
+        color: var(--dim);
+      }
+      .cas-tools .zoom {
+        font-family: var(--mono);
+        font-size: 10px;
+        color: var(--faint);
+        margin-left: 2px;
+      }
+      .cas-tools .latest {
+        margin-left: auto;
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        padding: 3px 8px;
+        border-radius: 6px;
+        color: var(--accent);
+        background: #a78bfa1f;
+        border: 1px solid #a78bfa55;
         font-size: 11px;
       }
-      .ticks {
-        display: flex;
-        gap: 0;
-        padding: 6px 14px 4px 58px;
-        font-family: var(--mono);
-        font-size: 10px;
-        color: var(--faint);
-      }
-      .ticks span {
-        width: 91px;
-      }
-      .lane {
-        display: grid;
-        grid-template-columns: 44px 1fr;
-        align-items: center;
-        gap: 0;
-        padding: 3px 14px 3px 14px;
-      }
-      .lane .lbl {
-        font-family: var(--mono);
-        font-size: 10px;
-        color: var(--faint);
-      }
-      .lane .track {
+      .cas-stage {
         position: relative;
-        height: 18px;
-      }
-      .bar {
-        position: absolute;
-        top: 2px;
-        height: 15px;
-        border-radius: 4px;
-        font-family: var(--mono);
-        font-size: 10.5px;
-        line-height: 15px;
-        padding: 0 6px;
-        white-space: nowrap;
+        height: 100%;
+        min-height: 0;
+        background:
+          linear-gradient(to right, #ffffff07 1px, transparent 1px),
+          linear-gradient(to bottom, #ffffff07 1px, transparent 1px);
+        background-size: 28px 28px;
+        background-color: #0e1116;
         overflow: hidden;
       }
-      .bar.ixn {
-        background: #171b22;
-        border: 1px solid var(--border-strong);
+      .cas-stage svg.edges {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+      }
+      .node {
+        position: absolute;
+        width: 118px;
+        height: 34px;
+        border-radius: 6px;
+        border: 1px solid #60a5fa88;
+        background: #60a5fa22;
+        padding: 5px 8px 5px 12px;
+        font-family: var(--mono);
+        font-size: 10px;
+        line-height: 1.15;
         color: var(--text);
       }
-      .bar.cmp {
-        background: #a78bfa26;
-        border: 1px solid #a78bfa5c;
-        color: var(--text);
-      }
-      .cmt {
-        position: absolute;
-        top: 1px;
-        width: 4px;
-        height: 17px;
-        border-radius: 2px;
-        background: var(--orange);
-      }
-      /* Playhead parked in the past — the rewind story, made visible. */
-      .playhead {
-        position: absolute;
-        top: 0;
-        bottom: 0;
-        width: 2px;
-        background: var(--accent);
-      }
-      .playhead::after {
+      .node::before {
         content: "";
         position: absolute;
-        top: -4px;
-        left: -4px;
-        width: 10px;
-        height: 10px;
-        border-radius: 3px;
+        left: 4px;
+        top: 6px;
+        bottom: 6px;
+        width: 3px;
+        border-radius: 1.5px;
+        background: var(--state);
+      }
+      .node.mount {
+        border-color: #a78bfa88;
+        background: #a78bfa22;
+      }
+      .node.mount::before {
         background: var(--accent);
       }
-      .tl-body {
-        position: relative;
-        padding-bottom: 8px;
+      .node.props {
+        border-color: #c084fc88;
+        background: #c084fc1f;
       }
+      .node.props::before {
+        background: var(--props);
+      }
+      .node.sel {
+        box-shadow:
+          0 0 0 2px #a78bfa99,
+          0 0 14px #a78bfa55;
+      }
+      .node .meta {
+        color: var(--faint);
+        font-size: 9px;
+      }
+      .ord {
+        position: absolute;
+        width: 16px;
+        height: 16px;
+        border-radius: 999px;
+        background: var(--raised);
+        border: 1px solid #a78bfa99;
+        color: var(--text);
+        font-family: var(--mono);
+        font-size: 9px;
+        font-weight: 600;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .minimap {
+        position: absolute;
+        right: 10px;
+        bottom: 10px;
+        width: 72px;
+        height: 52px;
+        border-radius: 6px;
+        border: 1px solid var(--border-strong);
+        background: #12151acc;
+        overflow: hidden;
+      }
+      .minimap .n {
+        position: absolute;
+        width: 10px;
+        height: 4px;
+        border-radius: 1px;
+        background: #a78bfa88;
+      }
+      .minimap .view {
+        position: absolute;
+        inset: 8px 12px 10px 8px;
+        border: 1px solid var(--accent);
+        background: #a78bfa14;
+        border-radius: 2px;
+      }
+
       .statusbar {
         display: flex;
         align-items: center;
@@ -449,7 +493,6 @@
 
       <section class="pitch">
         <div class="brand">
-          <!-- IconLens @ 34 -->
           <svg
             width="34"
             height="34"
@@ -466,14 +509,29 @@
 
         <h1>React debugging with <span class="accent">receipts</span>.</h1>
         <p class="sub">
-          Time travel through real state. Trace a render to its cause. Preview waste before you
-          change code. Diff two moments — or two sessions in CI. Human or AI agent — every answer
-          cites the exact render, component, and line.
+          Scrub Cascade to rewind real state. Trace a render to its cause. Preview waste before you
+          change code. Diff two moments — or two sessions in CI.
         </p>
 
         <div class="features">
           <div class="feature">
-            <!-- IconRewind -->
+            <svg
+              width="22"
+              height="22"
+              viewBox="0 0 16 16"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.4"
+              stroke-linecap="round"
+            >
+              <circle cx="4" cy="4" r="1.6" />
+              <circle cx="12" cy="4" r="1.6" />
+              <circle cx="8" cy="12" r="1.6" />
+              <path d="M5.4 4.8 10.6 4.8M4.6 5.4 7.2 10.6M11.4 5.4 8.8 10.6" />
+            </svg>
+            Cascade
+          </div>
+          <div class="feature">
             <svg
               width="22"
               height="22"
@@ -489,7 +547,6 @@
             Time travel
           </div>
           <div class="feature">
-            <!-- IconSparkle -->
             <svg width="22" height="22" viewBox="0 0 16 16" fill="none">
               <path
                 d="M8 2.5c.5 2.6 1.4 3.5 4 4-2.6.5-3.5 1.4-4 4-.5-2.6-1.4-3.5-4-4 2.6-.5 3.5-1.4 4-4z"
@@ -503,23 +560,6 @@
             AI agent, BYOK
           </div>
           <div class="feature">
-            <!-- IconCrosshair -->
-            <svg
-              width="22"
-              height="22"
-              viewBox="0 0 16 16"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="1.4"
-              stroke-linecap="round"
-            >
-              <circle cx="8" cy="8" r="3.5" />
-              <path d="M8 1.5v2.5M8 12v2.5M1.5 8h2.5M12 8h2.5" />
-            </svg>
-            Render causes
-          </div>
-          <div class="feature">
-            <!-- IconDoctor -->
             <svg
               width="22"
               height="22"
@@ -536,14 +576,12 @@
             AST Doctor
           </div>
           <div class="feature">
-            <!-- IconBolt -->
             <svg width="22" height="22" viewBox="0 0 16 16" fill="none">
               <path d="M9 1.5 3.5 9H8l-1 5.5L12.5 7H8z" fill="currentColor" />
             </svg>
             Waste detection
           </div>
           <div class="feature">
-            <!-- Suspense boundary — a deferred branch -->
             <svg
               width="22"
               height="22"
@@ -594,32 +632,8 @@
                 stroke-width="1.4"
                 stroke-linecap="round"
               >
-                <path d="M8 3.5v9M3.5 8h9" />
-              </svg>
-              <svg
-                width="15"
-                height="15"
-                viewBox="0 0 16 16"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="1.4"
-                stroke-linecap="round"
-              >
                 <circle cx="7" cy="7" r="4.5" />
                 <path d="m11 11 3 3" />
-              </svg>
-              <svg
-                width="15"
-                height="15"
-                viewBox="0 0 16 16"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="1.4"
-                stroke-linecap="round"
-              >
-                <path d="M2.5 5.5h11M2.5 10.5h11" />
-                <circle cx="6" cy="5.5" r="1.7" fill="#12151a" />
-                <circle cx="10" cy="10.5" r="1.7" fill="#12151a" />
               </svg>
               <svg class="rec" width="15" height="15" viewBox="0 0 16 16" fill="none">
                 <circle cx="8" cy="8" r="4.5" fill="currentColor" />
@@ -629,7 +643,7 @@
 
           <div class="cols">
             <div class="col">
-              <div class="col-head">TREE</div>
+              <div class="col-head">COMPONENTS</div>
               <div class="chips">
                 <span class="chip on">All</span>
                 <span class="chip">△</span>
@@ -641,35 +655,31 @@
                 ><span class="metrics"><span>1×</span><span>5.7ms</span></span>
               </div>
               <div class="row" style="padding-left: 24px">
-                <span class="bullet">·</span><span class="nm">Hero</span
-                ><span class="metrics"><span>1×</span><span>2.6ms</span></span>
+                <span class="bullet">·</span><span class="nm">CartProvider</span
+                ><span class="metrics"><span>1×</span><span>1.2ms</span></span>
               </div>
-              <div class="row" style="padding-left: 36px">
-                <span class="bullet">·</span><span class="nm">ProductList</span
-                ><span class="metrics"><span>3×</span><span>14.2ms</span></span>
+              <div class="row sel" style="padding-left: 36px">
+                <span class="nm">ProductList</span><span class="badge">waste ×4</span
+                ><span class="metrics"><span>4×</span><span>14.2ms</span></span>
               </div>
-              <div class="row sel" style="padding-left: 48px">
-                <span class="nm">FilterBar</span><span class="badge">waste ×6</span
+              <div class="row" style="padding-left: 48px">
+                <span class="nm">FilterBar</span
                 ><span class="metrics"><span>6×</span><span>3.1ms</span></span>
               </div>
               <div class="row" style="padding-left: 48px">
-                <span class="nm">PriceCell</span
-                ><span class="metrics"><span>1×</span><span>0.4ms</span></span>
-              </div>
-              <div class="row" style="padding-left: 24px">
-                <span class="bullet">·</span><span class="nm">ProductGrid</span
-                ><span class="metrics"><span>1×</span><span>6.8ms</span></span>
+                <span class="nm">ProductCard ×7</span
+                ><span class="metrics"><span>7×</span><span>9.4ms</span></span>
               </div>
             </div>
 
             <div class="col">
               <div class="col-head">INSPECTOR</div>
               <div class="sig">
-                <span>&lt;FilterBar&gt;</span>
-                <span class="badge">wasted ×6</span>
+                <span>&lt;ProductList&gt;</span>
+                <span class="badge">wasted ×4</span>
               </div>
-              <div class="kv">Why did it render?<span class="v">props: options</span></div>
-              <div class="kv">Visible change<span class="v">none · 6 of 6</span></div>
+              <div class="kv">Why did it render?<span class="v">state: cart</span></div>
+              <div class="kv">Cascade depth<span class="v">1 · 12 edges</span></div>
               <div class="agent">
                 <div class="hd">
                   <svg width="13" height="13" viewBox="0 0 16 16" fill="none">
@@ -681,133 +691,112 @@
                   Agent
                 </div>
                 <p>
-                  Parent passes a new inline <code>options</code> object each commit
-                  <code class="id">rl:cmt-41</code>. Hoist it or derive it in the store.
+                  State update at <code class="id">rl:cmt-41</code> fans out through Cascade —
+                  Aggregate the leaf cards or memo the list.
                 </p>
               </div>
             </div>
           </div>
 
-          <div>
-            <div class="tl-tools">
-              <svg
-                width="15"
-                height="15"
-                viewBox="0 0 16 16"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="1.4"
-                stroke-linecap="round"
-              >
-                <path d="M3 5.5V3h2.5M13 5.5V3h-2.5M3 10.5V13h2.5M13 10.5V13h-2.5" />
-              </svg>
-              <svg width="15" height="15" viewBox="0 0 16 16" fill="none">
-                <path
-                  d="M3.5 3.5v9"
-                  stroke="currentColor"
-                  stroke-width="1.4"
-                  stroke-linecap="round"
-                />
-                <path d="M12.5 3.5v9L5.5 8z" fill="currentColor" />
-              </svg>
-              <svg width="15" height="15" viewBox="0 0 16 16" fill="none">
-                <path d="M5.5 3.5v9l8-4.5z" fill="currentColor" />
-              </svg>
-              <svg width="15" height="15" viewBox="0 0 16 16" fill="none">
-                <path
-                  d="M12.5 3.5v9"
-                  stroke="currentColor"
-                  stroke-width="1.4"
-                  stroke-linecap="round"
-                />
-                <path d="M3.5 3.5v9L10.5 8z" fill="currentColor" />
-              </svg>
-              <span class="on">
-                <svg
-                  width="15"
-                  height="15"
-                  viewBox="0 0 16 16"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="1.4"
-                  stroke-linecap="round"
-                >
-                  <path d="M3 8a5 5 0 1 1 1.5 3.6" />
-                  <path d="M3 8V5M3 8h3" />
-                </svg>
+          <div class="cascade">
+            <div class="cas-tools">
+              <span class="ghost">Fit</span>
+              <span class="ghost">1:1</span>
+              <span class="zoom">100%</span>
+              <span class="seg" style="margin-left: 8px">
+                <span class="on">All</span>
+                <span>Expensive</span>
+                <span>Roots</span>
               </span>
-              <svg
-                width="15"
-                height="15"
-                viewBox="0 0 16 16"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="1.4"
-                stroke-linecap="round"
-              >
-                <path d="M3.5 8h9" />
-              </svg>
-              <span class="fit">fit</span>
-              <svg
-                width="15"
-                height="15"
-                viewBox="0 0 16 16"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="1.4"
-                stroke-linecap="round"
-              >
-                <path d="M8 3.5v9M3.5 8h9" />
-              </svg>
-              <span class="past"><span class="dot"></span> REWOUND · 2.4ms</span>
+              <span class="ghost">↑ Cause</span>
+              <span class="ghost">↓ Effects</span>
+              <span class="latest"><span class="dot"></span> Latest</span>
             </div>
+            <div class="cas-stage">
+              <svg class="edges" viewBox="0 0 580 168" preserveAspectRatio="none">
+                <path
+                  d="M132 42 C176 42, 176 42, 220 42"
+                  fill="none"
+                  stroke="#60a5fa94"
+                  stroke-width="1.4"
+                />
+                <path
+                  d="M132 42 C176 42, 176 78, 220 78"
+                  fill="none"
+                  stroke="#60a5fa94"
+                  stroke-width="1.4"
+                />
+                <path
+                  d="M338 42 C382 42, 382 30, 426 30"
+                  fill="none"
+                  stroke="#c084fc94"
+                  stroke-width="1.4"
+                />
+                <path
+                  d="M338 42 C382 42, 382 54, 426 54"
+                  fill="none"
+                  stroke="#c084fc94"
+                  stroke-width="1.4"
+                />
+                <path
+                  d="M338 78 C382 78, 382 98, 426 98"
+                  fill="none"
+                  stroke="#a78bfa94"
+                  stroke-width="1.4"
+                />
+                <polygon points="220,42 214,39 214,45" fill="#60a5fa94" />
+                <polygon points="220,78 214,75 214,81" fill="#60a5fa94" />
+                <polygon points="426,30 420,27 420,33" fill="#c084fc94" />
+                <polygon points="426,54 420,51 420,57" fill="#c084fc94" />
+                <polygon points="426,98 420,95 420,101" fill="#a78bfa94" />
+              </svg>
 
-            <div class="tl-body">
-              <div class="ticks">
-                <span>0ms</span><span>1ms</span><span>2ms</span><span>3ms</span><span>4ms</span
-                ><span>5ms</span>
+              <div class="node mount sel" style="left: 14px; top: 25px">
+                CartProvider
+                <div class="meta">state · 1.2ms self</div>
               </div>
-              <div class="lane">
-                <span class="lbl">IXN</span>
-                <span class="track"
-                  ><span class="bar ixn" style="left: 0; right: 18%">Click ▸ FilterBar</span></span
-                >
+              <div class="node" style="left: 220px; top: 25px">
+                ProductList
+                <div class="meta">parent · 14.2ms self</div>
               </div>
-              <div class="lane">
-                <span class="lbl">CMT</span>
-                <span class="track">
-                  <span class="cmt" style="left: 0%"></span>
-                  <span class="cmt" style="left: 34%"></span>
-                  <span class="cmt" style="left: 61%"></span>
-                </span>
+              <div class="node" style="left: 220px; top: 61px">
+                CheckoutBar
+                <div class="meta">parent · 2.1ms self</div>
               </div>
-              <div class="lane">
-                <span class="lbl">CMP</span>
-                <span class="track"
-                  ><span class="bar cmp" style="left: 0; right: 4%">ProductList 14.2ms</span></span
-                >
+              <div class="node props" style="left: 426px; top: 13px">
+                FilterBar
+                <div class="meta">props · 3.1ms self</div>
               </div>
-              <div class="lane">
-                <span class="lbl"></span>
-                <span class="track"
-                  ><span class="bar cmp" style="left: 5%; right: 25%">FilterBar 3.1ms</span></span
-                >
+              <div class="node props" style="left: 426px; top: 37px">
+                SortSelect
+                <div class="meta">props · 0.8ms self</div>
               </div>
-              <div class="lane">
-                <span class="lbl"></span>
-                <span class="track"
-                  ><span class="bar cmp" style="left: 52%; right: 3%">PriceCell 0.4ms</span></span
-                >
+              <div class="node mount" style="left: 426px; top: 81px; border-style: dashed">
+                ProductCard ×7
+                <div class="meta">aggregate · 9.4ms</div>
               </div>
-              <!-- 14px lane padding + 44px label gutter + 61% of the 512px
-                   track — parked on the third commit, same as the markers. -->
-              <span class="playhead" style="left: calc(58px + 0.61 * 512px); top: 22px"></span>
+
+              <div class="ord" style="left: 168px; top: 34px">1</div>
+              <div class="ord" style="left: 168px; top: 58px">2</div>
+              <div class="ord" style="left: 374px; top: 22px">3</div>
+              <div class="ord" style="left: 374px; top: 46px">4</div>
+              <div class="ord" style="left: 374px; top: 86px">5</div>
+
+              <div class="minimap">
+                <div class="n" style="left: 10px; top: 14px"></div>
+                <div class="n" style="left: 28px; top: 14px"></div>
+                <div class="n" style="left: 28px; top: 24px"></div>
+                <div class="n" style="left: 46px; top: 10px"></div>
+                <div class="n" style="left: 46px; top: 18px"></div>
+                <div class="n" style="left: 46px; top: 30px"></div>
+                <div class="view"></div>
+              </div>
             </div>
           </div>
 
           <div class="statusbar">
-            <span>EV 19</span><span>RND 19</span><span>CMP 19</span>
-            <span class="right"><span class="dot"></span> past · cmt-41</span>
+            <span>12 renders · 31.8ms self · depth 2</span>
+            <span class="right"><span class="dot"></span> click · CartButton</span>
           </div>
         </div>
       </div>

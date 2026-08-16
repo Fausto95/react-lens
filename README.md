@@ -1,12 +1,12 @@
 <p align="center">
-  <img src="apps/site/public/og.png" alt="React Lens — React debugging with receipts. Time travel, AI agent, render causes, AST Doctor, waste detection, Suspense & RSC." width="800" />
+  <img src="apps/site/public/og.png" alt="React Lens — React debugging with receipts. Cascade, time travel, AI agent, render causes, AST Doctor, waste detection, Suspense & RSC." width="800" />
 </p>
 
 <h1 align="center">React Lens</h1>
 
 <p align="center">
   <strong>React debugging with receipts.</strong><br />
-  Time travel through real state. Trace a render to its cause. Preview waste
+  Scrub Cascade to rewind real state. Trace a render to its cause. Preview waste
   before you change code. Diff two moments — or two sessions in CI. Human or AI
   agent — every answer cites the exact render, component, and line.
 </p>
@@ -25,9 +25,14 @@ by evidence instead of guesses.
 
 ## Features
 
-- **Time travel** — scrub the commit timeline and (in dev builds) restore real
-  page state as you go: raw `useState` / `useReducer` / class state, put back
-  through React's own override API.
+- **Cascade** — the center of the panel: a causal render graph for the selected
+  interaction. Depth left→right, ordered edges, Fit / 1:1, focus modes (All /
+  Expensive / Roots), Cause / Effects, aggregated leaf fan-out, and a minimap.
+  Replay and time-travel controls live on the same toolbar.
+- **Time travel** — scrub or replay an interaction and (in dev builds) restore
+  real page state as you go: raw `useState` / `useReducer` / class state, put
+  back through React's own override API. Follow **Latest** or step previous /
+  next interaction.
 - **AI agent, BYOK** — ⌘I opens an in-panel assistant (OpenAI / Anthropic /
   Z.AI; your key never leaves the browser) that answers through typed tools
   over the live trace. Every claim cites a Lens ID — clickable chips that jump
@@ -37,9 +42,6 @@ by evidence instead of guesses.
   avoidable.
 - **Diffs, per render and across time** — value + DOM diffs for one commit;
   A/B any two commits for a whole-app index of what ended up different.
-- **Interaction timeline** — a normalized event log of commits and
-  interactions, grouped into what you actually did, with commit heat and a
-  component waterfall.
 - **Pick it, find it** — ⌘\\ picks an element on the page and selects it in the
   tree; selecting in the panel outlines it and scrolls off-screen targets into
   view (so ↑/↓ doesn't drag the app around).
@@ -95,7 +97,8 @@ pnpm dev:playground
 ```
 
 Open the page and click a product in the Shop. The in-page panel records the
-interaction, flags avoidable re-renders, and can **Explain** the cost.
+interaction on **Cascade**, flags avoidable re-renders, and can **Explain** the
+cost.
 
 ### Chrome extension
 
@@ -159,7 +162,7 @@ packages/
   ui/ icons/        shared panel primitives
   demo-ui/          shared demo primitives (playground / e2e)
 apps/
-  devtools/         the React 19 panel
+  devtools/         the React 19 panel (Cascade + redesign shell)
   playground/       demo app engineered to misbehave
   extension/        MV3 Chrome extension shell
   site/             product site (inspects itself)
@@ -172,9 +175,10 @@ User guides live in [docs/](docs/). Architecture:
 ## Status
 
 The core is demoable end-to-end: fiber capture, semantic tree, inspector,
-timeline with time travel, Explain, Doctor, the AI agent, sessions, CLI/MCP,
-the verify loop, and the extension shell. [ROADMAP.md](ROADMAP.md) is the
-living checklist of what's built and what's next.
+**Cascade** with time travel and replay transport, Explain, Doctor, the AI
+agent, sessions, CLI/MCP, the verify loop, and the extension shell.
+[ROADMAP.md](ROADMAP.md) is the living checklist of what's built and what's
+next.
 
 Not yet: npm-published packages (still `0.0.0`; release pipeline is ready),
 Firefox/Safari extensions, network adapters.

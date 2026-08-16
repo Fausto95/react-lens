@@ -26,7 +26,9 @@
   --card-gap: 18px;
   --font: "Instrument Sans", ui-sans-serif, system-ui, sans-serif;
   --mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
-  --panel-gutter: 500px;
+  /* Modest strip for the docked panel — enough for brand, links, and icon actions. */
+  --panel-gutter: min(480px, 42vw);
+  --page-pad: 64px;
   --nav-h: 56px;
 }
 
@@ -83,11 +85,23 @@ pre {
   font-family: var(--mono);
 }
 
+/* Narrower default dock on the marketing page so the site stays usable. */
+#react-lens-overlay .rl-embedded {
+  width: min(480px, 42vw);
+  min-width: 360px;
+}
+
 /* Atmospheric grid + accent wash behind the whole page */
 .site-shell {
   position: relative;
   isolation: isolate;
   min-height: 100vh;
+  padding-right: 0;
+  transition: padding-right 160ms ease;
+}
+/* Only reserve the dock while it is actually open. */
+html[data-rl-panel="open"] .site-shell {
+  padding-right: var(--panel-gutter);
 }
 .site-shell::before {
   content: "";
@@ -95,10 +109,16 @@ pre {
   inset: 0;
   z-index: -2;
   background:
+    radial-gradient(900px 520px at 50% -8%, rgba(var(--accent-rgb), 0.22), transparent 60%),
+    radial-gradient(700px 480px at 80% 18%, rgba(var(--accent-rgb), 0.08), transparent 55%),
+    var(--bg);
+  pointer-events: none;
+}
+html[data-rl-panel="open"] .site-shell::before {
+  background:
     radial-gradient(900px 520px at 12% -8%, rgba(var(--accent-rgb), 0.22), transparent 60%),
     radial-gradient(700px 480px at 88% 18%, rgba(var(--accent-rgb), 0.08), transparent 55%),
     var(--bg);
-  pointer-events: none;
 }
 .site-shell::after {
   content: "";
@@ -109,9 +129,12 @@ pre {
     linear-gradient(rgba(var(--ink-rgb), 0.035) 1px, transparent 1px),
     linear-gradient(90deg, rgba(var(--ink-rgb), 0.035) 1px, transparent 1px);
   background-size: 48px 48px;
-  mask-image: radial-gradient(ellipse 70% 55% at 30% 0%, #000 20%, transparent 75%);
+  mask-image: radial-gradient(ellipse 70% 55% at 50% 0%, #000 20%, transparent 75%);
   pointer-events: none;
   animation: grid-drift 28s linear infinite;
+}
+html[data-rl-panel="open"] .site-shell::after {
+  mask-image: radial-gradient(ellipse 70% 55% at 30% 0%, #000 20%, transparent 75%);
 }
 @keyframes grid-drift {
   from {
@@ -144,9 +167,17 @@ pre {
   align-items: center;
   gap: 20px;
   height: 100%;
+  width: 100%;
   max-width: 1180px;
-  padding: 0 64px;
-  padding-right: var(--panel-gutter);
+  margin-inline: auto;
+  padding: 0 var(--page-pad);
+  flex-wrap: nowrap;
+  min-width: 0;
+}
+/* Dock open: use the full clear column left of the gutter. */
+html[data-rl-panel="open"] .site-nav-inner {
+  max-width: none;
+  margin-inline: 0;
 }
 .site-nav-brand {
   display: inline-flex;
@@ -172,6 +203,7 @@ pre {
   margin-left: 8px;
   flex: 1;
   min-width: 0;
+  overflow: hidden;
 }
 .site-nav-links a {
   color: var(--dim);
@@ -194,15 +226,14 @@ pre {
 .theme-toggle {
   display: inline-flex;
   align-items: center;
-  gap: 7px;
-  padding: 7px 11px;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
   border-radius: 8px;
   border: 1px solid var(--border);
   background: var(--raised);
   color: var(--dim);
-  font-family: var(--font);
-  font-size: 13px;
-  font-weight: 500;
   cursor: pointer;
 }
 .theme-toggle:hover {
@@ -210,16 +241,36 @@ pre {
   border-color: var(--border-strong);
   background: var(--hover);
 }
-.theme-toggle-label {
-  min-width: 3.4em;
-  text-align: left;
+.github-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--raised);
+  color: var(--dim);
+  text-decoration: none;
+}
+.github-toggle:hover {
+  color: var(--text);
+  border-color: var(--border-strong);
+  background: var(--hover);
+  text-decoration: none;
 }
 
-/* Leave room on the right for the docked React Lens panel (≈420px). */
+/* Reading column: centered in the viewport when the panel is hidden;
+   fills the shell (left of the dock) when open. */
 .site {
+  width: 100%;
   max-width: 1180px;
-  padding: 0 64px 120px;
-  padding-right: var(--panel-gutter);
+  margin-inline: auto;
+  padding: 0 var(--page-pad) 120px;
+}
+html[data-rl-panel="open"] .site {
+  max-width: none;
+  margin-inline: 0;
 }
 
 .site section {
@@ -292,6 +343,51 @@ pre {
   background: var(--green);
   box-shadow: 0 0 0 0 rgba(var(--green-rgb), 0.55);
   animation: live-pulse 2s ease-out infinite;
+}
+
+/* Without the dock as a right-hand anchor, center the page composition. */
+html[data-rl-panel="hidden"] .hero {
+  align-items: center;
+  text-align: center;
+}
+html[data-rl-panel="hidden"] .hero-sub {
+  margin-inline: auto;
+}
+html[data-rl-panel="hidden"] .hero .cta-row,
+html[data-rl-panel="hidden"] .hero-meta {
+  justify-content: center;
+}
+html[data-rl-panel="hidden"] .site section:not(.hero) {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+}
+html[data-rl-panel="hidden"] .site section:not(.hero) .sec-kicker,
+html[data-rl-panel="hidden"] .site section:not(.hero) h2,
+html[data-rl-panel="hidden"] .site section:not(.hero) .sec-lead,
+html[data-rl-panel="hidden"] .site section:not(.hero) .feats,
+html[data-rl-panel="hidden"] .site section:not(.hero) .cmd-list,
+html[data-rl-panel="hidden"] .site section:not(.hero) .card,
+html[data-rl-panel="hidden"] .site section:not(.hero) .changelog {
+  margin-inline: auto;
+}
+html[data-rl-panel="hidden"] .site section:not(.hero) .feat,
+html[data-rl-panel="hidden"] .site section:not(.hero) .cmd-row,
+html[data-rl-panel="hidden"] .site section:not(.hero) .change,
+html[data-rl-panel="hidden"] .site section:not(.hero) .card-hint,
+html[data-rl-panel="hidden"] .site section:not(.hero) .spec-row {
+  text-align: left;
+}
+html[data-rl-panel="hidden"] .site section:not(.hero) .cmd-row > p {
+  margin-inline: auto;
+}
+html[data-rl-panel="hidden"] .site section:not(.hero) .spec-row,
+html[data-rl-panel="hidden"] .site section:not(.hero) .chips {
+  justify-content: center;
+}
+html[data-rl-panel="hidden"] .site section:not(.hero) .card-hint {
+  justify-content: center;
 }
 @keyframes live-pulse {
   0% {
@@ -724,11 +820,14 @@ kbd {
 
 @media (max-width: 900px) {
   :root {
-    --panel-gutter: 64px;
+    --panel-gutter: 0px;
+    --page-pad: 28px;
+  }
+  .site-shell {
+    padding-right: 0;
   }
   .site {
-    padding: 0 28px 96px;
-    padding-right: 28px;
+    padding-bottom: 96px;
   }
   .site-nav-inner {
     padding: 0 20px;
@@ -739,8 +838,5 @@ kbd {
   }
   .hero h1 {
     max-width: 14ch;
-  }
-  .theme-toggle-label {
-    display: none;
   }
 }

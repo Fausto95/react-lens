@@ -2,7 +2,7 @@
 
 **React debugging with receipts.**
 
-Time travel through real state. Trace a render to its cause. Preview waste
+Scrub Cascade to rewind real state. Trace a render to its cause. Preview waste
 before you change code. Diff two moments — or two sessions in CI. Human or AI
 agent — every answer cites the exact render, component, and line.
 

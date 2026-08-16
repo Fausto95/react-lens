@@ -74,6 +74,12 @@ with multiple **projections** rather than a raw fiber tree.
   (expanded). **Canvas/worker-LOD + columnar viewport queries** now land (see
   Known follow-ups). Deferred: screenshots/thumbnails, full track stack,
   tree-topology patches, session compare/HMR/story mode.
+- ✅ **Cascade (first-class view)** — causal DAG for the selected interaction (depth on
+  X, ordered edges); Fit / 1:1 / focus modes (All · Expensive · Roots) · Cause /
+  Effects; leaf aggregation + visible-node budget; OffscreenCanvas worker paint +
+  overlay + minimap; compact ghost toolbar with docked replay / time-travel
+  transport and Latest follow; interaction rail ←/→. Supersedes the wave timeline as
+  the product center column in the redesign shell.
 - ✅ **Real time travel** (supersedes "Instant Replay") — scrubbing the playhead
   restores the page's actual state, Redux-DevTools-style: page-side raw-state ring
   (`instrumentation.timeTravel`, dev builds only) applied via `overrideHookState`/class
