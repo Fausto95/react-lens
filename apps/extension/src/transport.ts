@@ -118,6 +118,8 @@ export type ContentToPage =
       entries: TimeTravelEntry[];
       /** Cursor time — lets the page rewind registered store adapters too. */
       atT?: number;
+      /** Suppress the page's transitions while traveling (panel pref). */
+      snap?: boolean;
     }
   | { source: typeof CONTENT_SOURCE; kind: "time-travel-live"; requestId: string }
   | {
@@ -215,7 +217,14 @@ export type PortMessage =
       line?: number;
       column?: number;
     }
-  | { kind: "time-travel-apply"; requestId: string; entries: TimeTravelEntry[]; atT?: number }
+  | {
+      kind: "time-travel-apply";
+      requestId: string;
+      entries: TimeTravelEntry[];
+      atT?: number;
+      /** Suppress the page's transitions while traveling (panel pref). */
+      snap?: boolean;
+    }
   | { kind: "time-travel-live"; requestId: string }
   | ({ kind: "time-travel-result"; requestId: string } & TimeTravelResult);
 

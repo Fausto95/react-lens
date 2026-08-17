@@ -15,8 +15,15 @@ import type { TimeCursor } from "./timeCursor.js";
  */
 export interface TimeTravelApi {
   supported(): boolean | Promise<boolean>;
-  /** `atT` lets the page also rewind registered external-store adapters. */
-  apply(entries: TimeTravelEntry[], atT?: number): TimeTravelResult | Promise<TimeTravelResult>;
+  /**
+   * `atT` lets the page also rewind registered external-store adapters; `snap`
+   * suppresses the page's transitions so the restore paints without easing.
+   */
+  apply(
+    entries: TimeTravelEntry[],
+    atT?: number,
+    options?: { snap?: boolean },
+  ): TimeTravelResult | Promise<TimeTravelResult>;
   goLive(): TimeTravelResult | Promise<TimeTravelResult>;
 }
 
@@ -39,6 +46,12 @@ export interface RestoreStatus {
 export interface PanelTimeTravel {
   /** Feed every cursor change; applies state deltas while historical + enabled. */
   onCursor(cursor: TimeCursor, enabled: boolean): void;
+  /**
+   * Suppress the page's transitions while traveling. Pushed by the panel when
+   * the pref changes, so the next apply carries it — the controller owns the
+   * current value rather than reading panel state mid-render.
+   */
+  setSnap(on: boolean): void;
   /** Returns the page to live state (no-op if never traveled). */
   goLive(): void;
   dispose(): void;
@@ -79,6 +92,8 @@ export function createPanelTimeTravel(
   let lastProcessed = 0;
   /** Bumped only on goLive — cancels in-flight applies before they hit the page. */
   let travelEpoch = 0;
+  /** Motion suppression, on unless the panel says otherwise. */
+  let snap = true;
 
   function publish(atT: number): void {
     onStatus?.({
@@ -142,7 +157,7 @@ export function createPanelTimeTravel(
         // goLive bumped the epoch — never clobber the restored live page with
         // a scrub apply that was already queued as a microtask (replay End).
         if (epoch !== travelEpoch) return null;
-        return api.apply(delta, t);
+        return api.apply(delta, t, { snap });
       })
       .then(
         (result) => {
@@ -182,6 +197,9 @@ export function createPanelTimeTravel(
   }
 
   return {
+    setSnap(on) {
+      snap = on;
+    },
     onCursor(cursor, enabled) {
       if (!enabled || cursor.mode === "live") {
         goLive();

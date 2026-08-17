@@ -172,6 +172,7 @@ function connect(): void {
           requestId: msg.requestId,
           entries: msg.entries,
           ...(msg.atT !== undefined ? { atT: msg.atT } : {}),
+          ...(msg.snap !== undefined ? { snap: msg.snap } : {}),
         } satisfies ContentToPage,
         "*",
       );

@@ -190,6 +190,30 @@ describe("createPanelTimeTravel — restore status", () => {
     ctl.dispose();
   });
 
+  it("sends the panel's snap setting with every apply", async () => {
+    const applies: Array<{ snap?: boolean } | undefined> = [];
+    const api = fakeApi(() => result());
+    const wrapped: typeof api = {
+      ...api,
+      apply(entries, atT, options) {
+        applies.push(options);
+        return api.apply(entries, atT, options);
+      },
+    };
+    const ctl = createPanelTimeTravel(makeStore(), wrapped);
+    ctl.onCursor({ t: 250, mode: "historical" }, true);
+    flushRaf();
+    await settle();
+    expect(applies.at(-1)).toEqual({ snap: true });
+
+    ctl.setSnap(false);
+    ctl.onCursor({ t: 120, mode: "historical" }, true);
+    flushRaf();
+    await settle();
+    expect(applies.at(-1)).toEqual({ snap: false });
+    ctl.dispose();
+  });
+
   it("carries store restores and names each unavailable store", async () => {
     const api = fakeApi(() =>
       result({

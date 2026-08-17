@@ -522,12 +522,13 @@ function ExtensionPanel() {
         }
         return false;
       },
-      apply: (entries: TimeTravelEntry[], atT?: number) =>
+      apply: (entries: TimeTravelEntry[], atT?: number, options?: { snap?: boolean }) =>
         travelRequest((requestId) => ({
           kind: "time-travel-apply",
           requestId,
           entries,
           ...(atT !== undefined ? { atT } : {}),
+          ...(options?.snap !== undefined ? { snap: options.snap } : {}),
         })),
       goLive: () => travelRequest((requestId) => ({ kind: "time-travel-live", requestId })),
     }),

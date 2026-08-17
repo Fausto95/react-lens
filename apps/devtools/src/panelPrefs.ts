@@ -7,6 +7,12 @@ import { THEME_PREFS, type ThemePref } from "./theme.js";
 export interface PanelPrefs {
   /** Real time travel follows the playhead while scrubbing. */
   travelOn: boolean;
+  /**
+   * Suppress the page's transitions and animations while traveling, so a
+   * restore paints the past instead of easing toward it. Off is for debugging
+   * the animation itself.
+   */
+  travelSnap: boolean;
   /** Timeline pane: waterfall-lane height (px) and collapsed state. */
   tlPaneH: number;
   tlCollapsed: boolean;
@@ -41,6 +47,7 @@ const KEY = "react-lens/panel-prefs";
 
 const DEFAULTS: PanelPrefs = {
   travelOn: true,
+  travelSnap: true,
   tlPaneH: 250,
   tlCollapsed: false,
   theme: "dark",
@@ -67,6 +74,7 @@ export function loadPanelPrefs(): PanelPrefs {
     const parsed = JSON.parse(raw) as Partial<PanelPrefs>;
     return {
       travelOn: typeof parsed.travelOn === "boolean" ? parsed.travelOn : DEFAULTS.travelOn,
+      travelSnap: typeof parsed.travelSnap === "boolean" ? parsed.travelSnap : DEFAULTS.travelSnap,
       tlPaneH: typeof parsed.tlPaneH === "number" ? parsed.tlPaneH : DEFAULTS.tlPaneH,
       tlCollapsed:
         typeof parsed.tlCollapsed === "boolean" ? parsed.tlCollapsed : DEFAULTS.tlCollapsed,

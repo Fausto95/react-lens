@@ -29,6 +29,7 @@ import {
   IconCrosshair,
   IconSliders,
   IconRewind,
+  IconBolt,
 } from "@reactlens/icons";
 import { PanelMenu, type Retention } from "./PanelMenu.js";
 import { DoctorIssuesMenu } from "./DoctorIssuesMenu.js";
@@ -253,6 +254,9 @@ export function Panel({
   // the page's state follows the playhead. On by default when supported;
   // the toggle persists across sessions.
   const [travelOn, setTravelOn] = useState(() => loadPanelPrefs().travelOn);
+  // Motion suppression while traveling; pushed into the controller below so a
+  // toggle takes effect on the next scrub frame without rebuilding it.
+  const [travelSnap, setTravelSnap] = useState(() => loadPanelPrefs().travelSnap);
   const [travelSupported, setTravelSupported] = useState(false);
   // Set-wide restore feedback while traveling (partial-restore pill + markers).
   const [restoreStatus, setRestoreStatus] = useState<RestoreStatus | null>(null);
@@ -273,6 +277,9 @@ export function Panel({
     [store, timeTravel, setRestoreStatus],
   );
   useEffect(() => () => travelCtl?.dispose(), [travelCtl]);
+  useEffect(() => {
+    travelCtl?.setSnap(travelSnap);
+  }, [travelCtl, travelSnap]);
   // Imported sessions never drive the live page: their renderIds belong to a
   // different app run, so real restoration is disabled and the timeline shows
   // captured page DOM instead.
@@ -620,6 +627,27 @@ export function Panel({
               >
                 <IconRewind size={13} />
               </button>
+              {travelOn && travelSupported && !offlineSession && (
+                <button
+                  type="button"
+                  className={`rl-icon-btn rl-tl-snap${travelSnap ? " active" : ""}`}
+                  title={
+                    travelSnap
+                      ? "Snap: the page's transitions are suppressed, so a rewind paints the past immediately"
+                      : "Snap off: the page eases toward rewound values, so styles lag the playhead"
+                  }
+                  aria-label="Suppress page transitions while traveling"
+                  aria-pressed={travelSnap}
+                  onClick={() => {
+                    setTravelSnap((on) => {
+                      savePanelPrefs({ travelSnap: !on });
+                      return !on;
+                    });
+                  }}
+                >
+                  <IconBolt size={13} />
+                </button>
+              )}
             </>
           ) : undefined
         }

@@ -1977,6 +1977,11 @@
  * Healthy is the common case, so it is deliberately near-invisible: no border,
  * no fill, faint text. Only a failure earns colour, weight and a chevron.
  */
+/* Snap toggle sits with the travel controls; active means motion is suppressed. */
+.rl-tl-snap.active {
+  color: var(--rl-accent, #a78bfa);
+}
+
 .rl-restore-chip {
   display: inline-flex;
   align-items: center;

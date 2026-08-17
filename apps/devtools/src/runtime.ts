@@ -40,7 +40,7 @@ export interface LensRuntime {
   /** Real time travel: restore captured raw state on the page (dev builds). */
   timeTravel: {
     supported(): boolean;
-    apply(entries: TimeTravelEntry[], atT?: number): TimeTravelResult;
+    apply(entries: TimeTravelEntry[], atT?: number, options?: { snap?: boolean }): TimeTravelResult;
     goLive(): TimeTravelResult;
     /** Opt-in external-store rewind (Zustand/Redux/module state). */
     registerStore(adapter: TimeTravelStoreAdapter): () => void;
@@ -78,7 +78,8 @@ export function createEmbeddedRuntime(): LensRuntime {
     setHookState: (id, hookIndex, path, value) => fiber.setHookState(id, hookIndex, path, value),
     timeTravel: {
       supported: () => capture.instrumentation.timeTravel.supported(),
-      apply: (entries, atT) => capture.instrumentation.timeTravel.apply(entries, atT),
+      apply: (entries, atT, options) =>
+        capture.instrumentation.timeTravel.apply(entries, atT, options),
       goLive: () => capture.instrumentation.timeTravel.goLive(),
       registerStore: (adapter) => capture.instrumentation.timeTravel.registerStore(adapter),
     },

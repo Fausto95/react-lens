@@ -193,7 +193,9 @@ window.addEventListener("message", (event: MessageEvent) => {
       "*",
     );
   } else if (data.kind === "time-travel-apply") {
-    const result = instrumentation.timeTravel.apply(data.entries, data.atT);
+    const result = instrumentation.timeTravel.apply(data.entries, data.atT, {
+      ...(data.snap !== undefined ? { snap: data.snap } : {}),
+    });
     window.postMessage(
       { source: PAGE_SOURCE, kind: "time-travel-result", requestId: data.requestId, ...result },
       "*",

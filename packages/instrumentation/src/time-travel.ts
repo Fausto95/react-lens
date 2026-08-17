@@ -11,6 +11,7 @@ import {
 } from "@reactlens/protocol";
 import type { Fiber, FiberBridge, LiveState } from "@reactlens/fiber";
 import { captureStateHooks, inspectClassState } from "@reactlens/fiber";
+import { createSnapMode, type SnapMode } from "./snap-mode.js";
 
 /**
  * Page-side time travel: a bounded history of RAW state values per render,
@@ -32,8 +33,12 @@ export interface TimeTravelController {
   /**
    * Restore each entry's captured state; with `atT`, also restore every
    * registered store to its snapshot at or before that time. Enters active mode.
+   *
+   * `snap` (default true) suppresses the page's transitions and animations while
+   * traveling, so a restore lands on the frame it belongs to instead of easing
+   * toward it. Pass false to debug the animation itself.
    */
-  apply(entries: TimeTravelEntry[], atT?: number): TimeTravelResult;
+  apply(entries: TimeTravelEntry[], atT?: number, options?: { snap?: boolean }): TimeTravelResult;
   /** Restore the pre-travel live baselines and resume normal recording. */
   goLive(): TimeTravelResult;
   clear(): void;
@@ -64,12 +69,16 @@ export function createTimeTravel(deps: {
   snapshotsPerStore?: number;
   /** Single error seam — a misbehaving adapter is reported, never swallowed. */
   onError?: (scope: string, err: unknown) => void;
+  /** The inspected document, for suppressing motion while traveling. */
+  snapMode?: SnapMode;
 }): TimeTravelController {
   const { fiber } = deps;
   const rendersPerComponent = deps.rendersPerComponent ?? TIME_TRAVEL_RETENTION.rendersPerComponent;
   const maxComponents = deps.maxComponents ?? TIME_TRAVEL_RETENTION.maxComponents;
   const snapshotsPerStore = deps.snapshotsPerStore ?? TIME_TRAVEL_RETENTION.snapshotsPerStore;
   const onError = deps.onError ?? (() => {});
+  const snapMode =
+    deps.snapMode ?? createSnapMode(typeof document === "undefined" ? undefined : document);
 
   /**
    * componentId → (renderId → raw state), both insertion-ordered. Retention is
@@ -218,7 +227,14 @@ export function createTimeTravel(deps: {
     return applied;
   }
 
-  function apply(entries: TimeTravelEntry[], atT?: number): TimeTravelResult {
+  function apply(
+    entries: TimeTravelEntry[],
+    atT?: number,
+    options?: { snap?: boolean },
+  ): TimeTravelResult {
+    // Before any write lands: the restore commit must paint without easing.
+    if (options?.snap !== false) snapMode.on();
+    else snapMode.off();
     if (!supported()) {
       return {
         applied: 0,
@@ -268,6 +284,8 @@ export function createTimeTravel(deps: {
   }
 
   function goLive(): TimeTravelResult {
+    // The page owns its motion again from here.
+    snapMode.off();
     let applied = 0;
     let failed = 0;
     const hadComponents = baselines.size > 0;
@@ -352,6 +370,7 @@ export function createTimeTravel(deps: {
       history.clear();
       baselines.clear();
       stateless.clear();
+      snapMode.off();
       for (const reg of stores.values()) {
         reg.history.clear();
         reg.hasLast = false;
