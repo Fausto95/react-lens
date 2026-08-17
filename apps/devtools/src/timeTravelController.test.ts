@@ -190,6 +190,51 @@ describe("createPanelTimeTravel — restore status", () => {
     ctl.dispose();
   });
 
+  it("carries store restores and names each unavailable store", async () => {
+    const api = fakeApi(() =>
+      result({
+        applied: 1,
+        storesApplied: 1,
+        storeFailures: [{ storeId: "cart", reason: "no-snapshot" }],
+      }),
+    );
+    const statuses: Array<RestoreStatus | null> = [];
+    const ctl = createPanelTimeTravel(makeStore(), api, (s) => statuses.push(s));
+    ctl.onCursor({ t: 250, mode: "historical" }, true);
+    flushRaf();
+    await settle();
+    const last = statuses.at(-1)!;
+    expect(last.storesApplied).toBe(1);
+    expect(last.storeFailures.get("cart")).toBe("no-snapshot");
+    ctl.dispose();
+  });
+
+  it("drops a store failure once a later cursor restores that store", async () => {
+    // Store state is whole-app, not per delta: the newest apply is the truth,
+    // unlike component failures which accumulate across deltas.
+    let broken = true;
+    const api = fakeApi(() =>
+      broken
+        ? result({ storeFailures: [{ storeId: "cart", reason: "no-snapshot" }] })
+        : result({ storesApplied: 1 }),
+    );
+    const statuses: Array<RestoreStatus | null> = [];
+    const ctl = createPanelTimeTravel(makeStore(), api, (s) => statuses.push(s));
+    ctl.onCursor({ t: 120, mode: "historical" }, true);
+    flushRaf();
+    await settle();
+    expect(statuses.at(-1)!.storeFailures.size).toBe(1);
+
+    broken = false;
+    ctl.onCursor({ t: 250, mode: "historical" }, true);
+    flushRaf();
+    await settle();
+    const last = statuses.at(-1)!;
+    expect(last.storeFailures.size).toBe(0);
+    expect(last.storesApplied).toBe(1);
+    ctl.dispose();
+  });
+
   it("ignores a stale result that resolves after a newer one", async () => {
     let resolveFirst!: (r: TimeTravelResult) => void;
     let call = 0;
