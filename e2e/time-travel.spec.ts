@@ -109,7 +109,7 @@ test("the page registers its store through the __REACT_LENS__ page API", async (
   expect(hasApi).toBe(true);
 });
 
-test("the restore pill counts rewound stores and names failures", async ({ page }) => {
+test("the restore chip reports stores while traveling and clears on go-live", async ({ page }) => {
   await boot(page);
   await ensureTravelOn(page);
   await clickInPage(page, "Add");
@@ -118,12 +118,16 @@ test("the restore pill counts rewound stores and names failures", async ({ page 
   await page.waitForTimeout(350);
 
   await cascadeToolbar(page).getByRole("button", { name: "Previous interaction" }).click();
-  const pill = page.locator(".rl-tl-restore");
-  await expect(pill).toBeVisible();
-  await expect(pill).toContainText(/\d+ store/);
+  const chip = page.locator(".rl-restore-chip");
+  await expect(chip).toBeVisible();
+  // Quiet state: a glyph and the store count, no component tally. The sentence
+  // lives in the accessible name.
+  await expect(chip).toHaveText(/^\d+$/);
+  await expect(chip).not.toHaveClass(/partial/);
+  await expect(chip).toHaveAttribute("aria-label", /follows the playhead, and \d+ store/);
 
   await goLive(page);
-  await expect(pill).toHaveCount(0);
+  await expect(chip).toHaveCount(0);
 });
 
 test("external store cart rewinds with the selected interaction", async ({ page }) => {

@@ -1,11 +1,25 @@
-import { describe, expect, it, beforeEach } from "vite-plus/test";
+import { describe, expect, it, beforeEach, afterEach } from "vite-plus/test";
 import type { ComponentId } from "@reactlens/protocol";
 import { RestoreIndicator } from "./RestoreIndicator.js";
 
 (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
+/**
+ * Roots are unmounted between tests, not just detached: this component listens
+ * on `document` while its popover is open, so a leaked root would react to the
+ * next test's Escape and try to clean up DOM that no longer exists.
+ */
+const mounted: Array<{ unmount: () => void }> = [];
+
 beforeEach(() => {
   document.body.innerHTML = "<div id='root'></div>";
+});
+
+afterEach(async () => {
+  const React = await import("react");
+  await React.act(async () => {
+    for (const root of mounted.splice(0)) root.unmount();
+  });
 });
 
 async function mount(props: Parameters<typeof RestoreIndicator>[0]) {
@@ -13,6 +27,7 @@ async function mount(props: Parameters<typeof RestoreIndicator>[0]) {
   const { createRoot } = await import("react-dom/client");
   const container = document.getElementById("root")!;
   const root = createRoot(container);
+  mounted.push(root);
   await React.act(async () => {
     root.render(React.createElement(RestoreIndicator, props) as never);
   });
@@ -26,6 +41,11 @@ async function mount(props: Parameters<typeof RestoreIndicator>[0]) {
         chip().click();
       });
     },
+    async rerender(next: Parameters<typeof RestoreIndicator>[0]) {
+      await React.act(async () => {
+        root.render(React.createElement(RestoreIndicator, next) as never);
+      });
+    },
     menu: () => document.querySelector<HTMLElement>(".rl-restore-menu"),
     rows: () => [...document.querySelectorAll<HTMLElement>(".rl-restore-row")],
   };
@@ -34,24 +54,29 @@ async function mount(props: Parameters<typeof RestoreIndicator>[0]) {
 const cid = (n: number) => n as ComponentId;
 
 describe("RestoreIndicator — healthy", () => {
-  it("stays quiet: no component count, no warning, nothing to open", async () => {
-    // 199 restored components is not news. The chip's job while everything
-    // works is to be ignorable.
+  it("stays quiet: a glyph, the store count, nothing to open", async () => {
+    // 199 restored components is not news, and a toolbar has no room for a
+    // sentence. The chip's job while everything works is to be ignorable.
     const ui = await mount({ applied: 199, failures: [], storesApplied: 4, storeFailures: [] });
-    expect(ui.chip().textContent).toBe("state · 4 stores");
+    expect(ui.chip().textContent).toBe("4");
     expect(ui.chip().className).not.toContain("partial");
+    expect(ui.chip().querySelector("svg")).not.toBeNull();
     await ui.click();
     expect(ui.menu()).toBeNull();
   });
 
-  it("omits the store count when no store is registered", async () => {
+  it("shows the glyph alone when no store is registered", async () => {
     const ui = await mount({ applied: 12, failures: [], storesApplied: 0, storeFailures: [] });
-    expect(ui.chip().textContent).toBe("state");
+    expect(ui.chip().textContent).toBe("");
+    expect(ui.chip().querySelector("svg")).not.toBeNull();
   });
 
-  it("singularises one store", async () => {
+  it("carries the full sentence in the accessible name and tooltip", async () => {
+    // The words did not disappear, they moved: nothing is only-visual.
     const ui = await mount({ applied: 1, failures: [], storesApplied: 1, storeFailures: [] });
-    expect(ui.chip().textContent).toBe("state · 1 store");
+    const expected = "Every component's state follows the playhead, and 1 store";
+    expect(ui.chip().getAttribute("aria-label")).toBe(expected);
+    expect(ui.chip().title).toBe(expected);
   });
 });
 
@@ -63,11 +88,16 @@ describe("RestoreIndicator — partial", () => {
     storeFailures: [{ storeId: "cart", reason: "no-snapshot" as const }],
   };
 
-  it("names what failed, not how many succeeded", async () => {
+  it("shows the failure count, not how many succeeded", async () => {
     const ui = await mount(oneStore);
-    expect(ui.chip().textContent).toContain("1 store didn't rewind");
+    expect(ui.chip().textContent).toBe("1");
     expect(ui.chip().textContent).not.toContain("199");
     expect(ui.chip().className).toContain("partial");
+  });
+
+  it("names the failing kind in the accessible name", async () => {
+    const ui = await mount(oneStore);
+    expect(ui.chip().getAttribute("aria-label")).toContain("1 store didn't rewind");
   });
 
   it("says component when the failure is a component", async () => {
@@ -77,7 +107,7 @@ describe("RestoreIndicator — partial", () => {
       storesApplied: 0,
       storeFailures: [],
     });
-    expect(ui.chip().textContent).toContain("1 component didn't rewind");
+    expect(ui.chip().getAttribute("aria-label")).toContain("1 component didn't rewind");
   });
 
   it("counts both kinds together when they mix", async () => {
@@ -87,7 +117,8 @@ describe("RestoreIndicator — partial", () => {
       storesApplied: 1,
       storeFailures: [{ storeId: "cart", reason: "apply-failed" as const }],
     });
-    expect(ui.chip().textContent).toContain("2 didn't rewind");
+    expect(ui.chip().textContent).toBe("2");
+    expect(ui.chip().getAttribute("aria-label")).toContain("2 didn't rewind");
   });
 
   it("opens a popover explaining each failure in plain language", async () => {
@@ -126,6 +157,16 @@ describe("RestoreIndicator — partial", () => {
       (componentRow as HTMLButtonElement).click();
     });
     expect(selected).toEqual([cid(7)]);
+  });
+
+  it("hides the popover when everything recovers", async () => {
+    // Scrubbing to a cursor where every store has history: the explanation is
+    // no longer true, so it must not stay on screen.
+    const ui = await mount(oneStore);
+    await ui.click();
+    expect(ui.menu()).not.toBeNull();
+    await ui.rerender({ applied: 199, failures: [], storesApplied: 4, storeFailures: [] });
+    expect(ui.menu()).toBeNull();
   });
 
   it("closes on Escape", async () => {

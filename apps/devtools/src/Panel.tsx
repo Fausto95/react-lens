@@ -48,7 +48,7 @@ import { sourceResolver } from "./sourceResolver.js";
 import { createTooltipLayer } from "./tooltip.js";
 import type { EditApi } from "./Inspector.js";
 import { RedesignShell } from "./redesign/RedesignShell.js";
-import { RestoreStatusPill } from "./timeline/RestoreStatusPill.js";
+import { RestoreIndicator } from "./timeline/RestoreIndicator.js";
 import { ErrorChip } from "./ErrorChip.js";
 import { reportNotice } from "./errors.js";
 import "./theme.css";
@@ -567,7 +567,7 @@ export function Panel({
           timeTravel ? (
             <>
               {restoreStatus && (
-                <RestoreStatusPill
+                <RestoreIndicator
                   applied={restoreStatus.applied}
                   failures={[...restoreStatus.failedIds].map(([id, reason]) => ({
                     id,

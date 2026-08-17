@@ -1972,38 +1972,175 @@
   background: currentColor;
 }
 
-/* Set-wide restore feedback while time traveling. */
-.rl-tl-restore {
+/*
+ * How faithfully the page is showing the past, while time travel drives it.
+ * Healthy is the common case, so it is deliberately near-invisible: no border,
+ * no fill, faint text. Only a failure earns colour, weight and a chevron.
+ */
+.rl-restore-chip {
   display: inline-flex;
   align-items: center;
-  gap: 3px;
-  height: 20px;
-  padding: 0 7px;
+  justify-content: center;
+  gap: 5px;
+  height: 24px;
+  min-width: 24px;
+  padding: 0 8px;
   margin-left: 2px;
-  border-radius: 10px;
-  border: 1px solid var(--rl-border-strong);
-  background: var(--rl-bg-hover);
-  color: var(--rl-text-dim);
-  font-size: 10px;
+  border-radius: 12px;
+  border: 1px solid transparent;
+  background: none;
+  color: var(--rl-text-faint);
+  font: inherit;
+  font-size: 11px;
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
   cursor: default;
   flex: 0 0 auto;
 }
-.rl-tl-restore.partial {
+.rl-restore-chip-count {
+  font-weight: 550;
+  letter-spacing: 0.01em;
+}
+.rl-restore-chip svg {
+  flex: 0 0 auto;
+}
+.rl-restore-chip:disabled {
+  opacity: 1; /* not an unavailable control — just nothing to open */
+}
+.rl-restore-chip.partial {
   color: var(--rl-suspicious);
   border-color: rgba(var(--rl-suspicious-rgb), 0.35);
   background: rgba(var(--rl-suspicious-rgb), 0.08);
+  font-weight: 550;
   cursor: pointer;
 }
-.rl-tl-restore:disabled {
-  opacity: 0.9;
+.rl-restore-chip.partial:hover,
+.rl-restore-chip.partial[aria-expanded="true"] {
+  background: rgba(var(--rl-suspicious-rgb), 0.16);
+  border-color: rgba(var(--rl-suspicious-rgb), 0.5);
 }
-.rl-tl-restore-fail {
-  font-weight: 600;
+.rl-restore-chip.partial:focus-visible {
+  outline: 1px solid var(--rl-suspicious);
+  outline-offset: 1px;
 }
-.rl-tl-restore-stores {
+
+/*
+ * Portaled to the panel root and positioned from the chip's rect: the cascade
+ * toolbar clips its overflow and the graph canvas paints over anything inside
+ * it, so an in-place popover was both cut off and buried.
+ */
+/* Two classes on purpose: the generic `.rl-menu` block later in this file is
+   absolutely positioned, and these coordinates come from getBoundingClientRect
+   — viewport space, so the positioning scheme has to be fixed. */
+.rl-menu.rl-restore-menu {
+  position: fixed;
+  z-index: 2147483400;
+  top: 0;
+  right: auto;
+  min-width: 300px;
+  max-width: min(400px, 92vw);
+  padding: var(--rl-s2);
+  transform: translateX(-100%);
+}
+.rl-restore-menu .rl-menu-head {
+  text-transform: none;
+  letter-spacing: 0;
+  font-size: 11px;
+  color: var(--rl-suspicious);
+}
+.rl-restore-menu-ok {
+  color: var(--rl-text-faint);
+  font-weight: 400;
+}
+.rl-restore-menu-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  max-height: min(360px, 52vh);
+  overflow-y: auto;
+}
+.rl-restore-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  width: 100%;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: 5px;
+  background: none;
+  color: var(--rl-text);
+  font: inherit;
+  text-align: left;
+}
+button.rl-restore-row {
+  cursor: pointer;
+}
+button.rl-restore-row:hover,
+button.rl-restore-row:focus-visible {
+  background: var(--rl-bg-active);
+  outline: none;
+}
+button.rl-restore-row:disabled {
+  cursor: default;
+}
+.rl-restore-row-pip {
+  width: 5px;
+  height: 5px;
+  margin-top: 5px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: var(--rl-suspicious);
+}
+.rl-restore-row-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+.rl-restore-row-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.rl-restore-row-name {
+  font-size: 11.5px;
+  font-weight: 550;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.rl-restore-row-kind {
+  flex: 0 0 auto;
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--rl-text-faint);
+  border: 1px solid var(--rl-border);
+  border-radius: 4px;
+  padding: 0 4px;
+}
+.rl-restore-row-why {
+  font-size: 10.5px;
+  line-height: 1.45;
   color: var(--rl-text-dim);
+  text-wrap: pretty;
+}
+/* Click-through affordance: a chevron drawn in CSS, so the row needs no glyph
+   font and stays aligned with the name line. */
+.rl-restore-row-go {
+  flex: 0 0 auto;
+  width: 5px;
+  height: 5px;
+  margin: 5px 2px 0 0;
+  border-top: 1.5px solid var(--rl-text-faint);
+  border-right: 1.5px solid var(--rl-text-faint);
+  transform: rotate(45deg);
+}
+button.rl-restore-row:hover .rl-restore-row-go,
+button.rl-restore-row:focus-visible .rl-restore-row-go {
+  border-color: var(--rl-text);
 }
 .rl-tl-live-label {
   overflow: hidden;
