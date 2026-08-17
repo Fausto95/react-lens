@@ -7,6 +7,12 @@ import type {
 } from "@reactlens/protocol";
 import { createApplySetCursor, diffApplySet, type TraceStore } from "@reactlens/trace-engine";
 import type { TimeCursor } from "./timeCursor.js";
+import {
+  deserializeLaneFilter,
+  isComponentReplayMuted,
+  type LaneFilter,
+} from "./laneFilter.js";
+import { loadPanelPrefs } from "./panelPrefs.js";
 
 /**
  * Page-facing time-travel commands. Synchronous in the embedded runtime,
@@ -39,16 +45,104 @@ export interface PanelTimeTravel {
   dispose(): void;
 }
 
+export interface PanelTimeTravelOptions {
+  /**
+   * Replay policy source. The default reads the persisted panel mute filter,
+   * while tests/alternate shells can inject a cheaper in-memory source.
+   *
+   * This is intentionally read at flush time so changing mute policy does not
+   * rebuild the controller or interrupt playback.
+   */
+  getLaneFilter?: () => LaneFilter;
+}
+
+/**
+ * Whether this component sits inside a replay-mute boundary. A muted component
+ * isolates its whole recorded subtree from Lens-driven state restoration.
+ * Results are memoized for the current apply-set projection so deep trees do
+ * not repeatedly walk the same ancestor chain.
+ */
+function replaySubtreeMuted(
+  store: TraceStore,
+  filter: LaneFilter,
+  componentId: ComponentId,
+  cache: Map<ComponentId, boolean>,
+): boolean {
+  const cached = cache.get(componentId);
+  if (cached !== undefined) return cached;
+
+  const path: ComponentId[] = [];
+  const seen = new Set<ComponentId>();
+  let cursor: ComponentId | undefined = componentId;
+  let muted = false;
+
+  while (cursor !== undefined && !seen.has(cursor)) {
+    const known = cache.get(cursor);
+    if (known !== undefined) {
+      muted = known;
+      break;
+    }
+
+    seen.add(cursor);
+    path.push(cursor);
+    const instance = store.instance(cursor);
+    if (!instance) break;
+
+    if (isComponentReplayMuted(filter, instance.name, cursor)) {
+      muted = true;
+      break;
+    }
+
+    cursor = instance.parentId;
+  }
+
+  for (const id of path) cache.set(id, muted);
+  return muted;
+}
+
+/**
+ * Project the raw time-travel set through replay mute policy.
+ *
+ * A mute is a replay-isolation boundary: the matching component and every
+ * recorded descendant are omitted from Lens-driven React state writes. A type
+ * mute creates a boundary at every matching instance; an instance mute only at
+ * that instance. Solo remains view-only.
+ *
+ * This substantially prevents effects in the muted subtree from being
+ * retriggered by replay state restoration. It is deliberately not implemented
+ * by mutating React's internal effect lists: React exposes no supported
+ * DevTools API for per-component effect suppression, and doing so would be
+ * renderer/version fragile. Unrelated external/global app activity can still
+ * cause React to render that subtree independently of Lens.
+ */
+export function replayApplySet(
+  store: TraceStore,
+  applySet: ReadonlyMap<ComponentId, RenderId>,
+  filter: LaneFilter,
+): Map<ComponentId, RenderId> {
+  if (filter.muted.size === 0) return new Map(applySet);
+
+  const next = new Map<ComponentId, RenderId>();
+  const mutedCache = new Map<ComponentId, boolean>();
+  for (const [componentId, renderId] of applySet) {
+    if (replaySubtreeMuted(store, filter, componentId, mutedCache)) continue;
+    next.set(componentId, renderId);
+  }
+  return next;
+}
+
 /**
  * Bridges the timeline cursor to page-side state restoration: rAF-coalesces
- * scrub positions to the latest t, computes the apply set there, and sends
- * only the delta against what was last applied. Apply results feed `onStatus`
- * — the single error path for partial restores, including transport failures.
+ * scrub positions to the latest t, computes the apply set there, projects out
+ * replay-muted subtrees, and sends only the delta against what was last
+ * applied. Apply results feed `onStatus` — the single error path for partial
+ * restores, including transport failures.
  */
 export function createPanelTimeTravel(
   store: TraceStore,
   api: TimeTravelApi,
   onStatus?: (status: RestoreStatus | null) => void,
+  options: PanelTimeTravelOptions = {},
 ): PanelTimeTravel {
   let lastApplied = new Map<ComponentId, RenderId>();
   let pendingT: number | null = null;
@@ -68,6 +162,8 @@ export function createPanelTimeTravel(
   let lastProcessed = 0;
   /** Bumped only on goLive — cancels in-flight applies before they hit the page. */
   let travelEpoch = 0;
+  const getLaneFilter =
+    options.getLaneFilter ?? (() => deserializeLaneFilter(loadPanelPrefs().laneFilter));
 
   function publish(atT: number): void {
     onStatus?.({ atT, applied: restoredIds.size, failedIds: new Map(failedIds) });
@@ -109,11 +205,14 @@ export function createPanelTimeTravel(
     if (pendingT === null) return;
     const t = pendingT;
     pendingT = null;
-    const next = applyCursor.moveTo(t);
+    const rawNext = applyCursor.moveTo(t);
+    const next = replayApplySet(store, rawNext, getLaneFilter());
     const delta = diffApplySet(lastApplied, next);
     lastApplied = next;
     // External-store adapters follow the cursor even between component
-    // deltas, so an empty delta still applies once travel has begun.
+    // deltas, so an empty delta still applies once travel has begun. If every
+    // component in the very first frame is muted, do not enter travel merely
+    // to restore unrelated external stores.
     if (delta.length === 0 && !traveling) return;
     traveling = true;
     const gen = ++generation;

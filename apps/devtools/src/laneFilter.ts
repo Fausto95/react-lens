@@ -1,16 +1,16 @@
 import type { ComponentId } from "@reactlens/protocol";
 
 /**
- * Solo / mute as a **view-only** filter over lanes (DASH: DAW semantics).
+ * Solo / mute over lanes (DASH: DAW semantics).
  *
- * This is panel state, never capture state: muting drops a lane out of every
- * view (timeline, tree, stats) but the trace store keeps recording it, so
- * un-muting restores the full history. Capture-level exclusion, if it ever
- * ships, is a separate and visually distinct mode — never a silent upgrade of
- * mute (see the panel redesign plan, decision 2).
+ * This is panel policy, never capture policy: muting removes a lane from the
+ * views and excludes the matching component(s) from replay/time-travel state
+ * application, but the trace store keeps recording them. Unmuting therefore
+ * brings the complete history back and makes the component eligible for the
+ * next replay again.
  *
  * Keys are stable identities, not instance ids, so the filter survives
- * remounts and is safe to persist or hand to the page side later.
+ * remounts and is safe to persist.
  */
 export type LaneKey = string;
 
@@ -79,6 +79,19 @@ export function laneVisibility(filter: LaneFilter, key: LaneKey): LaneVisibility
 
 export function isLaneVisible(filter: LaneFilter, key: LaneKey): boolean {
   return laneVisibility(filter, key) === "visible";
+}
+
+/**
+ * Replay checks an instance lane so both instance mutes and its parent type
+ * mute are honored. Solo is intentionally ignored: solo changes what the user
+ * is looking at, while mute is an explicit "do not participate" policy.
+ */
+export function isComponentReplayMuted(
+  filter: LaneFilter,
+  name: string,
+  id: ComponentId,
+): boolean {
+  return laneVisibility(filter, instanceLaneKey(name, id)) === "muted";
 }
 
 function toggled(set: ReadonlySet<LaneKey>, key: LaneKey): Set<LaneKey> {
