@@ -329,12 +329,11 @@ describe("time travel controller — failure reasons", () => {
 });
 
 describe("time travel controller — external-store adapters", () => {
-  function makeStoreFixture(initial: number) {
+  function makeStoreFixture(initial: number, id = "demo") {
     let value = initial;
     return {
-      applied: [] as number[],
       adapter: {
-        id: "demo",
+        id,
         getSnapshot: () => value,
         applySnapshot(s: unknown) {
           value = s as number;
@@ -358,7 +357,7 @@ describe("time travel controller — external-store adapters", () => {
 
     const mid = tt.apply([], 150);
     expect(fx.get()).toBe(0);
-    expect(mid).toMatchObject({ applied: 1, failed: 0 });
+    expect(mid).toMatchObject({ storesApplied: 1, storeFailures: [] });
 
     tt.apply([], 250);
     expect(fx.get()).toBe(1);
@@ -367,13 +366,27 @@ describe("time travel controller — external-store adapters", () => {
     expect(fx.get()).toBe(2);
   });
 
-  it("a store with no snapshot at or before t counts as failed", () => {
+  it("counts stores separately from components", () => {
     const tt = createTimeTravel({ fiber: makeFakeFiber() as never });
-    const fx = makeStoreFixture(7);
+    tt.capture(1 as RenderId, 1 as ComponentId, hookFiber(0));
+    const fx = makeStoreFixture(0);
+    tt.registerStore(fx.adapter);
+    tt.captureStores(100);
+
+    const result = tt.apply([entry(1, 1)], 150);
+    // applied/failed describe components only — a store restore must not
+    // inflate the panel's "N components restored" count.
+    expect(result).toMatchObject({ applied: 1, failed: 0, storesApplied: 1 });
+  });
+
+  it("names the store and reason when no snapshot exists at or before t", () => {
+    const tt = createTimeTravel({ fiber: makeFakeFiber() as never });
+    const fx = makeStoreFixture(7, "cart");
     tt.registerStore(fx.adapter);
     tt.captureStores(500);
     const result = tt.apply([], 100);
-    expect(result).toMatchObject({ applied: 0, failed: 1 });
+    expect(result).toMatchObject({ applied: 0, failed: 0, storesApplied: 0 });
+    expect(result.storeFailures).toEqual([{ storeId: "cart", reason: "no-snapshot" }]);
     expect(fx.get()).toBe(7); // untouched
   });
 
@@ -388,6 +401,23 @@ describe("time travel controller — external-store adapters", () => {
     expect(fx.get()).toBe(5);
   });
 
+  it("a stale unregister does not tear down a re-registration of the same id", () => {
+    const tt = createTimeTravel({ fiber: makeFakeFiber() as never });
+    const first = makeStoreFixture(0, "cart");
+    const off = tt.registerStore(first.adapter);
+    // Hot reload: the module re-registers under the same id, then the old
+    // effect cleanup runs. It must not unregister the live adapter.
+    const second = makeStoreFixture(0, "cart");
+    tt.registerStore(second.adapter);
+    off();
+
+    tt.captureStores(100);
+    second.set(9);
+    const result = tt.apply([], 150);
+    expect(result).toMatchObject({ storesApplied: 1, storeFailures: [] });
+    expect(second.get()).toBe(0);
+  });
+
   it("bounds per-store snapshot history", () => {
     const tt = createTimeTravel({ fiber: makeFakeFiber() as never, snapshotsPerStore: 2 });
     const fx = makeStoreFixture(0);
@@ -397,12 +427,29 @@ describe("time travel controller — external-store adapters", () => {
       tt.captureStores(t);
     }
     fx.set(999);
-    expect(tt.apply([], 150)).toMatchObject({ applied: 0, failed: 1 }); // t=100 evicted
+    expect(tt.apply([], 150)).toMatchObject({
+      storesApplied: 0,
+      storeFailures: [{ storeId: "demo", reason: "no-snapshot" }],
+    }); // t=100 evicted
     tt.apply([], 250);
     expect(fx.get()).toBe(200);
   });
 
-  it("an adapter that throws on apply counts as failed, others still apply", () => {
+  it("an unchanged snapshot does not consume retention", () => {
+    const tt = createTimeTravel({ fiber: makeFakeFiber() as never, snapshotsPerStore: 2 });
+    const fx = makeStoreFixture(1);
+    tt.registerStore(fx.adapter);
+    tt.captureStores(100);
+    // Commits that leave the store untouched must not evict the t=100 entry:
+    // the snapshot is reference-identical, so it is not new history.
+    tt.captureStores(200);
+    tt.captureStores(300);
+    fx.set(42);
+    expect(tt.apply([], 150)).toMatchObject({ storesApplied: 1, storeFailures: [] });
+    expect(fx.get()).toBe(1);
+  });
+
+  it("an adapter that throws on apply is named as apply-failed, others still apply", () => {
     const tt = createTimeTravel({ fiber: makeFakeFiber() as never });
     const good = makeStoreFixture(0);
     tt.registerStore(good.adapter);
@@ -416,7 +463,49 @@ describe("time travel controller — external-store adapters", () => {
     tt.captureStores(100);
     good.set(9);
     const result = tt.apply([], 150);
-    expect(result).toMatchObject({ applied: 1, failed: 1 });
+    expect(result).toMatchObject({ storesApplied: 1 });
+    expect(result.storeFailures).toEqual([{ storeId: "broken", reason: "apply-failed" }]);
     expect(good.get()).toBe(0);
+  });
+
+  it("routes adapter errors to onError instead of swallowing them", () => {
+    const errors: Array<{ scope: string; message: string }> = [];
+    const tt = createTimeTravel({
+      fiber: makeFakeFiber() as never,
+      onError: (scope, err) => errors.push({ scope, message: (err as Error).message }),
+    });
+    tt.registerStore({
+      id: "broken",
+      getSnapshot() {
+        throw new Error("snapshot boom");
+      },
+      applySnapshot() {},
+    });
+    tt.captureStores(100);
+    expect(errors).toEqual([{ scope: "store-snapshot", message: "snapshot boom" }]);
+  });
+
+  it("takes the go-live baseline before any component write lands", () => {
+    // A component restore can synchronously write to a store (an effect, a
+    // subscription). The baseline must be the pre-travel live value, not
+    // whatever the component restore left behind.
+    const fx = makeStoreFixture(0);
+    const tt = createTimeTravel({
+      fiber: makeFakeFiber({
+        setHookState: () => {
+          fx.set(-1); // component restore clobbers the store
+          return true;
+        },
+      }) as never,
+    });
+    tt.registerStore(fx.adapter);
+    tt.captureStores(100);
+    fx.set(5); // live value at the moment travel begins
+    tt.capture(1 as RenderId, 1 as ComponentId, hookFiber(0));
+
+    tt.apply([entry(1, 1)], 150);
+    expect(fx.get()).toBe(0);
+    tt.goLive();
+    expect(fx.get()).toBe(5);
   });
 });
