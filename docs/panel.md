@@ -36,6 +36,12 @@ Replay / time travel (Cascade toolbar transport):
 | Replay all    | Replay from the start of the recorded window                    |
 | Travel toggle | When on, the page follows rewind / replay                       |
 | Latest        | Follow the newest interaction as it arrives                     |
+| Restore pill  | "12 restored · 2 stores · 1 unavailable" while traveling        |
+
+The restore pill appears once the page is following the playhead. It counts
+restored components and [registered stores](stores.md); when something could
+not follow, it turns amber, names each one in its tooltip (`cart — no snapshot
+this far back`) and clicks through to the first affected component.
 
 ## Tree filter
 

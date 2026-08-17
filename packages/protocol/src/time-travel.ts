@@ -25,13 +25,47 @@ export interface TimeTravelFailure {
   reason: TimeTravelFailureReason;
 }
 
+/**
+ * Opt-in seam for state living outside React (Zustand, Redux, TanStack Query,
+ * module singletons). The page registers adapters; snapshots are captured per
+ * commit and restored alongside component state when the cursor moves. Values
+ * never leave the page.
+ */
+export interface TimeTravelStoreAdapter {
+  /** Stable identifier, unique per registered store. */
+  id: string;
+  /** An immutable (or safely re-applicable) snapshot of the store's state. */
+  getSnapshot(): unknown;
+  applySnapshot(snapshot: unknown): void;
+}
+
+/**
+ * Why one registered store could not be restored:
+ * - "no-snapshot": nothing was captured at or before the cursor time (the store
+ *   registered later, or its snapshot ring evicted that far back).
+ * - "snapshot-failed": `getSnapshot` threw while taking the live baseline.
+ * - "apply-failed": `applySnapshot` threw.
+ */
+export type TimeTravelStoreFailureReason = "no-snapshot" | "snapshot-failed" | "apply-failed";
+
+export interface TimeTravelStoreFailure {
+  storeId: string;
+  reason: TimeTravelStoreFailureReason;
+}
+
 export interface TimeTravelResult {
+  /** Components restored. Registered stores are counted by `storesApplied`. */
   applied: number;
+  /** Components that could not be restored — one per entry in `failures`. */
   failed: number;
   /** False when the renderer lacks the dev-only override API (prod builds). */
   supported: boolean;
   /** One entry per failed apply-set entry; empty when everything applied. */
   failures: TimeTravelFailure[];
+  /** Registered stores restored to the cursor time. */
+  storesApplied: number;
+  /** One entry per store that could not be restored; empty when all applied. */
+  storeFailures: TimeTravelStoreFailure[];
 }
 
 /**
@@ -41,4 +75,6 @@ export interface TimeTravelResult {
 export const TIME_TRAVEL_RETENTION = {
   rendersPerComponent: 100,
   maxComponents: 200,
+  /** Snapshots kept per registered store adapter. */
+  snapshotsPerStore: 200,
 } as const;

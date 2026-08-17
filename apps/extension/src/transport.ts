@@ -3,7 +3,7 @@ import type {
   RenderId,
   ComponentId,
   TimeTravelEntry,
-  TimeTravelFailure,
+  TimeTravelResult,
 } from "@reactlens/protocol";
 
 /** Envelope for page(MAIN) ↔ content(ISOLATED) hops over window.postMessage. */
@@ -66,15 +66,11 @@ export type PageToContent =
       column?: number;
     }
   /** Ack for a time-travel apply/go-live (entry ids are JSON-safe numbers). */
-  | {
+  | ({
       source: typeof PAGE_SOURCE;
       kind: "time-travel-result";
       requestId: string;
-      applied: number;
-      failed: number;
-      supported: boolean;
-      failures: TimeTravelFailure[];
-    };
+    } & TimeTravelResult);
 
 export type ContentToPage =
   | { source: typeof CONTENT_SOURCE; kind: "record"; recording: boolean }
@@ -221,14 +217,7 @@ export type PortMessage =
     }
   | { kind: "time-travel-apply"; requestId: string; entries: TimeTravelEntry[]; atT?: number }
   | { kind: "time-travel-live"; requestId: string }
-  | {
-      kind: "time-travel-result";
-      requestId: string;
-      applied: number;
-      failed: number;
-      supported: boolean;
-      failures: TimeTravelFailure[];
-    };
+  | ({ kind: "time-travel-result"; requestId: string } & TimeTravelResult);
 
 /** The resumable half of the protocol — everything else is request/response. */
 export type SequencedMessage = Extract<PortMessage, { kind: "frame" | "hello" }>;

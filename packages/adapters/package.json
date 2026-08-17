@@ -1,0 +1,43 @@
+{
+  "name": "@reactlens/adapters",
+  "version": "0.1.0",
+  "description": "Time-travel store adapters for React Lens — rewind Zustand, Redux and TanStack Query with the playhead.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Fausto95/react-lens.git",
+    "directory": "packages/adapters"
+  },
+  "files": [
+    "dist"
+  ],
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "publishConfig": {
+    "main": "./dist/index.js",
+    "types": "./dist/index.d.ts",
+    "exports": {
+      ".": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      }
+    },
+    "access": "public"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "build": "tsup src/index.ts --format esm --dts --sourcemap --clean --tsconfig tsconfig.build.json"
+  },
+  "dependencies": {
+    "@reactlens/protocol": "workspace:*"
+  },
+  "devDependencies": {
+    "@tanstack/query-core": "^5.66.0",
+    "redux": "^5.0.1",
+    "tsup": "^8.5.1",
+    "zustand": "^5.0.3"
+  }
+}

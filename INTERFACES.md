@@ -166,10 +166,38 @@ interface TimeTravelEntry {
   renderId: RenderId;
 }
 interface TimeTravelResult {
-  applied: number;
+  applied: number; // components — registered stores are counted separately
   failed: number;
   supported: boolean;
+  failures: TimeTravelFailure[];
+  storesApplied: number;
+  storeFailures: TimeTravelStoreFailure[]; // { storeId, reason }
 }
+
+// Opt-in seam for state outside React (DESIGN §10.5). Registered from page
+// code through the page API; snapshots never cross the panel boundary.
+interface TimeTravelStoreAdapter {
+  id: string;
+  getSnapshot(): unknown;
+  applySnapshot(snapshot: unknown): void;
+}
+```
+
+### Page API — what the inspected app may call
+
+```ts
+// window.__REACT_LENS__, installed by the capturing host: the extension's
+// MAIN-world bridge at document_start, or the embedded runtime at
+// construction. Absent when React Lens is not running.
+interface ReactLensPageApi {
+  markInteraction(name: string, untilMs?: number): void;
+  registerStore(adapter: TimeTravelStoreAdapter): () => void;
+}
+
+// Hosts install through this, adopting registrations queued by a shim that
+// ran before them; page code resolves the host API or leaves such a stub.
+function installPageApi(target: unknown, api: ReactLensPageApi): void;
+function resolvePageApi(target: unknown): ReactLensPageApi | null;
 ```
 
 ---
@@ -291,8 +319,10 @@ interface Instrumentation {
 interface TimeTravelController {
   supported(): boolean; // renderer exposes the override API
   isActive(): boolean; // events suppressed while true
-  apply(entries: TimeTravelEntry[]): TimeTravelResult;
+  apply(entries: TimeTravelEntry[], atT?: number): TimeTravelResult; // atT also rewinds stores
   goLive(): TimeTravelResult; // restore baselines, resume recording
+  registerStore(adapter: TimeTravelStoreAdapter): () => void;
+  captureStores(timestamp: number): void; // per commit
 }
 
 interface CaptureConfig {
@@ -670,6 +700,36 @@ function createDevChannelClient(url): DevChannelClient;
 function attachDevChannelSink(onFrame, client): onFrame; // non-blocking copy
 function reactLensDevChannel(): VitePlugin; // from @reactlens/dev-channel/vite
 ```
+
+### `@reactlens/adapters`
+
+`[protocol]`. Ships in the app, not the panel. Zero dependency on any store
+library — stores are matched structurally and Query's `dehydrate`/`hydrate`
+are passed in from the app's own version.
+
+```ts
+function registerStore(adapter: TimeTravelStoreAdapter): () => void;
+function registerStores(...adapters: TimeTravelStoreAdapter[]): () => void;
+function createStoreAdapter<T>(spec: {
+  id: string;
+  get: () => T;
+  set: (snapshot: T) => void;
+}): TimeTravelStoreAdapter;
+
+function zustandAdapter<T>(
+  store: ZustandLikeStore<T>,
+  opts?: { id?: string },
+): TimeTravelStoreAdapter;
+function reduxAdapter<S>(
+  store: ReduxLikeStore<S>,
+  opts?: { id?: string; actionType?: string },
+): TimeTravelStoreAdapter;
+function withTimeTravel<S, A>(reducer: ReducerLike<S, A>, actionType?: string): ReducerLike<S, A>;
+function queryAdapter<C>(opts: QueryAdapterOptions<C>): TimeTravelStoreAdapter;
+```
+
+Registration resolves `window.__REACT_LENS__`, queueing if no host has
+installed yet. See [docs/stores.md](docs/stores.md).
 
 ### `@reactlens/playwright`
 

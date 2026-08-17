@@ -95,6 +95,41 @@ test("previous interaction rewinds the page; Latest returns to the live count", 
     .toContain("count 2");
 });
 
+test("the page registers its store through the __REACT_LENS__ page API", async ({ page }) => {
+  await boot(page);
+  // The surface an app reaches through @reactlens/adapters — and the one the
+  // MAIN-world extension bridge installs. Its absence would mean the fixture
+  // is rewinding through the embedded runtime object instead.
+  const hasApi = await page.evaluate(() => {
+    const api = (window as unknown as Record<string, unknown>).__REACT_LENS__ as
+      | { registerStore?: unknown; markInteraction?: unknown }
+      | undefined;
+    return typeof api?.registerStore === "function" && typeof api?.markInteraction === "function";
+  });
+  expect(hasApi).toBe(true);
+});
+
+test("the restore chip reports stores while traveling and clears on go-live", async ({ page }) => {
+  await boot(page);
+  await ensureTravelOn(page);
+  await clickInPage(page, "Add");
+  await page.waitForTimeout(350);
+  await clickInPage(page, "Add");
+  await page.waitForTimeout(350);
+
+  await cascadeToolbar(page).getByRole("button", { name: "Previous interaction" }).click();
+  const chip = page.locator(".rl-restore-chip");
+  await expect(chip).toBeVisible();
+  // Quiet state: a glyph and the store count, no component tally. The sentence
+  // lives in the accessible name.
+  await expect(chip).toHaveText(/^\d+$/);
+  await expect(chip).not.toHaveClass(/partial/);
+  await expect(chip).toHaveAttribute("aria-label", /follows the playhead, and \d+ store/);
+
+  await goLive(page);
+  await expect(chip).toHaveCount(0);
+});
+
 test("external store cart rewinds with the selected interaction", async ({ page }) => {
   await boot(page);
   await ensureTravelOn(page);

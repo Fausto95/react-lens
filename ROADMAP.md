@@ -86,9 +86,12 @@ with multiple **projections** rather than a raw fiber tree.
   `forceUpdate`; panel computes delta apply-sets (`applySetAt`/`diffApplySet`); recording
   pauses while traveling; go-live restores live baselines. Timeline rewind toggle (on by
   default when supported), purple playhead while driving the page, Space-play = true
-  state replay. Extension channel with auto-go-live on panel disconnect. Limits: state/
-  reducer/class state only (no refs/external stores/uncontrolled inputs), effects re-run,
-  no unmount of later-born components (DESIGN §10.5).
+  state replay. Extension channel with auto-go-live on panel disconnect. External stores
+  rewind through `@reactlens/adapters` (Zustand / Redux / TanStack Query / any get-set
+  pair) registered on `window.__REACT_LENS__`, with per-store restore feedback in the
+  pill. Limits: state/reducer/class state plus registered stores only (no refs,
+  unregistered module state or uncontrolled inputs), effects re-run, no unmount of
+  later-born components (DESIGN §10.5).
 - ✅ **`source-maps`** — resolve compiled `_debugStack` coords to original source
 - ✅ **`diagnostics` (Doctor v1)** — impact-ranked rules over runtime evidence; inspector section + tree ⚕ badges + issue count
 - ✅ **Effect debugger** — timed `EffectEvent`s (run + cleanup + hookIndex) via `onPostCommitFiberRoot`; Effects tab with counts, durations, and a "possible loop" badge

@@ -1,56 +1,41 @@
-import { useSyncExternalStore } from "react";
+import { useStore } from "zustand";
+import { createStore } from "zustand/vanilla";
+import { registerStores, zustandAdapter } from "@reactlens/adapters";
 import { Button, Card, Section, Stack } from "@reactlens/demo-ui";
-import { runtime } from "../boot.js";
 
 interface CartState {
   count: number;
+  add: () => void;
 }
 
-function createCartStore(initial: CartState) {
-  let state = initial;
-  const listeners = new Set<() => void>();
-  return {
-    getState: () => state,
-    setState(next: CartState) {
-      state = next;
-      for (const l of listeners) l();
-    },
-    subscribe: (l: () => void) => {
-      listeners.add(l);
-      return () => {
-        listeners.delete(l);
-      };
-    },
-  };
-}
+const cartStore = createStore<CartState>((set) => ({
+  count: 0,
+  add: () => set((s) => ({ count: s.count + 1 })),
+}));
 
-const cartStore = createCartStore({ count: 0 });
-
-runtime.timeTravel.registerStore({
-  id: "cart",
-  getSnapshot: () => cartStore.getState(),
-  applySnapshot: (s) => cartStore.setState(s as CartState),
-});
+/**
+ * Registration goes through the page API (`window.__REACT_LENS__`) rather than
+ * the embedded runtime object — the same path an app using the Chrome
+ * extension takes.
+ */
+registerStores(zustandAdapter(cartStore, { id: "cart" }));
 
 /** External-store cart — name matters for tree/timeline selection. */
 export function CartBadge() {
-  const cart = useSyncExternalStore(cartStore.subscribe, cartStore.getState);
+  const count = useStore(cartStore, (s) => s.count);
+  const add = useStore(cartStore, (s) => s.add);
   return (
     <Section
       kicker="Bag"
       title="Quick add"
-      hint="useSyncExternalStore cart registered for time travel."
+      hint="Zustand cart registered for time travel through @reactlens/adapters."
     >
       <Card>
         <Stack row>
-          <Button
-            variant="primary"
-            size="sm"
-            onClick={() => cartStore.setState({ count: cart.count + 1 })}
-          >
+          <Button variant="primary" size="sm" onClick={add}>
             Add
           </Button>
-          <output>cart: {cart.count}</output>
+          <output>cart: {count}</output>
         </Stack>
       </Card>
     </Section>

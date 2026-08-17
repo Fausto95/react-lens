@@ -6,23 +6,11 @@ import {
   type TimeTravelFailure,
   type TimeTravelFailureReason,
   type TimeTravelResult,
+  type TimeTravelStoreAdapter,
+  type TimeTravelStoreFailure,
 } from "@reactlens/protocol";
 import type { Fiber, FiberBridge, LiveState } from "@reactlens/fiber";
 import { captureStateHooks, inspectClassState } from "@reactlens/fiber";
-
-/**
- * Opt-in seam for state living outside React (Zustand, Redux, module
- * singletons). The page registers adapters; snapshots are captured per commit
- * and restored alongside component state when the cursor moves. Values never
- * leave the page.
- */
-export interface TimeTravelStoreAdapter {
-  /** Stable identifier, unique per registered store. */
-  id: string;
-  /** An immutable (or safely re-applicable) snapshot of the store's state. */
-  getSnapshot(): unknown;
-  applySnapshot(snapshot: unknown): void;
-}
 
 /**
  * Page-side time travel: a bounded history of RAW state values per render,
@@ -60,9 +48,11 @@ interface StoreRegistration {
   adapter: TimeTravelStoreAdapter;
   /** timestamp → snapshot, insertion-ordered ring. */
   history: Map<number, unknown>;
+  /** Whether `last` holds a snapshot — distinguishes "none yet" from `undefined`. */
+  hasLast: boolean;
+  /** Newest snapshot taken, for reference-equality dedupe. */
+  last: unknown;
 }
-
-const DEFAULT_SNAPSHOTS_PER_STORE = 200;
 
 export function createTimeTravel(deps: {
   fiber: FiberBridge;
@@ -72,11 +62,14 @@ export function createTimeTravel(deps: {
   maxComponents?: number;
   /** Snapshots retained per registered external store. */
   snapshotsPerStore?: number;
+  /** Single error seam — a misbehaving adapter is reported, never swallowed. */
+  onError?: (scope: string, err: unknown) => void;
 }): TimeTravelController {
   const { fiber } = deps;
   const rendersPerComponent = deps.rendersPerComponent ?? TIME_TRAVEL_RETENTION.rendersPerComponent;
   const maxComponents = deps.maxComponents ?? TIME_TRAVEL_RETENTION.maxComponents;
-  const snapshotsPerStore = deps.snapshotsPerStore ?? DEFAULT_SNAPSHOTS_PER_STORE;
+  const snapshotsPerStore = deps.snapshotsPerStore ?? TIME_TRAVEL_RETENTION.snapshotsPerStore;
+  const onError = deps.onError ?? (() => {});
 
   /**
    * componentId → (renderId → raw state), both insertion-ordered. Retention is
@@ -136,11 +129,23 @@ export function createTimeTravel(deps: {
   function captureStores(timestamp: number): void {
     if (active) return; // never record the rewound values as history
     for (const reg of stores.values()) {
+      let snapshot: unknown;
       try {
-        reg.history.set(timestamp, reg.adapter.getSnapshot());
-      } catch {
-        continue; // a broken getSnapshot must not break capture for others
+        snapshot = reg.adapter.getSnapshot();
+      } catch (err) {
+        // A broken getSnapshot must not break capture for the other stores —
+        // but it is reported rather than swallowed.
+        onError("store-snapshot", err);
+        continue;
       }
+      // Commits that left the store alone produce the identical snapshot.
+      // Recording those would evict real history behind unchanged values, so
+      // the timestamp maps onto the same reference instead of a new entry.
+      const unchanged = reg.hasLast && Object.is(snapshot, reg.last);
+      reg.hasLast = true;
+      reg.last = snapshot;
+      if (unchanged) continue;
+      reg.history.set(timestamp, snapshot);
       if (reg.history.size > snapshotsPerStore) {
         const oldest = reg.history.keys().next().value;
         if (oldest !== undefined) reg.history.delete(oldest);
@@ -149,18 +154,48 @@ export function createTimeTravel(deps: {
   }
 
   function registerStore(adapter: TimeTravelStoreAdapter): () => void {
-    stores.set(adapter.id, { adapter, history: new Map() });
+    const registration: StoreRegistration = {
+      adapter,
+      history: new Map(),
+      hasLast: false,
+      last: undefined,
+    };
+    stores.set(adapter.id, registration);
     return () => {
+      // Identity-checked: after a hot reload the module re-registers under the
+      // same id before the old cleanup runs, and that cleanup must not take
+      // the live registration with it.
+      if (stores.get(adapter.id) !== registration) return;
       stores.delete(adapter.id);
       storeBaselines.delete(adapter.id);
     };
   }
 
-  /** Restore every registered store to its snapshot at or before `t`. */
-  function applyStores(t: number): { applied: number; failed: number } {
-    let applied = 0;
-    let failed = 0;
+  /**
+   * Take the live baseline of every store that has none yet. Called before any
+   * component write lands: a restore can synchronously push to a store, and the
+   * baseline must be the pre-travel value, not that side effect's result.
+   */
+  function captureStoreBaselines(): TimeTravelStoreFailure[] {
+    const failures: TimeTravelStoreFailure[] = [];
     for (const [id, reg] of stores) {
+      if (storeBaselines.has(id)) continue;
+      try {
+        storeBaselines.set(id, reg.adapter.getSnapshot());
+      } catch (err) {
+        onError("store-snapshot", err);
+        failures.push({ storeId: id, reason: "snapshot-failed" });
+      }
+    }
+    return failures;
+  }
+
+  /** Restore every registered store to its snapshot at or before `t`. */
+  function applyStores(t: number, failures: TimeTravelStoreFailure[]): number {
+    let applied = 0;
+    const alreadyFailed = new Set(failures.map((f) => f.storeId));
+    for (const [id, reg] of stores) {
+      if (alreadyFailed.has(id)) continue; // no baseline → never write to it
       // History is insertion-ordered by capture time; walk for the last ≤ t.
       let best: { has: boolean; value: unknown } = { has: false, value: undefined };
       for (const [ts, value] of reg.history) {
@@ -168,27 +203,35 @@ export function createTimeTravel(deps: {
         else break;
       }
       if (!best.has) {
-        failed++;
+        failures.push({ storeId: id, reason: "no-snapshot" });
         continue;
       }
       try {
-        if (!storeBaselines.has(id)) storeBaselines.set(id, reg.adapter.getSnapshot());
         reg.adapter.applySnapshot(best.value);
         active = true;
         applied++;
-      } catch {
-        failed++;
+      } catch (err) {
+        onError("store-apply", err);
+        failures.push({ storeId: id, reason: "apply-failed" });
       }
     }
-    return { applied, failed };
+    return applied;
   }
 
   function apply(entries: TimeTravelEntry[], atT?: number): TimeTravelResult {
     if (!supported()) {
-      return { applied: 0, failed: entries.length, supported: false, failures: [] };
+      return {
+        applied: 0,
+        failed: entries.length,
+        supported: false,
+        failures: [],
+        storesApplied: 0,
+        storeFailures: [],
+      };
     }
     let applied = 0;
     const failures: TimeTravelFailure[] = [];
+    const storeFailures = atT !== undefined ? captureStoreBaselines() : [];
     const fail = (entry: TimeTravelEntry, reason: TimeTravelFailureReason) =>
       failures.push({ componentId: entry.componentId, renderId: entry.renderId, reason });
     for (const entry of entries) {
@@ -213,38 +256,21 @@ export function createTimeTravel(deps: {
       if (restore(entry.componentId, state)) applied++;
       else fail(entry, "write-failed");
     }
-    let failed = failures.length;
-    if (atT !== undefined && stores.size > 0) {
-      const storeResult = applyStores(atT);
-      applied += storeResult.applied;
-      failed += storeResult.failed;
-    }
-    return { applied, failed, supported: true, failures };
+    const storesApplied = atT !== undefined ? applyStores(atT, storeFailures) : 0;
+    return {
+      applied,
+      failed: failures.length,
+      supported: true,
+      failures,
+      storesApplied,
+      storeFailures,
+    };
   }
 
   function goLive(): TimeTravelResult {
     let applied = 0;
     let failed = 0;
-    for (const [id, baseline] of storeBaselines) {
-      const reg = stores.get(id);
-      if (!reg) continue;
-      try {
-        reg.adapter.applySnapshot(baseline);
-        applied++;
-      } catch {
-        failed++;
-      }
-    }
-    storeBaselines.clear();
-    if (baselines.size === 0) {
-      if (active) {
-        // Store restores flush like any commit; resume recording next macrotask.
-        setTimeout(() => {
-          active = false;
-        }, 0);
-      }
-      return { applied, failed, supported: supported(), failures: [] };
-    }
+    const hadComponents = baselines.size > 0;
     for (const [componentId, baseline] of baselines) {
       if (!fiber.hasFiber(componentId)) {
         failed++;
@@ -254,12 +280,45 @@ export function createTimeTravel(deps: {
       else failed++;
     }
     baselines.clear();
+    // Stores go last, mirroring apply: a component restore can push to a store
+    // through an effect or a subscription, and the store's live baseline is
+    // what the page must end up with.
+    let storesApplied = 0;
+    const storeFailures: TimeTravelStoreFailure[] = [];
+    for (const [id, baseline] of storeBaselines) {
+      const reg = stores.get(id);
+      if (!reg) continue;
+      try {
+        reg.adapter.applySnapshot(baseline);
+        storesApplied++;
+      } catch (err) {
+        onError("store-apply", err);
+        storeFailures.push({ storeId: id, reason: "apply-failed" });
+      }
+    }
+    storeBaselines.clear();
+    if (!hadComponents) {
+      if (active) {
+        // Store restores flush like any commit; resume recording next macrotask.
+        setTimeout(() => {
+          active = false;
+        }, 0);
+      }
+      return {
+        applied,
+        failed,
+        supported: supported(),
+        failures: [],
+        storesApplied,
+        storeFailures,
+      };
+    }
     // The restore commit flushes in a microtask; stay suppressed until it has
     // passed, then resume recording on the next macrotask.
     setTimeout(() => {
       active = false;
     }, 0);
-    return { applied, failed, supported: supported(), failures: [] };
+    return { applied, failed, supported: supported(), failures: [], storesApplied, storeFailures };
   }
 
   function restore(componentId: ComponentId, state: CapturedState): boolean {
@@ -293,7 +352,11 @@ export function createTimeTravel(deps: {
       history.clear();
       baselines.clear();
       stateless.clear();
-      for (const reg of stores.values()) reg.history.clear();
+      for (const reg of stores.values()) {
+        reg.history.clear();
+        reg.hasLast = false;
+        reg.last = undefined;
+      }
       storeBaselines.clear();
       active = false;
     },

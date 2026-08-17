@@ -351,12 +351,30 @@ values + class state`, `TIME_TRAVEL_RETENTION` mirrors the panel's render
 `useSyncExternalStore` hook's memoized value cannot work generically: the
 value would revert on the store's next notification, and the store itself
 would still hold the live state. Instead the page registers
-`TimeTravelStoreAdapter { id, getSnapshot, applySnapshot }`
-(`runtime.timeTravel.registerStore(...)`); snapshots are captured per commit
-into the same retention-bounded history and rewound to the snapshot at or
-before the cursor time sent with each apply. Zustand maps to
-`getState`/`setState(s, true)`, Redux to `getState`/a hydrate action. The
-playground's `ExternalStoreDemo` is the reference.
+`TimeTravelStoreAdapter { id, getSnapshot, applySnapshot }`; snapshots are
+captured per commit into the same retention-bounded history and rewound to the
+snapshot at or before the cursor time sent with each apply. A snapshot
+reference-identical to the previous one does not consume retention, so idle
+commits cannot evict real history behind an expensive `getSnapshot`.
+
+The page reaches registration through `window.__REACT_LENS__` (§ page API),
+installed by the extension's MAIN-world bridge at `document_start` and by the
+embedded runtime at construction; `installPageApi` adopts anything a
+`@reactlens/adapters` shim queued before a host arrived, so import order does
+not matter. `@reactlens/adapters` ships the mappings — Zustand to
+`getState`/`setState(s, true)`, Redux to `getState`/a hydrate action added by
+`withTimeTravel`, TanStack Query to `dehydrate`/`clear`+`hydrate` — with no
+dependency on any of them (stores are matched structurally, Query's functions
+are passed in). See [docs/stores.md](docs/stores.md); the playground's
+`scenarios/stores/` has one card per adapter.
+
+Store results are reported separately from components: `storesApplied` and
+`storeFailures[{ storeId, reason }]` on `TimeTravelResult`, so a store that has
+no snapshot that far back is named in the restore pill instead of inflating the
+component count. Store failures are whole-app rather than per-delta, so the
+newest apply replaces the previous verdict. Baselines are taken before any
+component write lands and restored after components on go-live, since a
+component restore can push to a store through an effect or a subscription.
 
 **Explicitly out of scope** (deliberate, not deferred):
 
@@ -371,7 +389,7 @@ playground's `ExternalStoreDemo` is the reference.
 
 Known limits (documented in the toggle tooltip): only `useState`/`useReducer`/
 class state and registered store adapters rewind — not refs, unregistered
-module state, uncontrolled inputs, or server state; effects re-run against
+module state, or uncontrolled inputs; effects re-run against
 rewound values; production React builds have no override API, so the toggle
 is disabled. Imported sessions never drive the live page (their renderIds
 belong to a different run) — they play back throttled whole-page DOM

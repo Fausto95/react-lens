@@ -307,6 +307,21 @@ export function IconRewind(props: IconProps) {
   );
 }
 
+/**
+ * An external store — stacked discs, the universal store/database mark. Used
+ * where a count refers to registered stores rather than components, so it must
+ * not be the rewind glyph it often sits beside.
+ */
+export function IconStore(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <ellipse cx="8" cy="4.2" rx="4.8" ry="1.9" />
+      <path d="M3.2 4.2v7.6c0 1.05 2.15 1.9 4.8 1.9s4.8-.85 4.8-1.9V4.2" />
+      <path d="M3.2 8c0 1.05 2.15 1.9 4.8 1.9s4.8-.85 4.8-1.9" />
+    </Svg>
+  );
+}
+
 /** AI assistant — a four-point sparkle. */
 export function IconSparkle(props: IconProps) {
   return (

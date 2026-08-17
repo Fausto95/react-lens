@@ -10,10 +10,12 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@reactlens/adapters": "workspace:*",
     "@reactlens/demo-ui": "workspace:*",
     "@reactlens/devtools": "workspace:*",
     "react": "^19",
-    "react-dom": "^19"
+    "react-dom": "^19",
+    "zustand": "^5.0.3"
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^5.2.0",

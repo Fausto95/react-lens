@@ -5,4 +5,5 @@ export * from "./events.js";
 export * from "./snapshot.js";
 export * from "./message.js";
 export * from "./time-travel.js";
+export * from "./page-api.js";
 export * from "./session.js";

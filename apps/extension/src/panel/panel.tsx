@@ -319,6 +319,8 @@ function ExtensionPanel() {
               failed: msg.failed,
               supported: msg.supported,
               failures: msg.failures ?? [],
+              storesApplied: msg.storesApplied ?? 0,
+              storeFailures: msg.storeFailures ?? [],
             });
           }
         }
@@ -472,7 +474,14 @@ function ExtensionPanel() {
   const travelRequest = useCallback(
     (build: (requestId: string) => PortMessage): Promise<TimeTravelResult> => {
       return new Promise((resolve) => {
-        const nothing: TimeTravelResult = { applied: 0, failed: 0, supported: false, failures: [] };
+        const nothing: TimeTravelResult = {
+          applied: 0,
+          failed: 0,
+          supported: false,
+          failures: [],
+          storesApplied: 0,
+          storeFailures: [],
+        };
         const port = portRef.current;
         if (!port) {
           resolve(nothing);

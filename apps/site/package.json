@@ -11,6 +11,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@reactlens/adapters": "workspace:*",
     "@reactlens/devtools": "workspace:*",
     "@reactlens/icons": "workspace:*",
     "@reactlens/ui": "workspace:*",
