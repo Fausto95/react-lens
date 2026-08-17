@@ -260,6 +260,9 @@ importers:
 
   apps/site:
     dependencies:
+      '@reactlens/adapters':
+        specifier: workspace:*
+        version: link:../../packages/adapters
       '@reactlens/devtools':
         specifier: workspace:*
         version: link:../devtools
