@@ -140,6 +140,97 @@ describe("createPanelTimeTravel — coalescing", () => {
   });
 });
 
+describe("createPanelTimeTravel — restore verification", () => {
+  /** A store whose commit DOM at t=200 is a red swatch. */
+  function storeWithDom(): TraceStore {
+    const store = makeStore();
+    store.ingest(
+      batch({
+        commitSnapshots: [
+          {
+            commitId: 1 as CommitId,
+            timestamp: 200,
+            dom: {
+              root: {
+                nodeName: "DIV",
+                children: [{ nodeName: "SPAN", attributes: { class: "sw red" } }],
+              },
+            },
+          },
+        ],
+      }),
+    );
+    return store;
+  }
+
+  it("reports nothing when the page matches the capture", async () => {
+    const store = storeWithDom();
+    const api = {
+      ...fakeApi(),
+      snapshotPage: () => ({
+        root: { nodeName: "DIV", children: [{ nodeName: "SPAN", attributes: { class: "sw red" } }] },
+      }),
+    };
+    const statuses: Array<RestoreStatus | null> = [];
+    const ctl = createPanelTimeTravel(store, api, (s) => statuses.push(s));
+    ctl.onCursor({ t: 200, mode: "historical" }, true);
+    flushRaf();
+    await settle();
+    await settle();
+    expect(statuses.at(-1)!.domMismatch).toBeUndefined();
+    ctl.dispose();
+  });
+
+  it("names the attributes that disagree with the capture", async () => {
+    // The signal the report was missing: React state restored, paint did not.
+    const store = storeWithDom();
+    const api = {
+      ...fakeApi(),
+      snapshotPage: () => ({
+        root: {
+          nodeName: "DIV",
+          children: [{ nodeName: "SPAN", attributes: { class: "sw blue" } }],
+        },
+      }),
+    };
+    const statuses: Array<RestoreStatus | null> = [];
+    const ctl = createPanelTimeTravel(store, api, (s) => statuses.push(s));
+    ctl.onCursor({ t: 200, mode: "historical" }, true);
+    flushRaf();
+    await settle();
+    await settle();
+    const mismatch = statuses.at(-1)!.domMismatch;
+    expect(mismatch?.count).toBe(1);
+    expect(mismatch?.examples.join(" ")).toContain("class");
+    ctl.dispose();
+  });
+
+  it("stays silent when no capture is close enough to the cursor to be evidence", async () => {
+    // Commit DOM is throttled, so a distant snapshot proves nothing.
+    const store = storeWithDom();
+    const api = {
+      ...fakeApi(),
+      snapshotPage: () => ({ root: { nodeName: "DIV" } }),
+    };
+    const statuses: Array<RestoreStatus | null> = [];
+    const ctl = createPanelTimeTravel(store, api, (s) => statuses.push(s));
+    ctl.onCursor({ t: 5_000, mode: "historical" }, true);
+    flushRaf();
+    await settle();
+    await settle();
+    expect(statuses.at(-1)!.domMismatch).toBeUndefined();
+    ctl.dispose();
+  });
+
+  it("skips verification entirely when the page cannot snapshot", async () => {
+    const ctl = createPanelTimeTravel(storeWithDom(), fakeApi(), () => {});
+    ctl.onCursor({ t: 200, mode: "historical" }, true);
+    flushRaf();
+    await settle();
+    ctl.dispose(); // must not throw when snapshotPage is absent
+  });
+});
+
 describe("createPanelTimeTravel — restore status", () => {
   it("publishes applied count and per-component failures", async () => {
     const api = fakeApi((entries) =>
