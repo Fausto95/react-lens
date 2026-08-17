@@ -1,4 +1,4 @@
-import { anomalyStats, type TraceStore } from "@reactlens/trace-engine";
+import { anomalyStats, interactionKindLabel, type TraceStore } from "@reactlens/trace-engine";
 
 /**
  * A ~1-2KB session digest prepended to the first user turn so the model never
@@ -41,7 +41,7 @@ export function buildEvidencePack(store: TraceStore): EvidencePack {
       .map((i) => ({
         id: i.id,
         label: i.label,
-        kind: i.kind,
+        kind: interactionKindLabel(i),
         durationMs: round(i.metrics.totalDuration),
         renderCount: i.metrics.renderCount,
       })),

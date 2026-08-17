@@ -12,7 +12,8 @@ export type { ApplySetCursor, ApplySetChange, ApplySetComparison } from "./time-
 export { anomalyStats } from "./anomaly.js";
 export type { AnomalyStats } from "./anomaly.js";
 export { buildInteractions } from "./interactions.js";
-export type { Interaction, InteractionMetrics, InteractionKind } from "./interactions.js";
+export type { Interaction, InteractionMetrics, InteractionKind, SystemTrigger } from "./interactions.js";
+export { interactionKindLabel } from "./interactions.js";
 
 export {
   TimelineIndex,

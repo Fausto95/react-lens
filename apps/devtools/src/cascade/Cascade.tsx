@@ -1,6 +1,6 @@
 /* oxlint-disable react/react-compiler -- imperative canvas/gesture refs; pointer hot paths intentionally bypass React state */
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import type { TraceStore } from "@reactlens/trace-engine";
+import { interactionKindLabel, type TraceStore } from "@reactlens/trace-engine";
 import type { ComponentId } from "@reactlens/protocol";
 import {
   IconArrowDown,
@@ -806,7 +806,7 @@ export function Cascade({
           </span>
         </Island>
         <span className="rl-cascade-sep rl-cascade-sep-kind" aria-hidden="true" />
-        <span className="rl-cascade-pill">{interaction?.kind ?? "idle"}</span>
+        <span className="rl-cascade-pill">{interaction?.label ?? "idle"}</span>
         {expandedAggregates.size > 0 ? (
           <Tool title="Collapse all expanded render groups (C)" onClick={collapseGroups}>
             <IconCollapse size={14} />
@@ -893,12 +893,12 @@ export function Cascade({
               key={item.id}
               className={`rl-cascade-interaction${item.id === interaction?.id ? " selected" : ""}`}
               onClick={() => chooseInteraction(item.id)}
-              title={`${item.label} · ${item.kind}`}
+              title={`${item.label} · ${interactionKindLabel(item)}`}
             >
               <span className="title">{item.label}</span>
               <span className="time">{Math.round(item.start - model.bounds.t0)}ms</span>
               <span className="meta">
-                {item.kind} · {item.metrics.renderCount.toLocaleString()} renders ·{" "}
+                {interactionKindLabel(item)} · {item.metrics.renderCount.toLocaleString()} renders ·{" "}
                 {item.metrics.reactDuration.toFixed(1)}ms React
               </span>
             </button>

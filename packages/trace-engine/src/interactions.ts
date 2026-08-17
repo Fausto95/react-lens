@@ -12,8 +12,11 @@ import type {
  * think "I clicked X and the list re-rendered", not "commit #26 happened". This
  * derives interactions from the raw event log — one per captured user
  * interaction, a leading synthetic "Load" for the initial mount, and gap-based
- * "Background" buckets for orphan renders (tickers/timers) that no interaction
- * tagged. Pure and deterministic so it's unit-testable and worker-safe.
+ * system buckets for orphan renders (tickers/timers) that no interaction
+ * tagged. System labels come from the initiating component (the one whose
+ * reason is state/context/store, not a parent cascade), falling back to
+ * "Background" when the name is unknown. Pure and deterministic so it's
+ * unit-testable and worker-safe.
  */
 export interface InteractionMetrics {
   /** Wall-clock span of the interaction (ms). */
@@ -25,7 +28,15 @@ export interface InteractionMetrics {
   stateUpdates: number;
   /** Unique components that rendered during the interaction. */
   componentIds: ComponentId[];
+  /**
+   * Why a system bucket ran, when known. User-facing lists show this instead
+   * of the internal kind `"system"`.
+   */
+  trigger?: SystemTrigger;
 }
+
+/** Dominant initiator of a system (non-gesture) interaction. */
+export type SystemTrigger = "state" | "context" | "store" | "update";
 
 export type InteractionKind = InteractionEvent["kind"] | "load" | "system";
 
@@ -117,7 +128,7 @@ export function buildInteractions(
   return buckets
     .filter((b) => b.renders.length > 0)
     .sort((a, b) => a.start - b.start)
-    .map(finalize);
+    .map((b) => finalize(b, nameOf));
 }
 
 interface MutableBucket {
@@ -144,7 +155,10 @@ function nearestPreceding(buckets: MutableBucket[], t: number): MutableBucket | 
   return best;
 }
 
-function finalize(b: MutableBucket): Interaction {
+function finalize(
+  b: MutableBucket,
+  nameOf: (id: ComponentId) => string | undefined,
+): Interaction {
   const componentIds = new Set<ComponentId>();
   const commitIds = new Set<CommitId>();
   let reactDuration = 0;
@@ -155,9 +169,10 @@ function finalize(b: MutableBucket): Interaction {
     reactDuration += r.selfDuration;
     if (r.reasons.some((x) => x.type === "state")) stateUpdates++;
   }
+  const trigger = b.kind === "system" ? systemTrigger(b.renders) : undefined;
   return {
     id: b.id,
-    label: b.label,
+    label: b.kind === "system" ? systemLabel(b.renders, nameOf) : b.label,
     kind: b.kind,
     start: b.start,
     end: b.end,
@@ -169,8 +184,46 @@ function finalize(b: MutableBucket): Interaction {
       renderCount: b.renders.length,
       stateUpdates,
       componentIds: [...componentIds],
+      ...(trigger ? { trigger } : {}),
     },
   };
+}
+
+/** Reasons that mark a component as the source of a burst, not a cascade victim. */
+const INITIATOR_REASON = new Set(["state", "context", "external-store", "force-update"]);
+
+/**
+ * Name a system bucket after the component that actually started it — the
+ * ticker/store/context owner — rather than every child that cascaded.
+ */
+function systemLabel(
+  renders: readonly RenderEvent[],
+  nameOf: (id: ComponentId) => string | undefined,
+): string {
+  const firstAt = new Map<ComponentId, number>();
+  for (const r of renders) {
+    if (!r.reasons.some((x) => INITIATOR_REASON.has(x.type))) continue;
+    const prev = firstAt.get(r.componentId);
+    if (prev === undefined || r.timestamp < prev) firstAt.set(r.componentId, r.timestamp);
+  }
+  const ordered =
+    firstAt.size > 0
+      ? [...firstAt.entries()].sort((a, b) => a[1] - b[1]).map(([id]) => id)
+      : renders[0]
+        ? [renders[0].componentId]
+        : [];
+  const names: string[] = [];
+  const seen = new Set<string>();
+  for (const id of ordered) {
+    const name = nameOf(id);
+    if (!name || seen.has(name)) continue;
+    seen.add(name);
+    names.push(name);
+  }
+  if (names.length === 0) return "Background";
+  if (names.length === 1) return names[0]!;
+  if (names.length === 2) return `${names[0]} + ${names[1]}`;
+  return `${names[0]} + ${names.length - 1} more`;
 }
 
 function labelFor(ev: InteractionEvent, targetName: string | undefined): string {
@@ -188,3 +241,56 @@ const KIND_VERB: Record<InteractionEvent["kind"], string> = {
   drag: "Drag",
   transition: "Transition",
 };
+
+const KIND_LABEL: Record<Exclude<InteractionKind, "system">, string> = {
+  click: "click",
+  keypress: "type",
+  submit: "submit",
+  navigation: "navigate",
+  hover: "hover",
+  drag: "drag",
+  transition: "transition",
+  load: "load",
+};
+
+const TRIGGER_LABEL: Record<SystemTrigger, string> = {
+  state: "state",
+  context: "context",
+  store: "store",
+  update: "update",
+};
+
+/** Short cause shown in lists instead of the internal kind (`system`). */
+export function interactionKindLabel(i: {
+  kind: InteractionKind;
+  metrics: { trigger?: SystemTrigger };
+}): string {
+  if (i.kind === "system") return i.metrics.trigger ? TRIGGER_LABEL[i.metrics.trigger] : "background";
+  return KIND_LABEL[i.kind];
+}
+
+function systemTrigger(renders: readonly RenderEvent[]): SystemTrigger | undefined {
+  const counts: Record<SystemTrigger, number> = {
+    state: 0,
+    context: 0,
+    store: 0,
+    update: 0,
+  };
+  for (const r of renders) {
+    for (const x of r.reasons) {
+      if (x.type === "state") counts.state++;
+      else if (x.type === "context") counts.context++;
+      else if (x.type === "external-store") counts.store++;
+      else if (x.type === "force-update") counts.update++;
+    }
+  }
+  let best: SystemTrigger | undefined;
+  let bestN = 0;
+  for (const key of ["state", "context", "store", "update"] as const) {
+    if (counts[key] > bestN) {
+      best = key;
+      bestN = counts[key];
+    }
+  }
+  return best;
+}

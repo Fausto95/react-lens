@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vite-plus/test";
-import { buildInteractions } from "./interactions.js";
+import { buildInteractions, interactionKindLabel } from "./interactions.js";
 import type {
   LensEvent,
   RenderEvent,
@@ -40,7 +40,13 @@ function interaction(over: Partial<InteractionEvent> = {}): InteractionEvent {
   };
 }
 
-const nameOf = (id: ComponentId) => (id === (42 as ComponentId) ? "ProductCard" : undefined);
+const NAMES: Record<number, string> = {
+  7: "Clock",
+  8: "Badge",
+  9: "Ticker",
+  42: "ProductCard",
+};
+const nameOf = (id: ComponentId) => NAMES[id as unknown as number];
 
 describe("buildInteractions", () => {
   it("groups pre-interaction renders under a synthetic Load", () => {
@@ -75,13 +81,13 @@ describe("buildInteractions", () => {
     expect(result[0]!.metrics.stateUpdates).toBe(1);
   });
 
-  it("attaches a close untagged render to the preceding interaction, but a distant one becomes Background", () => {
+  it("attaches a close untagged render to the preceding interaction, but a distant one becomes a system bucket", () => {
     const iid = 200 as InteractionId;
     const events: LensEvent[] = [
       interaction({ timestamp: 100, interactionId: iid, kind: "click" }),
       render({ timestamp: 101, interactionId: iid }),
       render({ timestamp: 150, interactionId: undefined }), // within 300ms tail → attaches
-      render({ timestamp: 900, interactionId: undefined }), // far later → Background
+      render({ timestamp: 900, interactionId: undefined }), // far later → system
     ];
     const result = buildInteractions(events, nameOf);
     const click = result.find((r) => r.kind === "click")!;
@@ -89,7 +95,90 @@ describe("buildInteractions", () => {
     expect(click.metrics.renderCount).toBe(2);
     expect(background).toBeDefined();
     expect(background!.label).toBe("Background");
+    expect(interactionKindLabel(background!)).toBe("background");
     expect(background!.metrics.renderCount).toBe(1);
+  });
+
+  it("names a system bucket after the initiating component, not cascaded children", () => {
+    const events: LensEvent[] = [
+      render({
+        timestamp: 1000,
+        componentId: 7 as ComponentId,
+        reasons: [{ type: "state", hookIndex: 0 }],
+      }),
+      render({
+        timestamp: 1001,
+        componentId: 8 as ComponentId,
+        reasons: [{ type: "parent", componentId: 7 as ComponentId }],
+      }),
+    ];
+    const result = buildInteractions(events, nameOf);
+    expect(result).toHaveLength(1);
+    expect(result[0]!.kind).toBe("load");
+    expect(result[0]!.label).toBe("Load");
+
+    const later: LensEvent[] = [
+      interaction({ timestamp: 10, interactionId: 1 as InteractionId, kind: "click" }),
+      render({ timestamp: 11, interactionId: 1 as InteractionId }),
+      render({
+        timestamp: 900,
+        componentId: 7 as ComponentId,
+        reasons: [{ type: "state", hookIndex: 0 }],
+      }),
+      render({
+        timestamp: 901,
+        componentId: 8 as ComponentId,
+        reasons: [{ type: "parent", componentId: 7 as ComponentId }],
+      }),
+    ];
+    const named = buildInteractions(later, nameOf).find((r) => r.kind === "system");
+    expect(named?.label).toBe("Clock");
+    expect(named?.metrics.trigger).toBe("state");
+    expect(interactionKindLabel(named!)).toBe("state");
+    expect(named?.metrics.renderCount).toBe(2);
+  });
+
+  it("joins two initiator names and summarizes three or more", () => {
+    const two: LensEvent[] = [
+      interaction({ timestamp: 10, interactionId: 1 as InteractionId, kind: "click" }),
+      render({ timestamp: 11, interactionId: 1 as InteractionId }),
+      render({
+        timestamp: 900,
+        componentId: 7 as ComponentId,
+        reasons: [{ type: "state", hookIndex: 0 }],
+      }),
+      render({
+        timestamp: 910,
+        componentId: 8 as ComponentId,
+        reasons: [{ type: "state", hookIndex: 0 }],
+      }),
+    ];
+    expect(buildInteractions(two, nameOf).find((r) => r.kind === "system")?.label).toBe(
+      "Clock + Badge",
+    );
+
+    const three: LensEvent[] = [
+      interaction({ timestamp: 10, interactionId: 1 as InteractionId, kind: "click" }),
+      render({ timestamp: 11, interactionId: 1 as InteractionId }),
+      render({
+        timestamp: 900,
+        componentId: 7 as ComponentId,
+        reasons: [{ type: "state", hookIndex: 0 }],
+      }),
+      render({
+        timestamp: 910,
+        componentId: 8 as ComponentId,
+        reasons: [{ type: "state", hookIndex: 0 }],
+      }),
+      render({
+        timestamp: 920,
+        componentId: 9 as ComponentId,
+        reasons: [{ type: "state", hookIndex: 0 }],
+      }),
+    ];
+    expect(buildInteractions(three, nameOf).find((r) => r.kind === "system")?.label).toBe(
+      "Clock + 2 more",
+    );
   });
 
   it("orders interactions by start time and spans to the last render end", () => {

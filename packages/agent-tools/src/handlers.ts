@@ -5,7 +5,7 @@ import type {
   EffectEvent,
   HookSnapshot,
 } from "@reactlens/protocol";
-import type { TraceStore } from "@reactlens/trace-engine";
+import { interactionKindLabel, type TraceStore } from "@reactlens/trace-engine";
 import type { Causality } from "@reactlens/causality";
 import { diff, type DiffResult } from "@reactlens/diff-engine";
 import { definitionSpan, type Diagnostic } from "@reactlens/diagnostics";
@@ -498,7 +498,7 @@ export function createToolHandlers(deps: {
         .map((i) => ({
           id: i.id,
           label: i.label,
-          kind: i.kind,
+          kind: interactionKindLabel(i),
           durationMs: round(i.metrics.totalDuration),
           reactMs: round(i.metrics.reactDuration),
           renderCount: i.metrics.renderCount,

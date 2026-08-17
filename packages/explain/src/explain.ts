@@ -1,5 +1,5 @@
 import type { ComponentId, RenderEvent } from "@reactlens/protocol";
-import type { TraceStore, Interaction } from "@reactlens/trace-engine";
+import { interactionKindLabel, type TraceStore, type Interaction } from "@reactlens/trace-engine";
 import type { Causality } from "@reactlens/causality";
 import type { Diagnostic } from "@reactlens/diagnostics";
 import type {
@@ -253,7 +253,7 @@ function writeCopy(
 
   const parts: string[] = [];
   parts.push(
-    `${interaction.kind} ran ${fmt(interaction.metrics.totalDuration)} (React ${fmt(interaction.metrics.reactDuration)}).`,
+    `${interactionKindLabel(interaction)} ran ${fmt(interaction.metrics.totalDuration)} (React ${fmt(interaction.metrics.reactDuration)}).`,
   );
 
   if (waste.length > 0) {
