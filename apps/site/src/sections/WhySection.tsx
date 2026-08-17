@@ -71,7 +71,7 @@ export function WhySection() {
           <h3>Ask in words, get Lens IDs back</h3>
           <p>
             <kbd>⌘I</kbd> opens an assistant that answers through typed tools over the live trace
-            (OpenAI / Anthropic / Z.AI — your key stays in the browser). Claims cite clickable Lens
+            (OpenAI / Anthropic / Z.AI — your key is encrypted in the browser). Claims cite clickable Lens
             IDs; the agent can propose fixes citing <code>file:line</code> against your source.
           </p>
         </article>

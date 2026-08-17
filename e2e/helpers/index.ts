@@ -109,6 +109,7 @@ export async function clickInPage(page: Page, label: string | RegExp): Promise<v
 export async function seedAgentKey(page: Page, apiKey = "sk-e2e-test"): Promise<void> {
   await page.evaluate(
     ({ key }) => {
+      // Legacy plaintext shape — the panel migrates it into the encrypted vault on load.
       localStorage.setItem(
         "react-lens/agent-settings",
         JSON.stringify({

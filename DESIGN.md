@@ -405,9 +405,11 @@ recorded trace — never from vibes. Three design rules keep it honest:
    compiled component (§1.4) and prefers fixes that restore compiler
    memoization at the cause site.
 
-BYOK: keys live in `chrome.storage.session` (extension) or localStorage
-(embedded), and leave the machine only as auth headers to the user-chosen
-provider. Answers cite Lens ID tokens the panel renders as chips that drive
+BYOK: non-secret agent prefs live in `chrome.storage.session` (extension) or
+localStorage (embedded). The API key is AES-GCM sealed into those prefs; the
+wrap key is session-scoped (`chrome.storage.session` / `sessionStorage`) so a
+durable prefs dump is not enough to recover it. Keys leave the machine only as
+auth headers to the user-chosen provider. Answers cite Lens ID tokens the panel renders as chips that drive
 selection and the time cursor; fenced fixes get Copy and Open-in-editor.
 Applying changes to disk is out of scope by construction — the panel is a
 browser page.

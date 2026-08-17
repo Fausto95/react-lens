@@ -49,8 +49,8 @@ export function SettingsPopover({
         </button>
       </div>
       <p className="rl-settings-hint">
-        Bring your own key (BYOK). Keys stay in this panel — calls go only to the provider you pick
-        (OpenAI, Claude, or Z.AI GLM).
+        Bring your own key (BYOK). The key is encrypted at rest in this panel and only leaves as auth
+        to the provider you pick (OpenAI, Claude, or Z.AI GLM).
       </p>
       <label className="rl-settings-field">
         <span>Provider</span>

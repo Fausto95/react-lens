@@ -112,6 +112,8 @@ Stored under `react-lens/panel-prefs` (localStorage):
 | `revealOnSelect`    | `true`    | Scroll the page to off-screen selections                    |
 | Column / pane prefs | —         | Tree / inspector widths, collapsed rails                    |
 
-Agent provider settings (API key, model, base URL) stay in
-`react-lens/agent-settings` — browser / extension storage only; keys never
-leave the machine.
+Agent provider settings (model, base URL) stay in `react-lens/agent-settings`.
+The API key is AES-GCM encrypted there; the wrap key lives in session storage
+(`chrome.storage.session` in the extension, `sessionStorage` when embedded) so
+durable prefs never hold a usable secret alone. Keys never leave the machine
+except as auth to the provider you pick.
