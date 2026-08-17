@@ -509,3 +509,42 @@ describe("time travel controller — external-store adapters", () => {
     expect(fx.get()).toBe(5);
   });
 });
+
+describe("time travel controller — snap mode", () => {
+  function styleTag(): HTMLElement | null {
+    return document.getElementById("react-lens-snap-mode");
+  }
+
+  it("suppresses transitions from the first apply until go-live", () => {
+    // Without this the page eases toward the rewound value, so a scrub reads as
+    // "the style didn't rewind" for the length of the transition.
+    document.head.innerHTML = "";
+    const tt = createTimeTravel({ fiber: makeFakeFiber() as never });
+    tt.capture(1 as RenderId, 1 as ComponentId, hookFiber(0));
+    expect(styleTag()).toBeNull();
+
+    tt.apply([entry(1, 1)]);
+    expect(styleTag()).not.toBeNull();
+
+    tt.goLive();
+    expect(styleTag()).toBeNull();
+  });
+
+  it("leaves the page alone when the panel turns snap mode off", () => {
+    document.head.innerHTML = "";
+    const tt = createTimeTravel({ fiber: makeFakeFiber() as never });
+    tt.capture(1 as RenderId, 1 as ComponentId, hookFiber(0));
+    tt.apply([entry(1, 1)], undefined, { snap: false });
+    expect(styleTag()).toBeNull();
+    tt.goLive();
+  });
+
+  it("clear() takes the stylesheet with it", () => {
+    document.head.innerHTML = "";
+    const tt = createTimeTravel({ fiber: makeFakeFiber() as never });
+    tt.capture(1 as RenderId, 1 as ComponentId, hookFiber(0));
+    tt.apply([entry(1, 1)]);
+    tt.clear();
+    expect(styleTag()).toBeNull();
+  });
+});
