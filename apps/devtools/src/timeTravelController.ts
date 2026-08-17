@@ -4,6 +4,7 @@ import type {
   TimeTravelEntry,
   TimeTravelFailureReason,
   TimeTravelResult,
+  TimeTravelStoreFailureReason,
 } from "@reactlens/protocol";
 import { createApplySetCursor, diffApplySet, type TraceStore } from "@reactlens/trace-engine";
 import type { TimeCursor } from "./timeCursor.js";
@@ -29,6 +30,10 @@ export interface RestoreStatus {
   atT: number;
   applied: number;
   failedIds: ReadonlyMap<ComponentId, TimeTravelFailureReason>;
+  /** Registered stores the page restored to this cursor time. */
+  storesApplied: number;
+  /** Stores that could not follow the cursor, with the page's reason. */
+  storeFailures: ReadonlyMap<string, TimeTravelStoreFailureReason>;
 }
 
 export interface PanelTimeTravel {
@@ -63,6 +68,12 @@ export function createPanelTimeTravel(
   /** Cumulative restore state since travel began. */
   const restoredIds = new Set<ComponentId>();
   const failedIds = new Map<ComponentId, TimeTravelFailureReason>();
+  /**
+   * Stores are not cumulative: every apply carries the cursor time, so each
+   * one re-reports every registered store. The newest result is the truth.
+   */
+  let storesApplied = 0;
+  let storeFailures = new Map<string, TimeTravelStoreFailureReason>();
   /** Monotonic apply generation; results arriving out of order are dropped. */
   let generation = 0;
   let lastProcessed = 0;
@@ -70,7 +81,13 @@ export function createPanelTimeTravel(
   let travelEpoch = 0;
 
   function publish(atT: number): void {
-    onStatus?.({ atT, applied: restoredIds.size, failedIds: new Map(failedIds) });
+    onStatus?.({
+      atT,
+      applied: restoredIds.size,
+      failedIds: new Map(failedIds),
+      storesApplied,
+      storeFailures: new Map(storeFailures),
+    });
   }
 
   function ingestResult(
@@ -81,6 +98,8 @@ export function createPanelTimeTravel(
   ): void {
     if (gen <= lastProcessed) return; // stale — a newer apply already reported
     lastProcessed = gen;
+    storesApplied = result.storesApplied;
+    storeFailures = new Map(result.storeFailures.map((f) => [f.storeId, f.reason] as const));
     const failedNow = new Map(result.failures.map((f) => [f.componentId, f.reason] as const));
     for (const entry of delta) {
       const reason = failedNow.get(entry.componentId);
@@ -151,6 +170,8 @@ export function createPanelTimeTravel(
     lastApplied = new Map();
     restoredIds.clear();
     failedIds.clear();
+    storesApplied = 0;
+    storeFailures = new Map();
     travelEpoch++;
     generation++;
     lastProcessed = generation; // in-flight results are now stale

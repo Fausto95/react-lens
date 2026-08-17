@@ -48,6 +48,7 @@ import { sourceResolver } from "./sourceResolver.js";
 import { createTooltipLayer } from "./tooltip.js";
 import type { EditApi } from "./Inspector.js";
 import { RedesignShell } from "./redesign/RedesignShell.js";
+import { RestoreStatusPill } from "./timeline/RestoreStatusPill.js";
 import { ErrorChip } from "./ErrorChip.js";
 import { reportNotice } from "./errors.js";
 import "./theme.css";
@@ -254,7 +255,7 @@ export function Panel({
   const [travelOn, setTravelOn] = useState(() => loadPanelPrefs().travelOn);
   const [travelSupported, setTravelSupported] = useState(false);
   // Set-wide restore feedback while traveling (partial-restore pill + markers).
-  const [, setRestoreStatus] = useState<RestoreStatus | null>(null);
+  const [restoreStatus, setRestoreStatus] = useState<RestoreStatus | null>(null);
   useEffect(() => {
     if (!timeTravel) return;
     let alive = true;
@@ -564,30 +565,48 @@ export function Panel({
         {...(onRequestSnapshot ? { onRequestSnapshot } : {})}
         transport={
           timeTravel ? (
-            <button
-              type="button"
-              className={`rl-icon-btn rl-tl-travel${travelOn ? " active" : ""}`}
-              disabled={!travelSupported || offlineSession}
-              title={
-                offlineSession
-                  ? "Imported session — time travel needs the original live page. Resume recording to go back live."
-                  : !travelSupported
-                    ? "Time travel requires a development React build"
-                    : travelOn
-                      ? "Time travel on — the page follows the playhead"
-                      : "Time travel off — scrubbing only moves the panel views"
-              }
-              aria-label="Apply state to the page while scrubbing"
-              aria-pressed={travelOn}
-              onClick={() => {
-                setTravelOn((on) => {
-                  savePanelPrefs({ travelOn: !on });
-                  return !on;
-                });
-              }}
-            >
-              <IconRewind size={13} />
-            </button>
+            <>
+              {restoreStatus && (
+                <RestoreStatusPill
+                  applied={restoreStatus.applied}
+                  failures={[...restoreStatus.failedIds].map(([id, reason]) => ({
+                    id,
+                    name: store.instance(id)?.name ?? `#${id}`,
+                    reason,
+                  }))}
+                  storesApplied={restoreStatus.storesApplied}
+                  storeFailures={[...restoreStatus.storeFailures].map(([storeId, reason]) => ({
+                    storeId,
+                    reason,
+                  }))}
+                  onSelect={select}
+                />
+              )}
+              <button
+                type="button"
+                className={`rl-icon-btn rl-tl-travel${travelOn ? " active" : ""}`}
+                disabled={!travelSupported || offlineSession}
+                title={
+                  offlineSession
+                    ? "Imported session — time travel needs the original live page. Resume recording to go back live."
+                    : !travelSupported
+                      ? "Time travel requires a development React build"
+                      : travelOn
+                        ? "Time travel on — the page follows the playhead"
+                        : "Time travel off — scrubbing only moves the panel views"
+                }
+                aria-label="Apply state to the page while scrubbing"
+                aria-pressed={travelOn}
+                onClick={() => {
+                  setTravelOn((on) => {
+                    savePanelPrefs({ travelOn: !on });
+                    return !on;
+                  });
+                }}
+              >
+                <IconRewind size={13} />
+              </button>
+            </>
           ) : undefined
         }
         toolbarActions={

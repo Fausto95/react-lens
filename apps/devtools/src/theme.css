@@ -2002,6 +2002,9 @@
 .rl-tl-restore-fail {
   font-weight: 600;
 }
+.rl-tl-restore-stores {
+  color: var(--rl-text-dim);
+}
 .rl-tl-live-label {
   overflow: hidden;
   text-overflow: ellipsis;
