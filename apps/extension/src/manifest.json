@@ -1,9 +1,14 @@
 {
   "manifest_version": 3,
   "name": "React Lens",
-  "version": "0.0.0",
-  "description": "Rewind any render, then ask why. Dev-time React observability for React apps.",
+  "version": "0.1.0",
+  "description": "React debugging with receipts. Scrub Cascade, rewind real state, and get cited answers in DevTools.",
   "minimum_chrome_version": "116",
+  "icons": {
+    "16": "icons/icon-16.png",
+    "48": "icons/icon-48.png",
+    "128": "icons/icon-128.png"
+  },
   "devtools_page": "src/devtools/devtools.html",
   "background": {
     "service_worker": "src/background/background.ts",

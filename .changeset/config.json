@@ -11,6 +11,8 @@
     "@reactlens/devtools",
     "@reactlens/playground",
     "@reactlens/extension",
-    "@reactlens/site"
+    "@reactlens/site",
+    "@reactlens/demo-ui",
+    "@reactlens/e2e-fixture"
   ]
 }

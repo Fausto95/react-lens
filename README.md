@@ -180,8 +180,7 @@ agent, sessions, CLI/MCP, the verify loop, and the extension shell.
 [ROADMAP.md](ROADMAP.md) is the living checklist of what's built and what's
 next.
 
-Not yet: npm-published packages (still `0.0.0`; release pipeline is ready),
-Firefox/Safari extensions, network adapters.
+Not yet: Firefox/Safari extensions, network adapters.
 
 ## Contributing
 
