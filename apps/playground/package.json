@@ -13,8 +13,11 @@
     "@reactlens/adapters": "workspace:*",
     "@reactlens/demo-ui": "workspace:*",
     "@reactlens/devtools": "workspace:*",
+    "@reduxjs/toolkit": "^2.5.0",
+    "@tanstack/react-query": "^5.66.0",
     "react": "^19",
     "react-dom": "^19",
+    "react-redux": "^9.2.0",
     "zustand": "^5.0.3"
   },
   "devDependencies": {

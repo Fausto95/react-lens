@@ -366,7 +366,7 @@ not matter. `@reactlens/adapters` ships the mappings — Zustand to
 `withTimeTravel`, TanStack Query to `dehydrate`/`clear`+`hydrate` — with no
 dependency on any of them (stores are matched structurally, Query's functions
 are passed in). See [docs/stores.md](docs/stores.md); the playground's
-`RoastFilter` is the reference.
+`scenarios/stores/` has one card per adapter.
 
 Store results are reported separately from components: `storesApplied` and
 `storeFailures[{ storeId, reason }]` on `TimeTravelResult`, so a store that has

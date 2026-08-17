@@ -44,7 +44,7 @@ export function RoastFilter() {
   return (
     <Card>
       <Stack>
-        <Meta>Roast filter — Zustand, outside React. Scrub the playhead and the chips follow.</Meta>
+        <Meta>Zustand — replacing setState, so keys added later are dropped.</Meta>
         <Stack row>
           {ROASTS.map((roast) => (
             <Button
