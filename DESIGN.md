@@ -387,6 +387,23 @@ component restore can push to a store through an effect or a subscription.
 - _Uncontrolled inputs_ — writing `.value` fights focus/selection; the
   offline commit DOM snapshots show their values instead.
 
+**Styles follow state, motion does not follow the playhead.** A className or
+inline style computed from state rewinds because the component re-renders;
+`apps/e2e-fixture`'s StyleMatrix pins that for static classes, inline style
+objects, Emotion's runtime classes and effect-driven `el.style` writes, in
+compiled and `"use no memo"` pairs — the React Compiler's memo cache is not
+implicated. What broke was motion: with the page's transitions live, a rewind
+started a 400ms ease toward the restored value, so state and paint disagreed for
+the whole window. Travel now installs a stylesheet suppressing transitions and
+animations (snap mode, `travelSnap`, on by default) and removes it on go-live.
+
+**Restores are verified, not assumed.** Once a scrub settles, the page
+re-snapshots its container (`snapshotPage`) and the panel diffs it against
+`commitDomAt(t)` with `compareDom`. A disagreement is reported in the restore
+chip — the only signal that catches "the write succeeded and the page still
+doesn't match". Commit DOM is throttled to 250ms, so verification stays silent
+unless a capture sits within that window of the cursor.
+
 Known limits (documented in the toggle tooltip): only `useState`/`useReducer`/
 class state and registered store adapters rewind — not refs, unregistered
 module state, or uncontrolled inputs; effects re-run against

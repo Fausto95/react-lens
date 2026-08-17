@@ -87,18 +87,21 @@ export function TimeTravelSection() {
           <h3>What travels</h3>
           <p>
             <code>useState</code>, <code>useReducer</code>, class state — and everything derived
-            from them: computed values, class names, styles, context from a rewound provider. Plus
-            any store you register with <code>@reactlens/adapters</code>: Zustand, Redux, TanStack
-            Query, or a get/set pair of your own.
+            from them: computed values, class names, inline styles, CSS-in-JS classes, context from
+            a rewound provider. Transitions are suppressed while traveling, so the page shows the
+            past instead of easing toward it. Plus any store you register with{" "}
+            <code>@reactlens/adapters</code>: Zustand, Redux, TanStack Query, or a get/set pair of
+            your own.
           </p>
         </article>
         <article className="change">
           <span className="tag orange">Stays put</span>
           <h3>What doesn't</h3>
           <p>
-            Refs, uncontrolled inputs, imperative DOM writes, and unregistered module state — an
-            external store rewinds only once you opt it in. Production builds have no override API,
-            so the toggle is disabled there.
+            Refs, uncontrolled inputs, and unregistered module state — a colour mode or CSS variable
+            written outside React rewinds only once you opt it in. The panel says so when the page
+            stops matching what it captured. Production builds have no override API, so the toggle
+            is disabled there.
           </p>
         </article>
       </div>

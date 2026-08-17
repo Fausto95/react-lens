@@ -105,6 +105,56 @@ registerStores(
 A module singleton is the same shape: `get` returns the value, `set` writes it
 back and notifies whatever the app subscribes with.
 
+## Styles that live outside React
+
+A className or inline style computed from `useState` rewinds on its own — that
+is just React state, and the specimen matrix in `apps/e2e-fixture` proves it for
+static classes, inline style objects, Emotion's runtime classes and effects that
+write `el.style`, compiled and uncompiled alike.
+
+What does not rewind is styling driven from outside React: a colour mode written
+to `documentElement`, a CSS variable set by a module singleton, a motion value.
+Those are stores like any other, so the same seam opts them in:
+
+```ts
+let mode: "light" | "dark" = "light";
+const listeners = new Set<() => void>();
+
+export const colorMode = {
+  get: () => mode,
+  set(next: "light" | "dark") {
+    mode = next;
+    document.documentElement.dataset.theme = next;
+    for (const l of listeners) l();
+  },
+  subscribe(l: () => void) {
+    listeners.add(l);
+    return () => void listeners.delete(l);
+  },
+};
+
+if (import.meta.env.DEV) {
+  registerStores(createStoreAdapter({ id: "color-mode", get: colorMode.get, set: colorMode.set }));
+}
+```
+
+The `set` does the same work the app does, so the DOM write follows the playhead
+with it. The same shape covers a framer-motion `MotionValue` (`get()` / `set()`)
+or any imperative writer you own.
+
+Two things no adapter fixes, and the panel now tells you about both:
+
+- **Transitions and animations.** A rewind is not an interaction, so the panel
+  suppresses the page's transitions while traveling ("snap", on by default, next
+  to the rewind toggle). Turn it off when the animation itself is what you are
+  debugging — and expect styles to lag the playhead by the transition's duration
+  while it is off.
+- **Anything the panel cannot write.** Once a scrub settles, the page's DOM is
+  compared against what was captured at that cursor; a disagreement appears in
+  the restore chip as "page differs", naming the attributes involved. It is
+  quiet by design — commit DOM is captured at most once per 250ms, so it only
+  speaks when a capture sits close enough to the cursor to be evidence.
+
 ## What to expect
 
 - **Snapshots are taken per commit**, bounded to the last 200 per store
