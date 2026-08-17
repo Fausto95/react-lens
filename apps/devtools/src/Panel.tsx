@@ -452,9 +452,11 @@ export function Panel({
       });
     });
   };
-  useEffect(() => {
-    if (issueCount === 0) setDoctorOpen(false);
-  }, [issueCount]);
+  // Close the Doctor menu when findings clear — adjust during render so we
+  // don't cascade a second pass from an effect (react-compiler EffectSetState).
+  if (issueCount === 0 && doctorOpen) {
+    setDoctorOpen(false);
+  }
 
   // ⌘K / Ctrl+K opens the command palette; ⌘\ toggles page inspect.
   // Plain keys (R, ?) match the hints the palette advertises.

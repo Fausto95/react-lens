@@ -35,7 +35,7 @@ export function ChangeSection() {
       <p className="sec-lead">
         One universal diff over values, props, state, and DOM — then A/B any two Lens commits for a
         whole-app index of what ended up different. In a development build, live-edit primitives in
-        the inspector; Replay with fix previews the tree with wasted renders hidden.
+        the inspector.
       </p>
 
       <div className="card">

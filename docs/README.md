@@ -2,10 +2,6 @@
 
 **React debugging with receipts.**
 
-Scrub Cascade to rewind real state. Trace a render to its cause. Preview waste
-before you change code. Diff two moments — or two sessions in CI. Human or AI
-agent — every answer cites the exact render, component, and line.
-
 | Guide                                 | Who it's for                                |
 | ------------------------------------- | ------------------------------------------- |
 | [Getting started](getting-started.md) | First run — playground, extension, site     |
