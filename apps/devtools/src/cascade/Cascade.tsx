@@ -635,6 +635,13 @@ export function Cascade({
 
   useEffect(() => paintAll(), [cursor.mode, cursor.t, focusMode, customFocus, paintAll]);
 
+  const setStageCursor = useCallback((panning: boolean, overNode: boolean) => {
+    const stage = stageRef.current;
+    if (!stage) return;
+    stage.classList.toggle("dragging", panning);
+    stage.classList.toggle("over-node", !panning && overNode);
+  }, []);
+
   const worldPoint = useCallback((clientX: number, clientY: number) => {
     const stage = stageRef.current;
     if (!stage) return { x: 0, y: 0, sx: 0, sy: 0 };
@@ -923,6 +930,7 @@ export function Cascade({
               hitId: hit?.node.id ?? null,
               moved: false,
             };
+            setStageCursor(false, hit != null);
             event.currentTarget.setPointerCapture(event.pointerId);
           }}
           onPointerMove={(event) => {
@@ -930,7 +938,10 @@ export function Cascade({
             if (drag) {
               const dx = event.clientX - drag.x;
               const dy = event.clientY - drag.y;
-              if (!drag.moved && Math.hypot(dx, dy) > 3) drag.moved = true;
+              if (!drag.moved && Math.hypot(dx, dy) > 3) {
+                drag.moved = true;
+                setStageCursor(true, false);
+              }
               if (drag.moved) {
                 viewRef.current.panX = drag.panX + dx;
                 viewRef.current.panY = drag.panY + dy;
@@ -939,7 +950,9 @@ export function Cascade({
               return;
             }
             const point = worldPoint(event.clientX, event.clientY);
-            setHover(spatial?.hit(point.x, point.y) ?? null, point.sx, point.sy);
+            const hit = spatial?.hit(point.x, point.y) ?? null;
+            setStageCursor(false, hit != null);
+            setHover(hit, point.sx, point.sy);
           }}
           onPointerUp={(event) => {
             const drag = dragRef.current;
@@ -947,16 +960,20 @@ export function Cascade({
             try {
               event.currentTarget.releasePointerCapture(event.pointerId);
             } catch {}
+            const point = worldPoint(event.clientX, event.clientY);
+            setStageCursor(false, spatial?.hit(point.x, point.y) != null);
             if (!drag || drag.moved || !drag.hitId || !layout) return;
             const item = layout.nodeById.get(drag.hitId);
             if (item) selectNode(item);
           }}
           onPointerCancel={() => {
             dragRef.current = null;
+            setStageCursor(false, false);
           }}
           onPointerLeave={() => {
             if (dragRef.current) return;
             hoverRef.current = null;
+            setStageCursor(false, false);
             updateTooltip(null, 0, 0);
             onHighlight?.(null);
             paintOverlay();

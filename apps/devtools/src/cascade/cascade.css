@@ -332,7 +332,11 @@
   touch-action: none;
   user-select: none;
   -webkit-user-select: none;
-  cursor: grab;
+  cursor: default;
+}
+
+.rl-cascade-stage.over-node {
+  cursor: pointer;
 }
 
 .rl-cascade-stage.dragging {
