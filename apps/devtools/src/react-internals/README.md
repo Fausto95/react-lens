@@ -1,27 +1,21 @@
-# React Internals workspace
+# React execution data
 
-The production workspace is wired to React Lens' existing live Fiber-backed trace.
+React Internals is no longer a competing top-level workspace. The product surface is **Cascade**, with React runtime information exposed as an optional X-ray layer over the same causal graph.
 
-React Lens already installs and owns the React DevTools hook at `document_start` through `@reactlens/fiber`. That bridge observes commits before the app's React runtime starts and feeds normalized render/component evidence into the shared `TraceStore`. The React Internals workspace reads that same store, so it works in both the Chrome extension and the embedded playground without installing another private-internals hook.
+The primary `@reactlens/devtools/panel` entry keeps Cascade mounted and adds a `React` toggle. When enabled, the execution layer shows the latest React commit inline: interaction/passive origin, rendered Fiber work scaled by self time, commit identity/span, and click-through Fiber details (self/subtree timing, parent and source).
 
-## Why not install Bippy in production too?
+`ReactInternalsPanel` remains exported as an experimental standalone surface for adapter development, but it is not primary navigation.
 
-Bippy solves the same low-level access problem by patching the React DevTools hook. Running it beside React Lens' own hook would add another private-internals owner and another compatibility surface across React versions. The panel therefore keeps a small `ReactInternalsRuntimeAdapter` / Bippy event contract for experiments, but production uses the hook React Lens already owns.
+## Runtime ownership
 
-## Data flow
+React Lens already owns the React DevTools hook at `document_start` through `@reactlens/fiber`, and `@reactlens/instrumentation` normalizes its commit/render signal into the shared `TraceStore`. Production Cascade consumes that existing live signal rather than installing a second private-internals hook.
 
-```text
-React runtime
-    ↓
-@reactlens/fiber (document_start DevTools hook)
-    ↓
-@reactlens/instrumentation
-    ↓
-TraceStore
-    ↓
-ReactInternalsPanel
-```
+The Bippy adapter remains an isolated seam for experiments and future enrichment. Raw Fiber objects must not leak into UI state; normalize useful fields (lanes, flags, tags, hook transitions, owner/source data, bailouts/effects) before they reach Cascade.
 
-Raw Fiber objects never enter persisted trace state or React component state. The workspace works with stable React Lens component ids, commit timing, parent relationships, render counts, self time, and source locations.
+The intended direction is progressive disclosure:
 
-Future enrichment can normalize additional low-level fields — tags, flags, lanes, hook state transitions, owners, effect work, and bailout information — inside the owned Fiber bridge without changing the workspace API.
+- default Cascade: causal structure and render cost
+- React layer: commit/work information inline
+- selected work item: richer Fiber-derived metadata
+- future semantic zoom: lanes/flags/reasons on nodes as zoom increases
+- raw Fiber: advanced/debug-only drawer, never the default UI
