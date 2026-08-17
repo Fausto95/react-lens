@@ -1,6 +1,6 @@
 /* oxlint-disable react/react-compiler -- imperative canvas/gesture refs; pointer hot paths intentionally bypass React state */
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { interactionKindLabel, type TraceStore } from "@reactlens/trace-engine";
+import type { TraceStore } from "@reactlens/trace-engine";
 import type { ComponentId } from "@reactlens/protocol";
 import {
   IconArrowDown,
@@ -26,6 +26,7 @@ import {
 import { createCascadeRenderer, type CascadeRendererClient } from "./rendererClient.js";
 import { buildCascadeSearchIndex, queryCascadeSearchIndex } from "./search.js";
 import { CascadeSpatialIndex } from "./spatial.js";
+import { InteractionList } from "./InteractionList.js";
 import "./cascade.css";
 import "./transport.css";
 
@@ -889,28 +890,14 @@ export function Cascade({
       </div>
 
       <div className="rl-cascade-body">
-        <div className="rl-cascade-interactions">
-          <div className="rl-cascade-interactions-head">
-            <span>Interactions</span>
-            <span>{model.interactions.length.toLocaleString()}</span>
-          </div>
-          {interactions.map((item) => (
-            <button
-              type="button"
-              key={item.id}
-              className={`rl-cascade-interaction${item.id === interaction?.id ? " selected" : ""}`}
-              onClick={() => chooseInteraction(item.id)}
-              title={`${item.label} · ${interactionKindLabel(item)}`}
-            >
-              <span className="title">{item.label}</span>
-              <span className="time">{Math.round(item.start - model.bounds.t0)}ms</span>
-              <span className="meta">
-                {interactionKindLabel(item)} · {item.metrics.renderCount.toLocaleString()} renders ·{" "}
-                {item.metrics.reactDuration.toFixed(1)}ms React
-              </span>
-            </button>
-          ))}
-        </div>
+        <InteractionList
+          store={store}
+          interactions={interactions}
+          totalCount={model.interactions.length}
+          selectedId={interaction?.id ?? null}
+          t0={model.bounds.t0}
+          onSelect={chooseInteraction}
+        />
 
         <div
           className="rl-cascade-stage"

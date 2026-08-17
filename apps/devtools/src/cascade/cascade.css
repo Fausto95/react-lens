@@ -8,7 +8,7 @@
 }
 
 .rl-cascade {
-  --cascade-rail: clamp(170px, 22%, 230px);
+  --cascade-rail: clamp(188px, 24%, 248px);
   --cascade-bar: 40px;
   --cascade-chip: 28px;
   --cascade-r: 6px;
@@ -275,9 +275,10 @@
 .rl-cascade-interaction {
   width: 100%;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 3px 8px;
-  padding: 8px;
+  grid-template-columns: 6px minmax(0, 1fr) auto;
+  gap: 4px 8px;
+  align-items: center;
+  padding: 7px 8px;
   border: 0;
   border-bottom: 1px solid color-mix(in srgb, var(--line) 70%, transparent);
   background: transparent;
@@ -296,7 +297,27 @@
   box-shadow: inset 2px 0 0 var(--accent);
 }
 
+.rl-cascade-interaction .kind-pip {
+  grid-column: 1;
+  grid-row: 1;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  flex: none;
+}
+
+.rl-cascade-interaction .kind-pip.kind-load {
+  background: var(--rl-network);
+}
+
+.rl-cascade-interaction .kind-pip.kind-system {
+  background: var(--text-3);
+}
+
 .rl-cascade-interaction .title {
+  grid-column: 2;
+  grid-row: 1;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -305,19 +326,76 @@
   font-weight: 600;
 }
 
-.rl-cascade-interaction .time,
-.rl-cascade-interaction .meta {
+.rl-cascade-interaction .react {
+  grid-column: 3;
+  grid-row: 1;
+  color: var(--text);
+  font: 600 9.5px var(--mono);
+  white-space: nowrap;
+}
+
+.rl-cascade-interaction .heat-row {
+  grid-column: 2 / -1;
+  grid-row: 2;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.rl-cascade-interaction .hbar {
+  flex: none;
+  width: 34px;
+  height: 3px;
+  border-radius: 2px;
+  background: rgba(var(--rl-ink-rgb), 0.07);
+  overflow: hidden;
+}
+
+.rl-cascade-interaction .hbar i {
+  display: block;
+  height: 100%;
+  border-radius: 2px;
+  background: var(--accent);
+  width: var(--w, 0%);
+}
+
+.rl-cascade-interaction .meta,
+.rl-cascade-interaction .time {
   color: var(--text-3);
   font: 9px var(--mono);
+  white-space: nowrap;
+}
+
+.rl-cascade-interaction .meta {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .rl-cascade-interaction .time {
-  grid-column: 2;
-  grid-row: 1;
+  margin-left: auto;
+  flex: none;
 }
 
-.rl-cascade-interaction .meta {
-  grid-column: 1 / -1;
+.rl-cascade-interaction .waste {
+  flex: none;
+  font: 9px var(--mono);
+  color: var(--warn);
+  background: rgba(var(--rl-warn-rgb), 0.12);
+  border-radius: 4px;
+  padding: 1px 5px;
+}
+
+.rl-cascade-interaction .stats {
+  grid-column: 2 / -1;
+  grid-row: 3;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  color: var(--text-3);
+  font: 9px var(--mono);
+  line-height: 1.35;
 }
 
 .rl-cascade-stage {
@@ -564,7 +642,7 @@
 
 @container cascade (max-width: 640px) {
   .rl-cascade {
-    --cascade-rail: 150px;
+    --cascade-rail: 168px;
   }
   .rl-cascade-cause {
     display: none;
@@ -599,9 +677,19 @@
   }
 
   .rl-cascade-interaction {
-    flex: 0 0 160px;
+    flex: 0 0 168px;
     border-right: 1px solid var(--line);
     border-bottom: 0;
+    align-content: start;
+  }
+
+  .rl-cascade-interaction .kind-pip {
+    align-self: start;
+    margin-top: 4px;
+  }
+
+  .rl-cascade-interaction.selected {
+    flex-basis: 188px;
   }
 
   .rl-cascade-minimap-shell {

@@ -18,10 +18,6 @@ const FEATURES: Feature[] = [
     body: "Command palette plus a structured filter language — renders:>20, wasted:true, compiled:false — so the tree answers questions, not just names.",
   },
   {
-    title: "Replay with fix",
-    body: "Preview the panel tree with wasted renders hidden. Fix with AI opens the BYOK agent on a Doctor finding — it proposes a patch; it does not write to disk.",
-  },
-  {
     title: "Waste detection",
     body: "After an interaction settles, a banner flags renders that produced no visible change and jumps you to the worst offender.",
   },

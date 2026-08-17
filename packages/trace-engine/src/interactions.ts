@@ -155,10 +155,7 @@ function nearestPreceding(buckets: MutableBucket[], t: number): MutableBucket | 
   return best;
 }
 
-function finalize(
-  b: MutableBucket,
-  nameOf: (id: ComponentId) => string | undefined,
-): Interaction {
+function finalize(b: MutableBucket, nameOf: (id: ComponentId) => string | undefined): Interaction {
   const componentIds = new Set<ComponentId>();
   const commitIds = new Set<CommitId>();
   let reactDuration = 0;
@@ -265,7 +262,8 @@ export function interactionKindLabel(i: {
   kind: InteractionKind;
   metrics: { trigger?: SystemTrigger };
 }): string {
-  if (i.kind === "system") return i.metrics.trigger ? TRIGGER_LABEL[i.metrics.trigger] : "background";
+  if (i.kind === "system")
+    return i.metrics.trigger ? TRIGGER_LABEL[i.metrics.trigger] : "background";
   return KIND_LABEL[i.kind];
 }
 
