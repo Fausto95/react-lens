@@ -203,3 +203,30 @@ test("focus modes All / Roots are mutually exclusive", async ({ page }) => {
   await expect(all).toHaveAttribute("aria-pressed", "true");
   await expect(roots).toHaveAttribute("aria-pressed", "false");
 });
+
+test("find locates cascade nodes and / focuses the field", async ({ page }) => {
+  await boot(page);
+  const input = page.getByRole("searchbox", { name: "Find renders in this cascade" });
+  await expect(input).toBeVisible();
+
+  await page.locator(".rl-cascade-stage").focus();
+  await page.keyboard.press("/");
+  await expect(input).toBeFocused();
+
+  await input.fill("zzzznope");
+  await expect(page.locator(".rl-cascade-find-count")).toHaveText("0");
+
+  await input.fill("a");
+  await expect(page.locator(".rl-cascade-find-count")).toHaveText(/^\d+\/\d+$/);
+
+  const before = await page.locator(".rl-cascade-find-count").textContent();
+  await page.keyboard.press("Enter");
+  await expect(page.locator(".rl-cascade-find-count")).toHaveText(/^\d+\/\d+$/);
+  const after = await page.locator(".rl-cascade-find-count").textContent();
+  const total = Number(/\/(\d+)/.exec(before ?? "")?.[1] ?? 0);
+  if (total > 1) expect(after).not.toBe(before);
+
+  await page.keyboard.press("Escape");
+  await expect(input).toHaveValue("");
+  await expect(page.locator(".rl-cascade-find-count")).toHaveText("");
+});

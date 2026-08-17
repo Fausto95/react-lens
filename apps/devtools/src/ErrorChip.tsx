@@ -45,7 +45,7 @@ export function ErrorChip() {
   const noticesOnly = total === 0;
 
   return (
-    <>
+    <span className="rl-menu-anchor">
       <button
         ref={anchorRef}
         type="button"
@@ -55,17 +55,25 @@ export function ErrorChip() {
             ? "React Lens has something to report — click for details"
             : "React Lens hit errors — click for details"
         }
+        aria-haspopup="dialog"
+        aria-expanded={open}
         onClick={() => setOpen((v) => !v)}
       >
         {noticesOnly ? `${errors.length} notice${errors.length === 1 ? "" : "s"}` : null}
         {noticesOnly ? null : `${total} error${total === 1 ? "" : "s"}`}
       </button>
       {open && (
-        <div ref={menuRef} className="rl-menu" role="dialog" aria-label="React Lens errors">
+        <div
+          ref={menuRef}
+          className="rl-menu"
+          role="dialog"
+          aria-label={noticesOnly ? "React Lens notices" : "React Lens errors"}
+        >
           <div className="rl-menu-head">
-            Errors
+            {noticesOnly ? "Notices" : "Errors"}
             <button
               type="button"
+              className="rl-menu-head-action"
               onClick={() => {
                 clearErrors();
                 setOpen(false);
@@ -84,6 +92,6 @@ export function ErrorChip() {
           </ul>
         </div>
       )}
-    </>
+    </span>
   );
 }

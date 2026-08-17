@@ -402,6 +402,90 @@
   pointer-events: none;
 }
 
+.rl-cascade-find {
+  position: absolute;
+  z-index: 6;
+  top: 10px;
+  left: 10px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  max-width: min(280px, calc(100% - 24px));
+  height: 28px;
+  padding: 0 6px 0 8px;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--panel) 94%, transparent);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28);
+  backdrop-filter: blur(8px);
+  color: var(--text-3);
+}
+
+.rl-cascade-find svg {
+  flex: none;
+}
+
+.rl-cascade-find-input {
+  flex: 1 1 auto;
+  min-width: 72px;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font: 500 12px/1 var(--sans);
+  letter-spacing: -0.02em;
+  outline: none;
+}
+
+.rl-cascade-find-input::placeholder {
+  color: var(--text-3);
+}
+
+.rl-cascade-find-input::-webkit-search-decoration,
+.rl-cascade-find-input::-webkit-search-cancel-button {
+  -webkit-appearance: none;
+}
+
+.rl-cascade-find-count {
+  flex: none;
+  min-width: 1.5em;
+  color: var(--text-3);
+  font: 500 10px/1 var(--mono);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+}
+
+.rl-cascade-find-count:empty {
+  display: none;
+}
+
+.rl-cascade-find-step {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text-2);
+  cursor: pointer;
+}
+
+.rl-cascade-find-step:hover:not(:disabled) {
+  color: var(--text);
+  background: color-mix(in srgb, var(--text) 6%, transparent);
+}
+
+.rl-cascade-find-step:disabled {
+  opacity: 0.34;
+  cursor: default;
+}
+
 .rl-cascade-minimap-shell {
   position: absolute;
   right: 12px;
@@ -521,6 +605,12 @@
     height: 96px;
     right: 8px;
     bottom: 8px;
+  }
+
+  .rl-cascade-find {
+    max-width: calc(100% - 16px);
+    left: 8px;
+    top: 8px;
   }
 }
 

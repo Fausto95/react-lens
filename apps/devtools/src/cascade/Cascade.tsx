@@ -9,6 +9,7 @@ import {
   IconChevronRight,
   IconCollapse,
   IconLive,
+  IconSearch,
 } from "@reactlens/icons";
 import { typeLaneKey } from "../laneFilter.js";
 import type { TimeCursor } from "../timeCursor.js";
@@ -23,6 +24,7 @@ import {
   type CascadeProjection,
 } from "./model.js";
 import { createCascadeRenderer, type CascadeRendererClient } from "./rendererClient.js";
+import { buildCascadeSearchIndex, queryCascadeSearchIndex } from "./search.js";
 import { CascadeSpatialIndex } from "./spatial.js";
 import "./cascade.css";
 import "./transport.css";
@@ -158,6 +160,16 @@ function minimapTransform(layout: CascadeLayout, width: number, height: number):
   };
 }
 
+function centerOnRect(
+  view: ViewTransform,
+  size: { width: number; height: number },
+  rect: { x: number; y: number; width: number; height: number },
+): void {
+  const z = Math.max(0.001, view.zoom);
+  view.panX = size.width / 2 - (rect.x + rect.width / 2) * z;
+  view.panY = size.height / 2 - (rect.y + rect.height / 2) * z;
+}
+
 function miniNodeColor(
   theme: TimelineTheme,
   cause: CascadeProjection["nodes"][number]["cause"],
@@ -281,6 +293,7 @@ export function Cascade({
   const tooltipNameRef = useRef<HTMLElement>(null);
   const tooltipMetaRef = useRef<HTMLElement>(null);
   const zoomRef = useRef<HTMLSpanElement>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
   const rendererRef = useRef<CascadeRendererClient | null>(null);
   const sizeRef = useRef({ width: 1, height: 1, dpr: 1 });
   const viewRef = useRef<ViewTransform>({ zoom: 1, panX: 0, panY: 0 });
@@ -306,6 +319,8 @@ export function Cascade({
   const [localSelectedId, setLocalSelectedId] = useState<string | null>(null);
   const [focusMode, setFocusMode] = useState<FocusMode>("all");
   const [customFocus, setCustomFocus] = useState<ReadonlySet<string> | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchHitId, setSearchHitId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!followLatest || !latest || selectedInteractionId === latest.id) return;
@@ -354,6 +369,10 @@ export function Cascade({
 
   const layout = useMemo(() => (projection ? layoutCascade(projection) : null), [projection]);
   const spatial = useMemo(() => (layout ? new CascadeSpatialIndex(layout.nodes) : null), [layout]);
+  const searchIndex = useMemo(
+    () => (layout ? buildCascadeSearchIndex(layout.nodes.map((item) => item.node)) : null),
+    [layout],
+  );
   const maxSelfTime = useMemo(
     () => Math.max(0.001, ...(projection?.nodes.map((node) => node.selfDuration) ?? [1])),
     [projection],
@@ -361,9 +380,21 @@ export function Cascade({
   const selectedId =
     localSelectedId ??
     (model.state.selectedRender === null ? null : `r:${model.state.selectedRender as number}`);
+  const matches = useMemo(
+    () => (searchIndex ? queryCascadeSearchIndex(searchIndex, searchQuery) : []),
+    [searchIndex, searchQuery],
+  );
+  const searching = searchQuery.trim().length > 0;
+  const searchHitIndex = matches.findIndex((node) => node.id === searchHitId);
+  const searchCount = !searching
+    ? ""
+    : matches.length === 0
+      ? "0"
+      : `${(searchHitIndex < 0 ? 0 : searchHitIndex) + 1}/${matches.length}`;
 
   const focusedIds = useMemo(() => {
     if (!projection) return null;
+    if (searching) return matches.length > 0 ? new Set(matches.map((node) => node.id)) : null;
     if (focusMode === "custom") return customFocus;
     if (focusMode === "roots") {
       const stateRoots = projection.nodes
@@ -380,7 +411,7 @@ export function Cascade({
       );
     }
     return null;
-  }, [customFocus, focusMode, maxSelfTime, projection]);
+  }, [customFocus, focusMode, matches, maxSelfTime, projection, searching]);
 
   const themeRef = useRef<TimelineTheme>(readTimelineTheme(null));
   const currentViewport = useCallback(
@@ -438,9 +469,10 @@ export function Cascade({
     drawCascadeOverlay(ctx, layout, currentViewport(), themeRef.current, {
       selectedId,
       hoveredId: hoverRef.current,
-      focusedIds,
+      focusedIds: searching ? null : focusedIds,
+      litIds: searching ? focusedIds : null,
     });
-  }, [currentViewport, focusedIds, layout, selectedId]);
+  }, [currentViewport, focusedIds, layout, searching, selectedId]);
 
   const paintBase = useCallback(() => {
     if (!layout) return;
@@ -482,6 +514,54 @@ export function Cascade({
     resetViewRef.current = false;
     paintAll();
   }, [layout, paintAll]);
+
+  const revealMatch = useCallback(
+    (id: string) => {
+      setSearchHitId(id);
+      setLocalSelectedId(id);
+      const item = layout?.nodeById.get(id);
+      if (item) {
+        centerOnRect(viewRef.current, sizeRef.current, item.rect);
+        paintAll();
+      }
+    },
+    [layout, paintAll],
+  );
+
+  const stepSearch = useCallback(
+    (delta: number) => {
+      if (matches.length === 0) return;
+      const current = matches.findIndex((node) => node.id === searchHitId);
+      const start = current < 0 ? 0 : current;
+      const next = matches[(start + delta + matches.length) % matches.length];
+      if (next) revealMatch(next.id);
+    },
+    [matches, revealMatch, searchHitId],
+  );
+
+  const clearSearch = useCallback(() => {
+    setSearchQuery("");
+    setSearchHitId(null);
+    setLocalSelectedId(null);
+  }, []);
+
+  const focusSearch = useCallback(() => {
+    const input = searchInputRef.current;
+    if (!input) return;
+    input.focus();
+    input.select();
+  }, []);
+
+  useEffect(() => {
+    if (!searching) return;
+    if (matches.length === 0) {
+      if (searchHitId !== null) setSearchHitId(null);
+      return;
+    }
+    if (searchHitId && matches.some((node) => node.id === searchHitId)) return;
+    const first = matches[0];
+    if (first) revealMatch(first.id);
+  }, [matches, revealMatch, searchHitId, searching]);
 
   useEffect(() => {
     const stage = stageRef.current;
@@ -694,7 +774,16 @@ export function Cascade({
     : "No interaction data";
 
   return (
-    <div className="rl-cascade" ref={rootRef}>
+    <div
+      className="rl-cascade"
+      ref={rootRef}
+      onKeyDown={(event) => {
+        if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "f") {
+          event.preventDefault();
+          focusSearch();
+        }
+      }}
+    >
       <div className="rl-cascade-toolbar">
         <Island label="Interactions">
           <Tool title="Previous interaction" onClick={() => stepInteraction(-1)}>
@@ -911,8 +1000,17 @@ export function Cascade({
             paintAll();
           }}
           onKeyDown={(event) => {
+            const target = event.target;
+            if (
+              target instanceof HTMLElement &&
+              (target.tagName === "INPUT" ||
+                target.tagName === "TEXTAREA" ||
+                target.isContentEditable)
+            ) {
+              return;
+            }
             const key = event.key.toLowerCase();
-            if (key === "f") {
+            if (key === "f" && !event.metaKey && !event.ctrlKey) {
               event.preventDefault();
               fit();
             } else if (key === "0") {
@@ -927,7 +1025,25 @@ export function Cascade({
             } else if (event.key === "ArrowRight") {
               event.preventDefault();
               stepInteraction(1);
+            } else if (key === "/" || ((event.metaKey || event.ctrlKey) && key === "f")) {
+              event.preventDefault();
+              focusSearch();
+            } else if (
+              searching &&
+              (event.key === "Enter" ||
+                event.key === "F3" ||
+                event.key === "n" ||
+                event.key === "N" ||
+                ((event.metaKey || event.ctrlKey) && key === "g"))
+            ) {
+              event.preventDefault();
+              stepSearch(event.shiftKey || event.key === "N" ? -1 : 1);
             } else if (event.key === "Escape") {
+              if (searching) {
+                event.preventDefault();
+                clearSearch();
+                return;
+              }
               setFocusMode("all");
               setCustomFocus(null);
               hoverRef.current = null;
@@ -938,6 +1054,61 @@ export function Cascade({
         >
           <canvas ref={baseRef} />
           <canvas ref={overlayRef} className="rl-cascade-overlay" />
+          <div
+            className="rl-cascade-find"
+            onPointerDown={(event) => event.stopPropagation()}
+            onKeyDown={(event) => event.stopPropagation()}
+          >
+            <IconSearch size={12} />
+            <input
+              ref={searchInputRef}
+              className="rl-cascade-find-input"
+              type="search"
+              spellCheck={false}
+              autoComplete="off"
+              placeholder="Find renders"
+              aria-label="Find renders in this cascade"
+              value={searchQuery}
+              onChange={(event) => setSearchQuery(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Escape") {
+                  event.preventDefault();
+                  if (searching) clearSearch();
+                  stageRef.current?.focus();
+                } else if (
+                  event.key === "Enter" ||
+                  event.key === "F3" ||
+                  ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "g")
+                ) {
+                  event.preventDefault();
+                  stepSearch(event.shiftKey ? -1 : 1);
+                }
+              }}
+            />
+            <span className="rl-cascade-find-count" aria-live="polite">
+              {searchCount}
+            </span>
+            <button
+              type="button"
+              className="rl-cascade-find-step"
+              title="Previous match (⇧Enter)"
+              aria-label="Previous match"
+              disabled={matches.length === 0}
+              onClick={() => stepSearch(-1)}
+            >
+              <IconArrowUp size={11} />
+            </button>
+            <button
+              type="button"
+              className="rl-cascade-find-step"
+              title="Next match (Enter)"
+              aria-label="Next match"
+              disabled={matches.length === 0}
+              onClick={() => stepSearch(1)}
+            >
+              <IconArrowDown size={11} />
+            </button>
+          </div>
           {!projection || projection.nodes.length === 0 ? (
             <div className="rl-cascade-empty">
               No render cascade is available for this interaction.
@@ -986,8 +1157,8 @@ export function Cascade({
         <span>{footer}</span>
         <span className="spacer" />
         <span className="rl-cascade-help">
-          drag pan · ⌘/ctrl+wheel zoom · 0 = 100% · C collapse groups · F fit · minimap drag · ←/→
-          interactions
+          drag pan · ⌘/ctrl+wheel zoom · 0 = 100% · / or ⌘F find · C collapse groups · F fit ·
+          minimap drag · ←/→ interactions
         </span>
       </div>
     </div>

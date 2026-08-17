@@ -22,6 +22,8 @@ export interface CascadeOverlayOptions {
   selectedId: string | null;
   hoveredId: string | null;
   focusedIds?: ReadonlySet<string> | null;
+  /** Search hits to keep undimmed. Painted O(hits) via a veil + punched holes. */
+  litIds?: ReadonlySet<string> | null;
 }
 
 function roundedRect(ctx: Canvas2D, x: number, y: number, w: number, h: number, r: number): void {
@@ -257,11 +259,15 @@ export function drawCascadeOverlay(
   options: CascadeOverlayOptions,
 ): void {
   setupScreen(ctx, view);
-  setupWorld(ctx, view);
-  if (options.focusedIds) {
-    for (const item of layout.nodes) {
-      if (options.focusedIds.has(item.node.id)) continue;
-      ctx.fillStyle = hexAlpha(theme.bg, 0.66);
+  const lit = options.litIds;
+  if (lit && lit.size > 0) {
+    ctx.fillStyle = hexAlpha(theme.bg, 0.66);
+    ctx.fillRect(0, 0, view.width, view.height);
+    setupWorld(ctx, view);
+    ctx.globalCompositeOperation = "destination-out";
+    for (const id of lit) {
+      const item = layout.nodeById.get(id);
+      if (!item) continue;
       roundedRect(
         ctx,
         item.rect.x - 2,
@@ -271,6 +277,24 @@ export function drawCascadeOverlay(
         7,
       );
       ctx.fill();
+    }
+    ctx.globalCompositeOperation = "source-over";
+  } else {
+    setupWorld(ctx, view);
+    if (options.focusedIds) {
+      for (const item of layout.nodes) {
+        if (options.focusedIds.has(item.node.id)) continue;
+        ctx.fillStyle = hexAlpha(theme.bg, 0.66);
+        roundedRect(
+          ctx,
+          item.rect.x - 2,
+          item.rect.y - 2,
+          item.rect.width + 4,
+          item.rect.height + 4,
+          7,
+        );
+        ctx.fill();
+      }
     }
   }
   if (options.hoveredId && options.hoveredId !== options.selectedId) {
@@ -283,10 +307,7 @@ export function drawCascadeOverlay(
       ctx.save();
       ctx.shadowColor = hexAlpha(theme.accent, 0.56);
       ctx.shadowBlur = 8;
-      ring(ctx, item.rect, hexAlpha(theme.accent, 0.42), 4, 3);
-      ctx.shadowBlur = 0;
       ring(ctx, item.rect, theme.accent, 2, 2);
-      ring(ctx, item.rect, hexAlpha(theme.text, 0.9), 1, 0.5);
       ctx.restore();
     }
   }

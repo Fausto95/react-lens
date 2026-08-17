@@ -194,7 +194,12 @@
   background: var(--rl-bg-raised, #12151a);
   color: var(--rl-text, #e6e9ef);
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28);
-  font: 600 12px/1 ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font:
+    600 12px/1 ui-sans-serif,
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    sans-serif;
   padding: 8px 11px;
   cursor: pointer;
 }
@@ -3260,11 +3265,33 @@
   box-shadow: 0 12px 32px rgba(var(--rl-shadow-rgb), 0.5);
 }
 .rl-menu-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
   font-size: 10px;
   text-transform: uppercase;
   letter-spacing: 0.05em;
   color: var(--rl-text-faint);
   padding: 4px 8px 6px;
+}
+.rl-menu-head-action {
+  appearance: none;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--rl-text-dim);
+  font: inherit;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+}
+.rl-menu-head-action:hover,
+.rl-menu-head-action:focus-visible {
+  color: var(--rl-text);
+}
+.rl-menu-head-action:focus {
+  outline: none;
 }
 .rl-menu-item {
   -webkit-app-region: no-drag;
@@ -4575,12 +4602,19 @@
 .rl-error-chip:hover {
   background: rgb(var(--rl-severe-rgb) / 0.2);
 }
+.rl-error-chip:focus {
+  outline: none;
+}
+.rl-error-chip:focus-visible {
+  background: rgb(var(--rl-severe-rgb) / 0.2);
+}
 .rl-error-chip.notice {
   border-color: rgb(var(--rl-warn-rgb) / 0.4);
   background: rgb(var(--rl-warn-rgb) / 0.12);
   color: var(--rl-warn);
 }
-.rl-error-chip.notice:hover {
+.rl-error-chip.notice:hover,
+.rl-error-chip.notice:focus-visible {
   background: rgb(var(--rl-warn-rgb) / 0.2);
 }
 .rl-error-list {
