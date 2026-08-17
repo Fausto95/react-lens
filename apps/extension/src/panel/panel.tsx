@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import type {
   ComponentId,
+  DOMSnapshot,
   SourceLocation,
   TimeTravelEntry,
   TimeTravelResult,
@@ -129,6 +130,7 @@ function ExtensionPanel() {
     new Map<string, { resolve: (ok: boolean) => void; reject: (err: Error) => void }>(),
   );
   const pendingTravel = useRef(new Map<string, (result: TimeTravelResult) => void>());
+  const pendingSnapshot = useRef(new Map<string, (dom: DOMSnapshot | undefined) => void>());
   const pendingLocate = useRef(new Map<string, (loc: SourceLocation | null) => void>());
 
   // Anything that escapes React — a throw in a port listener, a rejection
@@ -309,6 +311,13 @@ function ExtensionPanel() {
           pendingEdit.current.delete(msg.requestId);
           if (msg.ok) pending.resolve(true);
           else pending.reject(new Error(msg.error ?? "edit failed"));
+        }
+        if (msg.kind === "time-travel-snapshot-result") {
+          const pending = pendingSnapshot.current.get(msg.requestId);
+          if (pending) {
+            pendingSnapshot.current.delete(msg.requestId);
+            pending(msg.dom);
+          }
         }
         if (msg.kind === "time-travel-result") {
           const pending = pendingTravel.current.get(msg.requestId);
@@ -531,6 +540,30 @@ function ExtensionPanel() {
           ...(options?.snap !== undefined ? { snap: options.snap } : {}),
         })),
       goLive: () => travelRequest((requestId) => ({ kind: "time-travel-live", requestId })),
+      // Diagnostic only: if the page never answers, verification is skipped
+      // rather than travel being held up.
+      snapshotPage: () =>
+        new Promise<DOMSnapshot | undefined>((resolve) => {
+          const port = portRef.current;
+          if (!port) {
+            resolve(undefined);
+            return;
+          }
+          const requestId = crypto.randomUUID();
+          pendingSnapshot.current.set(requestId, resolve);
+          try {
+            port.postMessage({ kind: "time-travel-snapshot", requestId });
+          } catch {
+            pendingSnapshot.current.delete(requestId);
+            resolve(undefined);
+            return;
+          }
+          setTimeout(() => {
+            if (!pendingSnapshot.current.has(requestId)) return;
+            pendingSnapshot.current.delete(requestId);
+            resolve(undefined);
+          }, 5_000);
+        }),
     }),
     [travelRequest],
   );

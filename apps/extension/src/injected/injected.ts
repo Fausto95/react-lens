@@ -200,6 +200,17 @@ window.addEventListener("message", (event: MessageEvent) => {
       { source: PAGE_SOURCE, kind: "time-travel-result", requestId: data.requestId, ...result },
       "*",
     );
+  } else if (data.kind === "time-travel-snapshot") {
+    const dom = instrumentation.snapshotPage();
+    window.postMessage(
+      {
+        source: PAGE_SOURCE,
+        kind: "time-travel-snapshot-result",
+        requestId: data.requestId,
+        ...(dom ? { dom } : {}),
+      },
+      "*",
+    );
   } else if (data.kind === "time-travel-live") {
     const result = instrumentation.timeTravel.goLive();
     window.postMessage(

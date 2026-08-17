@@ -5,6 +5,7 @@ import type { Causality } from "@reactlens/causality";
 import type {
   ComponentId,
   ComponentInstance,
+  DOMSnapshot,
   TimeTravelEntry,
   TimeTravelResult,
   SourceLocation,
@@ -44,6 +45,8 @@ export interface LensRuntime {
     goLive(): TimeTravelResult;
     /** Opt-in external-store rewind (Zustand/Redux/module state). */
     registerStore(adapter: TimeTravelStoreAdapter): () => void;
+    /** The page's DOM now — the panel checks a restore reached the paint. */
+    snapshotPage(): DOMSnapshot | undefined;
   };
   start(): void;
   stop(): void;
@@ -82,6 +85,7 @@ export function createEmbeddedRuntime(): LensRuntime {
         capture.instrumentation.timeTravel.apply(entries, atT, options),
       goLive: () => capture.instrumentation.timeTravel.goLive(),
       registerStore: (adapter) => capture.instrumentation.timeTravel.registerStore(adapter),
+      snapshotPage: () => capture.instrumentation.snapshotPage(),
     },
     start: () => capture.start(),
     stop: () => capture.stop(),

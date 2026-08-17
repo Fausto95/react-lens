@@ -7,6 +7,9 @@ import type {
   TimeTravelStoreFailureReason,
 } from "@reactlens/protocol";
 import { createApplySetCursor, diffApplySet, type TraceStore } from "@reactlens/trace-engine";
+import { compareDom, type DiffChange } from "@reactlens/diff-engine";
+import { reportError } from "./errors.js";
+import type { DOMSnapshot } from "@reactlens/protocol";
 import type { TimeCursor } from "./timeCursor.js";
 
 /**
@@ -24,6 +27,11 @@ export interface TimeTravelApi {
     atT?: number,
     options?: { snap?: boolean },
   ): TimeTravelResult | Promise<TimeTravelResult>;
+  /**
+   * The page's DOM as it stands now. Optional: without it the panel simply does
+   * not verify, which is how imported sessions and older page runtimes behave.
+   */
+  snapshotPage?(): DOMSnapshot | undefined | Promise<DOMSnapshot | undefined>;
   goLive(): TimeTravelResult | Promise<TimeTravelResult>;
 }
 
@@ -41,6 +49,13 @@ export interface RestoreStatus {
   storesApplied: number;
   /** Stores that could not follow the cursor, with the page's reason. */
   storeFailures: ReadonlyMap<string, TimeTravelStoreFailureReason>;
+  /**
+   * Where the page's paint disagrees with the DOM captured at this cursor —
+   * present only when a capture close enough to `atT` exists to be evidence.
+   * This is the signal that catches what the write-level report cannot: state
+   * restored, paint didn't.
+   */
+  domMismatch?: { count: number; examples: string[] };
 }
 
 export interface PanelTimeTravel {
@@ -56,6 +71,29 @@ export interface PanelTimeTravel {
   goLive(): void;
   dispose(): void;
 }
+
+/**
+ * What differs, in the reader's terms. A diff path is a chain of child indices
+ * ending in the attribute name (or `#text`), and the chain says nothing to a
+ * human — the attribute does: "style ×3, #text ×6".
+ */
+function summarize(changes: DiffChange[]): { count: number; examples: string[] } {
+  const byKind = new Map<string, number>();
+  for (const change of changes) {
+    const kind = String(change.path.at(-1) ?? "node");
+    byKind.set(kind, (byKind.get(kind) ?? 0) + 1);
+  }
+  const examples = [...byKind]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 4)
+    .map(([kind, n]) => (n > 1 ? `${kind} ×${n}` : kind));
+  return { count: changes.length, examples };
+}
+
+/** How close a capture must be to the cursor to count as evidence (throttle window). */
+const VERIFY_WINDOW_MS = 250;
+/** Quiet period after the last scrub frame before verifying. */
+const VERIFY_SETTLE_MS = 120;
 
 /**
  * Bridges the timeline cursor to page-side state restoration: rAF-coalesces
@@ -94,6 +132,9 @@ export function createPanelTimeTravel(
   let travelEpoch = 0;
   /** Motion suppression, on unless the panel says otherwise. */
   let snap = true;
+  /** Verification runs once the scrub settles, not per frame. */
+  let verifyTimer: ReturnType<typeof setTimeout> | null = null;
+  let domMismatch: { count: number; examples: string[] } | undefined;
 
   function publish(atT: number): void {
     onStatus?.({
@@ -102,7 +143,36 @@ export function createPanelTimeTravel(
       failedIds: new Map(failedIds),
       storesApplied,
       storeFailures: new Map(storeFailures),
+      ...(domMismatch ? { domMismatch } : {}),
     });
+  }
+
+  /**
+   * Compare the page's paint against what was captured at `t`. Commit DOM is
+   * throttled, so only a snapshot taken near the cursor counts as evidence —
+   * anything further away would report the app's own progress as a failure.
+   */
+  function scheduleVerify(t: number): void {
+    if (!api.snapshotPage) return;
+    if (verifyTimer !== null) clearTimeout(verifyTimer);
+    verifyTimer = setTimeout(() => {
+      verifyTimer = null;
+      const expected = store.commitDomAt(t);
+      if (!expected || Math.abs(expected.timestamp - t) > VERIFY_WINDOW_MS) return;
+      const epoch = travelEpoch;
+      void Promise.resolve(api.snapshotPage!())
+        .then((actual) => {
+          if (!actual || epoch !== travelEpoch) return;
+          const changes = compareDom(expected.dom, actual);
+          domMismatch = changes.length > 0 ? summarize(changes) : undefined;
+          publish(t);
+        })
+        .catch((err: unknown) => {
+          // Verification is a diagnostic and must never break travel — but a
+          // silent catch here already hid one real bug, so it reports.
+          reportError("restore-verify", err);
+        });
+    }, VERIFY_SETTLE_MS);
   }
 
   function ingestResult(
@@ -150,6 +220,7 @@ export function createPanelTimeTravel(
     // deltas, so an empty delta still applies once travel has begun.
     if (delta.length === 0 && !traveling) return;
     traveling = true;
+    scheduleVerify(t);
     const gen = ++generation;
     const epoch = travelEpoch;
     Promise.resolve()
@@ -181,6 +252,11 @@ export function createPanelTimeTravel(
 
   function goLive(): void {
     unschedule();
+    if (verifyTimer !== null) {
+      clearTimeout(verifyTimer);
+      verifyTimer = null;
+    }
+    domMismatch = undefined;
     pendingT = null;
     lastApplied = new Map();
     restoredIds.clear();

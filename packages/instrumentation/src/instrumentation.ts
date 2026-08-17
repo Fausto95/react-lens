@@ -9,6 +9,7 @@ import type {
   ComponentInstance,
   ComponentType,
   CommitSnapshot,
+  DOMSnapshot,
   RenderSnapshot,
   RenderId,
   EventId,
@@ -75,6 +76,13 @@ export interface Instrumentation {
    * the selected render's detail lazily. Returns undefined once evicted.
    */
   snapshot(renderId: RenderId): RenderSnapshot | undefined;
+  /**
+   * The inspected app's DOM as it stands right now, shaped like the throttled
+   * commit captures so the two can be compared. The panel uses this to check
+   * that a restore reached the paint — a successful write is not proof the page
+   * looks like the past.
+   */
+  snapshotPage(): DOMSnapshot | undefined;
   /** Page-side time travel: apply/goLive raw state captured per render. */
   timeTravel: TimeTravelController;
 }
@@ -111,6 +119,8 @@ export function createInstrumentation(deps: {
    */
   let announcedInstances = new Map<ComponentId, string>();
   let pendingCommitSnapshots: CommitSnapshot[] = [];
+  /** The container most recently captured, for on-demand page snapshots. */
+  let lastContainer: Node | null = null;
   let lastCommitDomAt = -Infinity;
   let flushScheduled = false;
 
@@ -247,6 +257,9 @@ export function createInstrumentation(deps: {
    */
   function captureCommitDom(commit: CommitObservation): void {
     if (!config?.captureDOM || !commit.container) return;
+    // Retained for snapshotPage: verification needs the same subtree the
+    // captures came from, long after this commit is gone.
+    lastContainer = commit.container;
     if (commit.timestamp - lastCommitDomAt < COMMIT_DOM_THROTTLE_MS) return;
     const dom = snapshotDom(commit.container, COMMIT_DOM_LIMITS);
     if (!dom) return;
@@ -542,7 +555,12 @@ export function createInstrumentation(deps: {
     scheduleFlush();
   }
 
-  return { start, stop, isRecording, markInteraction, snapshot, timeTravel };
+  function snapshotPage(): DOMSnapshot | undefined {
+    if (!lastContainer) return undefined;
+    return snapshotDom(lastContainer, COMMIT_DOM_LIMITS);
+  }
+
+  return { start, stop, isRecording, markInteraction, snapshot, snapshotPage, timeTravel };
 }
 
 /**

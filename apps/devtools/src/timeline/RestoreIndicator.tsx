@@ -37,12 +37,19 @@ export interface RestoreStoreFailureItem {
   reason: TimeTravelStoreFailureReason;
 }
 
+/** Where the page's paint disagrees with what was captured at the cursor. */
+export interface RestoreDomMismatch {
+  count: number;
+  examples: string[];
+}
+
 export interface RestoreIndicatorProps {
   /** Components restored. Never rendered as a number — see the chip's comment. */
   applied: number;
   failures: RestoreFailureItem[];
   storesApplied?: number;
   storeFailures?: RestoreStoreFailureItem[];
+  domMismatch?: RestoreDomMismatch;
   onSelect?: (id: ComponentId) => void;
 }
 
@@ -70,6 +77,7 @@ export function RestoreIndicator({
   failures,
   storesApplied = 0,
   storeFailures = [],
+  domMismatch,
   onSelect,
 }: RestoreIndicatorProps) {
   const [anchor, setAnchor] = useState<Anchor | null>(null);
@@ -77,7 +85,9 @@ export function RestoreIndicator({
   const menuRef = useRef<HTMLDivElement>(null);
 
   const failedCount = failures.length + storeFailures.length;
-  const partial = failedCount > 0;
+  // A paint that disagrees with the capture is worth the same attention as a
+  // refused write: in both cases the page is not showing the past.
+  const partial = failedCount > 0 || domMismatch !== undefined;
   // Derived, not synchronised: a recovery hides the popover on the same render
   // that removes the failures, with no effect and no cascading state.
   const showMenu = anchor !== null && partial;
@@ -145,7 +155,7 @@ export function RestoreIndicator({
             failures of any kind. The rewind glyph belongs to the toggle beside
             this chip, so reusing it here would read as a second toggle. */}
         {partial ? <IconAlert size={12} /> : <IconStore size={12} />}
-        {(partial || storesApplied > 0) && (
+        {(partial || storesApplied > 0) && failedCount + storesApplied > 0 && (
           <span className="rl-restore-chip-count">{partial ? failedCount : storesApplied}</span>
         )}
         {partial && <IconChevronDown size={10} />}
@@ -164,7 +174,7 @@ export function RestoreIndicator({
           >
             <div className="rl-menu-head">
               <span>
-                {failedCount} didn&apos;t rewind
+                {failedCount > 0 ? `${failedCount} didn't rewind` : "Page differs from the capture"}
                 <span className="rl-restore-menu-ok">
                   {" · "}
                   {components}
@@ -173,6 +183,26 @@ export function RestoreIndicator({
               </span>
             </div>
             <div className="rl-restore-menu-list">
+              {domMismatch && (
+                <div className="rl-restore-row">
+                  <span className="rl-restore-row-pip" />
+                  <span className="rl-restore-row-body">
+                    <span className="rl-restore-row-head">
+                      <span className="rl-restore-row-name">
+                        {domMismatch.count} {domMismatch.count === 1 ? "place" : "places"} differ
+                      </span>
+                      <span className="rl-restore-row-kind">paint</span>
+                    </span>
+                    <span className="rl-restore-row-why">
+                      The page does not match the DOM captured here
+                      {domMismatch.examples.length > 0
+                        ? ` — ${domMismatch.examples.slice(0, 3).join(", ")}`
+                        : ""}
+                      .
+                    </span>
+                  </span>
+                </div>
+              )}
               {/* Stores first: one store explains more of the screen than any
                   single component, so it is the more useful thing to read. */}
               {storeFailures.map((f) => (
@@ -222,6 +252,8 @@ export function RestoreIndicator({
  * tells the reader where to look, which a bare count does not.
  */
 function failureLabel(components: number, stores: number): string {
+  // Paint-only: every write landed, but the page still does not match.
+  if (components === 0 && stores === 0) return "page differs";
   if (stores === 0) return `${components} component${components === 1 ? "" : "s"} didn't rewind`;
   if (components === 0) return `${stores} store${stores === 1 ? "" : "s"} didn't rewind`;
   return `${components + stores} didn't rewind`;

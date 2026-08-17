@@ -600,6 +600,7 @@ export function Panel({
                     storeId,
                     reason,
                   }))}
+                  {...(restoreStatus.domMismatch ? { domMismatch: restoreStatus.domMismatch } : {})}
                   onSelect={select}
                 />
               )}

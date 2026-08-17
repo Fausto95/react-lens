@@ -2,6 +2,7 @@ import type {
   EventsBatchMessage,
   RenderId,
   ComponentId,
+  DOMSnapshot,
   TimeTravelEntry,
   TimeTravelResult,
 } from "@reactlens/protocol";
@@ -65,6 +66,12 @@ export type PageToContent =
       line?: number;
       column?: number;
     }
+  | {
+      source: typeof PAGE_SOURCE;
+      kind: "time-travel-snapshot-result";
+      requestId: string;
+      dom?: DOMSnapshot;
+    }
   /** Ack for a time-travel apply/go-live (entry ids are JSON-safe numbers). */
   | ({
       source: typeof PAGE_SOURCE;
@@ -122,6 +129,8 @@ export type ContentToPage =
       snap?: boolean;
     }
   | { source: typeof CONTENT_SOURCE; kind: "time-travel-live"; requestId: string }
+  /** Ask the page for its DOM now, to check a restore reached the paint. */
+  | { source: typeof CONTENT_SOURCE; kind: "time-travel-snapshot"; requestId: string }
   | {
       source: typeof CONTENT_SOURCE;
       kind: "locate-source";
@@ -226,6 +235,8 @@ export type PortMessage =
       snap?: boolean;
     }
   | { kind: "time-travel-live"; requestId: string }
+  | { kind: "time-travel-snapshot"; requestId: string }
+  | { kind: "time-travel-snapshot-result"; requestId: string; dom?: DOMSnapshot }
   | ({ kind: "time-travel-result"; requestId: string } & TimeTravelResult);
 
 /** The resumable half of the protocol — everything else is request/response. */

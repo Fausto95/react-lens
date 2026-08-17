@@ -107,6 +107,8 @@ function flushRaf(): void {
 }
 /** Let awaited apply results propagate through the controller. */
 const settle = () => new Promise<void>((r) => setTimeout(r, 0));
+/** Verification is debounced past the last scrub frame, so it needs real time. */
+const settleVerify = () => new Promise<void>((r) => setTimeout(r, 220));
 
 beforeEach(() => {
   rafQueue = [];
@@ -168,15 +170,17 @@ describe("createPanelTimeTravel — restore verification", () => {
     const api = {
       ...fakeApi(),
       snapshotPage: () => ({
-        root: { nodeName: "DIV", children: [{ nodeName: "SPAN", attributes: { class: "sw red" } }] },
+        root: {
+          nodeName: "DIV",
+          children: [{ nodeName: "SPAN", attributes: { class: "sw red" } }],
+        },
       }),
     };
     const statuses: Array<RestoreStatus | null> = [];
     const ctl = createPanelTimeTravel(store, api, (s) => statuses.push(s));
     ctl.onCursor({ t: 200, mode: "historical" }, true);
     flushRaf();
-    await settle();
-    await settle();
+    await settleVerify();
     expect(statuses.at(-1)!.domMismatch).toBeUndefined();
     ctl.dispose();
   });
@@ -197,8 +201,7 @@ describe("createPanelTimeTravel — restore verification", () => {
     const ctl = createPanelTimeTravel(store, api, (s) => statuses.push(s));
     ctl.onCursor({ t: 200, mode: "historical" }, true);
     flushRaf();
-    await settle();
-    await settle();
+    await settleVerify();
     const mismatch = statuses.at(-1)!.domMismatch;
     expect(mismatch?.count).toBe(1);
     expect(mismatch?.examples.join(" ")).toContain("class");
@@ -216,8 +219,7 @@ describe("createPanelTimeTravel — restore verification", () => {
     const ctl = createPanelTimeTravel(store, api, (s) => statuses.push(s));
     ctl.onCursor({ t: 5_000, mode: "historical" }, true);
     flushRaf();
-    await settle();
-    await settle();
+    await settleVerify();
     expect(statuses.at(-1)!.domMismatch).toBeUndefined();
     ctl.dispose();
   });

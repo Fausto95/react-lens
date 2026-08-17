@@ -176,6 +176,15 @@ function connect(): void {
         } satisfies ContentToPage,
         "*",
       );
+    } else if (msg.kind === "time-travel-snapshot") {
+      window.postMessage(
+        {
+          source: CONTENT_SOURCE,
+          kind: "time-travel-snapshot",
+          requestId: msg.requestId,
+        } satisfies ContentToPage,
+        "*",
+      );
     } else if (msg.kind === "time-travel-live") {
       window.postMessage(
         {
@@ -313,6 +322,14 @@ window.addEventListener("message", (event: MessageEvent) => {
       name: data.name,
       ...(data.sourceFile ? { sourceFile: data.sourceFile } : {}),
       ...(data.sourceLine != null ? { sourceLine: data.sourceLine } : {}),
+    });
+    return;
+  }
+  if (data.kind === "time-travel-snapshot-result") {
+    relayLive({
+      kind: "time-travel-snapshot-result",
+      requestId: data.requestId,
+      ...(data.dom ? { dom: data.dom } : {}),
     });
     return;
   }

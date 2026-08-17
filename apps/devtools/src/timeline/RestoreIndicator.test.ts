@@ -179,6 +179,24 @@ describe("RestoreIndicator — partial", () => {
     expect(ui.menu()).toBeNull();
   });
 
+  it("treats a paint mismatch as a partial restore and explains it", async () => {
+    // Every write landed, and the page still does not show the past — the case
+    // a write-level report cannot see.
+    const ui = await mount({
+      applied: 12,
+      failures: [],
+      storesApplied: 2,
+      storeFailures: [],
+      domMismatch: { count: 3, examples: ["0.class", "1.style"] },
+    });
+    expect(ui.chip().className).toContain("partial");
+    expect(ui.chip().getAttribute("aria-label")).toContain("page differs");
+    await ui.click();
+    const menu = ui.menu();
+    expect(menu!.textContent).toContain("3 places differ");
+    expect(menu!.textContent).toContain("0.class");
+  });
+
   it("lists every failure — a truncated list would hide the cause", async () => {
     const ui = await mount({
       applied: 0,
