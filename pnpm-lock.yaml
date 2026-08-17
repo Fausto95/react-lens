@@ -217,6 +217,9 @@ importers:
 
   apps/playground:
     dependencies:
+      '@reactlens/adapters':
+        specifier: workspace:*
+        version: link:../../packages/adapters
       '@reactlens/demo-ui':
         specifier: workspace:*
         version: link:../../packages/demo-ui
@@ -229,6 +232,9 @@ importers:
       react-dom:
         specifier: ^19
         version: 19.2.8(react@19.2.8)
+      zustand:
+        specifier: ^5.0.3
+        version: 5.0.15(@types/react@19.2.18)(react@19.2.8)
     devDependencies:
       '@vitejs/plugin-react':
         specifier: ^5.2.0

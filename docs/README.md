@@ -10,6 +10,7 @@
 | [MCP](mcp.md)                         | Agent hosts wiring `react-lens mcp`         |
 | [Verify loop](verify.md)              | Playwright + named interactions + baselines |
 | [Sessions](sessions.md)               | Session file format and sensitivity         |
+| [External stores](stores.md)          | Rewinding Zustand, Redux, TanStack Query    |
 
 Architecture and package contracts live in the repo root:
 [DESIGN.md](../DESIGN.md) · [INTERFACES.md](../INTERFACES.md) ·

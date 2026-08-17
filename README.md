@@ -27,8 +27,10 @@ Open source ([MIT](LICENSE)).
   time-travel controls sit on the same toolbar.
 - **Time travel** — scrub or replay an interaction. In a React 19 dev build,
   that restores `useState` / `useReducer` / class state through React's
-  override API. Refs, unregistered stores, production builds, and components
-  that have since unmounted are not restored.
+  override API. Zustand, Redux and TanStack Query rewind too, through one
+  registration with [`@reactlens/adapters`](docs/stores.md). Refs, unregistered
+  stores, production builds, and components that have since unmounted are not
+  restored.
 - **Inspector** — props, state, hooks, DOM, and source for the selection.
   Primitive `useState` values can be edited live when the renderer override
   API is present.
