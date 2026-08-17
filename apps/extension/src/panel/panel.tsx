@@ -599,6 +599,7 @@ function ExtensionPanel() {
         </p>
         <button
           type="button"
+          className="rl-lost-primary"
           onClick={() => {
             setConnectionLost(false);
             reconnectRef.current?.();

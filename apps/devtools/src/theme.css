@@ -4565,16 +4565,26 @@
 .rl-lost button {
   margin-top: 4px;
   padding: 6px 14px;
-  border: 1px solid var(--rl-border, rgba(255, 255, 255, 0.14));
+  border: 1px solid var(--rl-border, #2f3644);
   border-radius: 6px;
-  background: var(--rl-surface, #17171a);
-  color: inherit;
+  background: var(--rl-bg-raised, #12151a);
+  color: var(--rl-text, #e6e9ef);
   font: inherit;
   font-size: 12px;
   cursor: pointer;
 }
 .rl-lost button:hover {
-  border-color: var(--rl-accent, #6e9bff);
+  background: var(--rl-bg-hover, #171b22);
+  border-color: var(--rl-border-strong, #2f3644);
+}
+.rl-lost button.rl-lost-primary {
+  background: var(--rl-text, #e6e9ef);
+  color: var(--rl-bg, #0b0d10);
+  border-color: var(--rl-text, #e6e9ef);
+}
+.rl-lost button.rl-lost-primary:hover {
+  background: var(--rl-text, #e6e9ef);
+  border-color: var(--rl-text, #e6e9ef);
 }
 
 /* Region-level recovery: one column failed and the rest of the panel — most
