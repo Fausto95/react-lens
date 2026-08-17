@@ -10,6 +10,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@emotion/css": "^11.13.5",
     "@reactlens/adapters": "workspace:*",
     "@reactlens/demo-ui": "workspace:*",
     "@reactlens/devtools": "workspace:*",

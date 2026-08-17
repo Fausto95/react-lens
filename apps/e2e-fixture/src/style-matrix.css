@@ -1,0 +1,37 @@
+/*
+ * Static rules for StyleMatrix. Deliberately plain CSS: this is exactly what a
+ * zero-runtime library (vanilla-extract, CSS modules) compiles down to, so the
+ * class-swap case is covered without adding a build plugin.
+ */
+.sm-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.sm-swatch {
+  display: inline-block;
+  width: 28px;
+  height: 14px;
+  border-radius: 3px;
+  background-color: rgb(0, 0, 0);
+}
+.sm-transition {
+  transition: background-color 400ms linear;
+}
+.sm-hue-a {
+  background-color: rgb(1, 2, 3);
+}
+.sm-hue-b {
+  background-color: rgb(101, 102, 103);
+}
+.sm-hue-c {
+  background-color: rgb(201, 202, 203);
+}
+
+/* Driven by CSS variables written outside React. */
+.sm-var-global {
+  background-color: var(--sm-global-hue, rgb(0, 0, 0));
+}
+.sm-var-adapter {
+  background-color: var(--sm-adapter-hue, rgb(0, 0, 0));
+}

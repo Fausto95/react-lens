@@ -6,6 +6,8 @@ import { TransitionDemo } from "./specimens/TransitionDemo.js";
 import { WasteDemo } from "./specimens/WasteDemo.js";
 import { Expensive } from "./specimens/Expensive.js";
 import { BigList } from "./specimens/BigList.js";
+import { StyleMatrix } from "./specimens/StyleMatrix.js";
+import "./style-matrix.css";
 
 /**
  * Atlas Shop — realistic multi-section host for Playwright.
@@ -24,6 +26,7 @@ export function App() {
           <Stack>
             <Showcase />
             <CartBadge />
+            <StyleMatrix />
             <SuspenseDemo />
             <TransitionDemo />
             <WasteDemo />
