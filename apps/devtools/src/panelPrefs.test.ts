@@ -41,20 +41,6 @@ describe("panel prefs", () => {
     expect(loadPanelPrefs().inspectorWidth).toBe(560);
   });
 
-  it("round-trips the solo/mute filter", () => {
-    savePanelPrefs({ laneFilter: { v: 1, solo: ["t:Cart"], muted: ["t:Tooltip"] } });
-    expect(loadPanelPrefs().laneFilter).toEqual({
-      v: 1,
-      solo: ["t:Cart"],
-      muted: ["t:Tooltip"],
-    });
-  });
-
-  it("drops a corrupt lane filter rather than hiding lanes forever", () => {
-    savePanelPrefs({ laneFilter: { v: 1, solo: "nope", muted: [7] } as never });
-    expect(loadPanelPrefs().laneFilter).toEqual({ v: 1, solo: [], muted: [] });
-  });
-
   it("defaults retention to the store's own caps", () => {
     const prefs = loadPanelPrefs();
     expect(prefs.maxEvents).toBe(10_000);

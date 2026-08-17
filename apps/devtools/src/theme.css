@@ -3998,67 +3998,6 @@
   border: 1px solid var(--rl-border);
 }
 
-/* ── Solo / mute lanes (view-only filter) ────────────────────────────────────
-   Hidden lanes stay in the tree, dimmed, so the switch that hid them is always
-   where the user left it. Mute reads differently from "not soloed": muting is
-   a deliberate act and gets the stronger dim plus a persistent toggle. */
-.rl-tree-row.rl-lane-muted .rl-tree-name,
-.rl-tree-row.rl-lane-muted .rl-tree-stats {
-  opacity: 0.4;
-}
-.rl-tree-row.rl-lane-unsoloed .rl-tree-name,
-.rl-tree-row.rl-lane-unsoloed .rl-tree-stats {
-  opacity: 0.55;
-}
-
-.rl-lane-acts {
-  display: none;
-  gap: 2px;
-  flex: 0 0 auto;
-  margin-left: 4px;
-}
-.rl-tree-row:hover .rl-lane-acts,
-.rl-lane-acts.pinned,
-.rl-lane-acts:focus-within {
-  display: inline-flex;
-}
-.rl-lane-act {
-  -webkit-app-region: no-drag;
-  display: grid;
-  place-items: center;
-  width: 16px;
-  height: 16px;
-  padding: 0;
-  border: none;
-  border-radius: 4px;
-  background: none;
-  font: inherit;
-  font-size: 9px;
-  font-weight: 600;
-  line-height: 1;
-  color: var(--rl-text-faint);
-  cursor: pointer;
-  transition:
-    color 100ms ease,
-    background 100ms ease;
-}
-.rl-lane-act:hover {
-  color: var(--rl-text);
-  background: var(--rl-bg-hover);
-}
-.rl-lane-act.on {
-  color: var(--rl-interaction);
-  background: rgba(var(--rl-interaction-rgb), 0.16);
-}
-.rl-lane-act:focus-visible {
-  outline: 1px solid var(--rl-interaction);
-  outline-offset: 1px;
-}
-
-.rl-status-filtered {
-  color: var(--rl-interaction);
-}
-
 /* Inline text button — "undo this filter" affordances inside empty states. */
 .rl-link-btn {
   padding: 0;
@@ -4112,10 +4051,6 @@
   padding-left: 24px;
   color: var(--rl-text-faint);
 }
-.rl-lane-label.rl-lane-muted,
-.rl-lane-label.rl-lane-unsoloed {
-  opacity: 0.42;
-}
 .rl-lane-caret {
   width: 9px;
   flex: 0 0 auto;
@@ -4140,15 +4075,6 @@
   font-size: 8.5px;
   color: var(--rl-text-faint);
 }
-.rl-lane-acts.pinned-hover {
-  display: none;
-  gap: 2px;
-  margin-left: auto;
-}
-.rl-lane-label:hover .rl-lane-acts.pinned-hover,
-.rl-lane-acts.pinned-hover:focus-within {
-  display: inline-flex;
-}
 
 .rl-lane-canvas-scroll {
   height: 100%;
@@ -4170,10 +4096,6 @@
 }
 .rl-lane-row.hl {
   background: rgba(var(--rl-interaction-rgb), 0.045);
-}
-.rl-lane-row.rl-lane-muted,
-.rl-lane-row.rl-lane-unsoloed {
-  opacity: 0.28;
 }
 
 /* ── Clips ── */

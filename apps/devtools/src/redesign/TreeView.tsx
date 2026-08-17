@@ -2,12 +2,12 @@ import { useEffect, useRef, useState, type CSSProperties } from "react";
 
 import type { ComponentId } from "@reactlens/protocol";
 import type { SemanticNode, VisibleRow } from "@reactlens/tree";
-import { laneVisibility, typeLaneKey, type LaneControls, type LaneKey } from "../laneFilter.js";
+import { typeLaneKey, type LaneKey } from "../laneFilter.js";
 import { rowWindow } from "../rowWindow.js";
 
 /**
  * The concept's `.tree` column: indented `.node` rows carrying a diagnostic
- * glyph, hover solo/mute actions, a waste badge, a heat bar and a count.
+ * glyph, a waste badge, a heat bar and a count.
  */
 
 export interface TreeViewRow {
@@ -61,7 +61,6 @@ export function TreeView({
   maxSelf,
   selected,
   doctor,
-  lanes,
   watchlist = [],
   regionHeat,
   componentHeat,
@@ -77,7 +76,6 @@ export function TreeView({
   watchlist?: Array<{ id: ComponentId; name: string; issues: number; renders: number }>;
   selected: ComponentId | null;
   doctor?: Set<ComponentId>;
-  lanes?: LaneControls;
   /** When set, heat/count/waste come from the timeline selection, not the session. */
   regionHeat?: Map<LaneKey, LaneHeat>;
   /** Per-instance heat — what a component row shows. */
@@ -288,8 +286,6 @@ export function TreeView({
           const { node, expandable, expanded } = row;
           const isComponent = node.kind === "component";
           const name = isComponent ? node.datum.name : node.name;
-          const laneKey = typeLaneKey(name);
-          const state = lanes ? laneVisibility(lanes.filter, laneKey) : "visible";
           const hasDoctor = isComponent && !!doctor?.has(node.id);
           const glyph = glyphFor(node, hasDoctor);
           const fallbackRenders = isComponent ? node.datum.renders : node.renders;
@@ -301,8 +297,6 @@ export function TreeView({
             fallbackSelf,
             fallbackWaste,
           );
-          const soloed = lanes?.filter.solo.has(laneKey) ?? false;
-          const muted = lanes?.filter.muted.has(laneKey) ?? false;
           const flashing = isComponent && flashId === node.id;
 
           return (
@@ -312,8 +306,8 @@ export function TreeView({
               // panel's stable contract (e2e, and anything scripting the panel).
               // The concept's class names sit alongside them, not instead.
               className={`node rl-tree-row${isComponent && node.id === selected ? " sel rl-selected" : ""}${
-                state === "muted" ? " is-muted" : ""
-              }${flashing ? " flash" : ""}`}
+                flashing ? " flash" : ""
+              }`}
               role="treeitem"
               aria-selected={isComponent && node.id === selected}
               aria-expanded={expandable ? expanded : undefined}
@@ -347,41 +341,6 @@ export function TreeView({
               {glyph && <span className={`glyph ${glyph.cls}`}>{glyph.text}</span>}
               <span className="nm rl-tree-name">{name}</span>
               {node.kind === "group" && <span className="x nm">×{node.count}</span>}
-
-              {lanes && (
-                <div className={`rowact${soloed || muted ? " pinned" : ""}`}>
-                  <span
-                    className={`ra${soloed ? " on" : ""}`}
-                    data-act="solo"
-                    title={`Solo ${name} — trace only this`}
-                    role="button"
-                    aria-pressed={soloed}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      lanes.toggleSolo(laneKey);
-                    }}
-                  >
-                    S
-                  </span>
-                  <span
-                    className={`ra${muted ? " on" : ""}`}
-                    data-act="mute"
-                    title={
-                      muted
-                        ? `Unmute ${name} — its history was never dropped`
-                        : `Mute ${name} — hide it from every view (still recorded)`
-                    }
-                    role="button"
-                    aria-pressed={muted}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      lanes.toggleMute(laneKey);
-                    }}
-                  >
-                    M
-                  </span>
-                </div>
-              )}
 
               <div className="heat">
                 {h.waste > 0 && <span className="waste">{h.waste}</span>}

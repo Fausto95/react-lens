@@ -4,7 +4,6 @@ import type { TraceStore, CommitSummary } from "@reactlens/trace-engine";
 import type { Causality } from "@reactlens/causality";
 import { useTraceVersion } from "../useLens.js";
 import { derivationCache } from "../traceFresh.js";
-import { laneFilterActive, type LaneFilter } from "../laneFilter.js";
 import type { TimeCursor } from "../timeCursor.js";
 import { statsPairFromStore } from "./model/lanes.js";
 import { buildActivity, buildAxis, mergeActive, type TimeSpan } from "./model/axis.js";
@@ -22,7 +21,6 @@ export interface UseTimelineArgs {
   store: TraceStore;
   causality: Causality;
   cursor: TimeCursor;
-  laneFilter: LaneFilter;
   fixApplied?: boolean;
 }
 
@@ -39,7 +37,6 @@ export function useTimeline({
   store,
   causality: _causality,
   cursor,
-  laneFilter,
   fixApplied = false,
 }: UseTimelineArgs) {
   const version = useTraceVersion(store, { kind: "global" });
@@ -90,13 +87,8 @@ export function useTimeline({
   ctxRef.current = { bounds, axis };
   const visible = wallWindow(axis, state.view);
 
-  const serializedLaneFilter = laneFilterActive(laneFilter)
-    ? { solo: [...laneFilter.solo], muted: [...laneFilter.muted] }
-    : undefined;
   const statsRange = state.region ?? { start: visible.start, end: visible.end };
-  const statsPair = statsPairFromStore(store, statsRange.start, statsRange.end, {
-    ...(serializedLaneFilter ? { laneFilter: serializedLaneFilter } : {}),
-  });
+  const statsPair = statsPairFromStore(store, statsRange.start, statsRange.end);
   const statsRaw = statsPair.raw;
   const stats = fixApplied ? statsPair.excludeWasted : statsRaw;
 

@@ -15,17 +15,6 @@ import {
 } from "./timeTravelController.js";
 import { loadPanelPrefs, savePanelPrefs } from "./panelPrefs.js";
 import { useLatest } from "./useLatest.js";
-import {
-  EMPTY_LANE_FILTER,
-  deserializeLaneFilter,
-  laneFilterActive,
-  serializeLaneFilter,
-  toggleMute,
-  toggleSolo,
-  type LaneControls,
-  type LaneFilter,
-  type LaneKey,
-} from "./laneFilter.js";
 import { loadAgentSettings } from "./settings.js";
 import type { AgentSettings } from "@reactlens/agent";
 import { AgentPane } from "./AgentPane.js";
@@ -40,7 +29,6 @@ import {
   IconCrosshair,
   IconSliders,
   IconRewind,
-  IconFilter,
 } from "@reactlens/icons";
 import { PanelMenu, type Retention } from "./PanelMenu.js";
 import { DoctorIssuesMenu } from "./DoctorIssuesMenu.js";
@@ -167,27 +155,6 @@ export function Panel({
     },
     [revealOnSelect, onHighlight],
   );
-  /**
-   * Solo / mute: one filter, honored by every view (timeline lanes, tree rows,
-   * region stats). Purely a view filter — the store keeps recording muted
-   * lanes, so un-muting brings the full history back.
-   */
-  const [laneFilter, setLaneFilter] = useState<LaneFilter>(() =>
-    deserializeLaneFilter(loadPanelPrefs().laneFilter),
-  );
-  // Toggles update functionally, never from the render closure: soloing and
-  // muting in the same tick must compose, not clobber each other. Persistence
-  // is an effect so the updater stays pure.
-  useEffect(() => {
-    savePanelPrefs({ laneFilter: serializeLaneFilter(laneFilter) });
-  }, [laneFilter]);
-  const lanes: LaneControls = {
-    filter: laneFilter,
-    toggleSolo: (key: LaneKey) => setLaneFilter((f) => toggleSolo(f, key)),
-    toggleMute: (key: LaneKey) => setLaneFilter((f) => toggleMute(f, key)),
-    clear: () => setLaneFilter(EMPTY_LANE_FILTER),
-  };
-  const lanesFiltered = laneFilterActive(laneFilter);
 
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [sessionLabel, setSessionLabel] = useState<string | null>(null);
@@ -513,15 +480,6 @@ export function Panel({
     group: "Navigate",
     run: () => setAgentOpen((v) => !v),
   });
-  if (lanesFiltered) {
-    commands.push({
-      id: "clear-lane-filter",
-      label: "Show all lanes (clear solo/mute)",
-      hint: `${laneFilter.solo.size + laneFilter.muted.size}`,
-      group: "Timeline",
-      run: lanes.clear,
-    });
-  }
   if (onToggleInspect) {
     commands.push({
       id: "toggle-inspect",
@@ -598,7 +556,6 @@ export function Panel({
         causality={causality}
         cursor={cursor}
         onCursor={setCursor}
-        lanes={lanes}
         doctor={affected}
         selected={selected}
         onSelect={select}
@@ -705,17 +662,6 @@ export function Panel({
                 />
               )}
             </span>
-            {lanesFiltered && (
-              <button
-                type="button"
-                className="rl-icon-btn rl-filtered-chip"
-                onClick={lanes.clear}
-                title={`Views are filtered — ${laneFilter.solo.size} soloed, ${laneFilter.muted.size} muted. Click to show all lanes.`}
-                aria-label="Clear lane filters"
-              >
-                <IconFilter size={14} />
-              </button>
-            )}
             <span className="rl-menu-anchor">
               <button
                 className={`rl-icon-btn${menuOpen ? " active" : ""}`}

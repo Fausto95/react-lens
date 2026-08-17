@@ -1,10 +1,4 @@
 import { THEME_PREFS, type ThemePref } from "./theme.js";
-import {
-  EMPTY_LANE_FILTER,
-  deserializeLaneFilter,
-  serializeLaneFilter,
-  type SerializedLaneFilter,
-} from "./laneFilter.js";
 
 /**
  * Small persisted panel preferences (localStorage; distinct from the agent's
@@ -29,11 +23,6 @@ export interface PanelPrefs {
   inspectorCollapsed: boolean;
   /** Selecting a component scrolls the inspected page to it when off-screen. */
   revealOnSelect: boolean;
-  /**
-   * Solo / mute lanes. View-only (the store keeps recording muted lanes), but
-   * persisted so a noisy component stays hidden across reloads.
-   */
-  laneFilter: SerializedLaneFilter;
   /** How many events the trace store retains before dropping the oldest. */
   maxEvents: number;
   /**
@@ -61,7 +50,6 @@ const DEFAULTS: PanelPrefs = {
   treeCollapsed: false,
   inspectorCollapsed: false,
   revealOnSelect: true,
-  laneFilter: serializeLaneFilter(EMPTY_LANE_FILTER),
   maxEvents: 10_000,
   maxAgeMs: null,
 };
@@ -101,9 +89,6 @@ export function loadPanelPrefs(): PanelPrefs {
         typeof parsed.revealOnSelect === "boolean"
           ? parsed.revealOnSelect
           : DEFAULTS.revealOnSelect,
-      // Round-tripped through the filter's own parser so a corrupt entry
-      // degrades to "show everything" instead of hiding lanes forever.
-      laneFilter: serializeLaneFilter(deserializeLaneFilter(parsed.laneFilter)),
       maxEvents: num(parsed.maxEvents, DEFAULTS.maxEvents, MIN_MAX_EVENTS, MAX_MAX_EVENTS),
       maxAgeMs:
         typeof parsed.maxAgeMs === "number" && Number.isFinite(parsed.maxAgeMs)
