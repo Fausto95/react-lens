@@ -362,8 +362,8 @@
 
 /* Doctor issues popover (toolbar badge) */
 .rl-doctor-menu {
-  min-width: 280px;
-  max-width: min(360px, 92vw);
+  min-width: 320px;
+  max-width: min(440px, 92vw);
   padding: var(--rl-s2);
   gap: 0;
 }
@@ -371,7 +371,7 @@
   display: flex;
   flex-direction: column;
   gap: 1px;
-  max-height: min(360px, 50vh);
+  max-height: min(420px, 56vh);
   overflow-y: auto;
 }
 .rl-doctor-menu-empty {
@@ -417,7 +417,24 @@
   flex-direction: column;
   gap: 2px;
 }
+.rl-doctor-issue-head {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+}
+.rl-doctor-issue-kind {
+  flex: 0 0 auto;
+  padding: 2px 5px;
+  border-radius: 4px;
+  background: var(--rl-bg-active);
+  color: var(--rl-text-dim);
+  font: 700 8.5px/1 var(--rl-mono);
+  letter-spacing: 0.045em;
+  text-transform: uppercase;
+}
 .rl-doctor-issue-title {
+  min-width: 0;
   font-size: 12px;
   line-height: 1.25;
   color: var(--rl-text);
@@ -428,6 +445,25 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+.rl-doctor-issue-detail {
+  font-size: 10.5px;
+  line-height: 1.4;
+  color: var(--rl-text-dim);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.rl-doctor-issue-next {
+  font-size: 10px;
+  line-height: 1.4;
+  color: var(--rl-text);
+}
+.rl-doctor-issue-next b {
+  color: var(--rl-healthy);
+  font-weight: 650;
 }
 .rl-doctor-issue-impact {
   flex: 0 0 auto;

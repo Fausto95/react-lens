@@ -3,6 +3,19 @@ import type { Diagnostic } from "@reactlens/diagnostics";
 import type { ComponentId } from "@reactlens/protocol";
 import type { TraceStore } from "@reactlens/trace-engine";
 
+const RULE_KIND: Record<string, string> = {
+  "render-fanout": "waste",
+  "unstable-callback": "identity",
+  "wasted-render": "waste",
+  "identity-churn": "identity",
+  "compiler-bailout": "compiler",
+  "context-fanout": "context",
+  "parent-cascade": "cascade",
+  "external-store": "store",
+  "force-update": "forced",
+  "effect-heavy": "effect",
+};
+
 /**
  * Popover listing Doctor findings by impact. Clicking a row selects that
  * component so the inspector Doctor section can show the full strip.
@@ -65,8 +78,17 @@ export function DoctorIssuesMenu({
               >
                 <span className="rl-doc-sev-pip" title={d.severity} />
                 <span className="rl-doctor-issue-body">
-                  <span className="rl-doctor-issue-title">{d.title}</span>
+                  <span className="rl-doctor-issue-head">
+                    <span className="rl-doctor-issue-kind">{RULE_KIND[d.ruleId] ?? d.ruleId}</span>
+                    <span className="rl-doctor-issue-title">{d.title}</span>
+                  </span>
                   <span className="rl-doctor-issue-comp">{name}</span>
+                  <span className="rl-doctor-issue-detail">{d.detail}</span>
+                  {d.fix && (
+                    <span className="rl-doctor-issue-next">
+                      <b>Next:</b> {d.fix}
+                    </span>
+                  )}
                 </span>
                 <span className="rl-doctor-issue-impact">{Math.round(d.impact)}</span>
               </button>

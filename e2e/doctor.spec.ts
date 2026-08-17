@@ -40,6 +40,24 @@ test("Doctor lists findings with severity after wasted re-renders", async ({ pag
   await expect(strip.locator(".rl-doc-title")).not.toHaveText("");
 });
 
+test("Doctor menu lists evidence and a next step", async ({ page }) => {
+  await boot(page);
+
+  for (let i = 0; i < 4; i++) {
+    await clickInPage(page, /Force re-render/);
+    await page.waitForTimeout(400);
+  }
+
+  const badge = page.getByRole("button", { name: /Doctor issues/ });
+  await expect(badge).toBeVisible({ timeout: 20_000 });
+  await badge.click();
+
+  const issue = page.locator(".rl-doctor-issue").first();
+  await expect(issue).toBeVisible();
+  await expect(issue.locator(".rl-doctor-issue-detail")).not.toHaveText("");
+  await expect(issue.locator(".rl-doctor-issue-next")).toContainText(/Next:/);
+});
+
 test("Fix-with-AI stages the question when no API key is set", async ({ page }) => {
   await boot(page);
   await page.evaluate(() => localStorage.removeItem("react-lens/agent-settings"));

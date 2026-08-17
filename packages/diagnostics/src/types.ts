@@ -1,6 +1,30 @@
 import type { ComponentId, SourceLocation } from "@reactlens/protocol";
 
 /**
+ * Evidence from this component's last render, only when that render landed in
+ * the latest commit. Session-level rules (fan-out, callback churn) ignore this.
+ */
+export interface LatestRenderEvidence {
+  wasted: boolean;
+  /** Paths that were referentially new but structurally equal (not functions). */
+  identityKeys: string[];
+  compilerBailout: string | null;
+  contextUpdate: boolean;
+  /** Woke up because a parent rendered; no own props/state/context change. */
+  parentOnly: boolean;
+  externalStore: boolean;
+  forceUpdate: boolean;
+  effectMs: number;
+  renderMs: number;
+  /** Downstream renders in the same commit under this component. */
+  cascadeSize: number;
+  reasonSummary: string;
+  ownValueChanged: boolean;
+  /** Up to a few `phase · hook #n · Xms` lines from the render window. */
+  effectLines: string[];
+}
+
+/**
  * Runtime evidence for one component, assembled by the caller from the trace
  * store + causality. Rules are pure functions of this — no framework, no store.
  */
@@ -15,6 +39,11 @@ export interface DiagnosticInput {
   functionPropChurn: boolean;
   /** Component is not optimized by the React Compiler. */
   uncompiled: boolean;
+  /**
+   * Last render of this component, when it is in the latest commit.
+   * Absent for components that did not render in that commit.
+   */
+  latest?: LatestRenderEvidence;
   source?: SourceLocation;
 }
 
