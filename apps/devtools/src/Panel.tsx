@@ -5,7 +5,7 @@ import type { ComponentId, RenderId } from "@reactlens/protocol";
 import { useTraceVersion } from "./useLens.js";
 import { readFresh } from "./traceFresh.js";
 import { diagnoseAll } from "./doctor.js";
-import { createDoctorClient, type DoctorResult } from "./doctorClient.js";
+import { createDoctorClient, type DoctorClient, type DoctorResult } from "./doctorClient.js";
 import { CommandPalette, type Command } from "./CommandPalette.js";
 import type { TimeCursor } from "./timeCursor.js";
 import {
@@ -50,7 +50,7 @@ import type { EditApi } from "./Inspector.js";
 import { RedesignShell } from "./redesign/RedesignShell.js";
 import { RestoreIndicator } from "./timeline/RestoreIndicator.js";
 import { ErrorChip } from "./ErrorChip.js";
-import { reportNotice } from "./errors.js";
+import { reportError, reportNotice } from "./errors.js";
 import "./theme.css";
 import "./redesign.css";
 
@@ -336,13 +336,24 @@ export function Panel({
 
   // Doctor: components with at least one diagnostic (for tree badges + count).
   // The pass walks every component and runs causality per render, so it runs in
-  // a Web Worker mirroring the store — off the panel's main thread. If the
-  // worker can't be created it falls back to a synchronous pass (guarded on very
+  // a Web Worker mirroring the store — off the panel's main thread. When the
+  // worker is unavailable it falls back to a synchronous pass (guarded on very
   // large apps so the panel stays responsive).
-  const doctorClient = useMemo(() => createDoctorClient(), []);
   const [workerDoctor, setWorkerDoctor] = useState<DoctorResult | null>(null);
+  // The live client, for the source-fusion effect below. A ref, not state: it is
+  // read from another effect, never during render.
+  const doctorClientRef = useRef<DoctorClient | null>(null);
   useEffect(() => {
-    const client = doctorClient;
+    // Created here rather than in a memo, and disposed in this same cleanup:
+    // the embedded panel runs under StrictMode, where a memoized client would
+    // be terminated by the first cleanup and then reused — dead — on remount,
+    // leaving Doctor permanently empty.
+    const client = createDoctorClient({
+      // A worker that dies after construction must not read as "no issues":
+      // say so, and the derived fallback below takes over.
+      onError: (err) => reportError("doctor-worker", err),
+    });
+    doctorClientRef.current = client;
     if (!client) return;
     const unsubscribe = client.subscribe(setWorkerDoctor);
     client.ingest(store.export()); // backfill history captured before we attached
@@ -355,12 +366,13 @@ export function Panel({
       unsubscribe();
       off();
       client.dispose();
+      doctorClientRef.current = null;
     };
-  }, [doctorClient, store, traceClient]);
+  }, [store, traceClient]);
 
   // Push selected component source into the Doctor worker for static+runtime fusion.
   useEffect(() => {
-    const client = doctorClient;
+    const client = doctorClientRef.current;
     if (!client || selected == null) return;
     const inst = store.instance(selected);
     if (!inst?.source) return;
@@ -381,7 +393,7 @@ export function Panel({
     return () => {
       alive = false;
     };
-  }, [doctorClient, store, selected]);
+  }, [store, selected]);
 
   // The store was cleared (page navigated/reloaded) — return the timeline to
   // LIVE and drop A/B marks so it doesn't sit at a now-gone historical moment.
@@ -396,10 +408,12 @@ export function Panel({
     });
   }, [empty]);
 
-  // The synchronous pass only runs where the worker could not be spawned, and
-  // only for small apps; it is still the most expensive read on this path.
+  // The synchronous pass covers every case where the worker has not answered —
+  // it could not be spawned, its script failed, or it is still starting — and
+  // stops running as soon as a result arrives. Guarded on very large apps,
+  // where it is the most expensive read on this path.
   const fallback = readFresh(version, () =>
-    !doctorClient && stats.components <= 2000 ? diagnoseAll(store, causality) : null,
+    !workerDoctor && stats.components <= 2000 ? diagnoseAll(store, causality) : null,
   );
   const affected = workerDoctor?.affected ?? fallback?.affected ?? new Set<ComponentId>();
   const issueCount = workerDoctor?.count ?? fallback?.diagnostics.length ?? 0;
