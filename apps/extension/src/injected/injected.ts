@@ -2,7 +2,7 @@ import { createSerializer } from "@reactlens/serializer";
 import { createFiberBridge } from "@reactlens/fiber";
 import { createInstrumentation } from "@reactlens/instrumentation";
 import type { EventsBatchMessage, ComponentId } from "@reactlens/protocol";
-import { PROTOCOL_VERSION } from "@reactlens/protocol";
+import { PROTOCOL_VERSION, installPageApi } from "@reactlens/protocol";
 import { PAGE_SOURCE, CONTENT_SOURCE, type ContentToPage } from "../transport.js";
 import { createHighlighter } from "./highlighter.js";
 import { createInspectController, tryReactTextOverride } from "./inspect.js";
@@ -47,6 +47,18 @@ const inspect = createInspectController({
       "*",
     );
   },
+});
+
+/**
+ * The page-facing API. Installed at module scope — this script runs in the
+ * MAIN world at document_start, so it lands before the app's own modules
+ * evaluate and their `registerStore` calls find a real host. Registrations
+ * that still arrive first (script registration retried after a service-worker
+ * cold start) are queued by the shim and adopted here.
+ */
+installPageApi(globalThis, {
+  markInteraction: (name, untilMs) => instrumentation.markInteraction(name, untilMs),
+  registerStore: (adapter) => instrumentation.timeTravel.registerStore(adapter),
 });
 
 function post(frame: Frame): void {

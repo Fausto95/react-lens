@@ -1,4 +1,4 @@
-import type { EventsBatchMessage } from "@reactlens/protocol";
+import { installPageApi, type EventsBatchMessage } from "@reactlens/protocol";
 import { TraceStore } from "@reactlens/trace-engine";
 import { createCausality, type Causality } from "@reactlens/causality";
 import { createSerializer } from "@reactlens/serializer";
@@ -22,6 +22,14 @@ export function createCaptureRuntime(): CaptureRuntime {
   const fiber = createFiberBridge(globalThis);
   const instrumentation = createInstrumentation({ fiber, serializer });
 
+  // Installed at construction, not in start(): boot runs before the app's
+  // modules evaluate, so a module-level registerStore finds a real host. Any
+  // that still land first were queued by the shim and are adopted here.
+  installPageApi(globalThis, {
+    markInteraction: (name, untilMs) => instrumentation.markInteraction(name, untilMs),
+    registerStore: (adapter) => instrumentation.timeTravel.registerStore(adapter),
+  });
+
   return {
     store,
     causality,
@@ -33,14 +41,6 @@ export function createCaptureRuntime(): CaptureRuntime {
         interactionWindowMs: 200,
         onFrame: (frame: EventsBatchMessage["payload"]) => store.ingest(frame),
       });
-      if (typeof globalThis !== "undefined") {
-        const g = globalThis as typeof globalThis & {
-          __REACT_LENS__?: { markInteraction?: (name: string, untilMs?: number) => void };
-        };
-        g.__REACT_LENS__ = {
-          markInteraction: (name, untilMs) => instrumentation.markInteraction(name, untilMs),
-        };
-      }
     },
     stop() {
       instrumentation.stop();
