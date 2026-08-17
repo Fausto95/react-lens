@@ -305,6 +305,16 @@ export function IconSparkle(props: IconProps) {
   );
 }
 
+/** Follow latest interaction — live target ring. */
+export function IconLive(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <circle cx="8" cy="8" r="2" fill="currentColor" stroke="none" />
+      <circle cx="8" cy="8" r="5.2" />
+    </Svg>
+  );
+}
+
 /** Panel settings — two tune sliders. */
 export function IconSliders(props: IconProps) {
   return (

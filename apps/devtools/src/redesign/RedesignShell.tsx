@@ -27,7 +27,6 @@ import { ErrorBoundary } from "../ErrorBoundary.js";
 export function RedesignShell({
   store,
   causality,
-  recording,
   cursor,
   onCursor,
   lanes,
@@ -35,7 +34,6 @@ export function RedesignShell({
   selected,
   onSelect,
   onHighlight,
-  sessionSpanMs,
   toolbarActions,
   transport,
   windowChrome = false,
@@ -45,7 +43,6 @@ export function RedesignShell({
 }: {
   store: TraceStore;
   causality: Causality;
-  recording: boolean;
   cursor: TimeCursor;
   onCursor: (c: TimeCursor) => void;
   lanes: LaneControls;
@@ -53,7 +50,6 @@ export function RedesignShell({
   selected: ComponentId | null;
   onSelect: (id: ComponentId) => void;
   onHighlight?: (id: ComponentId | null) => void;
-  sessionSpanMs: number;
   toolbarActions?: React.ReactNode;
   transport?: React.ReactNode;
   windowChrome?: boolean;
@@ -222,10 +218,6 @@ export function RedesignShell({
         <div className="brand">
           <span className="lens" />
           React Lens
-        </div>
-        <div className="rec" title="Recording is always on">
-          {recording && <i />}
-          {recording ? `Recording · ${(sessionSpanMs / 1000).toFixed(1)} s` : "Paused"}
         </div>
         <span className="hint">
           drag to scrub · ⇧ region · ⌥ marquee · J/K/L transport · ? shortcuts

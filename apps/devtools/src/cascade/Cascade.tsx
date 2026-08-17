@@ -8,7 +8,7 @@ import {
   IconChevronLeft,
   IconChevronRight,
   IconCollapse,
-  IconSparkle,
+  IconLive,
 } from "@reactlens/icons";
 import { typeLaneKey } from "../laneFilter.js";
 import type { TimeCursor } from "../timeCursor.js";
@@ -523,27 +523,34 @@ export function Cascade({
   }, []);
 
   useEffect(() => {
-    themeRef.current = readTimelineTheme(rootRef.current?.closest(".rl-redesign") ?? null);
-    if (layout) rendererRef.current?.setFrame(layout, themeRef.current, maxSelfTime);
-    if (layout) {
-      const mini = minimapRef.current;
-      const width = mini?.clientWidth || MINIMAP_SIZE;
-      const height = mini?.clientHeight || MINIMAP_SIZE;
-      minimapCacheRef.current = buildMinimapCache(
-        layout,
-        themeRef.current,
-        width,
-        height,
-        sizeRef.current.dpr,
-      );
-      if (resetViewRef.current && sizeRef.current.width > 1 && sizeRef.current.height > 1) {
-        viewRef.current = initialTransform(layout, sizeRef.current.width, sizeRef.current.height);
-        resetViewRef.current = false;
+    const applyTheme = () => {
+      themeRef.current = readTimelineTheme(rootRef.current?.closest(".rl-redesign") ?? null);
+      if (layout) rendererRef.current?.setFrame(layout, themeRef.current, maxSelfTime);
+      if (layout) {
+        const mini = minimapRef.current;
+        const width = mini?.clientWidth || MINIMAP_SIZE;
+        const height = mini?.clientHeight || MINIMAP_SIZE;
+        minimapCacheRef.current = buildMinimapCache(
+          layout,
+          themeRef.current,
+          width,
+          height,
+          sizeRef.current.dpr,
+        );
+        if (resetViewRef.current && sizeRef.current.width > 1 && sizeRef.current.height > 1) {
+          viewRef.current = initialTransform(layout, sizeRef.current.width, sizeRef.current.height);
+          resetViewRef.current = false;
+        }
+      } else {
+        minimapCacheRef.current = null;
       }
-    } else {
-      minimapCacheRef.current = null;
-    }
-    paintAll();
+      paintAll();
+    };
+    applyTheme();
+    const root = document.documentElement;
+    const observer = new MutationObserver(applyTheme);
+    observer.observe(root, { attributes: true, attributeFilter: ["data-rl-theme"] });
+    return () => observer.disconnect();
   }, [layout, maxSelfTime, paintAll]);
 
   useEffect(() => paintAll(), [cursor.mode, cursor.t, focusMode, customFocus, paintAll]);
@@ -779,7 +786,7 @@ export function Cascade({
               if (latest) chooseInteraction(latest.id);
             }}
           >
-            <IconSparkle size={12} />
+            <IconLive size={12} />
             <span className="rl-cascade-latest-label">Latest</span>
           </button>
         </div>

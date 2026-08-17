@@ -15,12 +15,11 @@ test("the panel keeps counting events after the initial mount", async ({ page })
   await expect.poll(() => eventCount(page)).toBeGreaterThan(afterRefresh);
 });
 
-test("recording stays on and keeps capturing after R", async ({ page }) => {
+test("R does not pause capture — recording stays on", async ({ page }) => {
   await boot(page);
   const before = await eventCount(page);
 
   await page.keyboard.press("r");
-  await expect(page.locator(".rl-status-rec")).toContainText("rec");
 
   await clickInPage(page, "count +1");
   await expect.poll(() => eventCount(page)).toBeGreaterThan(before);

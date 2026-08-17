@@ -112,13 +112,12 @@ test("clicking an interaction row selects it and unfollows latest", async ({ pag
   await expect(last).toHaveClass(/selected/);
 });
 
-test("replay controls are available and recording stays on", async ({ page }) => {
+test("replay controls are available while capture stays live", async ({ page }) => {
   await boot(page);
   await bumpCounter(page, 1);
 
   await expect(replayButton(page)).toBeEnabled();
   await expect(replayAllButton(page)).toBeEnabled();
-  await expect(page.locator(".rl-status-rec")).toContainText("rec");
 
   const mounted = await eventCount(page);
   await clickInPage(page, "Refresh prices");

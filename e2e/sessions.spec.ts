@@ -25,7 +25,6 @@ test("export → import round-trip disables travel until a live click", async ({
     await page.getByRole("button", { name: "Import session" }).click();
     await page.locator('input[type="file"][accept*="json"]').setInputFiles(tmp);
 
-    await expect(page.locator(".rl-status-rec")).toContainText("rec");
     const travel = page.getByRole("button", { name: "Apply state to the page while scrubbing" });
     await expect(travel).toBeDisabled();
     await expect(travel).toHaveAttribute("title", /Imported session/i);
@@ -48,7 +47,6 @@ test("imports a committed protocol-v1 .lens.json fixture", async ({ page }) => {
   await page.getByRole("button", { name: "Import session" }).click();
   await page.locator('input[type="file"][accept*="json"]').setInputFiles(fixture);
 
-  await expect(page.locator(".rl-status-rec")).toContainText("rec");
   const travel = page.getByRole("button", { name: "Apply state to the page while scrubbing" });
   await expect(travel).toBeDisabled();
   await expect(travel).toHaveAttribute("title", /Imported session/i);

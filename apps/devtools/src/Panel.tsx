@@ -28,7 +28,6 @@ import {
 } from "./laneFilter.js";
 import { loadAgentSettings } from "./settings.js";
 import type { AgentSettings } from "@reactlens/agent";
-import { sessionSpanMs } from "./sessionSpan.js";
 import { AgentPane } from "./AgentPane.js";
 import { ErrorBoundary } from "./ErrorBoundary.js";
 import { SettingsPopover } from "./SettingsPopover.js";
@@ -117,7 +116,7 @@ export interface PanelProps {
 export function Panel({
   store,
   causality,
-  recording,
+  recording: _recording,
   traceClient,
   embedded,
   onHighlight,
@@ -241,8 +240,6 @@ export function Panel({
   const [agentAsk] = useState<{ token: number; question: string } | null>(null);
   const { dockWidth, onDockResize } = useDockResize(embedded);
   const stats = readFresh(version, () => store.stats());
-  /** Session length so far — first activity to last activity+duration. */
-  const sessionMs = readFresh(version, () => sessionSpanMs(store));
 
   /**
    * Say when retention has eaten into the session. A timeline that begins
@@ -593,14 +590,12 @@ export function Panel({
       <RedesignShell
         store={store}
         causality={causality}
-        recording={recording}
         cursor={cursor}
         onCursor={setCursor}
         lanes={lanes}
         doctor={affected}
         selected={selected}
         onSelect={select}
-        sessionSpanMs={sessionMs}
         {...(onHighlight ? { onHighlight } : {})}
         {...(edit ? { edit } : {})}
         {...(onRequestSnapshot ? { onRequestSnapshot } : {})}
@@ -750,14 +745,6 @@ export function Panel({
                 reading={embedded ? "embedded" : "devtools"}
               />
             </span>
-            <span
-              className={`rl-icon-btn recording severe${recording ? " active" : ""}`}
-              title="Recording is always on"
-              aria-label="Recording is always on"
-              aria-pressed={recording}
-            >
-              <span className="rl-rec-pulse" />
-            </span>
           </span>
         }
       />
@@ -779,13 +766,6 @@ export function Panel({
           <span className="rl-status-k">cmp</span> {stats.components}
         </span>
         <span className="rl-spacer" />
-        <span
-          className={`rl-status-metric rl-status-rec${recording ? " on" : ""}`}
-          title="Recording is always on"
-        >
-          <span className="rl-status-rec-dot" />
-          {recording ? `rec · ${(sessionMs / 1000).toFixed(1)} s` : "paused"}
-        </span>
       </div>
 
       <input
