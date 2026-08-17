@@ -437,6 +437,7 @@ export function Panel({
   const issueCount = workerDoctor?.count ?? fallback?.diagnostics.length ?? 0;
   const diagnostics = workerDoctor?.diagnostics ?? fallback?.diagnostics?.slice(0, 50) ?? [];
   const openDoctor = () => {
+    if (issueCount === 0) return;
     setMenuOpen(false);
     setDoctorOpen((v) => !v);
   };
@@ -451,6 +452,9 @@ export function Panel({
       });
     });
   };
+  useEffect(() => {
+    if (issueCount === 0) setDoctorOpen(false);
+  }, [issueCount]);
 
   // ⌘K / Ctrl+K opens the command palette; ⌘\ toggles page inspect.
   // Plain keys (R, ?) match the hints the palette advertises.
@@ -674,32 +678,31 @@ export function Panel({
             >
               <IconUpload size={14} />
             </button>
-            {issueCount > 0 && (
-              <span className="rl-menu-anchor" ref={doctorAnchorRef}>
-                <button
-                  type="button"
-                  className={`rl-icon-btn rl-doctor-btn${doctorOpen ? " active" : ""}`}
-                  onClick={openDoctor}
-                  title={`${issueCount} Doctor issues`}
-                  aria-label={`${issueCount} Doctor issues`}
-                  aria-haspopup="dialog"
-                  aria-expanded={doctorOpen}
-                >
-                  <IconDoctor size={14} />
-                  <span className="rl-doctor-badge">{issueCount}</span>
-                </button>
-                {doctorOpen && (
-                  <DoctorIssuesMenu
-                    diagnostics={diagnostics}
-                    issueCount={issueCount}
-                    store={store}
-                    anchorRef={doctorAnchorRef}
-                    onSelect={pickDoctorIssue}
-                    onClose={() => setDoctorOpen(false)}
-                  />
-                )}
-              </span>
-            )}
+            <span className="rl-menu-anchor" ref={doctorAnchorRef}>
+              <button
+                type="button"
+                className={`rl-icon-btn rl-doctor-btn${doctorOpen ? " active" : ""}`}
+                onClick={openDoctor}
+                disabled={issueCount === 0}
+                title={issueCount > 0 ? `${issueCount} Doctor issues` : "No Doctor issues"}
+                aria-label={issueCount > 0 ? `${issueCount} Doctor issues` : "Doctor issues"}
+                aria-haspopup="dialog"
+                aria-expanded={doctorOpen}
+              >
+                <IconDoctor size={14} />
+                {issueCount > 0 ? <span className="rl-icon-pastille">{issueCount}</span> : null}
+              </button>
+              {doctorOpen && issueCount > 0 && (
+                <DoctorIssuesMenu
+                  diagnostics={diagnostics}
+                  issueCount={issueCount}
+                  store={store}
+                  anchorRef={doctorAnchorRef}
+                  onSelect={pickDoctorIssue}
+                  onClose={() => setDoctorOpen(false)}
+                />
+              )}
+            </span>
             {lanesFiltered && (
               <button
                 type="button"

@@ -49,7 +49,7 @@ test("Doctor menu lists evidence and a next step", async ({ page }) => {
   }
 
   const badge = page.getByRole("button", { name: /Doctor issues/ });
-  await expect(badge).toBeVisible({ timeout: 20_000 });
+  await expect(badge).toBeEnabled({ timeout: 20_000 });
   await badge.click();
 
   const issue = page.locator(".rl-doctor-issue").first();

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { IconAlert, IconNotice } from "@reactlens/icons";
 import { clearErrors, lensErrors, subscribeErrors } from "./errors.js";
 
 /**
@@ -43,24 +44,29 @@ export function ErrorChip() {
   // Notices are not faults, so they must not colour the chip red or be counted
   // as errors — but they still have to be visible, which is the whole point.
   const noticesOnly = total === 0;
+  const count = noticesOnly ? errors.length : total;
+  const label = noticesOnly
+    ? `${count} React Lens notice${count === 1 ? "" : "s"}`
+    : `${count} React Lens error${count === 1 ? "" : "s"}`;
 
   return (
     <span className="rl-menu-anchor">
       <button
         ref={anchorRef}
         type="button"
-        className={`rl-error-chip${noticesOnly ? " notice" : ""}`}
+        className={`rl-icon-btn rl-error-chip${noticesOnly ? " notice" : ""}`}
         title={
           noticesOnly
             ? "React Lens has something to report — click for details"
             : "React Lens hit errors — click for details"
         }
+        aria-label={label}
         aria-haspopup="dialog"
         aria-expanded={open}
         onClick={() => setOpen((v) => !v)}
       >
-        {noticesOnly ? `${errors.length} notice${errors.length === 1 ? "" : "s"}` : null}
-        {noticesOnly ? null : `${total} error${total === 1 ? "" : "s"}`}
+        {noticesOnly ? <IconNotice size={14} /> : <IconAlert size={14} />}
+        <span className={`rl-icon-pastille${noticesOnly ? "" : " severe"}`}>{count}</span>
       </button>
       {open && (
         <div

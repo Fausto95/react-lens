@@ -55,6 +55,26 @@ export function IconDoctor(props: IconProps) {
   );
 }
 
+/** Notices / panel reports. */
+export function IconNotice(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <path d="M3.5 11.6 5 9.4V7a3 3 0 0 1 6 0v2.4l1.5 2.2H3.5z" />
+      <path d="M6.6 12.7a1.5 1.5 0 0 0 2.8 0" />
+    </Svg>
+  );
+}
+
+/** Faults / errors. */
+export function IconAlert(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <path d="M8 2.6 1.8 13.2h12.4L8 2.6z" />
+      <path d="M8 6.5v3.1M8 11.5h.01" />
+    </Svg>
+  );
+}
+
 /** Record. */
 export function IconRecord(props: IconProps) {
   return (

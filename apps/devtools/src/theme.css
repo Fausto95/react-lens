@@ -336,11 +336,12 @@
   border-color: rgba(var(--rl-healthy-rgb), 0.45);
   background: rgba(var(--rl-healthy-rgb), 0.12);
 }
-/* Doctor: icon + iOS-style yellow notification pastille */
-.rl-doctor-btn {
+/* Doctor / notices: icon + iOS-style yellow notification pastille */
+.rl-doctor-btn,
+.rl-error-chip {
   position: relative;
 }
-.rl-doctor-badge {
+.rl-icon-pastille {
   position: absolute;
   top: -3px;
   right: -4px;
@@ -358,6 +359,10 @@
   text-align: center;
   pointer-events: none;
   box-shadow: 0 0 0 1.5px var(--rl-bg);
+}
+.rl-icon-pastille.severe {
+  background: var(--rl-severe);
+  color: rgb(var(--rl-ink-rgb));
 }
 
 /* Doctor issues popover (toolbar badge) */
@@ -4619,40 +4624,8 @@
   border-color: var(--rl-severe);
 }
 
-/* Everything the single error seam collected, as one unobtrusive chip. Silent
+/* Everything the single error seam collected, as one toolbar icon. Silent
    failures are what made the panel look frozen for no visible reason. */
-.rl-error-chip {
-  display: flex;
-  align-items: center;
-  gap: var(--rl-s2);
-  padding: 0 var(--rl-s3);
-  height: 22px;
-  border: 1px solid rgb(var(--rl-severe-rgb) / 0.4);
-  border-radius: 11px;
-  background: rgb(var(--rl-severe-rgb) / 0.12);
-  color: var(--rl-severe);
-  font-family: var(--rl-font);
-  font-size: 11px;
-  cursor: pointer;
-}
-.rl-error-chip:hover {
-  background: rgb(var(--rl-severe-rgb) / 0.2);
-}
-.rl-error-chip:focus {
-  outline: none;
-}
-.rl-error-chip:focus-visible {
-  background: rgb(var(--rl-severe-rgb) / 0.2);
-}
-.rl-error-chip.notice {
-  border-color: rgb(var(--rl-warn-rgb) / 0.4);
-  background: rgb(var(--rl-warn-rgb) / 0.12);
-  color: var(--rl-warn);
-}
-.rl-error-chip.notice:hover,
-.rl-error-chip.notice:focus-visible {
-  background: rgb(var(--rl-warn-rgb) / 0.2);
-}
 .rl-error-list {
   display: flex;
   flex-direction: column;
