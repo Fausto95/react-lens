@@ -13,7 +13,7 @@ import {
 import { useTraceVersion } from "../useLens.js";
 import { readFresh, derivationCache } from "../traceFresh.js";
 import { loadPanelPrefs, savePanelPrefs } from "../panelPrefs.js";
-import { typeLaneKey, type LaneControls } from "../laneFilter.js";
+import { typeLaneKey } from "../laneFilter.js";
 import type { TimeCursor } from "../timeCursor.js";
 import { useTimeline } from "../timeline/useTimeline.js";
 import { Timeline } from "../timeline/view/Timeline.js";
@@ -29,7 +29,6 @@ export function RedesignShell({
   causality,
   cursor,
   onCursor,
-  lanes,
   doctor,
   selected,
   onSelect,
@@ -45,7 +44,6 @@ export function RedesignShell({
   causality: Causality;
   cursor: TimeCursor;
   onCursor: (c: TimeCursor) => void;
-  lanes: LaneControls;
   doctor?: Set<ComponentId>;
   selected: ComponentId | null;
   onSelect: (id: ComponentId) => void;
@@ -60,7 +58,7 @@ export function RedesignShell({
   const version = useTraceVersion(store, { kind: "global" });
   const [fixApplied, setFixApplied] = useState(false);
   const [flashId, setFlashId] = useState<ComponentId | null>(null);
-  const timeline = useTimeline({ store, causality, cursor, laneFilter: lanes.filter, fixApplied });
+  const timeline = useTimeline({ store, causality, cursor, fixApplied });
   const [filterChips, setFilterChips] = useState<string[]>([]);
   const [filterFree, setFilterFree] = useState("");
   const query = [...filterChips, filterFree.trim()].filter(Boolean).join(" ");
@@ -315,7 +313,6 @@ export function RedesignShell({
                 onSelect={selectTreeComponent}
                 onToggle={toggleTree}
                 watchlist={watchlist}
-                lanes={lanes}
                 regionHeat={timeline.statsRaw.byLane}
                 componentHeat={timeline.statsRaw.byComponent}
                 fixApplied={fixApplied}
@@ -340,7 +337,6 @@ export function RedesignShell({
               model={timeline}
               cursor={cursor}
               onCursor={onCursor}
-              lanes={lanes}
               fixApplied={fixApplied}
               onSelectComponent={(id) => {
                 fromClipRef.current = true;

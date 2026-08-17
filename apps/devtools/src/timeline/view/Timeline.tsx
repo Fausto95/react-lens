@@ -1,7 +1,7 @@
 import { isValidElement, useEffect, useRef, useState } from "react";
 import type { ComponentId } from "@reactlens/protocol";
 import { IconPlay, IconRewind, IconStop } from "@reactlens/icons";
-import { typeLaneKey, type LaneControls } from "../../laneFilter.js";
+import { typeLaneKey } from "../../laneFilter.js";
 import type { TimeCursor } from "../../timeCursor.js";
 import type { Timeline as TimelineModel } from "../useTimeline.js";
 import { Cascade } from "../../cascade/Cascade.js";
@@ -47,7 +47,6 @@ export function Timeline({
   model,
   cursor,
   onCursor,
-  lanes: _lanes,
   fixApplied: _fixApplied,
   onSelectComponent,
   onHighlight,
@@ -56,7 +55,6 @@ export function Timeline({
   model: TimelineModel;
   cursor: TimeCursor;
   onCursor: (cursor: TimeCursor) => void;
-  lanes?: LaneControls;
   fixApplied?: boolean;
   onSelectComponent?: (id: ComponentId) => void;
   onHighlight?: (id: ComponentId | null) => void;
