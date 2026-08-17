@@ -17,25 +17,25 @@ flashes). There is no dedicated keymap for it.
 
 Cascade (focus the Cascade stage; press `?` in the command palette for more):
 
-| Shortcut         | Action                                              |
-| ---------------- | --------------------------------------------------- |
-| F                | Fit the entire cascade in view                      |
-| 0                | Reset zoom to 100%                                  |
-| C                | Collapse expanded aggregate groups                  |
-| ← / →            | Previous / next interaction                         |
-| Drag             | Pan the graph                                       |
-| ⌘/ctrl + wheel   | Zoom at the cursor                                  |
-| Esc              | Clear custom Cause / Effects focus (back to All)    |
-| Minimap drag     | Recenter the viewport                               |
+| Shortcut       | Action                                           |
+| -------------- | ------------------------------------------------ |
+| F              | Fit the entire cascade in view                   |
+| 0              | Reset zoom to 100%                               |
+| C              | Collapse expanded aggregate groups               |
+| ← / →          | Previous / next interaction                      |
+| Drag           | Pan the graph                                    |
+| ⌘/ctrl + wheel | Zoom at the cursor                               |
+| Esc            | Clear custom Cause / Effects focus (back to All) |
+| Minimap drag   | Recenter the viewport                            |
 
 Replay / time travel (Cascade toolbar transport):
 
-| Control        | Action                                                         |
-| -------------- | -------------------------------------------------------------- |
-| Replay         | Replay the selected interaction (dev builds restore page state) |
-| Replay all     | Replay from the start of the recorded window                   |
-| Travel toggle  | When on, the page follows rewind / replay                      |
-| Latest         | Follow the newest interaction as it arrives                    |
+| Control       | Action                                                          |
+| ------------- | --------------------------------------------------------------- |
+| Replay        | Replay the selected interaction (dev builds restore page state) |
+| Replay all    | Replay from the start of the recorded window                    |
+| Travel toggle | When on, the page follows rewind / replay                       |
+| Latest        | Follow the newest interaction as it arrives                     |
 
 ## Tree filter
 

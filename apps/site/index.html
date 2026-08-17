@@ -79,8 +79,7 @@
           document.documentElement.dataset.rlTheme = "dark";
         }
         try {
-          var wide =
-            window.matchMedia && window.matchMedia("(min-width: 901px)").matches;
+          var wide = window.matchMedia && window.matchMedia("(min-width: 901px)").matches;
           document.documentElement.dataset.rlPanel = wide ? "open" : "hidden";
         } catch (e3) {
           document.documentElement.dataset.rlPanel = "open";

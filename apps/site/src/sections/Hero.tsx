@@ -13,8 +13,8 @@ export function Hero() {
       </h1>
       <p className="hero-sub">
         Scrub Cascade to rewind real state. Trace a render to its cause. Preview waste before you
-        change code. Diff two moments — or two sessions in CI. Human or AI agent — every answer cites
-        the exact render, component, and line.
+        change code. Diff two moments — or two sessions in CI. Human or AI agent — every answer
+        cites the exact render, component, and line.
       </p>
       <div className="cta-row">
         <a

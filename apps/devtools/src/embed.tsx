@@ -1,4 +1,12 @@
-import { StrictMode, useState, useMemo, useEffect, useLayoutEffect, useRef, useCallback } from "react";
+import {
+  StrictMode,
+  useState,
+  useMemo,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useCallback,
+} from "react";
 import { createRoot } from "react-dom/client";
 import type { ComponentId } from "@reactlens/protocol";
 import { Panel } from "./Panel.js";
