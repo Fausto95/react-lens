@@ -116,7 +116,13 @@ export function createInstrumentation(deps: {
 
   let currentInteraction: { id: InteractionId; until: number } | null = null;
 
-  const timeTravel = createTimeTravel({ fiber });
+  // A registered store adapter is page code we do not control; its failures
+  // travel the same path as any other capture error, so they show up in the
+  // panel instead of vanishing into a catch block.
+  const timeTravel = createTimeTravel({
+    fiber,
+    onError: (scope, err) => emitAgentError(scope, err),
+  });
 
   // Retained render details for on-demand snapshot building when snapshots
   // aren't streamed inline. Bounded ring: recent renders only.
