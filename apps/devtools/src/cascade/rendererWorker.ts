@@ -14,6 +14,7 @@ let theme: TimelineTheme | null = null;
 let maxSelfTime = 1;
 let lastView: CascadeViewport | null = null;
 let lastCursor: number | null = null;
+let lastFocusedIds: ReadonlySet<string> | null = null;
 
 function resize(nextWidth: number, nextHeight: number, nextDpr: number): void {
   width = Math.max(1, nextWidth);
@@ -23,18 +24,29 @@ function resize(nextWidth: number, nextHeight: number, nextDpr: number): void {
   canvas.width = Math.max(1, Math.round(width * dpr));
   canvas.height = Math.max(1, Math.round(height * dpr));
 }
-function paint(view = lastView, cursorTime = lastCursor): void {
+function paint(view = lastView, cursorTime = lastCursor, focusedIds = lastFocusedIds): void {
   if (!ctx || !layout || !theme || !view) return;
   lastView = { ...view, width, height, dpr };
   lastCursor = cursorTime;
-  drawCascadeBase(ctx, layout, lastView, theme, { cursorTime, maxSelfTime, dimAfterCursor: true });
+  lastFocusedIds = focusedIds;
+  drawCascadeBase(ctx, layout, lastView, theme, {
+    cursorTime,
+    maxSelfTime,
+    dimAfterCursor: true,
+    focusedIds,
+  });
 }
 self.onmessage = (
   event: MessageEvent<
     | { type: "init"; canvas: OffscreenCanvas; width: number; height: number; dpr: number }
     | { type: "resize"; width: number; height: number; dpr: number }
     | { type: "frame"; layout: CascadeLayout; theme: TimelineTheme; maxSelfTime: number }
-    | { type: "paint"; view: CascadeViewport; cursorTime: number | null }
+    | {
+        type: "paint";
+        view: CascadeViewport;
+        cursorTime: number | null;
+        focusedIds?: string[] | null;
+      }
   >,
 ) => {
   const message = event.data;
@@ -57,6 +69,12 @@ self.onmessage = (
     paint();
     return;
   }
-  if (message.type === "paint") paint(message.view, message.cursorTime);
+  if (message.type === "paint") {
+    paint(
+      message.view,
+      message.cursorTime,
+      message.focusedIds ? new Set(message.focusedIds) : null,
+    );
+  }
 };
 export {};

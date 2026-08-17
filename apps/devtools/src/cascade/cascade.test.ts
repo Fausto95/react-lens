@@ -4,6 +4,7 @@ import type { CommitId, ComponentId, RenderEvent, RenderId } from "@reactlens/pr
 import { buildCascadeProjection } from "./model.js";
 import { layoutCascade } from "./layout.js";
 import { CascadeSpatialIndex } from "./spatial.js";
+import { cascadeEdgeInFocus } from "./draw.js";
 
 const cid = (n: number) => n as ComponentId;
 const rid = (n: number) => n as RenderId;
@@ -150,6 +151,18 @@ describe("cascade projection", () => {
     expect(a.nodes.map((node) => [node.node.id, node.rect])).toEqual(
       b.nodes.map((node) => [node.node.id, node.rect]),
     );
+  });
+});
+
+describe("cascade focus edges", () => {
+  it("keeps every edge when nothing is focused", () => {
+    expect(cascadeEdgeInFocus({ from: "a", to: "b" }, null)).toBe(true);
+  });
+
+  it("treats edges that leave the focused set as out of focus", () => {
+    const focused = new Set(["root", "hot"]);
+    expect(cascadeEdgeInFocus({ from: "root", to: "hot" }, focused)).toBe(true);
+    expect(cascadeEdgeInFocus({ from: "root", to: "leaf" }, focused)).toBe(false);
   });
 });
 

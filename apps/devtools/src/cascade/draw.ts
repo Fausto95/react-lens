@@ -17,11 +17,16 @@ export interface CascadePaintOptions {
   cursorTime: number | null;
   maxSelfTime: number;
   dimAfterCursor?: boolean;
+  /**
+   * Expensive / Roots / Cause-Effects: keep the full layout, but paint clips
+   * and edges outside this set at low alpha. Do not overlay theme.bg rects —
+   * those read as white spots on the grid.
+   */
+  focusedIds?: ReadonlySet<string> | null;
 }
 export interface CascadeOverlayOptions {
   selectedId: string | null;
   hoveredId: string | null;
-  focusedIds?: ReadonlySet<string> | null;
   /** Search hits to keep undimmed. Painted O(hits) via a veil + punched holes. */
   litIds?: ReadonlySet<string> | null;
 }
@@ -114,17 +119,29 @@ function drawArrowHead(ctx: Canvas2D, x: number, y: number, color: string): void
   ctx.closePath();
   ctx.fill();
 }
+/** True when both ends are focused (or there is no focus). Used for order badges and edge alpha. */
+export function cascadeEdgeInFocus(
+  edge: { from: string; to: string },
+  focusedIds: ReadonlySet<string> | null | undefined,
+): boolean {
+  if (!focusedIds) return true;
+  return focusedIds.has(edge.from) && focusedIds.has(edge.to);
+}
+
 function drawEdge(
   ctx: Canvas2D,
   item: CascadeLayoutEdge,
   theme: TimelineTheme,
   showOrder: boolean,
+  alpha = 1,
 ): void {
   const { edge, from, to, c1x, c1y, c2x, c2y } = item;
   const x1 = from.x + from.width;
   const y1 = from.y + from.height / 2;
   const x2 = to.x;
   const y2 = to.y + to.height / 2;
+  ctx.save();
+  ctx.globalAlpha = alpha;
   const color = hexAlpha(causeColor(theme, edge.cause), 0.58);
   ctx.lineWidth = 1.25;
   ctx.strokeStyle = color;
@@ -133,24 +150,26 @@ function drawEdge(
   ctx.bezierCurveTo(c1x, c1y, c2x, c2y, x2, y2);
   ctx.stroke();
   drawArrowHead(ctx, x2 - 1, y2, color);
-  if (!showOrder) return;
-  const mx = (x1 + x2) / 2;
-  const my = (y1 + y2) / 2 - 8;
-  ctx.font = `600 8.5px ${theme.mono}`;
-  const label = String(edge.order);
-  const width = Math.max(14, ctx.measureText(label).width + 7);
-  roundedRect(ctx, mx - width / 2, my - 7, width, 14, 7);
-  ctx.fillStyle = theme.panel;
-  ctx.fill();
-  ctx.strokeStyle = hexAlpha(theme.accent, 0.72);
-  ctx.lineWidth = 1;
-  ctx.stroke();
-  ctx.fillStyle = theme.text2;
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
-  ctx.fillText(label, mx, my + 0.25);
-  ctx.textAlign = "left";
-  ctx.textBaseline = "alphabetic";
+  if (showOrder) {
+    const mx = (x1 + x2) / 2;
+    const my = (y1 + y2) / 2 - 8;
+    ctx.font = `600 8.5px ${theme.mono}`;
+    const label = String(edge.order);
+    const width = Math.max(14, ctx.measureText(label).width + 7);
+    roundedRect(ctx, mx - width / 2, my - 7, width, 14, 7);
+    ctx.fillStyle = theme.panel;
+    ctx.fill();
+    ctx.strokeStyle = hexAlpha(theme.accent, 0.72);
+    ctx.lineWidth = 1;
+    ctx.stroke();
+    ctx.fillStyle = theme.text2;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(label, mx, my + 0.25);
+    ctx.textAlign = "left";
+    ctx.textBaseline = "alphabetic";
+  }
+  ctx.restore();
 }
 function ellipsis(ctx: Canvas2D, text: string, maxWidth: number): string {
   if (ctx.measureText(text).width <= maxWidth) return text;
@@ -176,7 +195,8 @@ function drawNode(
     options.dimAfterCursor !== false &&
     options.cursorTime !== null &&
     node.timestamp > options.cursorTime;
-  const alpha = afterCursor ? 0.3 : 1;
+  const unfocused = options.focusedIds != null && !options.focusedIds.has(node.id);
+  const alpha = (afterCursor ? 0.3 : 1) * (unfocused ? 0.28 : 1);
   ctx.save();
   ctx.globalAlpha = alpha;
   roundedRect(ctx, rect.x, rect.y, rect.width, rect.height, 6);
@@ -226,9 +246,13 @@ export function drawCascadeBase(
   drawScreenGrid(ctx, view, theme);
   setupWorld(ctx, view);
   const world = visibleWorld(view);
+  const focus = options.focusedIds;
   const showOrder = view.zoom >= 0.66 && layout.edges.length <= 300;
-  for (const edge of layout.edges)
-    if (edgeVisible(edge, world)) drawEdge(ctx, edge, theme, showOrder);
+  for (const edge of layout.edges) {
+    if (!edgeVisible(edge, world)) continue;
+    const inFocus = cascadeEdgeInFocus(edge.edge, focus);
+    drawEdge(ctx, edge, theme, showOrder && inFocus, inFocus ? 1 : 0.22);
+  }
   for (const node of layout.nodes)
     if (rectVisible(node.rect, world)) drawNode(ctx, node, theme, view, options);
 }
@@ -281,21 +305,6 @@ export function drawCascadeOverlay(
     ctx.globalCompositeOperation = "source-over";
   } else {
     setupWorld(ctx, view);
-    if (options.focusedIds) {
-      for (const item of layout.nodes) {
-        if (options.focusedIds.has(item.node.id)) continue;
-        ctx.fillStyle = hexAlpha(theme.bg, 0.66);
-        roundedRect(
-          ctx,
-          item.rect.x - 2,
-          item.rect.y - 2,
-          item.rect.width + 4,
-          item.rect.height + 4,
-          7,
-        );
-        ctx.fill();
-      }
-    }
   }
   if (options.hoveredId && options.hoveredId !== options.selectedId) {
     const item = layout.nodeById.get(options.hoveredId);

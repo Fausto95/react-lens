@@ -4,7 +4,11 @@ import type { CascadeViewport } from "./draw.js";
 
 export interface CascadeRendererClient {
   setFrame(layout: CascadeLayout, theme: TimelineTheme, maxSelfTime: number): void;
-  paint(view: CascadeViewport, cursorTime: number | null): void;
+  paint(
+    view: CascadeViewport,
+    cursorTime: number | null,
+    focusedIds?: ReadonlySet<string> | null,
+  ): void;
   resize(width: number, height: number, dpr: number): void;
   dispose(): void;
 }
@@ -75,8 +79,13 @@ export function createCascadeRenderer(canvas: HTMLCanvasElement): CascadeRendere
         maxSelfTime,
       });
     },
-    paint(view, cursorTime) {
-      post({ type: "paint", view, cursorTime });
+    paint(view, cursorTime, focusedIds) {
+      post({
+        type: "paint",
+        view,
+        cursorTime,
+        focusedIds: focusedIds ? [...focusedIds] : null,
+      });
     },
     resize(width, height, nextDpr) {
       post({ type: "resize", width, height, dpr: nextDpr });

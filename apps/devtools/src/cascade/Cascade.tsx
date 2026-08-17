@@ -367,16 +367,16 @@ export function Cascade({
     projectionCache.current = { key: "", projection: null };
   }
 
-  const layout = useMemo(() => (projection ? layoutCascade(projection) : null), [projection]);
-  const spatial = useMemo(() => (layout ? new CascadeSpatialIndex(layout.nodes) : null), [layout]);
   const searchIndex = useMemo(
-    () => (layout ? buildCascadeSearchIndex(layout.nodes.map((item) => item.node)) : null),
-    [layout],
+    () => (projection ? buildCascadeSearchIndex(projection.nodes) : null),
+    [projection],
   );
   const maxSelfTime = useMemo(
     () => Math.max(0.001, ...(projection?.nodes.map((node) => node.selfDuration) ?? [1])),
     [projection],
   );
+  const layout = useMemo(() => (projection ? layoutCascade(projection) : null), [projection]);
+  const spatial = useMemo(() => (layout ? new CascadeSpatialIndex(layout.nodes) : null), [layout]);
   const selectedId =
     localSelectedId ??
     (model.state.selectedRender === null ? null : `r:${model.state.selectedRender as number}`);
@@ -469,7 +469,6 @@ export function Cascade({
     drawCascadeOverlay(ctx, layout, currentViewport(), themeRef.current, {
       selectedId,
       hoveredId: hoverRef.current,
-      focusedIds: searching ? null : focusedIds,
       litIds: searching ? focusedIds : null,
     });
   }, [currentViewport, focusedIds, layout, searching, selectedId]);
@@ -480,7 +479,7 @@ export function Cascade({
     const cursorTime = cursor.mode === "live" ? null : cursor.t;
     const renderer = rendererRef.current;
     if (renderer) {
-      renderer.paint(viewport, cursorTime);
+      renderer.paint(viewport, cursorTime, searching ? null : focusedIds);
       return;
     }
     const canvas = baseRef.current;
@@ -490,8 +489,9 @@ export function Cascade({
       cursorTime,
       maxSelfTime,
       dimAfterCursor: true,
+      focusedIds: searching ? null : focusedIds,
     });
-  }, [currentViewport, cursor.mode, cursor.t, layout, maxSelfTime]);
+  }, [currentViewport, cursor.mode, cursor.t, focusedIds, layout, maxSelfTime, searching]);
 
   const paintAll = useCallback(() => {
     paintBase();
