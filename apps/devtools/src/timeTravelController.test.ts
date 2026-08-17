@@ -67,12 +67,18 @@ function makeStore(): TraceStore {
   return store;
 }
 
-const ok = (entries: TimeTravelEntry[]): TimeTravelResult => ({
-  applied: entries.length,
+/** A TimeTravelResult with every field defaulted — specs state only what they exercise. */
+const result = (partial: Partial<TimeTravelResult> = {}): TimeTravelResult => ({
+  applied: 0,
   failed: 0,
   supported: true,
   failures: [],
+  storesApplied: 0,
+  storeFailures: [],
+  ...partial,
 });
+
+const ok = (entries: TimeTravelEntry[]): TimeTravelResult => result({ applied: entries.length });
 
 function fakeApi(
   applyImpl?: (entries: TimeTravelEntry[]) => TimeTravelResult | Promise<TimeTravelResult>,
@@ -87,7 +93,7 @@ function fakeApi(
     },
     goLive() {
       api.goLives++;
-      return { applied: 0, failed: 0, supported: true, failures: [] };
+      return result();
     },
   };
   return api;
@@ -136,12 +142,13 @@ describe("createPanelTimeTravel — coalescing", () => {
 
 describe("createPanelTimeTravel — restore status", () => {
   it("publishes applied count and per-component failures", async () => {
-    const api = fakeApi((entries) => ({
-      applied: entries.length - 1,
-      failed: 1,
-      supported: true,
-      failures: [{ componentId: cid(2), renderId: rid(11), reason: "no-history" }],
-    }));
+    const api = fakeApi((entries) =>
+      result({
+        applied: entries.length - 1,
+        failed: 1,
+        failures: [{ componentId: cid(2), renderId: rid(11), reason: "no-history" }],
+      }),
+    );
     const statuses: Array<RestoreStatus | null> = [];
     const ctl = createPanelTimeTravel(makeStore(), api, (s) => statuses.push(s));
     ctl.onCursor({ t: 250, mode: "historical" }, true);
@@ -159,12 +166,10 @@ describe("createPanelTimeTravel — restore status", () => {
     let failNext = true;
     const api = fakeApi((entries) =>
       failNext
-        ? {
-            applied: 0,
+        ? result({
             failed: entries.length,
-            supported: true,
             failures: entries.map((e) => ({ ...e, reason: "no-history" as const })),
-          }
+          })
         : ok(entries),
     );
     const statuses: Array<RestoreStatus | null> = [];
@@ -203,12 +208,12 @@ describe("createPanelTimeTravel — restore status", () => {
     await settle();
     const afterSecond = statuses.at(-1)!;
 
-    resolveFirst({
-      applied: 0,
-      failed: 1,
-      supported: true,
-      failures: [{ componentId: cid(1), renderId: rid(10), reason: "write-failed" }],
-    });
+    resolveFirst(
+      result({
+        failed: 1,
+        failures: [{ componentId: cid(1), renderId: rid(10), reason: "write-failed" }],
+      }),
+    );
     await settle();
     // The late gen-1 failure must not overwrite the newer status.
     expect(statuses.at(-1)).toEqual(afterSecond);

@@ -323,6 +323,8 @@ window.addEventListener("message", (event: MessageEvent) => {
       failed: data.failed,
       supported: data.supported,
       failures: data.failures,
+      storesApplied: data.storesApplied,
+      storeFailures: data.storeFailures,
     });
     return;
   }

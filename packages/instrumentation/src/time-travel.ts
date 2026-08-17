@@ -6,23 +6,10 @@ import {
   type TimeTravelFailure,
   type TimeTravelFailureReason,
   type TimeTravelResult,
+  type TimeTravelStoreAdapter,
 } from "@reactlens/protocol";
 import type { Fiber, FiberBridge, LiveState } from "@reactlens/fiber";
 import { captureStateHooks, inspectClassState } from "@reactlens/fiber";
-
-/**
- * Opt-in seam for state living outside React (Zustand, Redux, module
- * singletons). The page registers adapters; snapshots are captured per commit
- * and restored alongside component state when the cursor moves. Values never
- * leave the page.
- */
-export interface TimeTravelStoreAdapter {
-  /** Stable identifier, unique per registered store. */
-  id: string;
-  /** An immutable (or safely re-applicable) snapshot of the store's state. */
-  getSnapshot(): unknown;
-  applySnapshot(snapshot: unknown): void;
-}
 
 /**
  * Page-side time travel: a bounded history of RAW state values per render,
@@ -62,8 +49,6 @@ interface StoreRegistration {
   history: Map<number, unknown>;
 }
 
-const DEFAULT_SNAPSHOTS_PER_STORE = 200;
-
 export function createTimeTravel(deps: {
   fiber: FiberBridge;
   /** Raw-state renders retained per component (mirrors the panel's render ring). */
@@ -76,7 +61,7 @@ export function createTimeTravel(deps: {
   const { fiber } = deps;
   const rendersPerComponent = deps.rendersPerComponent ?? TIME_TRAVEL_RETENTION.rendersPerComponent;
   const maxComponents = deps.maxComponents ?? TIME_TRAVEL_RETENTION.maxComponents;
-  const snapshotsPerStore = deps.snapshotsPerStore ?? DEFAULT_SNAPSHOTS_PER_STORE;
+  const snapshotsPerStore = deps.snapshotsPerStore ?? TIME_TRAVEL_RETENTION.snapshotsPerStore;
 
   /**
    * componentId → (renderId → raw state), both insertion-ordered. Retention is
@@ -185,7 +170,14 @@ export function createTimeTravel(deps: {
 
   function apply(entries: TimeTravelEntry[], atT?: number): TimeTravelResult {
     if (!supported()) {
-      return { applied: 0, failed: entries.length, supported: false, failures: [] };
+      return {
+        applied: 0,
+        failed: entries.length,
+        supported: false,
+        failures: [],
+        storesApplied: 0,
+        storeFailures: [],
+      };
     }
     let applied = 0;
     const failures: TimeTravelFailure[] = [];
@@ -219,7 +211,7 @@ export function createTimeTravel(deps: {
       applied += storeResult.applied;
       failed += storeResult.failed;
     }
-    return { applied, failed, supported: true, failures };
+    return { applied, failed, supported: true, failures, storesApplied: 0, storeFailures: [] };
   }
 
   function goLive(): TimeTravelResult {
@@ -243,7 +235,7 @@ export function createTimeTravel(deps: {
           active = false;
         }, 0);
       }
-      return { applied, failed, supported: supported(), failures: [] };
+      return { applied, failed, supported: supported(), failures: [], storesApplied: 0, storeFailures: [] };
     }
     for (const [componentId, baseline] of baselines) {
       if (!fiber.hasFiber(componentId)) {
@@ -259,7 +251,14 @@ export function createTimeTravel(deps: {
     setTimeout(() => {
       active = false;
     }, 0);
-    return { applied, failed, supported: supported(), failures: [] };
+    return {
+      applied,
+      failed,
+      supported: supported(),
+      failures: [],
+      storesApplied: 0,
+      storeFailures: [],
+    };
   }
 
   function restore(componentId: ComponentId, state: CapturedState): boolean {

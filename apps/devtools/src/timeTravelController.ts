@@ -138,6 +138,8 @@ export function createPanelTimeTravel(
             failed: delta.length,
             supported: true,
             failures: delta.map((e) => ({ ...e, reason: "write-failed" as const })),
+            storesApplied: 0,
+            storeFailures: [],
           });
         },
       );
