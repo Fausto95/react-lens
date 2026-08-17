@@ -1,8 +1,8 @@
 {
   "name": "@reactlens/adapters",
   "version": "0.1.0",
-  "license": "MIT",
   "description": "Time-travel store adapters for React Lens — rewind Zustand, Redux and TanStack Query with the playhead.",
+  "license": "MIT",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/Fausto95/react-lens.git",

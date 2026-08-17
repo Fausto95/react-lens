@@ -66,7 +66,7 @@ describe("zustandAdapter", () => {
     expect(notified).toBe(1);
   });
 
-  it("defaults the id to \"zustand\"", () => {
+  it('defaults the id to "zustand"', () => {
     expect(zustandAdapter(makeCart()).id).toBe("zustand");
   });
 });
@@ -139,23 +139,10 @@ describe("queryAdapter", () => {
     expect(queryClient.getQueryData(["user"])).toBe("ada");
   });
 
-  it("leaves queries created after the snapshot in place by default", async () => {
-    // hydrate merges. Documented, and the default: dropping live cache would
-    // make scrubbing destructive.
+  it("drops queries created after the snapshot", async () => {
     const queryClient = makeClient();
     await queryClient.fetchQuery({ queryKey: ["user"], queryFn: async () => "ada" });
     const a = queryAdapter({ queryClient, dehydrate, hydrate });
-    const snapshot = a.getSnapshot();
-    queryClient.setQueryData(["later"], 1);
-
-    a.applySnapshot(snapshot);
-    expect(queryClient.getQueryData(["later"])).toBe(1);
-  });
-
-  it("clearBeforeHydrate makes the restore exact", async () => {
-    const queryClient = makeClient();
-    await queryClient.fetchQuery({ queryKey: ["user"], queryFn: async () => "ada" });
-    const a = queryAdapter({ queryClient, dehydrate, hydrate, clearBeforeHydrate: true });
     const snapshot = a.getSnapshot();
     queryClient.setQueryData(["later"], 1);
 
@@ -164,7 +151,22 @@ describe("queryAdapter", () => {
     expect(queryClient.getQueryData(["user"])).toBe("ada");
   });
 
-  it("defaults the id to \"query\"", () => {
+  it("merge mode cannot rewind a query the app has since updated", async () => {
+    // Why clearing is the default: hydrate keeps whichever copy is newer, so
+    // merging leaves the live value in place and the playhead lies.
+    const queryClient = makeClient();
+    await queryClient.fetchQuery({ queryKey: ["user"], queryFn: async () => "ada" });
+    const a = queryAdapter({ queryClient, dehydrate, hydrate, mode: "merge" });
+    const snapshot = a.getSnapshot();
+    queryClient.setQueryData(["user"], "grace");
+    queryClient.setQueryData(["later"], 1);
+
+    a.applySnapshot(snapshot);
+    expect(queryClient.getQueryData(["user"])).toBe("grace");
+    expect(queryClient.getQueryData(["later"])).toBe(1);
+  });
+
+  it('defaults the id to "query"', () => {
     expect(queryAdapter({ queryClient: makeClient(), dehydrate, hydrate }).id).toBe("query");
   });
 });
