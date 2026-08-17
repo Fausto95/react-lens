@@ -95,6 +95,37 @@ test("previous interaction rewinds the page; Latest returns to the live count", 
     .toContain("count 2");
 });
 
+test("the page registers its store through the __REACT_LENS__ page API", async ({ page }) => {
+  await boot(page);
+  // The surface an app reaches through @reactlens/adapters — and the one the
+  // MAIN-world extension bridge installs. Its absence would mean the fixture
+  // is rewinding through the embedded runtime object instead.
+  const hasApi = await page.evaluate(() => {
+    const api = (window as unknown as Record<string, unknown>).__REACT_LENS__ as
+      | { registerStore?: unknown; markInteraction?: unknown }
+      | undefined;
+    return typeof api?.registerStore === "function" && typeof api?.markInteraction === "function";
+  });
+  expect(hasApi).toBe(true);
+});
+
+test("the restore pill counts rewound stores and names failures", async ({ page }) => {
+  await boot(page);
+  await ensureTravelOn(page);
+  await clickInPage(page, "Add");
+  await page.waitForTimeout(350);
+  await clickInPage(page, "Add");
+  await page.waitForTimeout(350);
+
+  await cascadeToolbar(page).getByRole("button", { name: "Previous interaction" }).click();
+  const pill = page.locator(".rl-tl-restore");
+  await expect(pill).toBeVisible();
+  await expect(pill).toContainText(/\d+ store/);
+
+  await goLive(page);
+  await expect(pill).toHaveCount(0);
+});
+
 test("external store cart rewinds with the selected interaction", async ({ page }) => {
   await boot(page);
   await ensureTravelOn(page);
