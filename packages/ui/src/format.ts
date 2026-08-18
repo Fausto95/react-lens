@@ -45,7 +45,7 @@ function shortId(identity: string): string {
 
 export function ms(n: number): string {
   if (n < 1) return `${n.toFixed(2)}ms`;
-  if (n < 10) return `${n.toFixed(1)}ms`;
+  if (n < 100) return `${n.toFixed(1)}ms`;
   return `${Math.round(n)}ms`;
 }
 

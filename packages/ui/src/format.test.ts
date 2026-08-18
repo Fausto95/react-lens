@@ -23,6 +23,7 @@ describe("ms — durations stay as-is", () => {
   it("formats durations in milliseconds", () => {
     expect(ms(0.5)).toBe("0.50ms");
     expect(ms(9.25)).toBe("9.3ms");
+    expect(ms(74.2)).toBe("74.2ms");
     expect(ms(123.4)).toBe("123ms");
   });
 });

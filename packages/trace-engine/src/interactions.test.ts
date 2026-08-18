@@ -194,4 +194,18 @@ describe("buildInteractions", () => {
     expect(submit.end).toBe(55); // 51 + selfDuration 4
     expect(submit.metrics.totalDuration).toBe(5); // 55 - 50
   });
+
+  it("sums exclusive self-time even when every render shares a commit timestamp", () => {
+    const iid = 300 as InteractionId;
+    const events: LensEvent[] = [
+      interaction({ timestamp: 10, interactionId: iid, kind: "click" }),
+      render({ timestamp: 10, interactionId: iid, selfDuration: 3 }),
+      render({ timestamp: 10, interactionId: iid, selfDuration: 5 }),
+    ];
+    const click = buildInteractions(events, nameOf).find((r) => r.kind === "click")!;
+    expect(click.metrics.reactDuration).toBe(8);
+    // wall is last timestamp+self minus interaction start — not the CPU sum
+    expect(click.metrics.totalDuration).toBe(5);
+    expect(click.metrics.totalDuration).toBeLessThan(click.metrics.reactDuration);
+  });
 });
