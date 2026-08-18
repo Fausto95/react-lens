@@ -4,7 +4,14 @@ import type { CommitId, ComponentId, RenderEvent, RenderId } from "@reactlens/pr
 import { buildCascadeProjection } from "./model.js";
 import { layoutCascade } from "./layout.js";
 import { CascadeSpatialIndex } from "./spatial.js";
-import { cascadeEdgeInFocus } from "./draw.js";
+import {
+  cascadeChainIds,
+  cascadeEdgeInFocus,
+  cascadeEdgeIncident,
+  cascadeEdgeOnChain,
+  cascadeNeighborhoodId,
+  cascadeNeighborhoodIds,
+} from "./draw.js";
 
 const cid = (n: number) => n as ComponentId;
 const rid = (n: number) => n as RenderId;
@@ -152,6 +159,20 @@ describe("cascade projection", () => {
       b.nodes.map((node) => [node.node.id, node.rect]),
     );
   });
+
+  it("routes fan-out on a shared family bus with a stub per child", () => {
+    const { store, interaction } = fixture();
+    const layout = layoutCascade(
+      buildCascadeProjection(store, interaction, { aggregateThreshold: 99 }),
+    );
+    const fromList = layout.edges.filter((item) => item.edge.from === "r:2");
+    expect(fromList.length).toBeGreaterThan(1);
+    expect(fromList.every((item) => item.busX != null)).toBe(true);
+    const busXs = new Set(fromList.map((item) => item.busX));
+    expect(busXs.size).toBe(1);
+    const childYs = new Set(fromList.map((item) => item.y2));
+    expect(childYs.size).toBe(fromList.length);
+  });
 });
 
 describe("cascade focus edges", () => {
@@ -163,6 +184,50 @@ describe("cascade focus edges", () => {
     const focused = new Set(["root", "hot"]);
     expect(cascadeEdgeInFocus({ from: "root", to: "hot" }, focused)).toBe(true);
     expect(cascadeEdgeInFocus({ from: "root", to: "leaf" }, focused)).toBe(false);
+  });
+});
+
+describe("cascade neighborhood", () => {
+  it("lets hover preview over a pinned clip", () => {
+    expect(cascadeNeighborhoodId("pinned", "hovered")).toBe("hovered");
+    expect(cascadeNeighborhoodId("pinned", null)).toBe("pinned");
+    expect(cascadeNeighborhoodId(null, "hovered")).toBe("hovered");
+    expect(cascadeNeighborhoodId(null, null)).toBe(null);
+  });
+
+  it("treats only incident edges as in the neighborhood", () => {
+    expect(cascadeEdgeIncident({ from: "a", to: "b" }, "a")).toBe(true);
+    expect(cascadeEdgeIncident({ from: "a", to: "b" }, "b")).toBe(true);
+    expect(cascadeEdgeIncident({ from: "a", to: "b" }, "c")).toBe(false);
+    expect(cascadeEdgeIncident({ from: "a", to: "b" }, null)).toBe(false);
+  });
+
+  it("collects the clip plus its immediate parent and children", () => {
+    const ids = cascadeNeighborhoodIds(
+      [
+        { edge: { from: "root", to: "hot" } },
+        { edge: { from: "hot", to: "leaf" } },
+        { edge: { from: "other", to: "away" } },
+      ],
+      "hot",
+    );
+    expect(ids).toEqual(new Set(["hot", "root", "leaf"]));
+    expect(cascadeNeighborhoodIds([], null)).toBe(null);
+  });
+
+  it("lights the ancestor chain up to the clip, not descendants or cousins", () => {
+    const edges = [
+      { edge: { from: "root", to: "branch" } },
+      { edge: { from: "branch", to: "hot" } },
+      { edge: { from: "hot", to: "leaf" } },
+      { edge: { from: "branch", to: "cousin" } },
+    ];
+    const chain = cascadeChainIds(edges, "hot");
+    expect(chain).toEqual(new Set(["root", "branch", "hot"]));
+    expect(cascadeEdgeOnChain({ from: "branch", to: "hot" }, chain)).toBe(true);
+    expect(cascadeEdgeOnChain({ from: "hot", to: "leaf" }, chain)).toBe(false);
+    expect(cascadeEdgeOnChain({ from: "branch", to: "cousin" }, chain)).toBe(false);
+    expect(cascadeChainIds([], null)).toBe(null);
   });
 });
 

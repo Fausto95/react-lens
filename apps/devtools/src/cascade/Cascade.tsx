@@ -1161,8 +1161,8 @@ export function Cascade({
         <span>{footer}</span>
         <span className="spacer" />
         <span className="rl-cascade-help">
-          drag pan · ⌘/ctrl+wheel zoom · 0 = 100% · / or ⌘F find · C collapse groups · F fit ·
-          minimap drag · ←/→ interactions
+          drag pan · hover a clip for its edges · click to pin · ⌘/ctrl+wheel zoom · 0 = 100% · / or
+          ⌘F find · C collapse groups · F fit · minimap drag · ←/→ interactions
         </span>
       </div>
     </div>

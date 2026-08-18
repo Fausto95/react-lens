@@ -8,7 +8,7 @@
 }
 
 .rl-cascade {
-  --cascade-rail: clamp(188px, 24%, 248px);
+  --cascade-rail: clamp(156px, 28%, 248px);
   --cascade-bar: 40px;
   --cascade-chip: 28px;
   --cascade-r: 6px;
@@ -232,7 +232,8 @@
 @media (prefers-reduced-motion: reduce) {
   .rl-cascade-tool,
   .rl-cascade-latest,
-  .rl-cascade-transport-button {
+  .rl-cascade-transport-button,
+  .rl-cascade-interaction {
     transition: none;
   }
 }
@@ -241,7 +242,7 @@
   min-width: 0;
   min-height: 0;
   display: grid;
-  grid-template-columns: var(--cascade-rail) minmax(0, 1fr);
+  grid-template-columns: minmax(0, var(--cascade-rail)) minmax(0, 1fr);
 }
 
 .rl-cascade-interactions {
@@ -249,61 +250,87 @@
   min-height: 0;
   overflow: auto;
   overscroll-behavior: contain;
+  padding: 4px;
   border-right: 1px solid var(--line);
   background: var(--panel);
+  container-type: inline-size;
+  container-name: interactions;
 }
 
 .rl-cascade-interactions-head {
   position: sticky;
-  top: 0;
+  top: -4px;
   z-index: 2;
-  height: 28px;
+  height: 32px;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 8px;
-  background: color-mix(in srgb, var(--panel) 94%, transparent);
-  backdrop-filter: blur(8px);
-  border-bottom: 1px solid var(--line);
+  margin: -4px -4px 4px;
+  padding: 0 12px;
+  background: color-mix(in srgb, var(--panel) 86%, transparent);
+  backdrop-filter: blur(12px);
   color: var(--text-3);
-  font-size: 9px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
+  font: 500 11px/1 var(--sans);
+  letter-spacing: -0.01em;
+}
+
+.rl-cascade-interactions-head .count {
+  color: var(--text-3);
+  font: 500 10px/1 var(--mono);
+  font-variant-numeric: tabular-nums;
 }
 
 .rl-cascade-interaction {
+  appearance: none;
+  -webkit-appearance: none;
   width: 100%;
   display: grid;
   grid-template-columns: 6px minmax(0, 1fr) auto;
-  gap: 4px 8px;
+  column-gap: 8px;
   align-items: center;
-  padding: 7px 8px;
+  margin: 0;
+  min-height: 32px;
+  padding: 0 10px;
   border: 0;
-  border-bottom: 1px solid color-mix(in srgb, var(--line) 70%, transparent);
+  border-radius: 8px;
   background: transparent;
   color: var(--text-2);
   text-align: left;
   cursor: pointer;
+  transition: background 140ms ease;
 }
 
 .rl-cascade-interaction:hover {
-  background: var(--panel-2);
+  background: color-mix(in srgb, var(--text) 4.5%, transparent);
+}
+
+.rl-cascade-interaction:focus {
+  outline: none;
+}
+
+.rl-cascade-interaction:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 45%, transparent);
+  outline-offset: 0;
 }
 
 .rl-cascade-interaction.selected {
   color: var(--text);
-  background: color-mix(in srgb, var(--accent) 9%, var(--panel));
-  box-shadow: inset 2px 0 0 var(--accent);
+  min-height: 0;
+  padding: 8px 10px;
+  background: color-mix(in srgb, var(--accent) 8%, var(--panel));
+}
+
+.rl-cascade-interaction.selected:hover {
+  background: color-mix(in srgb, var(--accent) 11%, var(--panel));
 }
 
 .rl-cascade-interaction .kind-pip {
   grid-column: 1;
   grid-row: 1;
-  width: 6px;
-  height: 6px;
+  width: 5px;
+  height: 5px;
   border-radius: 50%;
-  background: var(--accent);
+  background: color-mix(in srgb, var(--text-3) 80%, transparent);
   flex: none;
 }
 
@@ -320,82 +347,66 @@
   grid-row: 1;
   min-width: 0;
   overflow: hidden;
+  color: var(--text);
+  font: 500 12px/1.2 var(--sans);
+  letter-spacing: -0.022em;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 10.5px;
-  font-weight: 600;
+}
+
+.rl-cascade-interaction .trail {
+  grid-column: 3;
+  grid-row: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  flex: none;
+}
+
+.rl-cascade-interaction .nren {
+  flex: none;
+  color: var(--text-3);
+  font: 400 11px/1 var(--mono);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.03em;
 }
 
 .rl-cascade-interaction .react {
-  grid-column: 3;
-  grid-row: 1;
+  flex: none;
+  color: var(--text-2);
+  font: 500 11px/1 var(--mono);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.04em;
+  white-space: nowrap;
+}
+
+.rl-cascade-interaction.selected .react {
   color: var(--text);
-  font: 600 9.5px var(--mono);
-  white-space: nowrap;
-}
-
-.rl-cascade-interaction .heat-row {
-  grid-column: 2 / -1;
-  grid-row: 2;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  min-width: 0;
-}
-
-.rl-cascade-interaction .hbar {
-  flex: none;
-  width: 34px;
-  height: 3px;
-  border-radius: 2px;
-  background: rgba(var(--rl-ink-rgb), 0.07);
-  overflow: hidden;
-}
-
-.rl-cascade-interaction .hbar i {
-  display: block;
-  height: 100%;
-  border-radius: 2px;
-  background: var(--accent);
-  width: var(--w, 0%);
-}
-
-.rl-cascade-interaction .meta,
-.rl-cascade-interaction .time {
-  color: var(--text-3);
-  font: 9px var(--mono);
-  white-space: nowrap;
-}
-
-.rl-cascade-interaction .meta {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.rl-cascade-interaction .time {
-  margin-left: auto;
-  flex: none;
 }
 
 .rl-cascade-interaction .waste {
   flex: none;
-  font: 9px var(--mono);
+  font: 500 10px/1.2 var(--mono);
+  font-variant-numeric: tabular-nums;
   color: var(--warn);
   background: rgba(var(--rl-warn-rgb), 0.12);
-  border-radius: 4px;
-  padding: 1px 5px;
+  border-radius: 999px;
+  padding: 1px 6px;
 }
 
-.rl-cascade-interaction .stats {
+.rl-cascade-interaction .foot {
   grid-column: 2 / -1;
-  grid-row: 3;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
+  grid-row: 2;
+  min-width: 0;
+  margin-top: 5px;
   color: var(--text-3);
-  font: 9px var(--mono);
-  line-height: 1.35;
+  font: 400 11px/1.35 var(--sans);
+  overflow-wrap: break-word;
+}
+
+.rl-cascade-interaction .meta {
+  font-variant-numeric: tabular-nums;
 }
 
 .rl-cascade-stage {
@@ -611,6 +622,33 @@
   flex: 0 0 auto;
 }
 
+/* Rail-width density — drop the scan count when title + time need the room. */
+@container interactions (max-width: 188px) {
+  .rl-cascade-interaction {
+    column-gap: 6px;
+    padding-left: 8px;
+    padding-right: 8px;
+  }
+  .rl-cascade-interaction .nren {
+    display: none;
+  }
+  .rl-cascade-interaction .title {
+    font-size: 11.5px;
+  }
+  .rl-cascade-interaction .foot {
+    font-size: 10.5px;
+  }
+}
+
+@container interactions (max-width: 156px) {
+  .rl-cascade-interaction .trail {
+    gap: 6px;
+  }
+  .rl-cascade-interaction .react {
+    font-size: 10.5px;
+  }
+}
+
 /* Column-width queries — Cascade is a middle pane, so viewport media queries
    miss the common case of a wide window with a narrow cascade column. */
 @container cascade (max-width: 920px) {
@@ -661,15 +699,23 @@
 
 @container cascade (max-width: 520px) {
   .rl-cascade-body {
-    grid-template-columns: 1fr;
-    grid-template-rows: 126px minmax(0, 1fr);
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr);
   }
 
   .rl-cascade-interactions {
+    gap: 4px;
+    max-height: 108px;
+    padding: 6px 8px;
     border-right: 0;
     border-bottom: 1px solid var(--line);
     display: flex;
-    overflow: auto;
+    flex-flow: row nowrap;
+    align-items: stretch;
+    overflow-x: auto;
+    overflow-y: hidden;
+    overscroll-behavior-x: contain;
+    scrollbar-width: thin;
   }
 
   .rl-cascade-interactions-head {
@@ -677,19 +723,33 @@
   }
 
   .rl-cascade-interaction {
-    flex: 0 0 168px;
-    border-right: 1px solid var(--line);
-    border-bottom: 0;
-    align-content: start;
+    flex: 0 0 152px;
+    width: 152px;
+    min-width: 152px;
+    max-width: 152px;
+    min-height: 36px;
+    overflow: hidden;
+    border-right: 0;
+    align-content: center;
+  }
+
+  .rl-cascade-interaction .nren {
+    display: none;
   }
 
   .rl-cascade-interaction .kind-pip {
-    align-self: start;
-    margin-top: 4px;
+    align-self: center;
   }
 
   .rl-cascade-interaction.selected {
-    flex-basis: 188px;
+    flex-basis: 168px;
+    width: 168px;
+    min-width: 168px;
+    max-width: 168px;
+  }
+
+  .rl-cascade-interaction .foot {
+    font-size: 10.5px;
   }
 
   .rl-cascade-minimap-shell {
