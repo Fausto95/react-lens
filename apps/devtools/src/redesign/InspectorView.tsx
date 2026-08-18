@@ -1,7 +1,7 @@
 import { Fragment, useState, type ReactNode } from "react";
 import type { ComponentId, RenderId } from "@reactlens/protocol";
 import type { TraceStore } from "@reactlens/trace-engine";
-import type { LaneKey } from "../laneFilter.js";
+import { typeLaneKey, type LaneKey } from "../laneFilter.js";
 import type { RenderStory, TriggeredEntry } from "../inspector/renderStory.js";
 import { ChangeDiffRows } from "../tabs/RendersTab.js";
 
@@ -21,9 +21,12 @@ export function InspectorView({
   onHoverComponent,
   onSelectRender,
   headAction,
+  renderId,
 }: {
   store: TraceStore;
   componentId: ComponentId | null;
+  /** The clip this inspector is telling the story of — crumbs stay on it. */
+  renderId?: RenderId | null;
   story: RenderStory | null;
   t0: number | null;
   t1: number | null;
@@ -39,6 +42,17 @@ export function InspectorView({
   const [copied, setCopied] = useState(false);
 
   const name = componentId === null ? null : (store.instance(componentId)?.name ?? null);
+
+  const jumpToComponent = (id: ComponentId) => {
+    if (renderId != null && onSelectRender) {
+      const next = renderInSameCommit(store, renderId, id);
+      if (next !== null) {
+        onSelectRender(next, typeLaneKey(store.instance(id)?.name ?? ""));
+      }
+      return;
+    }
+    onSelectComponent?.(id);
+  };
 
   if (componentId === null) {
     return (
@@ -116,9 +130,9 @@ export function InspectorView({
               <span
                 role="button"
                 tabIndex={0}
-                onClick={() => onSelectComponent?.(step.id)}
+                onClick={() => jumpToComponent(step.id)}
                 onMouseEnter={() => onHoverComponent?.(step.id)}
-                onKeyDown={(e) => e.key === "Enter" && onSelectComponent?.(step.id)}
+                onKeyDown={(e) => e.key === "Enter" && jumpToComponent(step.id)}
               >
                 {step.name}
               </span>
@@ -143,7 +157,7 @@ export function InspectorView({
                     ? {
                         role: "button",
                         tabIndex: 0,
-                        onClick: () => onSelectComponent?.(step.componentId!),
+                        onClick: () => jumpToComponent(step.componentId!),
                       }
                     : {})}
                 >
@@ -276,6 +290,24 @@ function TriggeredList({
       </div>
     </>
   );
+}
+
+/**
+ * The ancestor's render in the same commit as `seed`, if it rendered then.
+ * Breadcrumb clicks use this so we stay in clip mode instead of clearing it.
+ */
+export function renderInSameCommit(
+  store: TraceStore,
+  seedRenderId: RenderId,
+  componentId: ComponentId,
+): RenderId | null {
+  const seed = store.getRender(seedRenderId);
+  if (!seed) return null;
+  if (seed.componentId === componentId) return seed.renderId;
+  for (const render of store.rendersOf(componentId)) {
+    if (render.commitId === seed.commitId) return render.renderId;
+  }
+  return null;
 }
 
 /** Owner chain root-first, capped so a 14-deep tree doesn't wrap forever. */

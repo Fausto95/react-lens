@@ -364,6 +364,7 @@ export function RedesignShell({
                   }
                   store={store}
                   componentId={selectedRenderEvent?.componentId ?? selected}
+                  renderId={selectedRender}
                   story={story}
                   t0={
                     selectedRenderEvent ? selectedRenderEvent.timestamp - timeline.bounds.t0 : null
