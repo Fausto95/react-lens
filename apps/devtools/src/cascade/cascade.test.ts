@@ -4,7 +4,14 @@ import type { CommitId, ComponentId, RenderEvent, RenderId } from "@reactlens/pr
 import { buildCascadeProjection } from "./model.js";
 import { layoutCascade } from "./layout.js";
 import { CascadeSpatialIndex } from "./spatial.js";
-import { cascadeChainIds, cascadeEdgeInFocus, cascadeEdgeIncident, cascadeEdgeOnChain, cascadeNeighborhoodId, cascadeNeighborhoodIds } from "./draw.js";
+import {
+  cascadeChainIds,
+  cascadeEdgeInFocus,
+  cascadeEdgeIncident,
+  cascadeEdgeOnChain,
+  cascadeNeighborhoodId,
+  cascadeNeighborhoodIds,
+} from "./draw.js";
 
 const cid = (n: number) => n as ComponentId;
 const rid = (n: number) => n as RenderId;

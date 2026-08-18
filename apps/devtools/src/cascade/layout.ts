@@ -181,8 +181,7 @@ export function layoutCascade(
   for (const [id, list] of incoming) {
     const toDepth = nodeById.get(id)!.node.depth;
     const adjacent = list.filter(
-      (item) =>
-        nodeById.get(item.from)?.node.depth === toDepth - 1 && !adjacentOut.has(item.from),
+      (item) => nodeById.get(item.from)?.node.depth === toDepth - 1 && !adjacentOut.has(item.from),
     );
     if (adjacent.length >= 2) adjacentIn.set(id, adjacent);
   }
@@ -207,10 +206,7 @@ export function layoutCascade(
       const preferred = parent.rect.x + parent.rect.width + 20 + slot * 12;
       outBusX.set(
         id,
-        Math.max(
-          parent.rect.x + parent.rect.width + 14,
-          Math.min(preferred, childLeft - 52),
-        ),
+        Math.max(parent.rect.x + parent.rect.width + 14, Math.min(preferred, childLeft - 52)),
       );
     });
   }
