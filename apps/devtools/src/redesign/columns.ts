@@ -34,6 +34,41 @@ export function columnTemplate(
 }
 
 /**
+ * Preferred pane widths squeezed into a dock that cannot hold the three
+ * minima at once. The stored prefs stay put — this is display-only, so
+ * widening the dock restores the user's sizes.
+ */
+export function fitColumns(
+  total: number,
+  treeW: number,
+  inspW: number,
+  collapsed: CollapsedPanes = NONE_COLLAPSED,
+): { treeW: number; inspW: number } {
+  if (!(total > 0)) return { treeW, inspW };
+  const left = collapsed.tree ? RAIL_W : treeW;
+  const right = collapsed.inspector ? RAIL_W : inspW;
+  if (left + right + TIMELINE_MIN <= total) return { treeW, inspW };
+
+  const mid = Math.min(TIMELINE_MIN, Math.max(0, Math.floor(total * 0.36)));
+  const sides = Math.max(0, total - mid);
+
+  if (collapsed.tree) {
+    return { treeW, inspW: collapsed.inspector ? inspW : Math.max(0, sides - RAIL_W) };
+  }
+  if (collapsed.inspector) {
+    return { treeW: Math.max(0, sides - RAIL_W), inspW };
+  }
+
+  const sum = treeW + inspW;
+  if (sum <= 0) {
+    const half = Math.floor(sides / 2);
+    return { treeW: half, inspW: sides - half };
+  }
+  const nextTree = Math.max(0, Math.round((treeW / sum) * sides));
+  return { treeW: nextTree, inspW: Math.max(0, sides - nextTree) };
+}
+
+/**
  * Where a resize drag lands: the pointer's width, clamped to the pane's range
  * and to whatever the timeline can spare.
  */

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vite-plus/test";
-import { RAIL_W, columnTemplate, nextColumnWidth, TIMELINE_MIN } from "./columns.js";
+import { RAIL_W, columnTemplate, fitColumns, nextColumnWidth, TIMELINE_MIN } from "./columns.js";
 
 describe("columnTemplate", () => {
   it("gives each side pane its width and the timeline the rest", () => {
@@ -61,5 +61,25 @@ describe("nextColumnWidth", () => {
       collapsed: { tree: false, inspector: true },
     });
     expect(railed).toBeGreaterThan(open);
+  });
+});
+
+describe("fitColumns", () => {
+  it("keeps preferred widths when the dock is wide enough", () => {
+    expect(fitColumns(1200, 272, 320)).toEqual({ treeW: 272, inspW: 320 });
+  });
+
+  it("scales both side panes so a narrow dock still shows three columns", () => {
+    const { treeW, inspW } = fitColumns(520, 272, 320);
+    expect(treeW + inspW).toBeLessThan(520);
+    expect(treeW).toBeGreaterThan(0);
+    expect(inspW).toBeGreaterThan(0);
+    expect(520 - treeW - inspW).toBeGreaterThan(0);
+  });
+
+  it("leaves a collapsed rail alone and spends the rest on the open pane", () => {
+    const { treeW, inspW } = fitColumns(520, 272, 320, { tree: true, inspector: false });
+    expect(treeW).toBe(272);
+    expect(inspW + RAIL_W).toBeLessThanOrEqual(520);
   });
 });

@@ -205,6 +205,8 @@
   letter-spacing: 0.04em;
   text-transform: uppercase;
   flex: none;
+  min-width: 0;
+  overflow: hidden;
 }
 .rl-redesign .colhead .right {
   margin-left: auto;
@@ -1020,6 +1022,8 @@
   flex: 1 1 auto;
   height: auto;
   min-height: 0;
+  min-width: 0;
+  overflow: hidden;
 }
 
 /* The dock keeps its own width — redesign.css loads after theme.css, so the
@@ -1128,6 +1132,7 @@ html[data-rl-dock="bottom"] .rl-redesign.rl-embedded .rl-resize-handle {
 .rl-redesign .toolbar {
   flex: none;
   min-width: 0;
+  flex-wrap: nowrap;
   overflow: visible;
 }
 .rl-redesign .toolbar > * {
@@ -1199,6 +1204,28 @@ html[data-rl-dock="bottom"] .rl-redesign.rl-embedded .rl-resize-handle {
 }
 @container panel (max-width: 1040px) {
   .rl-redesign .hint {
+    display: none;
+  }
+}
+@container panel (max-width: 900px) {
+  .rl-redesign .legend {
+    display: none;
+  }
+  .rl-redesign .rl-toolbar-actions {
+    margin-left: auto;
+  }
+}
+@container panel (max-width: 720px) {
+  .rl-redesign .kbd {
+    display: none;
+  }
+  .rl-redesign .rl-toolbar-actions .rl-doctor-btn,
+  .rl-redesign .rl-toolbar-actions .rl-error-chip {
+    margin-right: 0;
+  }
+}
+@container panel (max-width: 400px) {
+  .rl-redesign .brand-name {
     display: none;
   }
 }
