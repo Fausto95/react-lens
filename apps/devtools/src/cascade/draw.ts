@@ -31,11 +31,15 @@ export interface CascadeOverlayOptions {
   litIds?: ReadonlySet<string> | null;
 }
 
-const GHOST_EDGE_ALPHA_LIGHT = 0.14;
-const GHOST_EDGE_ALPHA_DARK = 0.09;
-/** Prototype neighborhood stroke — saturated blue, not cause-tinted. */
-const EDGE_BLUE = "#4c8dff";
-const EDGE_BLUE_HOT = "#1d4ed8";
+const GHOST_EDGE_ALPHA_LIGHT = 0.28;
+const GHOST_EDGE_ALPHA_DARK = 0.22;
+/** Muted tree pointers — not cause-tinted. */
+const POINTER_LIGHT = "rgba(100, 110, 130, 0.45)";
+const POINTER_DARK = "rgba(160, 170, 190, 0.4)";
+const POINTER_HOT_LIGHT = "rgba(70, 80, 110, 0.75)";
+const POINTER_HOT_DARK = "rgba(200, 210, 230, 0.7)";
+/** Order circle sits inside the clip, leading the name. */
+const BADGE_R = 7;
 
 /** Hover previews; a selected clip is the pin once the pointer leaves the graph. */
 export function cascadeNeighborhoodId(
@@ -177,15 +181,6 @@ function drawScreenGrid(ctx: Canvas2D, view: CascadeViewport, theme: TimelineThe
     ctx.stroke();
   }
 }
-function drawArrowHead(ctx: Canvas2D, x: number, y: number, color: string): void {
-  ctx.fillStyle = color;
-  ctx.beginPath();
-  ctx.moveTo(x, y);
-  ctx.lineTo(x - 6, y - 3.5);
-  ctx.lineTo(x - 6, y + 3.5);
-  ctx.closePath();
-  ctx.fill();
-}
 /** True when both ends are focused (or there is no focus). Used for order badges and edge alpha. */
 export function cascadeEdgeInFocus(
   edge: { from: string; to: string },
@@ -195,7 +190,12 @@ export function cascadeEdgeInFocus(
   return focusedIds.has(edge.from) && focusedIds.has(edge.to);
 }
 
-const ARROW_TIP_GAP = 8;
+const ARROW_TIP_GAP = 2;
+
+function pointerColor(theme: TimelineTheme, hot: boolean): string {
+  if (theme.light) return hot ? POINTER_HOT_LIGHT : POINTER_LIGHT;
+  return hot ? POINTER_HOT_DARK : POINTER_DARK;
+}
 
 function strokeBus(
   ctx: Canvas2D,
@@ -207,7 +207,7 @@ function strokeBus(
 ): void {
   const dy = y2 - y1;
   const sign = dy < 0 ? -1 : 1;
-  const r = Math.min(8, Math.abs(dy) / 2, Math.abs(busX - x1) / 2, Math.abs(x2 - busX) / 2);
+  const r = Math.min(6, Math.abs(dy) / 2, Math.abs(busX - x1) / 2, Math.abs(x2 - busX) / 2);
   ctx.beginPath();
   ctx.moveTo(x1, y1);
   if (Math.abs(dy) < 1.2 || r < 1) {
@@ -224,91 +224,57 @@ function strokeBus(
   ctx.stroke();
 }
 
-function orderBadgePosition(item: CascadeLayoutEdge, endX: number): { x: number; y: number } {
-  const x1 = item.from.x + item.from.width;
-  if (item.busX != null) {
-    const left = item.busX + 14;
-    const right = endX - 14;
-    const x = left < right ? (left + right) / 2 : (item.busX + endX) / 2;
-    return { x, y: item.y2 - 16 };
-  }
-  return { x: x1 + (endX - x1) * 0.62, y: item.y2 - 16 };
-}
-
-function drawOrderBadge(
+function strokeOrthogonal(
   ctx: Canvas2D,
-  item: CascadeLayoutEdge,
-  theme: TimelineTheme,
-  hot: boolean,
-  endX: number,
+  x1: number,
+  y1: number,
+  x2: number,
+  y2: number,
 ): void {
-  const { x, y } = orderBadgePosition(item, endX);
-  ctx.font = `600 8.5px ${theme.mono}`;
-  const label = String(item.edge.order);
-  const width = Math.max(14, ctx.measureText(label).width + 7);
-  roundedRect(ctx, x - width / 2, y - 7, width, 14, 7);
-  ctx.fillStyle = theme.panel;
-  ctx.fill();
-  ctx.strokeStyle = hexAlpha(hot ? EDGE_BLUE_HOT : EDGE_BLUE, 0.85);
-  ctx.lineWidth = 1;
+  const mid = (x1 + x2) / 2;
+  ctx.beginPath();
+  ctx.moveTo(x1, y1);
+  if (Math.abs(y2 - y1) < 1.2) {
+    ctx.lineTo(x2, y2);
+  } else {
+    ctx.lineTo(mid, y1);
+    ctx.lineTo(mid, y2);
+    ctx.lineTo(x2, y2);
+  }
   ctx.stroke();
-  ctx.fillStyle = theme.text2;
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
-  ctx.fillText(label, x, y + 0.25);
-  ctx.textAlign = "left";
-  ctx.textBaseline = "alphabetic";
 }
 
 function drawEdge(
   ctx: Canvas2D,
   item: CascadeLayoutEdge,
   theme: TimelineTheme,
-  showOrder: boolean,
   alpha = 1,
-  lineWidth = 1.25,
+  lineWidth = 1,
   hot = false,
 ): void {
-  const { from, to, y1, y2, c1x, c1y, c2x, c2y, busX } = item;
+  const { from, to, y1, y2, busX } = item;
   const x1 = from.x + from.width;
   const endX = to.x - ARROW_TIP_GAP;
   ctx.save();
   ctx.globalAlpha = alpha;
-  const color = hot ? EDGE_BLUE_HOT : hexAlpha(EDGE_BLUE, 0.58);
   ctx.lineWidth = lineWidth;
-  ctx.strokeStyle = color;
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+  ctx.strokeStyle = pointerColor(theme, hot);
   if (busX != null) strokeBus(ctx, x1, y1, busX, y2, endX);
-  else {
-    ctx.beginPath();
-    ctx.moveTo(x1, y1);
-    ctx.bezierCurveTo(c1x, c1y, c2x, c2y, endX, y2);
-    ctx.stroke();
-  }
-  drawArrowHead(ctx, endX, y2, color);
-  if (showOrder) drawOrderBadge(ctx, item, theme, hot, endX);
+  else strokeOrthogonal(ctx, x1, y1, endX, y2);
   ctx.restore();
 }
 
 function drawPortDots(
-  ctx: Canvas2D,
-  layout: CascadeLayout,
-  view: CascadeViewport,
-  world: ReturnType<typeof visibleWorld>,
+  _ctx: Canvas2D,
+  _layout: CascadeLayout,
+  _view: CascadeViewport,
+  _world: ReturnType<typeof visibleWorld>,
 ): void {
-  if (view.zoom < 0.48) return;
-  ctx.fillStyle = EDGE_BLUE;
-  for (const item of layout.nodes) {
-    if (!rectVisible(item.rect, world)) continue;
-    const { rect } = item;
-    const cy = rect.y + rect.height / 2;
-    ctx.beginPath();
-    ctx.arc(rect.x + rect.width, cy, 2.1, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.beginPath();
-    ctx.arc(rect.x, cy, 2.1, 0, Math.PI * 2);
-    ctx.fill();
-  }
+  // Pills connect with stubs — no port dots.
 }
+
 function ellipsis(ctx: Canvas2D, text: string, maxWidth: number): string {
   if (ctx.measureText(text).width <= maxWidth) return text;
   let lo = 0;
@@ -320,12 +286,45 @@ function ellipsis(ctx: Canvas2D, text: string, maxWidth: number): string {
   }
   return `${text.slice(0, Math.max(0, lo))}…`;
 }
+
+/** Incoming causal order per node — earliest edge wins when a clip has several parents. */
+function incomingOrderById(layout: CascadeLayout): Map<string, number> {
+  const orders = new Map<string, number>();
+  for (const item of layout.edges) {
+    const prev = orders.get(item.edge.to);
+    if (prev === undefined || item.edge.order < prev) orders.set(item.edge.to, item.edge.order);
+  }
+  return orders;
+}
+
+function drawClipOrder(
+  ctx: Canvas2D,
+  cx: number,
+  cy: number,
+  order: number,
+  theme: TimelineTheme,
+): void {
+  ctx.beginPath();
+  ctx.arc(cx, cy, BADGE_R, 0, Math.PI * 2);
+  // Neutral count chip — not cause-tinted, so it reads as an ordinal, not an icon.
+  ctx.fillStyle = theme.light ? hexAlpha(theme.text3, 0.28) : "rgba(120, 130, 160, 0.55)";
+  ctx.fill();
+  ctx.font = `600 9px ${theme.mono}`;
+  ctx.fillStyle = theme.light ? theme.text : "rgba(255,255,255,0.95)";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText(String(order), cx, cy + 0.4);
+  ctx.textAlign = "left";
+  ctx.textBaseline = "alphabetic";
+}
+
 function drawNode(
   ctx: Canvas2D,
   item: CascadeLayoutNode,
   theme: TimelineTheme,
   view: CascadeViewport,
   options: CascadePaintOptions,
+  order: number | null,
 ): void {
   const { node, rect } = item;
   const color = causeColor(theme, node.cause);
@@ -335,42 +334,55 @@ function drawNode(
     node.timestamp > options.cursorTime;
   const unfocused = options.focusedIds != null && !options.focusedIds.has(node.id);
   const alpha = (afterCursor ? 0.3 : 1) * (unfocused ? 0.28 : 1);
+  const r = Math.min(10, rect.height / 2);
   ctx.save();
   ctx.globalAlpha = alpha;
-  roundedRect(ctx, rect.x, rect.y, rect.width, rect.height, 6);
+  roundedRect(ctx, rect.x, rect.y, rect.width, rect.height, r);
   if (node.kind === "aggregate") {
     ctx.fillStyle = hexAlpha(theme.panel, theme.light ? 0.92 : 0.96);
     ctx.fill();
     ctx.setLineDash([4, 3]);
     ctx.strokeStyle = hexAlpha(color, 0.72);
   } else {
-    ctx.fillStyle = hexAlpha(color, theme.light ? 0.18 : 0.14);
+    ctx.fillStyle = hexAlpha(color, theme.light ? 0.16 : 0.18);
     ctx.fill();
-    ctx.strokeStyle = hexAlpha(color, theme.light ? 0.75 : 0.58);
+    ctx.strokeStyle = hexAlpha(color, theme.light ? 0.55 : 0.48);
   }
   ctx.lineWidth = 1;
   ctx.stroke();
   ctx.setLineDash([]);
-  ctx.fillStyle = color;
-  roundedRect(ctx, rect.x + 4, rect.y + 5, 3, rect.height - 10, 1.5);
-  ctx.fill();
-  if (view.zoom >= 0.48) {
+
+  if (view.zoom >= 0.42) {
+    const ink = hexAlpha(color, theme.light ? 0.92 : 0.95);
+    const pad = 8;
+    const midY = rect.y + rect.height / 2;
+    let textX = rect.x + pad;
+    if (order != null) {
+      const cx = rect.x + pad + BADGE_R;
+      drawClipOrder(ctx, cx, midY, order, theme);
+      textX = cx + BADGE_R + 5;
+    }
+
+    const ms =
+      node.kind === "aggregate"
+        ? `×${node.aggregateCount.toLocaleString()}`
+        : `${node.selfDuration < 10 ? node.selfDuration.toFixed(1) : Math.round(node.selfDuration)}ms`;
+    ctx.font = `600 9px ${theme.mono}`;
+    const msW = ctx.measureText(ms).width;
+    const msX = rect.x + rect.width - pad - msW;
+    const nameMax = Math.max(0, msX - 6 - textX);
+
     ctx.font = `600 10px ${theme.mono}`;
-    ctx.fillStyle = theme.text;
-    const suffix = node.kind === "aggregate" ? `  ${node.aggregateCount.toLocaleString()}` : "";
-    ctx.fillText(ellipsis(ctx, `${node.name}${suffix}`, rect.width - 22), rect.x + 12, rect.y + 14);
+    ctx.fillStyle = ink;
+    ctx.textAlign = "left";
+    ctx.textBaseline = "middle";
+    ctx.fillText(ellipsis(ctx, node.name, nameMax), textX, midY + 0.4);
+
+    ctx.font = `500 9px ${theme.mono}`;
+    ctx.fillStyle = theme.light ? hexAlpha(color, 0.7) : theme.text3;
+    ctx.fillText(ms, msX, midY + 0.4);
+    ctx.textBaseline = "alphabetic";
   }
-  if (view.zoom >= 0.7) {
-    ctx.font = `9px ${theme.mono}`;
-    ctx.fillStyle = theme.text3;
-    const cause = node.cause === "parent" ? "cascade" : node.cause;
-    const meta =
-      node.kind === "aggregate" ? cause : `${cause} · ${node.selfDuration.toFixed(1)}ms self`;
-    ctx.fillText(ellipsis(ctx, meta, rect.width - 22), rect.x + 12, rect.y + 27);
-  }
-  const ratio = Math.max(0, Math.min(1, node.selfDuration / Math.max(0.001, options.maxSelfTime)));
-  ctx.fillStyle = hexAlpha(color, 0.85);
-  ctx.fillRect(rect.x + 1, rect.y + rect.height - 2, Math.max(1, (rect.width - 2) * ratio), 1.5);
   ctx.restore();
 }
 export function drawCascadeBase(
@@ -386,14 +398,17 @@ export function drawCascadeBase(
   const world = visibleWorld(view);
   const focus = options.focusedIds;
   const ghost = theme.light ? GHOST_EDGE_ALPHA_LIGHT : GHOST_EDGE_ALPHA_DARK;
+  const orders = incomingOrderById(layout);
   for (const edge of layout.edges) {
     if (!edgeVisible(edge, world)) continue;
     const inFocus = cascadeEdgeInFocus(edge.edge, focus);
-    drawEdge(ctx, edge, theme, false, ghost * (inFocus ? 1 : 0.35));
+    drawEdge(ctx, edge, theme, ghost * (inFocus ? 1 : 0.35));
   }
   drawPortDots(ctx, layout, view, world);
-  for (const node of layout.nodes)
-    if (rectVisible(node.rect, world)) drawNode(ctx, node, theme, view, options);
+  for (const node of layout.nodes) {
+    if (!rectVisible(node.rect, world)) continue;
+    drawNode(ctx, node, theme, view, options, orders.get(node.node.id) ?? null);
+  }
 }
 function punchClips(ctx: Canvas2D, layout: CascadeLayout, ids: ReadonlySet<string>): void {
   ctx.fillStyle = "#000";
@@ -401,13 +416,14 @@ function punchClips(ctx: Canvas2D, layout: CascadeLayout, ids: ReadonlySet<strin
   for (const id of ids) {
     const item = layout.nodeById.get(id);
     if (!item) continue;
+    const r = Math.min(11, item.rect.height / 2 + 1);
     roundedRect(
       ctx,
       item.rect.x - 2,
       item.rect.y - 2,
       item.rect.width + 4,
       item.rect.height + 4,
-      7,
+      r,
     );
     ctx.fill();
   }
@@ -421,13 +437,14 @@ function ring(
   width: number,
   offset: number,
 ): void {
+  const r = Math.min(11, rect.height / 2 + offset);
   roundedRect(
     ctx,
     rect.x - offset,
     rect.y - offset,
     rect.width + offset * 2,
     rect.height + offset * 2,
-    7,
+    r,
   );
   ctx.lineWidth = width;
   ctx.strokeStyle = color;
@@ -458,30 +475,30 @@ export function drawCascadeOverlay(
     setupWorld(ctx, view);
   }
   const world = visibleWorld(view);
+  const hotRing = theme.light ? POINTER_HOT_LIGHT : theme.accent;
   if (chain && focusId) {
-    const showOrder = view.zoom >= 0.5;
     for (const item of layout.edges) {
       if (!cascadeEdgeOnChain(item.edge, chain)) continue;
       if (!edgeVisible(item, world)) continue;
-      drawEdge(ctx, item, theme, showOrder, 1, 2, true);
+      drawEdge(ctx, item, theme, 1, 1.5, true);
     }
     for (const id of chain) {
       if (id === options.selectedId || id === options.hoveredId) continue;
       const item = layout.nodeById.get(id);
-      if (item) ring(ctx, item.rect, EDGE_BLUE_HOT, 1.5, 1.5);
+      if (item) ring(ctx, item.rect, hotRing, 1.5, 1.5);
     }
   }
   if (options.hoveredId && options.hoveredId !== options.selectedId) {
     const item = layout.nodeById.get(options.hoveredId);
-    if (item) ring(ctx, item.rect, EDGE_BLUE_HOT, 2, 2);
+    if (item) ring(ctx, item.rect, hotRing, 2, 2);
   }
   if (options.selectedId) {
     const item = layout.nodeById.get(options.selectedId);
     if (item) {
       ctx.save();
-      ctx.shadowColor = hexAlpha(EDGE_BLUE_HOT, 0.56);
+      ctx.shadowColor = hexAlpha(theme.accent, 0.56);
       ctx.shadowBlur = 8;
-      ring(ctx, item.rect, EDGE_BLUE_HOT, 2, 2);
+      ring(ctx, item.rect, theme.accent, 2, 2);
       ctx.restore();
     }
   }

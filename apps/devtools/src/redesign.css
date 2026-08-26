@@ -892,12 +892,12 @@
   border-top: 1px solid var(--line);
 }
 .rl-redesign .diff .del {
-  color: #ff8080;
-  background: rgba(255, 107, 107, 0.06);
+  color: var(--rl-severe);
+  background: rgba(var(--rl-severe-rgb), 0.08);
 }
 .rl-redesign .diff .add {
-  color: #6fdca8;
-  background: rgba(62, 207, 142, 0.06);
+  color: var(--rl-healthy);
+  background: rgba(var(--rl-healthy-rgb), 0.08);
 }
 .rl-redesign .diff .neutral {
   color: var(--text-3);

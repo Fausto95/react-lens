@@ -50,13 +50,14 @@ export interface CascadeLayoutOptions {
 }
 
 const DEFAULTS: Required<CascadeLayoutOptions> = {
-  columnGap: 230,
-  rowGap: 48,
+  columnGap: 200,
+  rowGap: 40,
   paddingX: 48,
   paddingY: 52,
   nodeWidth: 168,
-  nodeHeight: 34,
-  timeJitterMax: 52,
+  nodeHeight: 28,
+  /** Keep depth columns flush — no temporal stagger. */
+  timeJitterMax: 0,
 };
 
 function parentSortKey(node: CascadeNode, parentOrder: ReadonlyMap<string, number>): number {
@@ -121,8 +122,8 @@ export function layoutCascade(
           ((node.timestamp - projection.interaction.start) / interactionSpan) * o.timeJitterMax,
         ),
       );
-      const durationBonus = Math.min(34, Math.log2(1 + Math.max(0, node.duration)) * 6);
-      const width = o.nodeWidth + durationBonus + (node.kind === "aggregate" ? 18 : 0);
+      // Fixed width — every clip is the same size; duration lives in the label, not the box.
+      const width = o.nodeWidth;
       const rect: CascadeRect = {
         x: o.paddingX + depth * o.columnGap + temporal,
         y: o.paddingY + index * o.rowGap,

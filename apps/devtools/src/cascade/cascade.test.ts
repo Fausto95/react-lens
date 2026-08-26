@@ -160,6 +160,31 @@ describe("cascade projection", () => {
     );
   });
 
+  it("left-aligns every clip inside a depth column", () => {
+    const { store, interaction } = fixture();
+    const layout = layoutCascade(
+      buildCascadeProjection(store, interaction, { aggregateThreshold: 99 }),
+    );
+    const byDepth = new Map<number, number[]>();
+    for (const item of layout.nodes) {
+      const xs = byDepth.get(item.node.depth) ?? [];
+      xs.push(item.rect.x);
+      byDepth.set(item.node.depth, xs);
+    }
+    for (const xs of byDepth.values()) {
+      expect(new Set(xs).size).toBe(1);
+    }
+  });
+
+  it("gives every clip the same width", () => {
+    const { store, interaction } = fixture();
+    const layout = layoutCascade(
+      buildCascadeProjection(store, interaction, { aggregateThreshold: 99 }),
+    );
+    const widths = new Set(layout.nodes.map((n) => n.rect.width));
+    expect(widths.size).toBe(1);
+  });
+
   it("routes fan-out on a shared family bus with a stub per child", () => {
     const { store, interaction } = fixture();
     const layout = layoutCascade(
