@@ -280,14 +280,6 @@ html[data-rl-panel="open"] .site-nav-inner {
   gap: 6px;
 }
 
-.site-nav-playground {
-  width: auto;
-  padding: 0 10px;
-  font-size: 13px;
-  font-weight: 500;
-  display: none;
-}
-
 /* Reading column: centered in the viewport when the panel is hidden;
    fills the shell (left of the dock) when open. */
 .site {
@@ -849,9 +841,6 @@ html[data-rl-panel="open"][data-rl-dock="bottom"] .coach {
 @container site (max-width: 1100px) {
   .site-nav-links {
     display: none;
-  }
-  .site-nav-playground {
-    display: inline-flex;
   }
 }
 

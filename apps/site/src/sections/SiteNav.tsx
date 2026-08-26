@@ -2,7 +2,6 @@ import { IconLens } from "@reactlens/icons";
 import { ThemeToggle } from "../ThemeToggle.js";
 
 const REPO = "https://github.com/Fausto95/react-lens";
-const PLAYGROUND = "http://127.0.0.1:5178/";
 
 function IconGitHub() {
   return (
@@ -26,18 +25,9 @@ export function SiteNav() {
           <a href="#cascade">Cascade</a>
           <a href="#diff">Diff</a>
           <a href="#agents">Agents</a>
-          <a href={PLAYGROUND}>Playground</a>
         </nav>
         <div className="site-nav-actions">
           <div className="site-nav-embed" data-rl-embed-controls />
-          <a
-            className="github-toggle site-nav-playground"
-            href={PLAYGROUND}
-            aria-label="Movies playground"
-            title="Movies playground"
-          >
-            Playground
-          </a>
           <ThemeToggle />
           <a
             className="github-toggle"
