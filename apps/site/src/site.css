@@ -27,7 +27,7 @@
   --font: "Instrument Sans", ui-sans-serif, system-ui, sans-serif;
   --mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
   /* Modest strip for the docked panel — enough for brand, links, and icon actions. */
-  --panel-gutter: min(480px, 42vw);
+  --panel-gutter: var(--rl-embed-size, min(480px, 42vw));
   --page-pad: 64px;
   --nav-h: 56px;
 }
@@ -73,6 +73,17 @@ body {
   text-rendering: optimizeLegibility;
 }
 
+#app {
+  min-height: 100%;
+  container-type: inline-size;
+  container-name: site;
+}
+
+html[data-rl-panel="open"] #app {
+  overflow: auto;
+  height: 100%;
+}
+
 a {
   color: var(--accent);
   text-decoration: none;
@@ -90,22 +101,25 @@ pre {
   width: min(480px, 42vw);
   min-width: 360px;
 }
+html[data-rl-dock="bottom"] #react-lens-overlay .rl-embedded {
+  width: auto;
+  min-width: 0;
+}
 
 /* Atmospheric grid + accent wash behind the whole page */
 .site-shell {
   position: relative;
   isolation: isolate;
   min-height: 100vh;
-  padding-right: 0;
-  transition: padding-right 160ms ease;
 }
-/* Only reserve the dock while it is actually open. */
+
 html[data-rl-panel="open"] .site-shell {
-  padding-right: var(--panel-gutter);
+  min-height: 100%;
 }
+
 .site-shell::before {
   content: "";
-  position: fixed;
+  position: absolute;
   inset: 0;
   z-index: -2;
   background:
@@ -122,7 +136,7 @@ html[data-rl-panel="open"] .site-shell::before {
 }
 .site-shell::after {
   content: "";
-  position: fixed;
+  position: absolute;
   inset: 0;
   z-index: -1;
   background-image:
@@ -260,6 +274,20 @@ html[data-rl-panel="open"] .site-nav-inner {
   text-decoration: none;
 }
 
+.site-nav-embed {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.site-nav-playground {
+  width: auto;
+  padding: 0 10px;
+  font-size: 13px;
+  font-weight: 500;
+  display: none;
+}
+
 /* Reading column: centered in the viewport when the panel is hidden;
    fills the shell (left of the dock) when open. */
 .site {
@@ -271,6 +299,9 @@ html[data-rl-panel="open"] .site-nav-inner {
 html[data-rl-panel="open"] .site {
   max-width: none;
   margin-inline: 0;
+}
+html[data-rl-panel="open"][data-rl-dock="bottom"] .hero {
+  min-height: calc(100vh - var(--nav-h) - var(--rl-embed-size, 0px));
 }
 
 .site section {
@@ -759,6 +790,9 @@ kbd {
   color: var(--text);
   backdrop-filter: blur(12px);
 }
+html[data-rl-panel="open"][data-rl-dock="bottom"] .coach {
+  bottom: calc(24px + var(--rl-embed-size, 0px));
+}
 .coach .pulse {
   width: 9px;
   height: 9px;
@@ -812,19 +846,18 @@ kbd {
   }
 }
 
-@media (max-width: 1100px) {
+@container site (max-width: 1100px) {
   .site-nav-links {
     display: none;
   }
+  .site-nav-playground {
+    display: inline-flex;
+  }
 }
 
-@media (max-width: 900px) {
-  :root {
-    --panel-gutter: 0px;
-    --page-pad: 28px;
-  }
+@container site (max-width: 900px) {
   .site-shell {
-    padding-right: 0;
+    --page-pad: 28px;
   }
   .site {
     padding-bottom: 96px;

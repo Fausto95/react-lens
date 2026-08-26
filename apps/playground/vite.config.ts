@@ -1,5 +1,6 @@
 import { defineConfig, lazyPlugins } from "vite-plus";
 import react from "@vitejs/plugin-react";
+import stylex from "@stylexjs/unplugin";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -16,12 +17,15 @@ export default defineConfig({
     ],
   },
   plugins: lazyPlugins(() => [
+    stylex.vite({
+      useCSSLayers: true,
+      devMode: "full",
+    }),
     react({
       // The React Compiler runs over every workspace source, matching how the
       // real extension builds the panel. No file opts out, including the
-      // scenarios: their waste has to be waste the Compiler cannot remove, or
-      // the demo is showing a problem that no longer exists.
-      // oxc-parser is stubbed; Doctor falls back to regex when unavailable.
+      // cinema app: waste in the playground has to be waste the Compiler
+      // cannot remove, or the demo is showing a problem that no longer exists.
       babel: {
         plugins: [
           [

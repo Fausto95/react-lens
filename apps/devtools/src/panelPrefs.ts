@@ -1,5 +1,7 @@
 import { THEME_PREFS, type ThemePref } from "./theme.js";
 
+export type DockPlacement = "side" | "bottom";
+
 /**
  * Small persisted panel preferences (localStorage; distinct from the agent's
  * provider settings in settings.ts, which may live in chrome.storage.session).
@@ -14,6 +16,10 @@ export interface PanelPrefs {
   theme: ThemePref;
   /** Embedded dock width (px); null keeps the CSS default. */
   dockWidth: number | null;
+  /** Embedded dock height (px) when placed along the bottom. */
+  dockHeight: number | null;
+  /** Side sits beside the host app; bottom sits under it. Never overlays. */
+  dockPlacement: DockPlacement;
   /** Column widths (px) for the components and inspector panes; the timeline
    *  takes whatever is left. */
   treeWidth: number;
@@ -45,6 +51,8 @@ const DEFAULTS: PanelPrefs = {
   tlCollapsed: false,
   theme: "dark",
   dockWidth: null,
+  dockHeight: null,
+  dockPlacement: "side",
   treeWidth: 272,
   inspectorWidth: 320,
   treeCollapsed: false,
@@ -77,6 +85,11 @@ export function loadPanelPrefs(): PanelPrefs {
         typeof parsed.dockWidth === "number" && Number.isFinite(parsed.dockWidth)
           ? parsed.dockWidth
           : DEFAULTS.dockWidth,
+      dockHeight:
+        typeof parsed.dockHeight === "number" && Number.isFinite(parsed.dockHeight)
+          ? parsed.dockHeight
+          : DEFAULTS.dockHeight,
+      dockPlacement: parsed.dockPlacement === "bottom" ? "bottom" : DEFAULTS.dockPlacement,
       treeWidth: num(parsed.treeWidth, DEFAULTS.treeWidth, 180, 460),
       inspectorWidth: num(parsed.inspectorWidth, DEFAULTS.inspectorWidth, 240, 560),
       treeCollapsed:

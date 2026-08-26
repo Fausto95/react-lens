@@ -161,22 +161,59 @@
   min-width: 0;
 }
 
-.rl-embedded {
-  position: fixed;
-  left: auto;
-  right: 0;
-  top: 0;
-  bottom: 0;
-  /* Three columns (272 + 6 + timeline + 6 + 320) need real width; the dock is
-     resizable and remembers, this is just a sane first run. */
-  width: min(1180px, 88vw);
-  min-width: 720px;
+.rl-root.rl-embedded {
+  position: relative;
+  inset: auto;
+  flex: 0 0 auto;
+  align-self: stretch;
+  width: min(520px, 44vw);
+  min-width: 360px;
+  height: auto;
   border-left: 1px solid var(--rl-border-strong);
   box-shadow: -8px 0 24px rgba(var(--rl-shadow-rgb), 0.4);
   z-index: 2147483000;
 }
 
-/* Wrapper stays out of layout when open (Panel owns fixed positioning). */
+html[data-rl-dock="bottom"] .rl-embedded {
+  width: auto;
+  min-width: 0;
+  height: min(420px, 42vh);
+  min-height: 240px;
+  border-left: none;
+  border-top: 1px solid var(--rl-border-strong);
+  box-shadow: 0 -8px 24px rgba(var(--rl-shadow-rgb), 0.4);
+}
+
+/* Overlay host is transparent to layout so the panel is a flex item of body. */
+#react-lens-overlay {
+  display: contents;
+}
+
+html[data-rl-panel="open"] {
+  height: 100%;
+}
+
+html[data-rl-panel="open"] body {
+  display: flex;
+  flex-direction: row;
+  align-items: stretch;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+}
+
+html[data-rl-panel="open"][data-rl-dock="bottom"] body {
+  flex-direction: column;
+}
+
+html[data-rl-panel="open"] #app {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+}
+
+/* Wrapper stays out of layout; the panel is a flex item of body. */
 .rl-embed-shell {
   display: contents;
 }
@@ -184,23 +221,113 @@
   display: none;
 }
 
-.rl-embed-toggle {
+.rl-embed-controls {
   position: fixed;
   right: 12px;
   bottom: 12px;
   z-index: 2147483100;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+html[data-rl-panel="open"][data-rl-dock="side"] .rl-embed-controls:not(.is-nav) {
+  right: calc(var(--rl-embed-size, 0px) + 12px);
+}
+
+html[data-rl-panel="open"][data-rl-dock="bottom"] .rl-embed-controls:not(.is-nav) {
+  bottom: calc(var(--rl-embed-size, 0px) + 12px);
+}
+
+.rl-embed-controls.is-nav {
+  position: static;
+  inset: auto;
+  z-index: auto;
+  gap: 6px;
+}
+
+.rl-embed-controls.is-nav .rl-embed-dock {
+  padding: 0;
+  gap: 6px;
+  border: none;
+  background: none;
+  box-shadow: none;
+  border-radius: 0;
+}
+
+.rl-embed-controls.is-nav .rl-embed-dock button,
+.rl-embed-controls.is-nav .rl-embed-toggle {
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  border: 1px solid var(--border, var(--rl-border, #2f3644));
+  background: var(--raised, var(--rl-bg-raised, #12151a));
+  color: var(--dim, var(--rl-text-dim, #99a1b3));
+  box-shadow: none;
+}
+
+.rl-embed-controls.is-nav .rl-embed-dock button.is-on,
+.rl-embed-controls.is-nav .rl-embed-toggle[aria-expanded="true"] {
+  color: var(--accent, var(--rl-accent, #a78bfa));
+  border-color: var(--border-strong, var(--rl-border-strong, #2f3644));
+}
+
+.rl-embed-controls.is-nav .rl-embed-dock button:hover,
+.rl-embed-controls.is-nav .rl-embed-toggle:hover {
+  color: var(--text, var(--rl-text, #e6e9ef));
+  border-color: var(--border-strong, var(--rl-border-strong, #2f3644));
+  background: var(--hover, var(--rl-bg-hover, #171b22));
+}
+
+.rl-embed-dock {
+  display: flex;
+  padding: 3px;
+  border-radius: 999px;
+  border: 1px solid var(--rl-border-strong, #2f3644);
+  background: var(--rl-bg-raised, #12151a);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28);
+}
+
+.rl-embed-dock button {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: var(--rl-text, #e6e9ef);
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.rl-embed-dock button.is-on {
+  background: var(--rl-bg-hover, #1b1f27);
+  color: var(--rl-accent, #a78bfa);
+}
+
+.rl-embed-toggle {
+  position: static;
+  right: auto;
+  bottom: auto;
+  z-index: auto;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   border: 1px solid var(--rl-border-strong, #2f3644);
   border-radius: 999px;
   background: var(--rl-bg-raised, #12151a);
   color: var(--rl-text, #e6e9ef);
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28);
-  font:
-    600 12px/1 ui-sans-serif,
-    -apple-system,
-    BlinkMacSystemFont,
-    "Segoe UI",
-    sans-serif;
-  padding: 8px 11px;
   cursor: pointer;
 }
 .rl-embed-toggle:hover {

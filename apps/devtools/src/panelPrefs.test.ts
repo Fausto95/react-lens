@@ -35,6 +35,13 @@ describe("panel prefs", () => {
     expect(loadPanelPrefs().inspectorWidth).toBe(360);
   });
 
+  it("round-trips dock placement and height", () => {
+    expect(loadPanelPrefs().dockPlacement).toBe("side");
+    savePanelPrefs({ dockPlacement: "bottom", dockHeight: 380 });
+    expect(loadPanelPrefs().dockPlacement).toBe("bottom");
+    expect(loadPanelPrefs().dockHeight).toBe(380);
+  });
+
   it("clamps column widths into their drag ranges", () => {
     savePanelPrefs({ treeWidth: 10, inspectorWidth: 9999 });
     expect(loadPanelPrefs().treeWidth).toBe(180);
