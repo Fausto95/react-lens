@@ -8,6 +8,7 @@ import {
   useCallback,
 } from "react";
 import { createRoot } from "react-dom/client";
+import { createPortal } from "react-dom";
 import type { ComponentId } from "@reactlens/protocol";
 import { Panel } from "./Panel.js";
 import type { LensRuntime } from "./runtime.js";
@@ -15,6 +16,8 @@ import { createHighlighter } from "./highlighter.js";
 import { createRenderOverlay } from "./renderOverlay.js";
 import { createInspectController } from "./inspectController.js";
 import { configureComponentLocator } from "./sourceLocator.js";
+import { loadPanelPrefs, savePanelPrefs, type DockPlacement } from "./panelPrefs.js";
+import { IconDockBottom, IconDockSide, IconPanel } from "@reactlens/icons";
 
 const WAVE_MAX_GROUPS = 300;
 const WAVE_MAX_NODES = 400;
@@ -38,6 +41,7 @@ function EmbeddedPanel({
   initiallyVisible: boolean;
 }) {
   const [visible, setVisible] = useState(initiallyVisible);
+  const [dock, setDock] = useState<DockPlacement>(() => loadPanelPrefs().dockPlacement);
   const [overlayOn, setOverlayOn] = useState(false);
   const [inspecting, setInspecting] = useState(false);
   const [pickedId, setPickedId] = useState<ComponentId | null>(null);
@@ -72,7 +76,38 @@ function EmbeddedPanel({
 
   useLayoutEffect(() => {
     document.documentElement.dataset.rlPanel = visible ? "open" : "hidden";
-  }, [visible]);
+    document.documentElement.dataset.rlDock = dock;
+  }, [visible, dock]);
+
+  useLayoutEffect(() => {
+    if (!visible) {
+      document.documentElement.style.removeProperty("--rl-embed-size");
+      return;
+    }
+    const apply = () => {
+      const panel = host.querySelector<HTMLElement>(".rl-embedded");
+      if (!panel) return;
+      const rect = panel.getBoundingClientRect();
+      const size = dock === "bottom" ? rect.height : rect.width;
+      if (size > 0) {
+        document.documentElement.style.setProperty("--rl-embed-size", `${Math.round(size)}px`);
+      }
+    };
+    apply();
+    const panel = host.querySelector<HTMLElement>(".rl-embedded");
+    const observer = new ResizeObserver(apply);
+    if (panel) observer.observe(panel);
+    window.addEventListener("resize", apply);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("resize", apply);
+    };
+  }, [visible, dock, host]);
+
+  const setPlacement = (next: DockPlacement) => {
+    setDock(next);
+    savePanelPrefs({ dockPlacement: next });
+  };
 
   const cancelWave = useCallback(() => {
     for (const t of waveTimers.current) clearTimeout(t);
@@ -135,6 +170,7 @@ function EmbeddedPanel({
           causality={runtime.causality}
           recording
           embedded
+          embedDock={dock}
           overlayEnabled={overlayOn}
           inspecting={inspecting}
           onToggleInspect={onToggleInspect}
@@ -160,24 +196,94 @@ function EmbeddedPanel({
           }}
         />
       </div>
-      <button
-        type="button"
-        className="rl-embed-toggle"
-        aria-expanded={visible}
-        title={visible ? "Hide embedded React Lens DevTools" : "Show embedded React Lens DevTools"}
-        onClick={() => setVisible((value) => !value)}
-      >
-        {visible ? "Hide DevTools" : "Show DevTools"}
-      </button>
+      <EmbedChrome
+        visible={visible}
+        dock={dock}
+        onToggle={() => setVisible((value) => !value)}
+        onDock={setPlacement}
+      />
     </>
   );
 }
 
+function EmbedChrome({
+  visible,
+  dock,
+  onToggle,
+  onDock,
+}: {
+  visible: boolean;
+  dock: DockPlacement;
+  onToggle: () => void;
+  onDock: (next: DockPlacement) => void;
+}) {
+  const [slot, setSlot] = useState<Element | null>(null);
+
+  useEffect(() => {
+    const found = document.querySelector("[data-rl-embed-controls]");
+    if (found) {
+      setSlot(found);
+      return;
+    }
+    const observer = new MutationObserver(() => {
+      const el = document.querySelector("[data-rl-embed-controls]");
+      if (!el) return;
+      setSlot(el);
+      observer.disconnect();
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
+    return () => observer.disconnect();
+  }, []);
+
+  const inNav = slot != null;
+  const chrome = (
+    <div className={`rl-embed-controls${inNav ? " is-nav" : ""}`}>
+      <div className="rl-embed-dock" role="group" aria-label="DevTools dock">
+        <button
+          type="button"
+          className={dock === "side" ? "is-on" : undefined}
+          aria-pressed={dock === "side"}
+          aria-label="Dock DevTools on the side"
+          title="Dock on the side"
+          onClick={() => onDock("side")}
+        >
+          <IconDockSide size={16} />
+        </button>
+        <button
+          type="button"
+          className={dock === "bottom" ? "is-on" : undefined}
+          aria-pressed={dock === "bottom"}
+          aria-label="Dock DevTools at the bottom"
+          title="Dock at the bottom"
+          onClick={() => onDock("bottom")}
+        >
+          <IconDockBottom size={16} />
+        </button>
+      </div>
+      <button
+        type="button"
+        className="rl-embed-toggle"
+        aria-expanded={visible}
+        aria-label={visible ? "Hide DevTools" : "Show DevTools"}
+        title={visible ? "Hide DevTools" : "Show DevTools"}
+        onClick={onToggle}
+      >
+        <IconPanel size={16} />
+      </button>
+    </div>
+  );
+
+  if (slot) return createPortal(chrome, slot);
+  return chrome;
+}
+
 /**
- * Mount the panel as an in-page overlay. Used by the playground in dev mode so
- * the whole pipeline (instrumentation → trace store → causality → UI) is
- * exercised without the extension. The panel deliberately mounts on a detached
- * React root so it never appears in the inspected app's own fiber tree.
+ * Mount the panel beside (or under) the host app. Used by the playground in
+ * dev mode so the whole pipeline (instrumentation → trace store → causality →
+ * UI) is exercised without the extension. The panel mounts on a detached React
+ * root so it never appears in the inspected app's own fiber tree. Body becomes
+ * a flex row (or column) so the dock sits beside the app and the app column
+ * shrinks — container queries then see the remaining width.
  */
 export function mountEmbedded(runtime: LensRuntime): () => void {
   const host = document.createElement("div");
@@ -185,7 +291,9 @@ export function mountEmbedded(runtime: LensRuntime): () => void {
   document.body.appendChild(host);
   runtime.ignoreContainer(host);
   const initiallyVisible = initialEmbedVisible();
+  const placement = loadPanelPrefs().dockPlacement;
   document.documentElement.dataset.rlPanel = initiallyVisible ? "open" : "hidden";
+  document.documentElement.dataset.rlDock = placement;
   const root = createRoot(host);
   root.render(
     <StrictMode>
@@ -196,5 +304,7 @@ export function mountEmbedded(runtime: LensRuntime): () => void {
     root.unmount();
     host.remove();
     delete document.documentElement.dataset.rlPanel;
+    delete document.documentElement.dataset.rlDock;
+    document.documentElement.style.removeProperty("--rl-embed-size");
   };
 }

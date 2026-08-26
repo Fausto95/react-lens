@@ -13,7 +13,7 @@ import {
   type RestoreStatus,
   type TimeTravelApi,
 } from "./timeTravelController.js";
-import { loadPanelPrefs, savePanelPrefs } from "./panelPrefs.js";
+import { loadPanelPrefs, savePanelPrefs, type DockPlacement } from "./panelPrefs.js";
 import { useLatest } from "./useLatest.js";
 import { loadAgentSettings } from "./settings.js";
 import type { AgentSettings } from "@reactlens/agent";
@@ -73,6 +73,8 @@ export interface PanelProps {
   /** @deprecated Recording is always on; pause control has been removed. */
   onToggleRecording?: () => void;
   embedded?: boolean;
+  /** Where the embedded panel sits relative to the host app. */
+  embedDock?: DockPlacement;
   /**
    * Highlight a component's DOM on the page (bidirectional selection). With
    * `reveal`, the page also scrolls to the component when it's out of view —
@@ -108,6 +110,7 @@ export function Panel({
   recording: _recording,
   traceClient,
   embedded,
+  embedDock = "side",
   onHighlight,
   overlayEnabled,
   onToggleOverlay,
@@ -206,7 +209,7 @@ export function Panel({
     };
   }, [settingsVersion]);
   const [agentAsk] = useState<{ token: number; question: string } | null>(null);
-  const { dockWidth, onDockResize } = useDockResize(embedded);
+  const { dockWidth, dockHeight, onDockResize } = useDockResize(embedded, embedDock);
   const stats = readFresh(version, () => store.stats());
 
   /**
@@ -556,8 +559,18 @@ export function Panel({
   return (
     <div
       ref={rootRef}
-      className={`rl-root rl-redesign${embedded ? " rl-embedded" : ""}`}
-      style={embedded && dockWidth ? { width: dockWidth } : undefined}
+      className={`rl-root rl-redesign${embedded ? ` rl-embedded rl-dock-${embedDock}` : ""}`}
+      style={
+        embedded
+          ? embedDock === "bottom"
+            ? dockHeight
+              ? { height: dockHeight, width: "100%" }
+              : { width: "100%" }
+            : dockWidth
+              ? { width: dockWidth }
+              : undefined
+          : undefined
+      }
     >
       {embedded && (
         <div
@@ -807,39 +820,55 @@ export function Panel({
   );
 }
 
-const DOCK_MIN = 720;
+const DOCK_MIN_WIDTH = 360;
+const DOCK_MIN_HEIGHT = 240;
 /** Leave at least this much of the inspected page visible. */
 const DOCK_PAGE_MARGIN = 160;
 
 /**
- * Drag-to-resize for the right-docked embedded panel. The handle sits on the
- * panel's left edge, so dragging left widens it.
+ * Drag-to-resize for the embedded panel. Side dock: handle on the left edge.
+ * Bottom dock: handle on the top edge.
  */
-function useDockResize(embedded?: boolean): {
+function useDockResize(
+  embedded: boolean | undefined,
+  placement: DockPlacement,
+): {
   dockWidth: number | null;
+  dockHeight: number | null;
   onDockResize: (e: React.PointerEvent<HTMLDivElement>) => void;
 } {
   const [dockWidth, setDockWidth] = useState<number | null>(() => loadPanelPrefs().dockWidth);
-  const latest = useLatest(dockWidth);
+  const [dockHeight, setDockHeight] = useState<number | null>(() => loadPanelPrefs().dockHeight);
+  const latestWidth = useLatest(dockWidth);
+  const latestHeight = useLatest(dockHeight);
+  const latestPlacement = useLatest(placement);
 
   const onDockResize = (e: React.PointerEvent<HTMLDivElement>) => {
     if (!embedded) return;
     e.preventDefault();
     document.body.style.userSelect = "none";
-    // Window-level so the drag survives leaving the 7px handle.
     const move = (ev: PointerEvent) => {
-      const max = window.innerWidth - DOCK_PAGE_MARGIN;
-      setDockWidth(Math.max(DOCK_MIN, Math.min(max, window.innerWidth - ev.clientX)));
+      if (latestPlacement.current === "bottom") {
+        const max = window.innerHeight - DOCK_PAGE_MARGIN;
+        setDockHeight(Math.max(DOCK_MIN_HEIGHT, Math.min(max, window.innerHeight - ev.clientY)));
+      } else {
+        const max = window.innerWidth - DOCK_PAGE_MARGIN;
+        setDockWidth(Math.max(DOCK_MIN_WIDTH, Math.min(max, window.innerWidth - ev.clientX)));
+      }
     };
     const up = () => {
       window.removeEventListener("pointermove", move);
       window.removeEventListener("pointerup", up);
       document.body.style.userSelect = "";
-      if (latest.current != null) savePanelPrefs({ dockWidth: latest.current });
+      if (latestPlacement.current === "bottom") {
+        if (latestHeight.current != null) savePanelPrefs({ dockHeight: latestHeight.current });
+      } else if (latestWidth.current != null) {
+        savePanelPrefs({ dockWidth: latestWidth.current });
+      }
     };
     window.addEventListener("pointermove", move);
     window.addEventListener("pointerup", up);
   };
 
-  return { dockWidth, onDockResize };
+  return { dockWidth, dockHeight, onDockResize };
 }

@@ -27,6 +27,7 @@ export function SiteNav() {
           <a href="#agents">Agents</a>
         </nav>
         <div className="site-nav-actions">
+          <div className="site-nav-embed" data-rl-embed-controls />
           <ThemeToggle />
           <a
             className="github-toggle"

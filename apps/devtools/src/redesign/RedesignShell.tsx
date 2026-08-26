@@ -21,7 +21,7 @@ import { buildRenderStory } from "../inspector/renderStory.js";
 import { Inspector, type EditApi } from "../Inspector.js";
 import { TreeView, treeViewRows } from "./TreeView.js";
 import { InspectorView } from "./InspectorView.js";
-import { columnTemplate, nextColumnWidth, type CollapsedPanes } from "./columns.js";
+import { columnTemplate, fitColumns, nextColumnWidth, type CollapsedPanes } from "./columns.js";
 import { ErrorBoundary } from "../ErrorBoundary.js";
 
 export function RedesignShell({
@@ -82,10 +82,21 @@ export function RedesignShell({
   const gridRef = useRef<HTMLDivElement>(null);
   const [treeW, setTreeW] = useState(() => loadPanelPrefs().treeWidth);
   const [inspW, setInspW] = useState(() => loadPanelPrefs().inspectorWidth);
+  const [gridW, setGridW] = useState(0);
   const [collapsed, setCollapsed] = useState<CollapsedPanes>(() => {
     const prefs = loadPanelPrefs();
     return { tree: prefs.treeCollapsed, inspector: prefs.inspectorCollapsed };
   });
+  useEffect(() => {
+    const host = gridRef.current;
+    if (!host) return;
+    const apply = () => setGridW(host.getBoundingClientRect().width);
+    apply();
+    const observer = new ResizeObserver(apply);
+    observer.observe(host);
+    return () => observer.disconnect();
+  }, []);
+  const fitted = fitColumns(gridW || Number.POSITIVE_INFINITY, treeW, inspW, collapsed);
   useEffect(() => {
     savePanelPrefs({
       treeWidth: treeW,
@@ -215,7 +226,7 @@ export function RedesignShell({
         )}
         <div className="brand">
           <span className="lens" />
-          React Lens
+          <span className="brand-name">React Lens</span>
         </div>
         <span className="hint">
           drag to scrub · ⇧ region · ⌥ marquee · J/K/L transport · ? shortcuts
@@ -234,12 +245,12 @@ export function RedesignShell({
       <div
         className="grid"
         ref={gridRef}
-        style={{ gridTemplateColumns: columnTemplate(treeW, inspW, collapsed) }}
+        style={{ gridTemplateColumns: columnTemplate(fitted.treeW, fitted.inspW, collapsed) }}
       >
         {!collapsed.tree && (
           <div
             className="colresize"
-            style={{ left: treeW }}
+            style={{ left: fitted.treeW }}
             title="Drag to resize"
             onPointerDown={startColumnDrag("tree")}
           />
@@ -247,7 +258,7 @@ export function RedesignShell({
         {!collapsed.inspector && (
           <div
             className="colresize"
-            style={{ right: inspW }}
+            style={{ right: fitted.inspW }}
             title="Drag to resize"
             onPointerDown={startColumnDrag("inspector")}
           />

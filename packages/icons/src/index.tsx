@@ -406,3 +406,35 @@ export function IconStop(props: IconProps) {
     </Svg>
   );
 }
+
+/** Embedded panel — show or hide the dock. */
+export function IconPanel(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <rect x="2.5" y="3" width="11" height="10" rx="1.5" />
+      <path d="M2.5 6h11" />
+    </Svg>
+  );
+}
+
+/** Dock the panel on the right. */
+export function IconDockSide(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <rect x="2.5" y="3" width="11" height="10" rx="1.5" />
+      <path d="M9.5 3v10" />
+      <path d="M9.5 3h4v10h-4z" fill="currentColor" stroke="none" opacity="0.35" />
+    </Svg>
+  );
+}
+
+/** Dock the panel along the bottom. */
+export function IconDockBottom(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <rect x="2.5" y="3" width="11" height="10" rx="1.5" />
+      <path d="M2.5 9.2h11" />
+      <path d="M2.5 9.2h11V13h-11z" fill="currentColor" stroke="none" opacity="0.35" />
+    </Svg>
+  );
+}
