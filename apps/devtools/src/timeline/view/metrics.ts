@@ -38,7 +38,9 @@ export const NAME_W_FRAC = 0.14;
 export const NAME_W = 148;
 
 export const MIN_CLIP_PX = 2;
-export const CLIP_LABEL_MIN_PX = 48;
+/** Hide icon + name below this visible width; pill chrome still draws. */
+export const CLIP_LABEL_MIN_PX = 36;
+export const CLIP_PILL_R = 9;
 /** Floor on the axis view span — stop zooming in past this (axis units ≈ ms on activity). */
 export const VIEW_SPAN_MIN = 5;
 /**

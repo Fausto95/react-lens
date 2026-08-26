@@ -91,27 +91,25 @@ export function hexAlpha(hex: string, alpha: number): string {
   return `rgba(${r},${g},${b},${alpha})`;
 }
 
+/** Flat pastel pill chrome — fill, border, and ink for icon + label. */
 export function clipPaint(
   theme: TimelineTheme,
   col: string,
 ): {
-  fillTop: string;
-  fillBottom: string;
+  fill: string;
   stroke: string;
-  label: string;
+  ink: string;
 } {
   if (theme.light) {
     return {
-      fillTop: hexAlpha(col, 0.58),
-      fillBottom: hexAlpha(col, 0.44),
-      stroke: hexAlpha(col, 0.9),
-      label: hexAlpha(theme.text, 0.94),
+      fill: hexAlpha(col, 0.16),
+      stroke: hexAlpha(col, 0.55),
+      ink: hexAlpha(col, 0.92),
     };
   }
   return {
-    fillTop: col + "52",
-    fillBottom: col + "38",
-    stroke: col + "78",
-    label: "rgba(255,255,255,.92)",
+    fill: hexAlpha(col, 0.18),
+    stroke: hexAlpha(col, 0.48),
+    ink: hexAlpha(col, 0.95),
   };
 }

@@ -1,79 +1,16 @@
 /**
- * Causal arrow geometry — side-attached cubic arcs with tangent-aligned heads.
+ * Causal pointer geometry — orthogonal tree stubs with circular order badges.
  *
  * Routing:
- * - Single parent→child down: left-side C-curve
- * - Fan-out down (several effects): right-side C-curves with spreading bows
- * - Child→parent up: right-side C-curve
- * - Forward in time: exit right of source → enter left of target
- * - Fan-out order: ports along the source edge + ordinal badge at the port
+ * - Stacked parent→child: left-edge family bus (vertical stem + horizontal stub)
+ * - Fan-out: shared left bus, one stub per child
+ * - Forward in time: exit right of source → enter left of target (orthogonal)
+ * - Order badge: muted circle on the child attachment
  */
 
 import type { ClipCauseColor } from "../model/lanes.js";
 
-export interface Point {
-  x: number;
-  y: number;
-}
-
-export function cubicAt(t: number, p0: Point, p1: Point, p2: Point, p3: Point): Point {
-  const u = 1 - t;
-  const uu = u * u;
-  const tt = t * t;
-  return {
-    x: uu * u * p0.x + 3 * uu * t * p1.x + 3 * u * tt * p2.x + tt * t * p3.x,
-    y: uu * u * p0.y + 3 * uu * t * p1.y + 3 * u * tt * p2.y + tt * t * p3.y,
-  };
-}
-
-export function cubicTangent(t: number, p0: Point, p1: Point, p2: Point, p3: Point): Point {
-  const u = 1 - t;
-  return {
-    x: 3 * u * u * (p1.x - p0.x) + 6 * u * t * (p2.x - p1.x) + 3 * t * t * (p3.x - p2.x),
-    y: 3 * u * u * (p1.y - p0.y) + 6 * u * t * (p2.y - p1.y) + 3 * t * t * (p3.y - p2.y),
-  };
-}
-
-export type ArrowSide = "left" | "right" | "forward";
-
-/** Cubic controls for a side-attached or forward causal arc. */
-export function causalBezierPoints(
-  x1: number,
-  y1: number,
-  x2: number,
-  y2: number,
-  side: ArrowSide = "forward",
-  /** Extra outward bow for later fan-out slots (px). */
-  fanSpread = 0,
-): [Point, Point, Point, Point] {
-  const dx = x2 - x1;
-  const dy = y2 - y1;
-  const dist = Math.hypot(dx, dy);
-  const p0: Point = { x: x1, y: y1 };
-  const p3: Point = { x: x2, y: y2 };
-
-  if (side === "left" || side === "right") {
-    const outward = side === "left" ? -1 : 1;
-    const handle = Math.min(130, Math.max(22, Math.abs(dy) * 0.22 + 18 + fanSpread));
-    const p1: Point = { x: x1 + outward * handle, y: y1 };
-    const p2: Point = { x: x2 + outward * handle * 0.85, y: y2 };
-    return [p0, p1, p2, p3];
-  }
-
-  const handle = Math.min(120, Math.max(28, Math.abs(dx) * 0.45 + Math.abs(dy) * 0.12));
-  const sign = dx >= 0 ? 1 : -1;
-  const p1: Point = { x: x1 + sign * handle, y: y1 };
-  const p2: Point = { x: x2 - sign * handle, y: y2 };
-  if (dist < 1) {
-    p1.y += 8;
-    p2.y -= 8;
-  }
-  return [p0, p1, p2, p3];
-}
-
-export function tangentAngle(tangent: Point): number {
-  return Math.atan2(tangent.y, tangent.x);
-}
+export type ArrowSide = "left" | "forward";
 
 export interface ClipPorts {
   x0: number;
@@ -82,20 +19,20 @@ export interface ClipPorts {
   y1: number;
 }
 
-/** Max outward bow a causal bezier can take (see causalBezierPoints handles). */
-const MAX_HANDLE_PX = 130;
+/** Padding for span culling — orthogonal stubs stay near the clip edges. */
+const SPAN_PAD_PX = 24;
 
 /**
- * Whether an arrow's curve can intersect the stage. Tests the span between
- * both ports padded by the max bezier handle — endpoint containment is wrong:
- * an arrow with one port off-screen still crosses the viewport.
+ * Whether a pointer can intersect the stage. Tests the span between both ports
+ * padded slightly — endpoint containment is wrong: a pointer with one port
+ * off-screen still crosses the viewport.
  */
 export function arrowSpanVisible(
   from: ClipPorts,
   to: ClipPorts,
   nameW: number,
   stageW: number,
-  pad = MAX_HANDLE_PX,
+  pad = SPAN_PAD_PX,
 ): boolean {
   const lo = Math.min(from.x0, to.x0) - pad;
   const hi = Math.max(from.x1, to.x1) + pad;
@@ -104,17 +41,21 @@ export function arrowSpanVisible(
 
 export interface ArrowRoute {
   side: ArrowSide;
+  /** Parent attachment x (left bus or right exit). */
   x1: number;
   y1: number;
+  /** Child left attachment. */
   x2: number;
   y2: number;
-  /** Extra bow for this fan-out slot. */
-  fanSpread: number;
+  /**
+   * Shared vertical bus x for left-side family stubs. Null for forward links.
+   */
+  busX: number | null;
 }
 
 /**
- * Pick attachment sides. Fan-outs go down the right (sketch); a lone downward
- * link hugs the left; upward links hug the right.
+ * Pick attachment: stacked children share a left bus; later-in-time targets
+ * connect forward from the parent's right edge.
  */
 export function routeCausalArrow(
   from: ClipPorts,
@@ -122,54 +63,35 @@ export function routeCausalArrow(
   slot = 1,
   slotCount = 1,
 ): ArrowRoute {
-  const dyMid = (to.y0 + to.y1) / 2 - (from.y0 + from.y1) / 2;
+  const y1 = (from.y0 + from.y1) / 2;
+  const y2 = (to.y0 + to.y1) / 2;
   const overlapX = Math.min(from.x1, to.x1) - Math.max(from.x0, to.x0);
   const minW = Math.min(from.x1 - from.x0, to.x1 - to.x0, 1);
   const stacked = overlapX > minW * 0.3 || to.x0 < from.x1 - 4;
-
-  // Spread ports along the source edge so many arrows don't share one pixel.
-  const srcH = Math.max(from.y1 - from.y0, 1);
-  const t = slotCount <= 1 ? 0.5 : slot / (slotCount + 1);
-  const y1 = from.y0 + srcH * t;
-  const y2 = (to.y0 + to.y1) / 2;
-  const fanSpread = slotCount > 1 ? (slot - 1) * 12 : 0;
+  const dyMid = y2 - y1;
 
   if (stacked && Math.abs(dyMid) > 8) {
-    let side: "left" | "right";
-    if (dyMid > 0) {
-      // Down: fan-out on the right; a single child on the left.
-      side = slotCount > 1 ? "right" : "left";
-    } else {
-      side = "right";
-    }
-
-    if (side === "left") {
-      return {
-        side,
-        x1: from.x0 + 2,
-        y1,
-        x2: to.x0 + 2,
-        y2,
-        fanSpread,
-      };
-    }
+    // Left family bus — fan slots share the same stem; y1 stays parent mid.
+    void slot;
+    void slotCount;
+    const busX = from.x0;
     return {
-      side,
-      x1: from.x1 - 2,
+      side: "left",
+      x1: busX,
       y1,
-      x2: to.x1 - 2,
+      x2: to.x0,
       y2,
-      fanSpread,
+      busX,
     };
   }
 
   return {
     side: "forward",
-    x1: from.x1 - 2,
+    x1: from.x1,
     y1,
-    x2: to.x0 + 2,
+    x2: to.x0,
     y2,
-    fanSpread: 0,
+    busX: null,
   };
 }
 
@@ -179,13 +101,16 @@ export interface DrawCausalArrowArgs {
   y1: number;
   x2: number;
   y2: number;
+  /** Stroke color (muted gray). */
   color: string;
   side?: ArrowSide;
-  fanSpread?: number;
+  busX?: number | null;
   lineWidth?: number;
-  headSize?: number;
   /** 1-based ordinal for causal sequence (always drawn, including lone arrows). */
   orderLabel?: number;
+  /** Circle + number fill for the Datadog-style badge. */
+  badgeFill?: string;
+  badgeText?: string;
 }
 
 export interface ArrowEndpoint {
@@ -317,8 +242,38 @@ export function planCausalArrows(
   }));
 }
 
+const BADGE_R = 6;
+
+function strokeOrthogonal(
+  ctx: CanvasRenderingContext2D,
+  side: ArrowSide,
+  x1: number,
+  y1: number,
+  x2: number,
+  y2: number,
+  busX: number | null,
+): void {
+  ctx.beginPath();
+  if (side === "left" && busX != null) {
+    ctx.moveTo(busX, y1);
+    ctx.lineTo(busX, y2);
+    ctx.lineTo(x2, y2);
+  } else {
+    const mid = (x1 + x2) / 2;
+    ctx.moveTo(x1, y1);
+    if (Math.abs(y2 - y1) < 1.2) {
+      ctx.lineTo(x2, y2);
+    } else {
+      ctx.lineTo(mid, y1);
+      ctx.lineTo(mid, y2);
+      ctx.lineTo(x2, y2);
+    }
+  }
+  ctx.stroke();
+}
+
 /**
- * Stroke a cubic causal arrow and place a filled head aligned to the curve tangent.
+ * Stroke an orthogonal causal pointer. Order lives on the child clip, not the stub.
  */
 export function drawCausalArrow(args: DrawCausalArrowArgs): void {
   const {
@@ -329,64 +284,40 @@ export function drawCausalArrow(args: DrawCausalArrowArgs): void {
     y2,
     color,
     side = "forward",
-    fanSpread = 0,
-    lineWidth = 1.35,
-    headSize = 7,
+    busX = null,
+    lineWidth = 1,
     orderLabel,
   } = args;
-  const [p0, p1, p2, p3] = causalBezierPoints(x1, y1, x2, y2, side, fanSpread);
-
-  const tan = cubicTangent(0.995, p0, p1, p2, p3);
-  const angle = tangentAngle(tan);
-  const len = Math.hypot(tan.x, tan.y) || 1;
-  const inset = headSize * 0.85;
-  const tip = {
-    x: p3.x - (tan.x / len) * inset,
-    y: p3.y - (tan.y / len) * inset,
-  };
 
   ctx.save();
   ctx.strokeStyle = color;
-  ctx.fillStyle = color;
   ctx.lineWidth = lineWidth;
   ctx.lineCap = "round";
   ctx.lineJoin = "round";
   ctx.globalAlpha = orderLabel != null && orderLabel > 6 ? 0.55 : 1;
-  ctx.beginPath();
-  ctx.moveTo(p0.x, p0.y);
-  ctx.bezierCurveTo(p1.x, p1.y, p2.x, p2.y, tip.x, tip.y);
-  ctx.stroke();
-
-  const halfW = headSize * 0.44;
-  const cos = Math.cos(angle);
-  const sin = Math.sin(angle);
-  ctx.beginPath();
-  ctx.moveTo(p3.x, p3.y);
-  ctx.lineTo(p3.x - headSize * cos + halfW * sin, p3.y - headSize * sin - halfW * cos);
-  ctx.lineTo(p3.x - headSize * cos - halfW * sin, p3.y - headSize * sin + halfW * cos);
-  ctx.closePath();
-  ctx.fill();
-  ctx.globalAlpha = 1;
-
-  // Badge sits on the source port — not the curve apex — so fan-outs stay readable.
-  if (orderLabel != null && orderLabel > 0) {
-    const outward = side === "left" ? -1 : 1;
-    const lx = x1 + outward * 9;
-    const ly = y1;
-    ctx.font = "bold 8px ui-monospace, SF Mono, Menlo, monospace";
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    const text = String(orderLabel);
-    const tw = Math.max(ctx.measureText(text).width + 4, 10);
-    const th = 10;
-    ctx.fillStyle = color;
-    ctx.beginPath();
-    if (typeof ctx.roundRect === "function") ctx.roundRect(lx - tw / 2, ly - th / 2, tw, th, 2.5);
-    else ctx.rect(lx - tw / 2, ly - th / 2, tw, th);
-    ctx.fill();
-    ctx.fillStyle = "#fff";
-    ctx.fillText(text, lx, ly + 0.5);
-  }
-
+  strokeOrthogonal(ctx, side, x1, y1, x2, y2, busX);
   ctx.restore();
+}
+
+/** Draw the causal order circle inside the leading edge of a child clip. */
+export function drawClipOrderBadge(
+  ctx: CanvasRenderingContext2D,
+  clipLeft: number,
+  clipMidY: number,
+  order: number,
+  fill: string,
+  text: string,
+): void {
+  const cx = clipLeft + 8 + BADGE_R;
+  ctx.beginPath();
+  ctx.arc(cx, clipMidY, BADGE_R, 0, Math.PI * 2);
+  ctx.fillStyle = fill;
+  ctx.fill();
+  ctx.font = `600 8px ui-monospace, SF Mono, Menlo, monospace`;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillStyle = text;
+  ctx.fillText(String(order), cx, clipMidY + 0.4);
+  ctx.textAlign = "left";
+  ctx.textBaseline = "alphabetic";
 }

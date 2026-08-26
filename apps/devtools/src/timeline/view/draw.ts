@@ -11,10 +11,24 @@ import type { TimeSpan } from "../model/axis.js";
 import type { ViewWindow } from "../model/viewport.js";
 import { WAVE_MIN_MS, waveBins, type WaveBin } from "../model/wave.js";
 import type { TimelineGeometryPayload } from "../timelineRendererClient.js";
-import { LANE_PAD, MIN_CLIP_PX, ROW_H, RULER_H } from "./metrics.js";
-import { arrowSpanVisible, drawCausalArrow, planCausalArrows, routeCausalArrow } from "./arrows.js";
+import {
+  CLIP_LABEL_MIN_PX,
+  CLIP_PILL_R,
+  LANE_PAD,
+  MIN_CLIP_PX,
+  ROW_H,
+  RULER_H,
+} from "./metrics.js";
+import {
+  arrowSpanVisible,
+  drawCausalArrow,
+  drawClipOrderBadge,
+  planCausalArrows,
+  routeCausalArrow,
+} from "./arrows.js";
 import { computeClipRects, type ClipRect } from "./clipRects.js";
 import { causeColor, clipPaint, hexAlpha, type TimelineTheme } from "./timelineTheme.js";
+import type { ClipCauseColor } from "../model/lanes.js";
 import { RenderFlags, causeCodeToName } from "@reactlens/trace-engine";
 
 export type { ClipRect } from "./clipRects.js";
@@ -223,6 +237,100 @@ export function ensureHatchPattern(ctx: CanvasRenderingContext2D): CanvasPattern
   pc.lineTo(8, -2);
   pc.stroke();
   return ctx.createPattern(p as CanvasImageSource, "repeat");
+}
+
+const LABEL_PAD = 5;
+/** Room for the in-clip order circle drawn on the overlay. */
+const ORDER_LEAD = 8 + 6 + 6 + 5;
+
+function ellipsisName(ctx: CanvasRenderingContext2D, text: string, maxWidth: number): string {
+  if (ctx.measureText(text).width <= maxWidth) return text;
+  let lo = 0;
+  let hi = text.length;
+  while (lo < hi) {
+    const mid = Math.ceil((lo + hi) / 2);
+    if (ctx.measureText(`${text.slice(0, mid)}…`).width <= maxWidth) lo = mid;
+    else hi = mid - 1;
+  }
+  return lo > 0 ? `${text.slice(0, lo)}…` : "";
+}
+
+interface PaintClipArgs {
+  ctx: CanvasRenderingContext2D;
+  x0: number;
+  w: number;
+  cy: number;
+  clipH: number;
+  name: string;
+  cause: ClipCauseColor;
+  wasted: boolean;
+  selected: boolean;
+  nameW: number;
+  stageW: number;
+  theme: TimelineTheme;
+  pattern: CanvasPattern | null;
+}
+
+/** Pastel pill + left-aligned sticky name (order circle is overlaid separately). */
+function paintClip(args: PaintClipArgs): void {
+  const { ctx, x0, w, cy, clipH, name, cause, wasted, selected, nameW, stageW, theme, pattern } =
+    args;
+  const col = causeColor(theme, cause);
+  const paint = clipPaint(theme, col);
+  const x1 = x0 + w;
+  const r = Math.min(CLIP_PILL_R, clipH / 2);
+
+  if (wasted && pattern) {
+    ctx.fillStyle = pattern;
+    roundRect(ctx, x0, cy, w, clipH, r);
+    ctx.fill();
+    ctx.strokeStyle = hexAlpha(theme.text3, 0.55);
+    ctx.setLineDash([3, 2]);
+    ctx.stroke();
+    ctx.setLineDash([]);
+  } else {
+    ctx.fillStyle = paint.fill;
+    roundRect(ctx, x0, cy, w, clipH, r);
+    ctx.fill();
+    ctx.strokeStyle = paint.stroke;
+    ctx.stroke();
+  }
+
+  if (selected) {
+    ctx.strokeStyle = theme.accent;
+    ctx.lineWidth = 1.5;
+    ctx.shadowColor = hexAlpha(theme.accent, 0.5);
+    ctx.shadowBlur = 6;
+    roundRect(ctx, x0 - 1.5, cy - 1.5, w + 3, clipH + 3, r + 1);
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+    ctx.lineWidth = 1;
+  }
+
+  const visLeft = Math.max(x0, nameW);
+  const visRight = Math.min(x1, stageW);
+  const visibleW = visRight - visLeft;
+  if (visibleW < CLIP_LABEL_MIN_PX) return;
+
+  const ink = wasted ? hexAlpha(theme.text3, 0.85) : paint.ink;
+  ctx.font = `600 9px ${theme.mono}`;
+  const textStart = LABEL_PAD + ORDER_LEAD;
+  const maxText = Math.max(0, visibleW - textStart - LABEL_PAD);
+  const label = ellipsisName(ctx, wasted ? "wasted" : name, maxText);
+  if (!label && !wasted) return;
+  const textW = ctx.measureText(label).width;
+  const labelX = Math.min(
+    Math.max(x0 + textStart, nameW + textStart),
+    Math.max(nameW + textStart, x1 - textW - LABEL_PAD),
+  );
+  if (labelX + textW > visRight + 0.5) return;
+
+  const midY = cy + clipH / 2;
+  ctx.fillStyle = ink;
+  ctx.textAlign = "left";
+  ctx.textBaseline = "middle";
+  ctx.fillText(label, labelX, midY + 0.5);
+  ctx.textBaseline = "alphabetic";
 }
 
 export function drawBase(args: DrawBaseArgs): {
@@ -434,58 +542,23 @@ export function drawBase(args: DrawBaseArgs): {
         const clipH = ROW_H - 6;
         const cy = row.y + LANE_PAD / 2 + (geometry.stackRow[i] ?? 0) * ROW_H + 1.5;
         const causeKey = clipCauseColor(causeCodeToName(geometry.cause[i]!));
-        const col = causeColor(theme, causeKey);
-        const paint = clipPaint(theme, col);
         const wasted = (geometry.flags[i]! & RenderFlags.Wasted) !== 0;
         ctx.globalAlpha = row.dim ? 0.25 : 1;
-
-        if (wasted && pattern) {
-          ctx.fillStyle = pattern;
-          roundRect(ctx, x0, cy, w, clipH, 4);
-          ctx.fill();
-          ctx.strokeStyle = hexAlpha(theme.text3, 0.55);
-          ctx.setLineDash([3, 2]);
-          ctx.stroke();
-          ctx.setLineDash([]);
-        } else {
-          const grad = ctx.createLinearGradient(0, cy, 0, cy + clipH);
-          grad.addColorStop(0, paint.fillTop);
-          grad.addColorStop(1, paint.fillBottom);
-          ctx.fillStyle = grad;
-          roundRect(ctx, x0, cy, w, clipH, 4);
-          ctx.fill();
-          ctx.strokeStyle = paint.stroke;
-          ctx.stroke();
-          if (w > 74) {
-            let px = x0 + 1;
-            const barAlpha = theme.light ? 0.65 : 0.55;
-            for (const frac of [0.6, 0.25, 0.15] as const) {
-              ctx.fillStyle = hexAlpha(col, barAlpha);
-              roundRect(ctx, px, cy + clipH - 4.5, frac * (w - 2), 3, 1.5);
-              ctx.fill();
-              px += frac * (w - 2);
-            }
-          }
-        }
-
-        if (selectedRender === geometry.renderId[i]) {
-          ctx.strokeStyle = theme.accent;
-          ctx.lineWidth = 1.5;
-          ctx.shadowColor = hexAlpha(theme.accent, 0.5);
-          ctx.shadowBlur = 6;
-          roundRect(ctx, x0 - 1.5, cy - 1.5, w + 3, clipH + 3, 5);
-          ctx.stroke();
-          ctx.shadowBlur = 0;
-          ctx.lineWidth = 1;
-        }
-
-        if (w > 48) {
-          ctx.fillStyle = wasted ? hexAlpha(theme.text3, 0.85) : paint.label;
-          ctx.font = `9px ${MONO}`;
-          const total = geometry.x1[i]! - geometry.x0[i]!;
-          const lbl = wasted ? "wasted" : `${causeKey} · ${total.toFixed(0)}ms`;
-          ctx.fillText(lbl.slice(0, Math.floor(w / 5.5)), x0 + 5, cy + clipH / 2 + 3);
-        }
+        paintClip({
+          ctx,
+          x0,
+          w,
+          cy,
+          clipH,
+          name: row.lane.name,
+          cause: causeKey,
+          wasted,
+          selected: selectedRender === geometry.renderId[i],
+          nameW: NW,
+          stageW: W,
+          theme,
+          pattern,
+        });
         ctx.globalAlpha = 1;
       }
       continue;
@@ -499,56 +572,22 @@ export function drawBase(args: DrawBaseArgs): {
       const w = Math.max(x1 - x0, MIN_CLIP_PX);
       const clipH = ROW_H - 6;
       const cy = row.y + LANE_PAD / 2 + (c.row ?? 0) * ROW_H + 1.5;
-      const col = causeColor(theme, clipCauseColor(c.cause));
-      const paint = clipPaint(theme, col);
       ctx.globalAlpha = row.dim ? 0.25 : 1;
-
-      if (c.wasted && pattern) {
-        ctx.fillStyle = pattern;
-        roundRect(ctx, x0, cy, w, clipH, 4);
-        ctx.fill();
-        ctx.strokeStyle = hexAlpha(theme.text3, 0.55);
-        ctx.setLineDash([3, 2]);
-        ctx.stroke();
-        ctx.setLineDash([]);
-      } else {
-        const grad = ctx.createLinearGradient(0, cy, 0, cy + clipH);
-        grad.addColorStop(0, paint.fillTop);
-        grad.addColorStop(1, paint.fillBottom);
-        ctx.fillStyle = grad;
-        roundRect(ctx, x0, cy, w, clipH, 4);
-        ctx.fill();
-        ctx.strokeStyle = paint.stroke;
-        ctx.stroke();
-        if (w > 74) {
-          let px = x0 + 1;
-          const barAlpha = theme.light ? 0.65 : 0.55;
-          for (const frac of [0.6, 0.25, 0.15] as const) {
-            ctx.fillStyle = hexAlpha(col, barAlpha);
-            roundRect(ctx, px, cy + clipH - 4.5, frac * (w - 2), 3, 1.5);
-            ctx.fill();
-            px += frac * (w - 2);
-          }
-        }
-      }
-
-      if (selectedRender === c.renderId) {
-        ctx.strokeStyle = theme.accent;
-        ctx.lineWidth = 1.5;
-        ctx.shadowColor = hexAlpha(theme.accent, 0.5);
-        ctx.shadowBlur = 6;
-        roundRect(ctx, x0 - 1.5, cy - 1.5, w + 3, clipH + 3, 5);
-        ctx.stroke();
-        ctx.shadowBlur = 0;
-        ctx.lineWidth = 1;
-      }
-
-      if (w > 48) {
-        ctx.fillStyle = c.wasted ? hexAlpha(theme.text3, 0.85) : paint.label;
-        ctx.font = `9px ${MONO}`;
-        const lbl = c.wasted ? "wasted" : `${clipCauseColor(c.cause)} · ${c.total.toFixed(0)}ms`;
-        ctx.fillText(lbl.slice(0, Math.floor(w / 5.5)), x0 + 5, cy + clipH / 2 + 3);
-      }
+      paintClip({
+        ctx,
+        x0,
+        w,
+        cy,
+        clipH,
+        name: c.name,
+        cause: clipCauseColor(c.cause),
+        wasted: c.wasted,
+        selected: selectedRender === c.renderId,
+        nameW: NW,
+        stageW: W,
+        theme,
+        pattern,
+      });
       ctx.globalAlpha = 1;
     }
   }
@@ -627,10 +666,14 @@ export function drawOverlay(args: DrawOverlayArgs): void {
   );
 
   const planned = planCausalArrows(edgeList, ports);
+  const pointerColor = theme.light
+    ? hexAlpha(theme.text3, 0.55)
+    : hexAlpha(theme.text2, 0.45);
+  const badgeFill = theme.light ? hexAlpha(theme.text3, 0.28) : "rgba(120, 130, 160, 0.55)";
+  const badgeText = theme.light ? theme.text : "rgba(255,255,255,0.95)";
   for (const p of planned) {
     if (!arrowSpanVisible(p.from, p.to, NW, W)) continue;
     const route = routeCausalArrow(p.from, p.to, p.slot, p.slotCount);
-    const col = hexAlpha(causeColor(theme, p.causeKey), 0.92);
     drawCausalArrow({
       ctx,
       x1: route.x1,
@@ -638,12 +681,12 @@ export function drawOverlay(args: DrawOverlayArgs): void {
       x2: route.x2,
       y2: route.y2,
       side: route.side,
-      fanSpread: route.fanSpread,
-      color: col,
-      lineWidth: p.slotCount > 6 ? 1.1 : 1.35,
-      headSize: 7,
+      busX: route.busX,
+      color: pointerColor,
+      lineWidth: 1,
       orderLabel: p.order,
     });
+    drawClipOrderBadge(ctx, p.to.x0, (p.to.y0 + p.to.y1) / 2, p.order, badgeFill, badgeText);
   }
 
   if (marquee) {
@@ -660,7 +703,7 @@ export function drawOverlay(args: DrawOverlayArgs): void {
   const hv = hoverId && clipRects.get(hoverId);
   if (hv) {
     ctx.strokeStyle = hexAlpha(theme.text, theme.light ? 0.45 : 0.55);
-    roundRect(ctx, hv.x0 - 0.5, hv.y0 - 0.5, hv.x1 - hv.x0 + 1, hv.y1 - hv.y0 + 1, 4.5);
+    roundRect(ctx, hv.x0 - 0.5, hv.y0 - 0.5, hv.x1 - hv.x0 + 1, hv.y1 - hv.y0 + 1, CLIP_PILL_R);
     ctx.stroke();
   }
 
