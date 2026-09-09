@@ -19,6 +19,8 @@ export interface CascadeRenderNode {
   parentId: string | null;
   childCount: number;
   aggregateCount: 1;
+  /** React Compiler status, or `null` when the runtime did not report one. */
+  compiled: boolean | null;
 }
 
 export interface CascadeAggregateNode {
@@ -37,6 +39,8 @@ export interface CascadeAggregateNode {
   parentId: string | null;
   childCount: 0;
   aggregateCount: number;
+  /** `true` only when every member is compiled; `null` when they disagree. */
+  compiled: boolean | null;
 }
 
 export type CascadeNode = CascadeRenderNode | CascadeAggregateNode;
@@ -186,6 +190,17 @@ function buildRawGraph(store: TraceStore, interaction: Interaction): RawGraph {
   return { renders, parentByRender, childrenByRender, depthByRender };
 }
 
+/**
+ * One compiler verdict for a group. A mixed group claims nothing rather than
+ * inheriting whichever member happened to come first — a false ✓ on a group is
+ * worse than no ✓ at all.
+ */
+function sharedCompiled(group: readonly CascadeNode[]): boolean | null {
+  const first = group[0]?.compiled ?? null;
+  if (first === null) return null;
+  return group.every((node) => node.compiled === first) ? first : null;
+}
+
 function aggregateKey(parentId: string | null, node: CascadeRenderNode): string {
   return `${parentId ?? "root"}|${node.depth}|${node.name}|${node.cause}`;
 }
@@ -223,6 +238,7 @@ export function buildCascadeProjection(
       parentId: parentRender === undefined ? null : rawId(parentRender),
       childCount: raw.childrenByRender.get(render.renderId)?.length ?? 0,
       aggregateCount: 1,
+      compiled: store.instance(render.componentId)?.compiler?.compiled ?? null,
     });
   }
 
@@ -259,6 +275,7 @@ export function buildCascadeProjection(
       parentId: first.parentId,
       childCount: 0,
       aggregateCount: group.length,
+      compiled: sharedCompiled(group),
     });
   }
 
@@ -293,6 +310,7 @@ export function buildCascadeProjection(
         selfDuration: omitted.reduce((sum, node) => sum + node.selfDuration, 0),
         depth: Math.max(1, ...omitted.map((node) => node.depth)),
         parentId: null,
+        compiled: sharedCompiled(omitted),
         childCount: 0,
         aggregateCount: omitted.reduce((sum, node) => sum + node.aggregateCount, 0),
       });
@@ -360,8 +378,31 @@ export function buildCascadeProjection(
   };
 }
 
+/**
+ * The component name without the ` ×N` an aggregate carries. Single source of
+ * truth for that convention — every consumer that groups by component uses it.
+ */
+export function cascadeBaseName(node: CascadeNode): string {
+  return node.kind === "aggregate" ? node.name.replace(/ ×\d+$/, "") : node.name;
+}
+
+/**
+ * The runtime's sentinel for a component React could not name — see
+ * `packages/fiber/src/react-internals.ts`. In practice these are the
+ * `forwardRef` / `memo` wrappers component libraries wrap every element in.
+ */
+const ANONYMOUS = "Anonymous";
+
+/**
+ * True when the render has no identity a developer could act on: React had no
+ * name for it, or the instance was gone by the time we projected it.
+ */
+export function isUnnamedRender(node: CascadeNode): boolean {
+  const name = cascadeBaseName(node);
+  return name === ANONYMOUS || name.startsWith("#");
+}
+
 export function aggregateExpansionKey(node: CascadeAggregateNode): string | null {
   if (node.id === "g:overflow" || node.renderIds.length === 0) return null;
-  const first = node.name.replace(/ ×\d+$/, "");
-  return `${node.parentId ?? "root"}|${node.depth}|${first}|${node.cause}`;
+  return `${node.parentId ?? "root"}|${node.depth}|${cascadeBaseName(node)}|${node.cause}`;
 }
