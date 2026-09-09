@@ -7,15 +7,15 @@ interface Feature {
 const FEATURES: Feature[] = [
   {
     title: "Cascade",
-    body: "Causal render graph for the selected interaction — Fit / 1:1, focus modes, Cause / Effects, aggregation, minimap, and replay transport on one toolbar.",
+    body: "Everything the selected interaction rendered, read two ways — a ledger you scan top to bottom and a roll-up ranked by cost — with the replay transport on the same toolbar.",
   },
   {
     title: "Bidirectional selection",
-    body: "Pick an element on the page (⌘\\) to select it in the tree; selecting in the panel outlines it and scrolls off-screen targets into view.",
+    body: "Pick an element on the page (⌘\\) to select it in the panel; selecting in the panel outlines it and scrolls off-screen targets into view.",
   },
   {
     title: "⌘K search",
-    body: "Command palette plus a structured filter language — renders:>20, wasted:true, compiled:false — so the tree answers questions, not just names.",
+    body: "Jump to any component by name — including ones that have not rendered yet — or run any panel command, from one palette.",
   },
   {
     title: "Waste detection",
@@ -31,7 +31,7 @@ const FEATURES: Feature[] = [
   },
   {
     title: "Suspense & RSC aware",
-    body: "Suspense boundaries, server-component roles, and server actions are detected from client fiber heuristics and badged in the tree and inspector.",
+    body: "Suspense boundaries, server-component roles, and server actions are detected from client fiber heuristics and badged in the inspector.",
   },
   {
     title: "Sessions",

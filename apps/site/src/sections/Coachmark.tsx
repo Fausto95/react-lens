@@ -9,7 +9,7 @@ export function Coachmark() {
       <span className="pulse" />
       <span>
         This site is inspecting itself — the panel on the right is <strong>React Lens</strong>,
-        running on this page. Open the tree and select any section.
+        running on this page. Click any row in the cascade to inspect it.
       </span>
       <button className="x" aria-label="Dismiss" onClick={() => setOpen(false)}>
         ×

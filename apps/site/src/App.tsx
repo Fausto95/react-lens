@@ -11,7 +11,7 @@ import { Reveal } from "./Reveal.js";
 
 /**
  * The site is its own demo: every section below is a real component, so the
- * React Lens panel docked on the right shows THIS page's tree. Full-bleed
+ * React Lens panel docked on the right shows THIS page's renders. Full-bleed
  * hero first, then pillars (rewind → trace → cascade → diff), features, agents.
  */
 export function App() {

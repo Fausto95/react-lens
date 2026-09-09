@@ -130,7 +130,7 @@
         overflow: hidden;
         display: grid;
         grid-template-columns: minmax(0, 1fr);
-        grid-template-rows: 44px minmax(0, 1fr) 220px 24px;
+        grid-template-rows: 44px minmax(0, 1fr) 24px;
         font-size: 13px;
       }
       .topbar {
@@ -163,8 +163,7 @@
 
       .cols {
         display: grid;
-        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-        border-bottom: 1px solid var(--border);
+        grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr);
         min-height: 0;
       }
       .col {
@@ -301,16 +300,16 @@
         background: #a78bfa22;
       }
 
-      /* Cascade */
+      /* Cascade — interactions rail + the ledger lens */
       .cascade {
         display: grid;
-        grid-template-rows: 36px 1fr;
+        grid-template-rows: 34px minmax(0, 1fr);
         min-height: 0;
       }
       .cas-tools {
         display: flex;
         align-items: center;
-        gap: 6px;
+        gap: 7px;
         padding: 0 10px;
         color: var(--dim);
         border-bottom: 1px solid var(--border);
@@ -326,7 +325,7 @@
         background: #ffffff08;
       }
       .cas-tools .seg span {
-        padding: 3px 7px;
+        padding: 3px 8px;
         border-radius: 4px;
         color: var(--faint);
       }
@@ -334,131 +333,226 @@
         background: #a78bfa22;
         color: var(--accent);
       }
-      .cas-tools .ghost {
-        padding: 3px 7px;
-        border-radius: 4px;
-        color: var(--dim);
-      }
-      .cas-tools .zoom {
-        font-family: var(--mono);
-        font-size: 10px;
+      .cas-tools .arrows {
+        display: inline-flex;
+        gap: 2px;
         color: var(--faint);
-        margin-left: 2px;
+        font-size: 12px;
+      }
+      .cas-tools .pill {
+        padding: 2px 8px;
+        border-radius: 999px;
+        border: 1px solid var(--border-strong);
+        font-size: 10.5px;
+        color: var(--dim);
       }
       .cas-tools .latest {
         margin-left: auto;
         display: inline-flex;
         align-items: center;
-        gap: 5px;
-        padding: 3px 8px;
-        border-radius: 6px;
+        gap: 6px;
         color: var(--accent);
-        background: #a78bfa1f;
-        border: 1px solid #a78bfa55;
         font-size: 11px;
       }
-      .cas-stage {
-        position: relative;
-        height: 100%;
+
+      .cas-body {
+        display: grid;
+        grid-template-columns: 112px minmax(0, 1fr);
         min-height: 0;
-        background:
-          linear-gradient(to right, #ffffff07 1px, transparent 1px),
-          linear-gradient(to bottom, #ffffff07 1px, transparent 1px);
-        background-size: 28px 28px;
-        background-color: #0e1116;
-        overflow: hidden;
       }
-      .cas-stage svg.edges {
-        position: absolute;
-        inset: 0;
-        width: 100%;
-        height: 100%;
+
+      /* Interactions rail: one line each, cost as the row's own fill. */
+      .rail {
+        border-right: 1px solid var(--border);
+        min-width: 0;
       }
-      .node {
-        position: absolute;
-        width: 118px;
-        height: 34px;
-        border-radius: 6px;
-        border: 1px solid #60a5fa88;
-        background: #60a5fa22;
-        padding: 5px 8px 5px 12px;
-        font-family: var(--mono);
-        font-size: 10px;
-        line-height: 1.15;
+      .rail-head {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        padding: 5px 6px;
+        border-bottom: 1px solid var(--border);
+      }
+      .rail-head .seg {
+        display: inline-flex;
+        gap: 1px;
+        padding: 2px;
+        border-radius: 5px;
+        background: #ffffff08;
+      }
+      .rail-head .seg span {
+        padding: 2px 5px;
+        border-radius: 3px;
+        font-size: 9.5px;
+        color: var(--faint);
+      }
+      .rail-head .seg .on {
+        background: #ffffff14;
         color: var(--text);
       }
-      .node::before {
+      .rail-head .n {
+        margin-left: auto;
+        font-family: var(--mono);
+        font-size: 9.5px;
+        color: var(--faint);
+      }
+      .irow {
+        position: relative;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        height: 26px;
+        padding: 0 7px;
+        font-family: var(--mono);
+        font-size: 10.5px;
+        color: var(--dim);
+        border-left: 2px solid transparent;
+      }
+      .irow::before {
         content: "";
         position: absolute;
-        left: 4px;
-        top: 6px;
-        bottom: 6px;
-        width: 3px;
-        border-radius: 1.5px;
-        background: var(--state);
+        inset: 2px auto 2px 0;
+        width: var(--cost, 0%);
+        border-radius: 0 3px 3px 0;
+        background: #60a5fa1f;
       }
-      .node.mount {
-        border-color: #a78bfa88;
-        background: #a78bfa22;
+      .irow > * {
+        position: relative;
       }
-      .node.mount::before {
-        background: var(--accent);
+      .irow.sel {
+        background: #a78bfa1f;
+        border-left-color: var(--accent);
+        color: var(--text);
       }
-      .node.props {
-        border-color: #c084fc88;
-        background: #c084fc1f;
+      .irow .pip {
+        width: 5px;
+        height: 5px;
+        border-radius: 50%;
+        flex: none;
       }
-      .node.props::before {
-        background: var(--props);
+      .irow .lbl {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
       }
-      .node.sel {
-        box-shadow:
-          0 0 0 2px #a78bfa99,
-          0 0 14px #a78bfa55;
+      .irow .ms {
+        margin-left: auto;
       }
-      .node .meta {
+      .irow .warn-dot {
+        position: absolute;
+        top: 4px;
+        right: 3px;
+        width: 4px;
+        height: 4px;
+        border-radius: 50%;
+        background: var(--orange);
+      }
+
+      /* Ledger: depth is indentation, cost is a bar. */
+      .ledger-head {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 5px 9px;
+        border-bottom: 1px solid var(--border);
+      }
+      .ledger-head .find {
+        flex: 1;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        padding: 4px 8px;
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        color: var(--faint);
+        font-size: 10.5px;
+      }
+      .ledger-head .rows-n {
+        font-family: var(--mono);
+        font-size: 9.5px;
+        color: var(--faint);
+      }
+      .lrow {
+        display: grid;
+        /* The name is what you read; the bar and the number get what is left. */
+        grid-template-columns: minmax(0, 1fr) 50px 34px;
+        align-items: center;
+        gap: 8px;
+        height: 22px;
+        padding: 0 8px;
+        font-family: var(--mono);
+        font-size: 10.5px;
+      }
+      .lrow.sel {
+        background: #a78bfa1f;
+        box-shadow: inset 2px 0 0 var(--accent);
+      }
+      .lname {
+        display: flex;
+        align-items: center;
+        min-width: 0;
+        /* Without this the names run under the bar column. */
+        overflow: hidden;
+        white-space: nowrap;
+        color: var(--text);
+      }
+      .lind {
+        flex: none;
+        align-self: stretch;
+        background-image: repeating-linear-gradient(
+          to right,
+          var(--border) 0 1px,
+          transparent 1px 13px
+        );
+      }
+      .ldot {
+        width: 5px;
+        height: 5px;
+        border-radius: 50%;
+        flex: none;
+        margin: 0 7px 0 1px;
+      }
+      .lglyph {
+        margin-left: 7px;
+        font-size: 9px;
+      }
+      .lglyph.ok {
+        color: #34d399;
+      }
+      .lglyph.warn {
+        color: var(--orange);
+      }
+      .lchain {
+        margin: 0 5px;
+        padding: 0 4px;
+        border-radius: 3px;
+        background: #ffffff10;
         color: var(--faint);
         font-size: 9px;
       }
-      .ord {
-        position: absolute;
-        width: 16px;
-        height: 16px;
-        border-radius: 999px;
-        background: var(--raised);
-        border: 1px solid #a78bfa99;
-        color: var(--text);
-        font-family: var(--mono);
-        font-size: 9px;
-        font-weight: 600;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-      }
-      .minimap {
-        position: absolute;
-        right: 10px;
-        bottom: 10px;
-        width: 72px;
-        height: 52px;
-        border-radius: 6px;
-        border: 1px solid var(--border-strong);
-        background: #12151acc;
-        overflow: hidden;
-      }
-      .minimap .n {
-        position: absolute;
-        width: 10px;
-        height: 4px;
-        border-radius: 1px;
-        background: #a78bfa88;
-      }
-      .minimap .view {
-        position: absolute;
-        inset: 8px 12px 10px 8px;
-        border: 1px solid var(--accent);
-        background: #a78bfa14;
+      .lbar {
+        height: 7px;
         border-radius: 2px;
+        background: #ffffff0d;
+        overflow: hidden;
+        position: relative;
+      }
+      .lbar i {
+        position: absolute;
+        inset: 0 auto 0 0;
+        display: block;
+      }
+      .lbar .sub {
+        opacity: 0.32;
+      }
+      .lms {
+        text-align: right;
+        font-size: 10px;
+        color: var(--dim);
+      }
+      .lms.hot {
+        color: var(--orange);
+        font-weight: 600;
       }
 
       .statusbar {
@@ -642,33 +736,192 @@
           </div>
 
           <div class="cols">
-            <div class="col">
-              <div class="col-head">COMPONENTS</div>
-              <div class="chips">
-                <span class="chip on">All</span>
-                <span class="chip">△</span>
-                <span class="chip warn">Waste</span>
-              </div>
-              <div class="filter">Filter by name, /regex/, render…</div>
-              <div class="row">
-                <span class="bullet">·</span><span class="nm">App</span
-                ><span class="metrics"><span>1×</span><span>5.7ms</span></span>
-              </div>
-              <div class="row" style="padding-left: 24px">
-                <span class="bullet">·</span><span class="nm">CartProvider</span
-                ><span class="metrics"><span>1×</span><span>1.2ms</span></span>
-              </div>
-              <div class="row sel" style="padding-left: 36px">
-                <span class="nm">ProductList</span><span class="badge">waste ×4</span
-                ><span class="metrics"><span>4×</span><span>14.2ms</span></span>
-              </div>
-              <div class="row" style="padding-left: 48px">
-                <span class="nm">FilterBar</span
-                ><span class="metrics"><span>6×</span><span>3.1ms</span></span>
-              </div>
-              <div class="row" style="padding-left: 48px">
-                <span class="nm">ProductCard ×7</span
-                ><span class="metrics"><span>7×</span><span>9.4ms</span></span>
+            <div class="col" style="padding: 0">
+              <div class="cascade">
+                <div class="cas-tools">
+                  <span class="arrows">‹ ›</span>
+                  <span class="seg">
+                    <span class="on">Ledger</span>
+                    <span>Roll-up</span>
+                  </span>
+                  <span class="pill">click · CartButton</span>
+                  <span class="latest"><span class="dot"></span> Latest</span>
+                </div>
+
+                <div class="cas-body">
+                  <div class="rail">
+                    <div class="rail-head">
+                      <span class="seg">
+                        <span class="on">Time</span><span>Slow</span><span>Waste</span>
+                      </span>
+                      <span class="n">6</span>
+                    </div>
+                    <div class="irow" style="--cost: 34%">
+                      <span class="pip" style="background: #34d399"></span>
+                      <span class="lbl">Load</span><span class="ms">11.4</span>
+                    </div>
+                    <div class="irow" style="--cost: 18%">
+                      <span class="pip" style="background: #60a5fa"></span>
+                      <span class="lbl">input Search</span><span class="ms">6.1</span>
+                    </div>
+                    <div class="irow sel" style="--cost: 100%">
+                      <span class="pip" style="background: #60a5fa"></span>
+                      <span class="lbl">click Cart</span><span class="ms">31.8</span>
+                      <span class="warn-dot"></span>
+                    </div>
+                    <div class="irow" style="--cost: 9%">
+                      <span class="pip" style="background: #82828e"></span>
+                      <span class="lbl">resize</span><span class="ms">2.8</span>
+                    </div>
+                    <div class="irow" style="--cost: 22%">
+                      <span class="pip" style="background: #60a5fa"></span>
+                      <span class="lbl">click Filter</span><span class="ms">7.2</span>
+                      <span class="warn-dot"></span>
+                    </div>
+                    <div class="irow" style="--cost: 5%">
+                      <span class="pip" style="background: #60a5fa"></span>
+                      <span class="lbl">click Sort</span><span class="ms">1.6</span>
+                    </div>
+                    <div class="irow" style="--cost: 13%">
+                      <span class="pip" style="background: #82828e"></span>
+                      <span class="lbl">visibility</span><span class="ms">4.1</span>
+                    </div>
+                  </div>
+
+                  <div>
+                    <div class="ledger-head">
+                      <span class="find">
+                        <svg
+                          width="10"
+                          height="10"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          stroke-width="2.4"
+                        >
+                          <circle cx="11" cy="11" r="7" />
+                          <path d="m20 20-3.5-3.5" />
+                        </svg>
+                        Filter components…
+                      </span>
+                      <span class="rows-n">12 rows</span>
+                    </div>
+
+                    <div class="lrow">
+                      <span class="lname"
+                        ><span class="ldot" style="background: #34d399"></span>CartProvider<span
+                          class="lglyph ok"
+                          >✓</span
+                        ></span
+                      >
+                      <span class="lbar"
+                        ><i class="sub" style="width: 100%; background: #34d399"></i
+                        ><i style="width: 4%; background: #34d399"></i
+                      ></span>
+                      <span class="lms">1.20</span>
+                    </div>
+                    <div class="lrow sel">
+                      <span class="lname"
+                        ><span class="lind" style="width: 13px"></span
+                        ><span class="ldot" style="background: #60a5fa"></span>ProductList<span
+                          class="lglyph warn"
+                          >⚠</span
+                        ></span
+                      >
+                      <span class="lbar"
+                        ><i class="sub" style="width: 88%; background: #60a5fa"></i
+                        ><i style="width: 45%; background: #60a5fa"></i
+                      ></span>
+                      <span class="lms hot">14.20</span>
+                    </div>
+                    <div class="lrow">
+                      <span class="lname"
+                        ><span class="lind" style="width: 26px"></span
+                        ><span class="ldot" style="background: #82828e"></span>FilterBar</span
+                      >
+                      <span class="lbar"
+                        ><i class="sub" style="width: 20%; background: #82828e"></i
+                        ><i style="width: 10%; background: #82828e"></i
+                      ></span>
+                      <span class="lms">3.10</span>
+                    </div>
+                    <div class="lrow">
+                      <span class="lname"
+                        ><span class="lind" style="width: 26px"></span
+                        ><span class="ldot" style="background: #82828e"></span>Row<span
+                          class="lchain"
+                          >⋯3</span
+                        ><span style="color: var(--dim)">Cell</span></span
+                      >
+                      <span class="lbar"
+                        ><i class="sub" style="width: 14%; background: #82828e"></i
+                        ><i style="width: 7%; background: #82828e"></i
+                      ></span>
+                      <span class="lms">2.40</span>
+                    </div>
+                    <div class="lrow">
+                      <span class="lname"
+                        ><span class="lind" style="width: 26px"></span
+                        ><span class="ldot" style="background: #a78bfa"></span>ProductCard ×7</span
+                      >
+                      <span class="lbar"
+                        ><i class="sub" style="width: 60%; background: #a78bfa"></i
+                        ><i style="width: 30%; background: #a78bfa"></i
+                      ></span>
+                      <span class="lms">9.40</span>
+                    </div>
+                    <div class="lrow">
+                      <span class="lname"
+                        ><span class="lind" style="width: 39px"></span
+                        ><span class="ldot" style="background: #a78bfa"></span>PriceTag</span
+                      >
+                      <span class="lbar"
+                        ><i class="sub" style="width: 9%; background: #a78bfa"></i
+                        ><i style="width: 9%; background: #a78bfa"></i
+                      ></span>
+                      <span class="lms">1.30</span>
+                    </div>
+                    <div class="lrow">
+                      <span class="lname"
+                        ><span class="lind" style="width: 13px"></span
+                        ><span class="ldot" style="background: #82828e"></span>CheckoutBar<span
+                          class="lglyph ok"
+                          >✓</span
+                        ></span
+                      >
+                      <span class="lbar"
+                        ><i class="sub" style="width: 13%; background: #82828e"></i
+                        ><i style="width: 7%; background: #82828e"></i
+                      ></span>
+                      <span class="lms">2.10</span>
+                    </div>
+                    <div class="lrow">
+                      <span class="lname"
+                        ><span class="lind" style="width: 26px"></span
+                        ><span class="ldot" style="background: #82828e"></span>CartBadge</span
+                      >
+                      <span class="lbar"
+                        ><i class="sub" style="width: 6%; background: #82828e"></i
+                        ><i style="width: 6%; background: #82828e"></i
+                      ></span>
+                      <span class="lms">0.90</span>
+                    </div>
+                    <div class="lrow">
+                      <span class="lname"
+                        ><span class="lind" style="width: 26px"></span
+                        ><span class="ldot" style="background: #82828e"></span>Total<span
+                          class="lchain"
+                          >⋯2</span
+                        ></span
+                      >
+                      <span class="lbar"
+                        ><i class="sub" style="width: 5%; background: #82828e"></i
+                        ><i style="width: 5%; background: #82828e"></i
+                      ></span>
+                      <span class="lms">0.70</span>
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
 
@@ -679,7 +932,7 @@
                 <span class="badge">wasted ×4</span>
               </div>
               <div class="kv">Why did it render?<span class="v">state: cart</span></div>
-              <div class="kv">Cascade depth<span class="v">1 · 12 edges</span></div>
+              <div class="kv">Cascade depth<span class="v">d1 · 9 below</span></div>
               <div class="agent">
                 <div class="hd">
                   <svg width="13" height="13" viewBox="0 0 16 16" fill="none">
@@ -692,104 +945,8 @@
                 </div>
                 <p>
                   State update at <code class="id">rl:cmt-41</code> fans out through Cascade —
-                  Aggregate the leaf cards or memo the list.
+                  aggregate the leaf cards or memo the list.
                 </p>
-              </div>
-            </div>
-          </div>
-
-          <div class="cascade">
-            <div class="cas-tools">
-              <span class="ghost">Fit</span>
-              <span class="ghost">1:1</span>
-              <span class="zoom">100%</span>
-              <span class="seg" style="margin-left: 8px">
-                <span class="on">All</span>
-                <span>Expensive</span>
-                <span>Roots</span>
-              </span>
-              <span class="ghost">↑ Cause</span>
-              <span class="ghost">↓ Effects</span>
-              <span class="latest"><span class="dot"></span> Latest</span>
-            </div>
-            <div class="cas-stage">
-              <svg class="edges" viewBox="0 0 580 188" preserveAspectRatio="none">
-                <path
-                  d="M132 42 C176 42, 176 42, 220 42"
-                  fill="none"
-                  stroke="#60a5fa94"
-                  stroke-width="1.4"
-                />
-                <path
-                  d="M132 42 C176 42, 176 90, 220 90"
-                  fill="none"
-                  stroke="#60a5fa94"
-                  stroke-width="1.4"
-                />
-                <path
-                  d="M338 42 C382 42, 382 27, 426 27"
-                  fill="none"
-                  stroke="#c084fc94"
-                  stroke-width="1.4"
-                />
-                <path
-                  d="M338 42 C382 42, 382 75, 426 75"
-                  fill="none"
-                  stroke="#c084fc94"
-                  stroke-width="1.4"
-                />
-                <path
-                  d="M338 90 C382 90, 382 123, 426 123"
-                  fill="none"
-                  stroke="#a78bfa94"
-                  stroke-width="1.4"
-                />
-                <polygon points="220,42 214,39 214,45" fill="#60a5fa94" />
-                <polygon points="220,90 214,87 214,93" fill="#60a5fa94" />
-                <polygon points="426,27 420,24 420,30" fill="#c084fc94" />
-                <polygon points="426,75 420,72 420,78" fill="#c084fc94" />
-                <polygon points="426,123 420,120 420,126" fill="#a78bfa94" />
-              </svg>
-
-              <div class="node mount sel" style="left: 14px; top: 25px">
-                CartProvider
-                <div class="meta">state · 1.2ms self</div>
-              </div>
-              <div class="node" style="left: 220px; top: 25px">
-                ProductList
-                <div class="meta">parent · 14.2ms self</div>
-              </div>
-              <div class="node" style="left: 220px; top: 73px">
-                CheckoutBar
-                <div class="meta">parent · 2.1ms self</div>
-              </div>
-              <div class="node props" style="left: 426px; top: 10px">
-                FilterBar
-                <div class="meta">props · 3.1ms self</div>
-              </div>
-              <div class="node props" style="left: 426px; top: 58px">
-                SortSelect
-                <div class="meta">props · 0.8ms self</div>
-              </div>
-              <div class="node mount" style="left: 426px; top: 106px; border-style: dashed">
-                ProductCard ×7
-                <div class="meta">aggregate · 9.4ms</div>
-              </div>
-
-              <div class="ord" style="left: 168px; top: 34px">1</div>
-              <div class="ord" style="left: 168px; top: 70px">2</div>
-              <div class="ord" style="left: 374px; top: 19px">3</div>
-              <div class="ord" style="left: 374px; top: 67px">4</div>
-              <div class="ord" style="left: 374px; top: 115px">5</div>
-
-              <div class="minimap">
-                <div class="n" style="left: 10px; top: 12px"></div>
-                <div class="n" style="left: 28px; top: 12px"></div>
-                <div class="n" style="left: 28px; top: 24px"></div>
-                <div class="n" style="left: 46px; top: 8px"></div>
-                <div class="n" style="left: 46px; top: 20px"></div>
-                <div class="n" style="left: 46px; top: 32px"></div>
-                <div class="view"></div>
               </div>
             </div>
           </div>
