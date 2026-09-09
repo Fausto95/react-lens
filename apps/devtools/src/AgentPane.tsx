@@ -14,12 +14,13 @@ import {
   type ToolName,
 } from "@reactlens/agent";
 import type { LensRef } from "@reactlens/explain";
-import { IconCopy } from "@reactlens/icons";
+import { IconClose, IconCopy } from "@reactlens/icons";
 import { diagnoseOne } from "./doctor.js";
 import { getSourceResolver } from "./sourceResolver.js";
 import { loadAgentSettings } from "./settings.js";
 import { Markdown, type CitationRef } from "./markdown.js";
 import type { TimeCursor } from "./timeCursor.js";
+import { withAttachments, type AgentAttachment } from "./agentAttachments.js";
 
 const SUGGESTIONS = [
   "Why is the last interaction slow?",
@@ -43,6 +44,8 @@ export function AgentPane({
   settings,
   settingsVersion = 0,
   askRequest = null,
+  attachments = [],
+  onDetach,
   onClose,
   onOpenSettings,
   onSelectComponent,
@@ -56,6 +59,9 @@ export function AgentPane({
   settingsVersion?: number;
   /** Inline "Fix with AI": a pre-built question to auto-ask (token dedupes). */
   askRequest?: { token: number; question: string } | null;
+  /** Components handed over from a cascade row; prefixed to the next question. */
+  attachments?: readonly AgentAttachment[];
+  onDetach?: (id: ComponentId) => void;
   onClose: () => void;
   onOpenSettings: () => void;
   onSelectComponent?: (id: ComponentId) => void;
@@ -128,10 +134,12 @@ export function AgentPane({
       const ac = new AbortController();
       abortRef.current = ac;
       setRunning(true);
+      // The transcript shows what the developer typed; the model also gets the
+      // attached components, named with their ids so it can call tools on them.
       setMessages([...session.messages, { role: "user", content: q }]);
       setPending({ text: "", activity: [] });
       try {
-        await session.send(q, {
+        await session.send(withAttachments(q, attachments), {
           signal: ac.signal,
           onEvent: (e) => {
             if (e.type === "text_delta") {
@@ -163,7 +171,7 @@ export function AgentPane({
         setRunning(false);
       }
     },
-    [handlers, running, settings, store],
+    [attachments, handlers, running, settings, store],
   );
 
   // Inline "Fix with AI" entry points (tree rows, timeline bars) auto-ask.
@@ -299,6 +307,25 @@ export function AgentPane({
       </div>
 
       <div className="rl-agent-ask">
+        {attachments.length > 0 && (
+          <div className="rl-agent-attach" aria-label="Components attached to this question">
+            {attachments.map((item) => (
+              <span className="rl-agent-chip" key={item.id as number}>
+                {item.name}
+                {onDetach && (
+                  <button
+                    type="button"
+                    aria-label={`Remove ${item.name}`}
+                    title={`Remove ${item.name}`}
+                    onClick={() => onDetach(item.id)}
+                  >
+                    <IconClose size={9} />
+                  </button>
+                )}
+              </span>
+            ))}
+          </div>
+        )}
         <textarea
           value={input}
           onChange={(e) => setInput(e.target.value)}

@@ -713,36 +713,6 @@ html[data-rl-panel="open"][data-rl-dock="bottom"] .rl-embed-controls:not(.is-nav
   container-type: inline-size;
   container-name: tree;
 }
-.rl-tree {
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-  flex: 1;
-  min-width: 0;
-}
-.rl-tree-scroll {
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
-  outline: none;
-}
-/* Keyboard cursor — visible only while the tree itself has focus. */
-.rl-tree-scroll:focus-visible .rl-tree-row.rl-kb-focus,
-.rl-tree-scroll:focus .rl-tree-row.rl-kb-focus {
-  box-shadow: inset 2px 0 0 var(--rl-render);
-  background: var(--rl-bg-hover);
-}
-.rl-tree-modes {
-  display: flex;
-  gap: 2px;
-  padding: var(--rl-s2) var(--rl-s3);
-  position: sticky;
-  top: 26px;
-  background: var(--rl-bg);
-  z-index: 1;
-  border-bottom: 1px solid var(--rl-border);
-  min-width: 0;
-}
 /* Segmented control (tree modes) — labeled, Linear-style track */
 .rl-seg {
   display: inline-flex;
@@ -779,57 +749,6 @@ html[data-rl-panel="open"][data-rl-dock="bottom"] .rl-embed-controls:not(.is-nav
 }
 .rl-mode-compact {
   display: none;
-}
-
-.rl-tree-search-wrap {
-  position: relative;
-  display: flex;
-  margin: var(--rl-s2) var(--rl-s3) var(--rl-s3);
-}
-.rl-tree-search {
-  flex: 1;
-  min-width: 0;
-  background: var(--rl-bg);
-  color: var(--rl-text);
-  border: 1px solid transparent;
-  border-radius: 6px;
-  font: inherit;
-  font-size: 12px;
-  padding: 5px 26px 5px 8px;
-}
-.rl-tree-search:hover {
-  border-color: var(--rl-border);
-}
-.rl-tree-search:focus {
-  outline: none;
-  border-color: var(--rl-render);
-  background: var(--rl-bg-raised);
-}
-.rl-tree-search.invalid,
-.rl-tree-search.invalid:focus {
-  border-color: rgba(var(--rl-severe-rgb), 0.65);
-}
-.rl-tree-search::placeholder {
-  color: var(--rl-text-faint);
-}
-.rl-tree-search-count {
-  position: absolute;
-  right: 7px;
-  top: 50%;
-  transform: translateY(-50%);
-  font-size: 10px;
-  font-variant-numeric: tabular-nums;
-  color: var(--rl-text-faint);
-  pointer-events: none;
-}
-.rl-tree-search-count.invalid {
-  color: var(--rl-severe);
-  font-weight: 600;
-}
-
-.rl-tree-rows {
-  display: flex;
-  flex-direction: column;
 }
 
 /* Command palette */
@@ -906,38 +825,6 @@ html[data-rl-panel="open"][data-rl-dock="bottom"] .rl-embed-controls:not(.is-nav
   font-size: 11px;
   font-family: var(--rl-mono);
 }
-.rl-tree-row {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  height: 26px;
-  padding-right: var(--rl-s3);
-  cursor: default;
-  font-size: 12px;
-  border-bottom: 1px solid rgba(var(--rl-panel-rgb), 0.3);
-  min-width: 0;
-}
-.rl-tree-row:hover {
-  background: var(--rl-bg-hover);
-}
-.rl-tree-row.rl-selected {
-  background: rgba(var(--rl-render-rgb), 0.12);
-  box-shadow: inset 2px 0 0 var(--rl-render);
-}
-.rl-tree-row.rl-in-selection {
-  background: rgba(var(--rl-render-rgb), 0.07);
-}
-.rl-tree-row.rl-in-selection:hover {
-  background: rgba(var(--rl-render-rgb), 0.12);
-}
-.rl-tree-main {
-  flex: 1 1 auto;
-  min-width: 0;
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  overflow: hidden;
-}
 .rl-caret {
   flex: 0 0 20px;
   width: 20px;
@@ -952,20 +839,6 @@ html[data-rl-panel="open"][data-rl-dock="bottom"] .rl-embed-controls:not(.is-nav
 }
 .rl-caret.hidden {
   visibility: hidden;
-}
-.rl-tree-name {
-  flex: 1 1 auto;
-  min-width: 0;
-  color: var(--rl-text);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.rl-tree-pips {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  flex: 0 0 auto;
 }
 .rl-pip {
   flex: 0 0 auto;
@@ -1009,13 +882,6 @@ html[data-rl-panel="open"][data-rl-dock="bottom"] .rl-embed-controls:not(.is-nav
   color: var(--rl-suspicious);
   background: rgba(var(--rl-suspicious-rgb), 0.15);
 }
-.rl-tree-stats {
-  flex: 0 0 auto;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  min-width: 0;
-}
 .rl-flame {
   flex: 0 0 56px;
   width: 56px;
@@ -1030,33 +896,6 @@ html[data-rl-panel="open"][data-rl-dock="bottom"] .rl-embed-controls:not(.is-nav
   background: linear-gradient(90deg, var(--rl-render), var(--rl-suspicious));
   border-radius: 2px;
 }
-.rl-tree-metric {
-  flex: 0 0 auto;
-  font-variant-numeric: tabular-nums;
-  color: var(--rl-text-dim);
-  font-size: 11px;
-  text-align: right;
-}
-.rl-tree-metric.rl-tree-renders {
-  flex: 0 0 28px;
-  width: 28px;
-}
-.rl-tree-metric.rl-tree-ms {
-  flex: 0 0 44px;
-  width: 44px;
-}
-.rl-tree-metric.dim {
-  color: var(--rl-text-faint);
-}
-.rl-tree-stats-compact {
-  display: none;
-  flex: 0 0 auto;
-  font-size: 10px;
-  font-variant-numeric: tabular-nums;
-  color: var(--rl-text-faint);
-  white-space: nowrap;
-  letter-spacing: -0.01em;
-}
 
 /* Narrow tree: collapse flame + dual metrics into one chip; shorten mode tabs. */
 @container tree (max-width: 340px) {
@@ -1070,26 +909,12 @@ html[data-rl-panel="open"][data-rl-dock="bottom"] .rl-embed-controls:not(.is-nav
     padding: 3px 7px;
     font-size: 10px;
   }
-  .rl-flame,
-  .rl-tree-metric {
+  .rl-flame {
     display: none;
-  }
-  .rl-tree-stats-compact {
-    display: inline;
-  }
-  .rl-tree-row {
-    gap: 4px;
-    padding-right: 8px;
-  }
-  .rl-tree-pips {
-    gap: 3px;
   }
 }
 
 @container tree (max-width: 220px) {
-  .rl-tree-pips {
-    display: none;
-  }
   .rl-caret {
     flex-basis: 16px;
     width: 16px;
@@ -3624,11 +3449,6 @@ button.rl-restore-row:focus-visible .rl-restore-row-go {
 .rl-menu-item.danger:hover {
   background: rgba(var(--rl-severe-rgb), 0.12);
 }
-
-/* Freeze Frame markers in the tree */
-.rl-tree-row.rl-frozen-out {
-  opacity: 0.35;
-}
 .rl-frozen-dot {
   width: 6px;
   height: 6px;
@@ -3955,6 +3775,15 @@ button.rl-restore-row:focus-visible .rl-restore-row-go {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  /* Self-contained: this button is used inside rows and lists that carry no
+     button reset of their own, and a bare <button> defaults to a grey box with
+     an outset border and padding that crushes the icon to nothing. */
+  appearance: none;
+  -webkit-appearance: none;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
   width: 16px;
   height: 16px;
   border-radius: 5px;
@@ -3966,7 +3795,6 @@ button.rl-restore-row:focus-visible .rl-restore-row-go {
     opacity 100ms ease,
     background 100ms ease;
 }
-.rl-tree-row:hover .rl-fix-ai,
 .rl-fix-ai:focus-visible {
   opacity: 1;
 }
@@ -4848,4 +4676,42 @@ button.rl-restore-row:focus-visible .rl-restore-row-go {
 }
 .rl-error-list .count {
   color: var(--rl-text-faint);
+}
+
+/* Components handed to the agent from a cascade row, shown above the input so
+   it is obvious what the next question is about. */
+.rl-agent-attach {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+.rl-agent-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 5px 2px 8px;
+  border: 1px solid rgba(var(--rl-render-rgb), 0.4);
+  border-radius: 999px;
+  background: rgba(var(--rl-render-rgb), 0.12);
+  color: var(--rl-text);
+  font-family: var(--rl-mono);
+  font-size: 10.5px;
+  white-space: nowrap;
+}
+.rl-agent-chip button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 13px;
+  height: 13px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--rl-text-dim);
+  cursor: pointer;
+}
+.rl-agent-chip button:hover {
+  background: rgba(var(--rl-ink-rgb), 0.12);
+  color: var(--rl-text);
 }
