@@ -1,42 +1,35 @@
-import { useEffect, useRef } from "react";
-import {
-  interactionKindLabel,
-  type Interaction,
-  type InteractionKind,
-  type TraceStore,
-} from "@reactlens/trace-engine";
-import { ms, timeAxis } from "@reactlens/ui";
+import { useEffect, useRef, useState } from "react";
+import type { Interaction, TraceStore } from "@reactlens/trace-engine";
+import { ms } from "@reactlens/ui";
 import { useTraceVersion } from "../useLens.js";
 import { readFresh } from "../traceFresh.js";
+import {
+  DEFAULT_RAIL_SORT,
+  RAIL_SORTS,
+  buildRailRows,
+  interactionKindTone,
+  type RailSortKey,
+} from "./interactionRail.js";
 
 export interface InteractionListProps {
   store: TraceStore;
   interactions: readonly Interaction[];
-  /** Full session count shown in the sticky header (may exceed the windowed list). */
+  /** Full session count shown in the header (may exceed the windowed list). */
   totalCount: number;
   selectedId: string | null;
   t0: number;
   onSelect: (id: string) => void;
 }
 
-/** Kind pip tone for the rail — gesture / load / system. */
-export function interactionKindTone(kind: InteractionKind): "gesture" | "load" | "system" {
-  if (kind === "load") return "load";
-  if (kind === "system") return "system";
-  return "gesture";
-}
-
 /**
- * Wall span (`end - start`) is only worth showing when it clearly exceeds
- * summed React self-time. Render events often share a commit timestamp, so
- * the span can be a few ms while self-time sums to tens of ms — displaying
- * both looks like the numbers disagree.
+ * The interactions rail.
+ *
+ * One line per interaction: a kind pip, the label, and React time. Cost is the
+ * row's own background fill rather than a bar in its own column, because the
+ * rail's width is width the lens does not get. Renders, components, commits,
+ * state updates and wall span all live in the row's tooltip — they were four
+ * numbers with no ranking, and none of them is what you scan for.
  */
-export function extraWallMs(item: Interaction): number | null {
-  const extra = item.metrics.totalDuration - item.metrics.reactDuration;
-  return extra >= 8 ? item.metrics.totalDuration : null;
-}
-
 export function InteractionList({
   store,
   interactions,
@@ -47,6 +40,7 @@ export function InteractionList({
 }: InteractionListProps) {
   const version = useTraceVersion(store, { kind: "global" });
   const listRef = useRef<HTMLDivElement>(null);
+  const [sort, setSort] = useState<RailSortKey>(DEFAULT_RAIL_SORT);
 
   // version bumps when wasted flags land after causality; interactions when the window changes.
   const wasteById = readFresh(version, () => {
@@ -60,53 +54,56 @@ export function InteractionList({
 
   useEffect(() => {
     if (!selectedId || !listRef.current) return;
-    const el = listRef.current.querySelector<HTMLElement>(`.rl-cascade-interaction.selected`);
+    const el = listRef.current.querySelector<HTMLElement>(".rl-cascade-interaction.selected");
     el?.scrollIntoView({ block: "nearest", inline: "nearest" });
-  }, [selectedId]);
+  }, [selectedId, sort]);
+
+  const rows = buildRailRows(interactions, wasteById, sort, selectedId, t0);
 
   return (
-    <div className="rl-cascade-interactions" ref={listRef}>
+    <div className="rl-cascade-interactions">
       <div className="rl-cascade-interactions-head">
-        <span>Interactions</span>
+        <span className="rl-rail-sort" role="tablist" aria-label="Sort interactions">
+          {(Object.keys(RAIL_SORTS) as RailSortKey[]).map((key) => (
+            <button
+              key={key}
+              type="button"
+              role="tab"
+              aria-selected={sort === key}
+              title={RAIL_SORTS[key].title}
+              onClick={() => setSort(key)}
+            >
+              {RAIL_SORTS[key].label}
+            </button>
+          ))}
+        </span>
         <span className="count">{totalCount.toLocaleString()}</span>
       </div>
-      {interactions.map((item) => {
-        const selected = item.id === selectedId;
-        const kindLabel = interactionKindLabel(item);
-        const wasted = wasteById.get(item.id) ?? 0;
-        const tone = interactionKindTone(item.kind);
-        const wall = extraWallMs(item);
-        const started = timeAxis(Math.max(0, item.start - t0));
-        return (
+      <div className="rl-cascade-interaction-rows" ref={listRef}>
+        {rows.map((row) => (
           <button
             type="button"
-            key={item.id}
-            className={`rl-cascade-interaction${selected ? " selected" : ""}`}
-            data-kind={tone}
-            onClick={() => onSelect(item.id)}
-            title={`${item.label} · ${kindLabel} · ${ms(item.metrics.reactDuration)} React · ${item.metrics.renderCount.toLocaleString()} renders · ${started}`}
+            key={row.id}
+            className={`rl-cascade-interaction${row.selected ? " selected" : ""}`}
+            data-kind={interactionKindTone(row.kind)}
+            data-hot={row.hot || undefined}
+            aria-selected={row.selected}
+            style={{ "--rail-cost": `${(row.costShare * 100).toFixed(1)}%` } as React.CSSProperties}
+            onClick={() => onSelect(row.id)}
+            title={row.detail}
           >
-            <span className={`kind-pip kind-${tone}`} aria-hidden="true" />
-            <span className="title">{item.label}</span>
-            <span className="trail">
-              {wasted > 0 ? <span className="waste">{wasted.toLocaleString()}</span> : null}
-              <span className="nren">{item.metrics.renderCount.toLocaleString()}</span>
-              <span className="react">{ms(item.metrics.reactDuration)}</span>
-            </span>
-            {selected ? (
-              <span className="foot">
-                <span className="meta">{item.metrics.renderCount.toLocaleString()} renders</span>
-                {wasted > 0 ? ` · ${wasted.toLocaleString()} wasted` : ""}
-                {wall != null ? ` · ${ms(wall)} wall` : ""}
-                {` · ${item.metrics.componentIds.length.toLocaleString()} comps · ${item.commitIds.length.toLocaleString()} ${item.commitIds.length === 1 ? "commit" : "commits"}`}
-                {item.metrics.stateUpdates > 1
-                  ? ` · ${item.metrics.stateUpdates.toLocaleString()} state`
-                  : ""}
-              </span>
+            <span className={`kind-pip kind-${interactionKindTone(row.kind)}`} aria-hidden="true" />
+            <span className="title">{row.label}</span>
+            <span className="react">{ms(row.cost)}</span>
+            {row.wasted > 0 ? (
+              <span
+                className="waste-dot"
+                aria-label={`${row.wasted.toLocaleString()} wasted renders`}
+              />
             ) : null}
           </button>
-        );
-      })}
+        ))}
+      </div>
     </div>
   );
 }
