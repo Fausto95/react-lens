@@ -1,0 +1,613 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="dark light" />
+    <title>Interactions rail — two directions</title>
+    <link rel="icon" href="data:," />
+    <style>
+      :root {
+        --bg: #0a0a0b;
+        --panel: #0f0f11;
+        --panel-2: #17171b;
+        --panel-3: #1e1e23;
+        --text: #ececf0;
+        --text-2: #9c9ca6;
+        --text-3: #61616c;
+        --line: rgba(255, 255, 255, 0.075);
+        --line-strong: rgba(255, 255, 255, 0.16);
+        --accent: #6e9bff;
+        --accent-soft: rgba(110, 155, 255, 0.14);
+        --warn: #f5a623;
+        --bad: #f87171;
+        --cause-state: #3ecf8e;
+        --cause-props: #4c8dff;
+        --cause-context: #a78bfa;
+        --cause-parent: #82828e;
+        --mono: ui-monospace, "SF Mono", Menlo, monospace;
+        --sans: -apple-system, BlinkMacSystemFont, "Inter", system-ui, sans-serif;
+      }
+      [data-theme="light"] {
+        --bg: #fcfcfd;
+        --panel: #fff;
+        --panel-2: #f4f4f6;
+        --panel-3: #eaeaee;
+        --text: #14141a;
+        --text-2: #5e5e6b;
+        --text-3: #9494a1;
+        --line: rgba(0, 0, 0, 0.08);
+        --line-strong: rgba(0, 0, 0, 0.18);
+        --accent: #3563e9;
+        --accent-soft: rgba(53, 99, 233, 0.1);
+        --warn: #b26a00;
+        --bad: #d33b3b;
+        --cause-state: #12a06a;
+        --cause-props: #2f6fe4;
+        --cause-context: #7c4ddb;
+        --cause-parent: #7c7c88;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        height: 100vh;
+        overflow: hidden;
+        background: var(--bg);
+        color: var(--text);
+        font: 13px/1.5 var(--sans);
+        -webkit-font-smoothing: antialiased;
+      }
+      #app {
+        display: grid;
+        grid-template-rows: auto auto minmax(0, 1fr);
+        height: 100vh;
+      }
+      header {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        height: 44px;
+        padding: 0 12px;
+        border-bottom: 1px solid var(--line);
+        background: var(--panel);
+      }
+      .brand {
+        font-weight: 600;
+      }
+      .brand span {
+        color: var(--text-3);
+        font-weight: 400;
+        font-size: 11px;
+        margin-left: 6px;
+      }
+      .seg {
+        display: flex;
+        gap: 2px;
+        background: var(--panel-2);
+        padding: 2px;
+        border-radius: 7px;
+      }
+      .seg button {
+        appearance: none;
+        border: 0;
+        background: transparent;
+        color: var(--text-2);
+        font: inherit;
+        font-size: 12px;
+        font-weight: 500;
+        padding: 4px 11px;
+        border-radius: 5px;
+        cursor: pointer;
+        white-space: nowrap;
+      }
+      .seg button[aria-selected="true"] {
+        background: var(--bg);
+        color: var(--text);
+        box-shadow: 0 0 0 1px var(--line-strong);
+      }
+      .spacer {
+        margin-left: auto;
+      }
+      .icon-btn {
+        appearance: none;
+        border: 1px solid var(--line-strong);
+        background: transparent;
+        color: var(--text-2);
+        border-radius: 6px;
+        height: 26px;
+        padding: 0 9px;
+        cursor: pointer;
+        font: inherit;
+        font-size: 12px;
+      }
+      .note {
+        padding: 9px 12px;
+        border-bottom: 1px solid var(--line);
+        color: var(--text-2);
+        font-size: 12px;
+      }
+      .note b {
+        color: var(--text);
+      }
+      .note .win {
+        color: var(--cause-state);
+      }
+      .note .cost {
+        color: var(--warn);
+      }
+
+      /* ---------- shared panel chrome ---------- */
+      .panel {
+        min-width: 0;
+        min-height: 0;
+        display: grid;
+        background: var(--bg);
+      }
+      .toolbar {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        height: 34px;
+        padding: 0 10px;
+        border-bottom: 1px solid var(--line);
+        background: color-mix(in srgb, var(--panel) 92%, var(--bg));
+        font-size: 11px;
+        color: var(--text-3);
+        font-family: var(--mono);
+      }
+      .kicker {
+        font-size: 10px;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        font-weight: 600;
+        color: var(--text-3);
+        font-family: var(--sans);
+      }
+
+      /* mock lens, so the width the rail takes is visible */
+      .lens {
+        min-width: 0;
+        min-height: 0;
+        overflow: auto;
+        font-family: var(--mono);
+        font-size: 11px;
+      }
+      .lrow {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 120px 46px;
+        align-items: center;
+        gap: 10px;
+        height: 24px;
+        padding: 0 10px;
+      }
+      .lrow:hover {
+        background: color-mix(in srgb, var(--text) 5%, transparent);
+      }
+      .lname {
+        display: flex;
+        align-items: center;
+        min-width: 0;
+        white-space: nowrap;
+      }
+      .lind {
+        flex: none;
+        align-self: stretch;
+        background-image: repeating-linear-gradient(
+          to right,
+          var(--line) 0 1px,
+          transparent 1px 13px
+        );
+      }
+      .ldot {
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        flex: none;
+        margin: 0 7px 0 1px;
+      }
+      .lbar {
+        height: 8px;
+        border-radius: 2px;
+        background: var(--panel-2);
+        overflow: hidden;
+      }
+      .lbar i {
+        display: block;
+        height: 100%;
+      }
+      .lms {
+        text-align: right;
+        font-size: 10px;
+        color: var(--text-2);
+        font-variant-numeric: tabular-nums;
+      }
+      .ltrunc {
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      /* ============================================================
+         A — Compact rail
+         ============================================================ */
+      .a-shell {
+        grid-template-columns: 168px minmax(0, 1fr);
+      }
+      /* The width chain has to be unbroken, or the rows size to their content
+         and spill over the rail instead of truncating inside it. */
+      .a-rail {
+        border-right: 1px solid var(--line);
+        background: var(--panel);
+        min-width: 0;
+        min-height: 0;
+        display: grid;
+        /* An explicit column track, or the single implicit one is auto-sized by
+           the longest row and the rail quietly grows past its own width. */
+        grid-template-columns: minmax(0, 1fr);
+        grid-template-rows: auto minmax(0, 1fr);
+      }
+      .a-rows {
+        min-width: 0;
+        overflow-x: hidden;
+        overflow-y: auto;
+      }
+      .a-row {
+        position: relative;
+        display: grid;
+        grid-template-columns: 7px minmax(0, 1fr) auto;
+        align-items: center;
+        gap: 6px;
+        height: 30px;
+        padding: 0 8px;
+        cursor: pointer;
+        border-left: 2px solid transparent;
+        font-family: var(--mono);
+        font-size: 11px;
+      }
+      /* Cost is the row's own background — no separate bar column to pay for. */
+      .a-row::before {
+        content: "";
+        position: absolute;
+        inset: 3px auto 3px 0;
+        width: var(--w, 0%);
+        background: color-mix(in srgb, var(--accent) 13%, transparent);
+        border-radius: 0 3px 3px 0;
+        pointer-events: none;
+      }
+      .a-row:hover {
+        background: color-mix(in srgb, var(--text) 5%, transparent);
+      }
+      .a-row[aria-selected="true"] {
+        background: var(--accent-soft);
+        border-left-color: var(--accent);
+      }
+      .a-pip {
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        z-index: 1;
+      }
+      .a-label {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        z-index: 1;
+      }
+      .a-ms {
+        z-index: 1;
+        font-size: 10.5px;
+        color: var(--text-2);
+        font-variant-numeric: tabular-nums;
+        white-space: nowrap;
+      }
+      .a-row[aria-selected="true"] .a-ms,
+      .a-row[data-hot="true"] .a-ms {
+        color: var(--text);
+        font-weight: 600;
+      }
+      .a-waste {
+        position: absolute;
+        right: 3px;
+        top: 3px;
+        width: 4px;
+        height: 4px;
+        border-radius: 50%;
+        background: var(--warn);
+      }
+
+      /* ============================================================
+         B — Horizontal strip
+         ============================================================ */
+      .b-shell {
+        grid-template-rows: auto minmax(0, 1fr);
+      }
+      .b-strip {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        height: 40px;
+        padding: 0 10px;
+        border-bottom: 1px solid var(--line);
+        background: var(--panel);
+        overflow-x: auto;
+        overflow-y: hidden;
+        scrollbar-width: thin;
+      }
+      .b-chip {
+        position: relative;
+        flex: 0 0 auto;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        max-width: 190px;
+        height: 26px;
+        padding: 0 9px;
+        border-radius: 13px;
+        border: 1px solid var(--line);
+        background: var(--panel-2);
+        cursor: pointer;
+        font-family: var(--mono);
+        font-size: 11px;
+        color: var(--text-2);
+        white-space: nowrap;
+      }
+      .b-chip:hover {
+        color: var(--text);
+        border-color: var(--line-strong);
+      }
+      .b-chip[aria-selected="true"] {
+        background: var(--accent-soft);
+        border-color: color-mix(in srgb, var(--accent) 55%, transparent);
+        color: var(--text);
+      }
+      .b-pip {
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        flex: none;
+      }
+      .b-label {
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .b-ms {
+        color: var(--text-3);
+        font-variant-numeric: tabular-nums;
+      }
+      .b-chip[aria-selected="true"] .b-ms,
+      .b-chip[data-hot="true"] .b-ms {
+        color: var(--text);
+        font-weight: 600;
+      }
+      .b-chip[data-waste="true"]::after {
+        content: "";
+        position: absolute;
+        left: -1px;
+        top: 50%;
+        transform: translateY(-50%);
+        width: 3px;
+        height: 14px;
+        border-radius: 2px;
+        background: var(--warn);
+      }
+      .b-sticky {
+        position: sticky;
+        right: -10px;
+        flex: none;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        margin-left: auto;
+        padding: 0 10px 0 14px;
+        background: linear-gradient(to right, transparent, var(--panel) 14px);
+      }
+
+      .sortseg {
+        display: flex;
+        gap: 1px;
+        background: var(--panel-2);
+        padding: 2px;
+        border-radius: 6px;
+        flex: none;
+      }
+      .sortseg button {
+        appearance: none;
+        border: 0;
+        background: transparent;
+        color: var(--text-3);
+        font: inherit;
+        font-family: var(--sans);
+        font-size: 10.5px;
+        padding: 2px 6px;
+        border-radius: 4px;
+        cursor: pointer;
+        white-space: nowrap;
+      }
+      .a-rail .toolbar {
+        gap: 6px;
+        padding: 0 6px;
+      }
+      .sortseg button[aria-selected="true"] {
+        background: var(--bg);
+        color: var(--text);
+      }
+      .count {
+        font-variant-numeric: tabular-nums;
+        white-space: nowrap;
+      }
+      .view {
+        display: none;
+        min-height: 0;
+      }
+      .view[data-active="true"] {
+        display: grid;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="app">
+      <header>
+        <div class="brand">Interactions <span>two directions</span></div>
+        <div class="seg" role="tablist" id="opts">
+          <button role="tab" data-opt="a" aria-selected="true">A · Compact rail</button>
+          <button role="tab" data-opt="b" aria-selected="false">B · Strip</button>
+        </div>
+        <span class="spacer"></span>
+        <button class="icon-btn" id="theme">Theme</button>
+      </header>
+      <p class="note" id="note"></p>
+      <div id="views"></div>
+    </div>
+
+    <script type="module">
+      import {
+        INTERACTIONS,
+        KINDS,
+        LEDGER_ROWS,
+        MAX_SELF,
+        SORTS,
+        fmtAt,
+        fmtCount,
+        fmtMs,
+      } from "./data.js";
+
+      const state = { opt: "a", sort: "recent", selected: INTERACTIONS[0].id };
+
+      const NOTES = {
+        a: `<b>A · Compact rail.</b> Still a rail, so the session stays scannable top-to-bottom, but
+            <span class="win">168px instead of 156–248px</span> and one line per interaction. Cost is the
+            row's own background fill rather than a bar column, so nothing is spent on chrome. Only
+            label + self time are shown; renders, commits and state updates move to the tooltip. A
+            wasted-render warning is a dot in the corner. <span class="cost">Cost: still takes a column.</span>`,
+        b: `<b>B · Strip.</b> One scrollable row of chips above the lens, so
+            <span class="win">the lens gets the full width</span> — the biggest win for the ledger at depth.
+            Same information per chip: kind pip, label, self time, wasted edge.
+            <span class="cost">Cost: a long session scrolls sideways, and you lose the at-a-glance
+            vertical scan of the whole session.</span>`,
+      };
+
+      const sorted = () => [...INTERACTIONS].sort(SORTS[state.sort].compare);
+      const hot = (item) => item.selfMs >= MAX_SELF * 0.1;
+      const tip = (item) =>
+        `${item.label} · ${KINDS[item.kind].label}\n${fmtMs(item.selfMs)}ms self · ${item.wallMs}ms wall\n` +
+        `${item.renders} renders · ${item.comps} components · ${item.commits} commits · ${item.states} state\n` +
+        (item.wasted > 0 ? `${item.wasted} wasted renders\n` : "") +
+        `at +${fmtAt(item.at)}`;
+
+      function sortControl() {
+        return `<span class="sortseg" role="tablist" aria-label="Sort interactions">${Object.entries(
+          SORTS,
+        )
+          .map(
+            ([key, s]) =>
+              `<button role="tab" data-sort="${key}" aria-selected="${state.sort === key}">${s.label}</button>`,
+          )
+          .join("")}</span>`;
+      }
+
+      function mockLens() {
+        const max = Math.max(...LEDGER_ROWS.map((r) => r[3]));
+        return `<div class="panel"><div class="toolbar"><span class="kicker">Ledger</span>
+            <span style="margin-left:auto">${LEDGER_ROWS.length} rows</span></div>
+          <div class="lens">${LEDGER_ROWS.map(
+            ([depth, name, cause, self]) => `<div class="lrow">
+              <span class="lname"><span class="lind" style="width:${depth * 13}px"></span>
+                <span class="ldot" style="background:var(--cause-${cause})"></span>
+                <span class="ltrunc">${name}</span></span>
+              <span class="lbar"><i style="width:${(self / max) * 100}%;background:var(--cause-${cause})"></i></span>
+              <span class="lms">${self.toFixed(2)}</span>
+            </div>`,
+          ).join("")}</div></div>`;
+      }
+
+      function optionA() {
+        const items = sorted();
+        return `<section class="view panel a-shell" data-view="a" data-active="${state.opt === "a"}">
+          <div class="a-rail">
+            <div class="toolbar">
+              ${sortControl()}
+              <span class="count" style="margin-left:auto">${items.length}</span>
+            </div>
+            <div class="a-rows">${items
+              .map(
+                (item) => `<div class="a-row" role="option" data-id="${item.id}"
+                    aria-selected="${state.selected === item.id}" data-hot="${hot(item)}"
+                    style="--w:${(item.selfMs / MAX_SELF) * 100}%" title="${tip(item)}">
+                  <span class="a-pip" style="background:${KINDS[item.kind].color}"></span>
+                  <span class="a-label">${item.label}</span>
+                  <span class="a-ms">${fmtMs(item.selfMs)}</span>
+                  ${item.wasted > 0 ? '<span class="a-waste"></span>' : ""}
+                </div>`,
+              )
+              .join("")}</div>
+          </div>
+          ${mockLens()}
+        </section>`;
+      }
+
+      function optionB() {
+        const items = sorted();
+        return `<section class="view panel b-shell" data-view="b" data-active="${state.opt === "b"}">
+          <div class="b-strip" role="listbox" aria-label="Interactions">
+            ${items
+              .map(
+                (item) => `<button class="b-chip" role="option" data-id="${item.id}"
+                    aria-selected="${state.selected === item.id}" data-hot="${hot(item)}"
+                    data-waste="${item.wasted > 0}" title="${tip(item)}">
+                  <span class="b-pip" style="background:${KINDS[item.kind].color}"></span>
+                  <span class="b-label">${item.label}</span>
+                  <span class="b-ms">${fmtMs(item.selfMs)}</span>
+                </button>`,
+              )
+              .join("")}
+            <span class="b-sticky">${sortControl()}<span class="count" style="font-family:var(--mono);font-size:11px;color:var(--text-3)">${fmtCount(items.length)}</span></span>
+          </div>
+          ${mockLens()}
+        </section>`;
+      }
+
+      const views = document.getElementById("views");
+      const note = document.getElementById("note");
+
+      function render() {
+        note.innerHTML = NOTES[state.opt];
+        views.innerHTML = state.opt === "a" ? optionA() : optionB();
+        views.className = "";
+        for (const button of document.querySelectorAll("#opts button"))
+          button.setAttribute("aria-selected", String(button.dataset.opt === state.opt));
+      }
+
+      views.addEventListener("click", (event) => {
+        const sort = event.target.closest("[data-sort]");
+        if (sort) {
+          state.sort = sort.dataset.sort;
+          return render();
+        }
+        const row = event.target.closest("[data-id]");
+        if (row) {
+          state.selected = row.dataset.id;
+          render();
+        }
+      });
+      document.getElementById("opts").addEventListener("click", (event) => {
+        const button = event.target.closest("button[data-opt]");
+        if (!button) return;
+        state.opt = button.dataset.opt;
+        render();
+      });
+      document.getElementById("theme").addEventListener("click", () => {
+        const el = document.documentElement;
+        el.dataset.theme = el.dataset.theme === "dark" ? "light" : "dark";
+      });
+      window.addEventListener("keydown", (event) => {
+        if (event.key === "1" || event.key === "2") {
+          state.opt = event.key === "1" ? "a" : "b";
+          render();
+        }
+      });
+
+      render();
+    </script>
+  </body>
+</html>
