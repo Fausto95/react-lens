@@ -11,7 +11,7 @@ test("mocked OpenAI stream: chips, citations, copy, and drawer close", async ({
   await seedAgentKey(page);
   await page.reload();
   await expect(page.locator(".rl-root")).toBeVisible();
-  await expect(page.locator(".rl-tree-name", { hasText: /^App$/ }).first()).toBeVisible();
+  await expect(page.locator(".rl-ledger-row").first()).toBeVisible();
 
   let call = 0;
   await page.route("**/v1/chat/completions", async (route) => {

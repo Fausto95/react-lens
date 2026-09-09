@@ -29,9 +29,8 @@ describe("panel prefs", () => {
   });
 
   it("round-trips dock and column widths", () => {
-    savePanelPrefs({ dockWidth: 520, treeWidth: 300, inspectorWidth: 360 });
+    savePanelPrefs({ dockWidth: 520, inspectorWidth: 360 });
     expect(loadPanelPrefs().dockWidth).toBe(520);
-    expect(loadPanelPrefs().treeWidth).toBe(300);
     expect(loadPanelPrefs().inspectorWidth).toBe(360);
   });
 
@@ -43,8 +42,7 @@ describe("panel prefs", () => {
   });
 
   it("clamps column widths into their drag ranges", () => {
-    savePanelPrefs({ treeWidth: 10, inspectorWidth: 9999 });
-    expect(loadPanelPrefs().treeWidth).toBe(180);
+    savePanelPrefs({ inspectorWidth: 9999 });
     expect(loadPanelPrefs().inspectorWidth).toBe(560);
   });
 

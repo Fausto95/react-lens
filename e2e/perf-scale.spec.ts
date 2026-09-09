@@ -16,11 +16,13 @@ test.describe("perf scale", () => {
     expect(elapsed).toBeLessThan(15_000);
   });
 
-  test("tree mounts few DOM rows even after catalog churn", async ({ page }) => {
+  test("the ledger mounts few DOM rows even after catalog churn", async ({ page }) => {
     await page.goto("/");
     await page.getByTestId("refresh-catalog").click();
-    const treeRows = page.locator(".rl-tree-row, [data-tree-row]");
-    const count = await treeRows.count();
-    expect(count).toBeLessThanOrEqual(120);
+    // The ledger windows: only the visible slice is ever in the DOM, however
+    // many renders the cascade holds.
+    const rows = page.locator(".rl-ledger-row");
+    await expect(rows.first()).toBeVisible();
+    expect(await rows.count()).toBeLessThanOrEqual(120);
   });
 });

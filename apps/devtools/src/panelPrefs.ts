@@ -22,10 +22,8 @@ export interface PanelPrefs {
   dockPlacement: DockPlacement;
   /** Column widths (px) for the components and inspector panes; the timeline
    *  takes whatever is left. */
-  treeWidth: number;
   inspectorWidth: number;
   /** Side panes collapsed to a rail; each keeps its width for when it returns. */
-  treeCollapsed: boolean;
   inspectorCollapsed: boolean;
   /** Selecting a component scrolls the inspected page to it when off-screen. */
   revealOnSelect: boolean;
@@ -53,9 +51,7 @@ const DEFAULTS: PanelPrefs = {
   dockWidth: null,
   dockHeight: null,
   dockPlacement: "side",
-  treeWidth: 272,
   inspectorWidth: 320,
-  treeCollapsed: false,
   inspectorCollapsed: false,
   revealOnSelect: true,
   maxEvents: 10_000,
@@ -90,10 +86,7 @@ export function loadPanelPrefs(): PanelPrefs {
           ? parsed.dockHeight
           : DEFAULTS.dockHeight,
       dockPlacement: parsed.dockPlacement === "bottom" ? "bottom" : DEFAULTS.dockPlacement,
-      treeWidth: num(parsed.treeWidth, DEFAULTS.treeWidth, 180, 460),
       inspectorWidth: num(parsed.inspectorWidth, DEFAULTS.inspectorWidth, 240, 560),
-      treeCollapsed:
-        typeof parsed.treeCollapsed === "boolean" ? parsed.treeCollapsed : DEFAULTS.treeCollapsed,
       inspectorCollapsed:
         typeof parsed.inspectorCollapsed === "boolean"
           ? parsed.inspectorCollapsed

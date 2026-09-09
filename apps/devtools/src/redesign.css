@@ -236,6 +236,10 @@
   width: 100%;
   min-width: 48px;
   font-family: var(--sans);
+  /* Appearance lives here, not on a per-pane class, so every filter field in
+     the panel is the same field — see `FilterField.tsx`. */
+  flex: 1;
+  padding: 5px 26px 5px 8px;
 }
 .rl-redesign .filter input::placeholder {
   color: var(--text-3);
@@ -1285,16 +1289,6 @@ html[data-rl-dock="bottom"] .rl-redesign.rl-embedded .rl-resize-handle {
   color: var(--text);
 }
 
-.rl-redesign .rl-tree-search-count {
-  position: absolute;
-  right: 18px;
-  font-family: var(--mono);
-  font-size: 9.5px;
-  color: var(--text-3);
-}
-.rl-redesign .rl-tree-search-count.invalid {
-  color: var(--bad);
-}
 .rl-redesign .filter {
   position: relative;
 }

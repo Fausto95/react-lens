@@ -1,10 +1,17 @@
 import { test, expect } from "@playwright/test";
-import { boot, bumpCounter, selectInTree, openSection, propsLine, counterLine } from "./helpers.js";
+import {
+  boot,
+  bumpCounter,
+  selectComponent,
+  openSection,
+  propsLine,
+  counterLine,
+} from "./helpers.js";
 
 test("renders feed lists newest first and expands with the diff", async ({ page }) => {
   await boot(page);
   await bumpCounter(page, 2);
-  await selectInTree(page, "HooksShowca");
+  await selectComponent(page, "HooksShowca");
   await openSection(page, "Renders");
 
   const rows = page.locator(".rl-render-row");
@@ -21,7 +28,7 @@ test("renders feed lists newest first and expands with the diff", async ({ page 
 
 test("editing a prop in the inspector re-renders the page", async ({ page }) => {
   await boot(page);
-  await selectInTree(page, "PropsShowcase");
+  await selectComponent(page, "PropsShowcase");
   await openSection(page, "Props");
 
   const textRow = page
@@ -37,7 +44,7 @@ test("editing a prop in the inspector re-renders the page", async ({ page }) => 
 
 test("reducer state shows a read-only badge", async ({ page }) => {
   await boot(page);
-  await selectInTree(page, "HooksShowcase");
+  await selectComponent(page, "HooksShowcase");
   await openSection(page, "State");
 
   const reducerRow = page.locator(".rl-val-row").filter({ hasText: /reducer #/ });
@@ -47,7 +54,7 @@ test("reducer state shows a read-only badge", async ({ page }) => {
 
 test("editing useState in the inspector updates the page counter", async ({ page }) => {
   await boot(page);
-  await selectInTree(page, "HooksShowcase");
+  await selectComponent(page, "HooksShowcase");
   await openSection(page, "State");
 
   const stateInput = page

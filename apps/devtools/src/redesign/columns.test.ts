@@ -1,85 +1,65 @@
-import { describe, it, expect } from "vite-plus/test";
-import { RAIL_W, columnTemplate, fitColumns, nextColumnWidth, TIMELINE_MIN } from "./columns.js";
+import { describe, expect, it } from "vite-plus/test";
+import {
+  INSP_MAX,
+  INSP_MIN,
+  NONE_COLLAPSED,
+  RAIL_W,
+  TIMELINE_MIN,
+  columnTemplate,
+  fitColumns,
+  nextColumnWidth,
+} from "./columns.js";
 
 describe("columnTemplate", () => {
-  it("gives each side pane its width and the timeline the rest", () => {
-    expect(columnTemplate(272, 320, { tree: false, inspector: false })).toBe(
-      "272px minmax(0, 1fr) 320px",
-    );
+  it("gives the cascade the slack and the inspector its width", () => {
+    expect(columnTemplate(320)).toBe("minmax(0, 1fr) 320px");
   });
 
-  it("shrinks a collapsed pane to a rail without disturbing the other", () => {
-    expect(columnTemplate(272, 320, { tree: true, inspector: false })).toBe(
-      `${RAIL_W}px minmax(0, 1fr) 320px`,
-    );
-    expect(columnTemplate(272, 320, { tree: false, inspector: true })).toBe(
-      `272px minmax(0, 1fr) ${RAIL_W}px`,
-    );
-  });
-
-  it("hands the whole width to the timeline when both are collapsed", () => {
-    expect(columnTemplate(272, 320, { tree: true, inspector: true })).toBe(
-      `${RAIL_W}px minmax(0, 1fr) ${RAIL_W}px`,
-    );
-  });
-});
-
-describe("nextColumnWidth", () => {
-  const total = 1200;
-
-  it("follows the pointer within the pane's own range", () => {
-    expect(nextColumnWidth("tree", 300, { total, treeW: 272, inspW: 320 })).toBe(300);
-    expect(nextColumnWidth("inspector", 400, { total, treeW: 272, inspW: 320 })).toBe(400);
-  });
-
-  it("clamps to the pane's minimum and maximum", () => {
-    expect(nextColumnWidth("tree", 20, { total, treeW: 272, inspW: 320 })).toBe(180);
-    expect(nextColumnWidth("tree", 9999, { total, treeW: 272, inspW: 320 })).toBe(520);
-    expect(nextColumnWidth("inspector", 10, { total, treeW: 272, inspW: 320 })).toBe(260);
-  });
-
-  it("never squeezes the timeline below the width its controls need", () => {
-    // Dragging used to crush the middle column to ~40px, putting the zoom and
-    // transport buttons out of reach.
-    const w = nextColumnWidth("tree", 900, { total: 1000, treeW: 272, inspW: 320 });
-    expect(1000 - w - 320).toBeGreaterThanOrEqual(TIMELINE_MIN);
-  });
-
-  it("keeps the dragged pane usable when the minimums cannot all fit", () => {
-    // Below ~840px the three minimums do not fit at once. The pane being
-    // dragged keeps its own minimum rather than collapsing by stealth —
-    // collapsing is a deliberate act, with a button.
-    expect(nextColumnWidth("tree", 900, { total: 700, treeW: 272, inspW: 320 })).toBe(180);
-  });
-
-  it("counts a collapsed neighbour as a rail, so the pane may grow into it", () => {
-    const open = nextColumnWidth("tree", 9999, { total: 900, treeW: 272, inspW: 320 });
-    const railed = nextColumnWidth("tree", 9999, {
-      total: 900,
-      treeW: 272,
-      inspW: 320,
-      collapsed: { tree: false, inspector: true },
-    });
-    expect(railed).toBeGreaterThan(open);
+  it("reduces a collapsed inspector to a rail", () => {
+    expect(columnTemplate(320, { inspector: true })).toBe(`minmax(0, 1fr) ${RAIL_W}px`);
   });
 });
 
 describe("fitColumns", () => {
-  it("keeps preferred widths when the dock is wide enough", () => {
-    expect(fitColumns(1200, 272, 320)).toEqual({ treeW: 272, inspW: 320 });
+  it("leaves the stored width alone when it fits", () => {
+    expect(fitColumns(1200, 320, NONE_COLLAPSED)).toEqual({ inspW: 320 });
   });
 
-  it("scales both side panes so a narrow dock still shows three columns", () => {
-    const { treeW, inspW } = fitColumns(520, 272, 320);
-    expect(treeW + inspW).toBeLessThan(520);
-    expect(treeW).toBeGreaterThan(0);
-    expect(inspW).toBeGreaterThan(0);
-    expect(520 - treeW - inspW).toBeGreaterThan(0);
+  it("leaves it alone when the grid has not been measured yet", () => {
+    expect(fitColumns(0, 320)).toEqual({ inspW: 320 });
   });
 
-  it("leaves a collapsed rail alone and spends the rest on the open pane", () => {
-    const { treeW, inspW } = fitColumns(520, 272, 320, { tree: true, inspector: false });
-    expect(treeW).toBe(272);
-    expect(inspW + RAIL_W).toBeLessThanOrEqual(520);
+  it("squeezes the inspector rather than the cascade in a narrow dock", () => {
+    const { inspW } = fitColumns(500, 420);
+    expect(inspW).toBeLessThan(420);
+    expect(500 - inspW).toBeGreaterThan(0);
+  });
+
+  it("never squeezes a collapsed inspector — it is already a rail", () => {
+    expect(fitColumns(300, 420, { inspector: true })).toEqual({ inspW: 420 });
+  });
+});
+
+describe("nextColumnWidth", () => {
+  it("follows the pointer inside the pane's range", () => {
+    expect(nextColumnWidth(400, { total: 1400, inspW: 320 })).toBe(400);
+  });
+
+  it("clamps to the pane's minimum", () => {
+    expect(nextColumnWidth(10, { total: 1400, inspW: 320 })).toBe(INSP_MIN);
+  });
+
+  it("clamps to the pane's maximum", () => {
+    expect(nextColumnWidth(5000, { total: 4000, inspW: 320 })).toBe(INSP_MAX);
+  });
+
+  it("never starves the cascade below its minimum", () => {
+    const total = INSP_MIN + TIMELINE_MIN + 40;
+    const next = nextColumnWidth(9999, { total, inspW: 320 });
+    expect(total - next).toBeGreaterThanOrEqual(TIMELINE_MIN);
+  });
+
+  it("still honours the minimum when the dock is smaller than both minima", () => {
+    expect(nextColumnWidth(9999, { total: 100, inspW: 320 })).toBe(INSP_MIN);
   });
 });

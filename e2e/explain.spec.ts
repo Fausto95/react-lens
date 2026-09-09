@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { boot, bumpCounter, selectInTree, openSection } from "./helpers.js";
+import { boot, bumpCounter, selectComponent, openSection } from "./helpers.js";
 
 /**
  * Local explain path: the inspector Why section narrates the selected render
@@ -8,7 +8,7 @@ import { boot, bumpCounter, selectInTree, openSection } from "./helpers.js";
 test("Why section narrates the selected component after interaction", async ({ page }) => {
   await boot(page);
   await bumpCounter(page, 2);
-  await selectInTree(page, "HooksShowca");
+  await selectComponent(page, "HooksShowca");
   await openSection(page, "Why");
 
   const why = page.locator(".isect").filter({ has: page.locator(".ihead", { hasText: "Why" }) });
