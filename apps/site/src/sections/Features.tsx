@@ -7,7 +7,7 @@ interface Feature {
 const FEATURES: Feature[] = [
   {
     title: "Cascade",
-    body: "Everything the selected interaction rendered, read two ways — a ledger you scan top to bottom and a roll-up ranked by cost — with the replay transport on the same toolbar.",
+    body: "Everything the selected interaction rendered, read two ways — a ledger you scan top to bottom, with the prop keys and the owner behind each props render, and a roll-up ranked by cost — with the replay transport on the same toolbar.",
   },
   {
     title: "Bidirectional selection",

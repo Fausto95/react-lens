@@ -2,7 +2,12 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { ComponentId } from "@reactlens/protocol";
 import { IconCollapse, IconSparkle } from "@reactlens/icons";
 import { FilterField } from "../FilterField.js";
-import { isUnnamedRender, type CascadeNode, type CascadeProjection } from "./model.js";
+import {
+  cascadeBaseName,
+  isUnnamedRender,
+  type CascadeNode,
+  type CascadeProjection,
+} from "./model.js";
 import {
   buildLedgerRows,
   chainIds,
@@ -62,6 +67,12 @@ function causeClass(cause: CascadeNode["cause"]): string {
     default:
       return "cascade";
   }
+}
+
+/** Up to `cap` keys plus a count of the rest — one glance, full list in the tooltip. */
+function propKeysLabel(keys: readonly string[], cap = 3): string {
+  if (keys.length <= cap) return keys.join("·");
+  return `${keys.slice(0, cap).join("·")} +${keys.length - cap}`;
 }
 
 function Bar({
@@ -271,6 +282,11 @@ export function LedgerView({
                 : node.selfDuration;
               const hidden = row.subtree.renderCount - node.aggregateCount;
               const clamped = Math.min(row.depth, maxIndent);
+              // A folded chain is one cause, so its prop keys union cleanly.
+              const propsKeys = chain
+                ? [...new Set(chain.flatMap((link) => [...link.changedProps]))]
+                : [...node.changedProps];
+              const owner = node.ownerEdge === true ? node.ownerName : null;
               return (
                 <div
                   key={node.id}
@@ -312,6 +328,24 @@ export function LedgerView({
                     </span>
                     <span className={`rl-ledger-dot cause-${causeClass(node.cause)}`} />
                     <span className="rl-ledger-label">{node.name}</span>
+                    {propsKeys.length > 0 ? (
+                      <span
+                        className="rl-ledger-props"
+                        title={`Props that crossed this render: ${propsKeys.join(", ")}`}
+                      >
+                        {propKeysLabel(propsKeys)}
+                      </span>
+                    ) : null}
+                    {owner ? (
+                      <span
+                        className="rl-ledger-owner"
+                        title={`Props came from ${owner} — the component that renders ${cascadeBaseName(
+                          node,
+                        )} — not from the parent above it`}
+                      >
+                        ⤿ {owner}
+                      </span>
+                    ) : null}
                     {node.componentId !== null && flagged?.has(node.componentId) ? (
                       <span
                         className="rl-ledger-glyph g-warn"

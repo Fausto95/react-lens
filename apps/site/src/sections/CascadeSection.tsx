@@ -23,7 +23,9 @@ export function CascadeSection() {
           <p>
             Depth becomes indentation, so hundreds of renders stay in reading order. Library
             wrappers and pass-through chains fold away; each row carries its own self time and its
-            subtree&apos;s. Filter by name and the ancestors of every hit are kept.
+            subtree&apos;s. A props render names the keys that changed and, when they came from a
+            component other than the parent above it, the <b>owner</b> that sent them — React&apos;s
+            second tree, drawn on the first. Filter by name and the ancestors of every hit are kept.
           </p>
         </article>
         <article className="change">

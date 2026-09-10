@@ -753,6 +753,38 @@
 .rl-ledger-tail {
   color: var(--text-2);
 }
+
+/* The prop keys that crossed this render, and — when they came from a
+   component other than the parent above — who sent them. Both yield to the
+   name: they shrink and ellipsize first, so a long key list never pushes the
+   component you are reading off the row. */
+.rl-ledger-props,
+.rl-ledger-owner {
+  flex: 0 1 auto;
+  min-width: 0;
+  margin-left: 7px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 10px;
+  color: var(--text-3);
+}
+.rl-ledger-props {
+  color: var(--props, var(--text-3));
+  opacity: 0.85;
+}
+.rl-ledger-owner {
+  padding: 0 5px;
+  border-radius: 3px;
+  border: 0;
+  background: var(--panel-2);
+  font: inherit;
+  font-size: 10px;
+  color: var(--text-2);
+}
+.rl-ledger-row[data-muted] .rl-ledger-props,
+.rl-ledger-row[data-muted] .rl-ledger-owner {
+  opacity: 0.4;
+}
 .rl-ledger-twist {
   width: 13px;
   flex: none;

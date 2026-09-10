@@ -12,6 +12,7 @@ import { createIdFactory } from "@reactlens/protocol";
 import {
   type Fiber,
   type FiberRoot,
+  type ReactComponentInfo,
   type DevToolsHook,
   type ReactRenderer,
   getExistingHook,
@@ -377,6 +378,8 @@ export function createFiberBridge(target: typeof globalThis = globalThis): Fiber
     const rsc = flightMeta(fiber.elementType) ?? flightMeta(fiber.type);
     if (rsc) instance.rsc = rsc;
     if (parentFiber) instance.parentId = idOf(parentFiber);
+    const ownerFiber = ownerComponentOf(fiber);
+    if (ownerFiber) instance.ownerId = idOf(ownerFiber);
     const source = sourceOf(fiber);
     if (source) instance.source = source;
     const suspense = suspenseOf(fiber);
@@ -678,6 +681,25 @@ function nearestComponentAncestor(fiber: Fiber | null): Fiber | null {
     node = node.return;
   }
   return null;
+}
+
+/**
+ * The component whose render created this element — React's owner relation
+ * (`_debugOwner`). Unlike the structural parent it answers "where did my props
+ * come from", which can be a component nowhere near this position in the tree.
+ * Dev builds only: production React sets no `_debugOwner`. An element a server
+ * component created has a `ReactComponentInfo` owner, not a fiber; it has no
+ * client-side render to point at, so it yields no owner here.
+ */
+export function ownerComponentOf(fiber: Fiber): Fiber | null {
+  const owner = fiber._debugOwner;
+  if (!owner || !isFiber(owner)) return null;
+  const component = nearestComponentSelfOrAncestor(owner);
+  return component && component !== fiber ? component : null;
+}
+
+function isFiber(owner: Fiber | ReactComponentInfo): owner is Fiber {
+  return typeof (owner as Fiber).tag === "number";
 }
 
 /**

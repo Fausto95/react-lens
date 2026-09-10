@@ -22,6 +22,11 @@ export interface ComponentInstance {
   type: ComponentType;
   name: string;
   parentId?: ComponentId;
+  /**
+   * The component whose render created this element — React's owner relation
+   * (`_debugOwner`). Dev builds only; absent when React reported none. This is
+   * where the props came from, which is not always the structural parent.
+   */
   ownerId?: ComponentId;
   rootId: RootId;
   source?: SourceLocation;

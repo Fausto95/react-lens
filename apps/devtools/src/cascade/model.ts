@@ -21,6 +21,17 @@ export interface CascadeRenderNode {
   aggregateCount: 1;
   /** React Compiler status, or `null` when the runtime did not report one. */
   compiled: boolean | null;
+  /** Component whose render created this element (React's owner), when known. */
+  ownerId: ComponentId | null;
+  ownerName: string | null;
+  /**
+   * `true` when the props that re-rendered this component came from its owner
+   * rather than the cascade parent above it — the cross-tree data edge. `null`
+   * when the cause is not `props` or React reported no owner.
+   */
+  ownerEdge: boolean | null;
+  /** Prop keys that crossed this render, when the cause is `props`. */
+  changedProps: readonly string[];
 }
 
 export interface CascadeAggregateNode {
@@ -41,6 +52,12 @@ export interface CascadeAggregateNode {
   aggregateCount: number;
   /** `true` only when every member is compiled; `null` when they disagree. */
   compiled: boolean | null;
+  /** Members share a parent, so they usually share an owner; `null` otherwise. */
+  ownerId: ComponentId | null;
+  ownerName: string | null;
+  ownerEdge: boolean | null;
+  /** Union of the members' changed prop keys, capped for display. */
+  changedProps: readonly string[];
 }
 
 export type CascadeNode = CascadeRenderNode | CascadeAggregateNode;
@@ -101,6 +118,28 @@ function explicitParent(render: RenderEvent): ComponentId | null {
     if (reason.type === "parent") return reason.componentId;
   }
   return null;
+}
+
+function changedPropsOf(render: RenderEvent): readonly string[] {
+  for (const reason of render.reasons) {
+    if (reason.type === "props") return reason.changed;
+  }
+  return [];
+}
+
+/**
+ * `true` when the props that re-rendered this component came from its owner,
+ * not from the cascade parent directly above it. A `null` parent means the
+ * render hangs off the interaction itself, so any owner is a cross-tree edge.
+ */
+function ownerEdgeOf(
+  cause: CascadeCause,
+  ownerId: ComponentId | null,
+  parentComponentId: ComponentId | null,
+): boolean | null {
+  if (cause !== "props" || ownerId === null) return null;
+  if (parentComponentId === null) return true;
+  return ownerId !== parentComponentId;
 }
 
 function rawId(renderId: RenderId): string {
@@ -201,6 +240,27 @@ function sharedCompiled(group: readonly CascadeNode[]): boolean | null {
   return group.every((node) => node.compiled === first) ? first : null;
 }
 
+/** Same convention as `sharedCompiled`, for any optional attribute. */
+function sharedOf<T>(values: readonly T[]): T | null {
+  const first = values[0] ?? null;
+  if (first === null) return null;
+  return values.every((value) => value === first) ? first : null;
+}
+
+/** Union of the members' changed prop keys, order-stable, capped for display. */
+const AGGREGATE_PROPS_CAP = 6;
+
+function unionChangedProps(group: readonly CascadeRenderNode[]): readonly string[] {
+  const seen = new Set<string>();
+  for (const node of group) {
+    for (const key of node.changedProps) {
+      if (seen.size >= AGGREGATE_PROPS_CAP) return [...seen];
+      seen.add(key);
+    }
+  }
+  return [...seen];
+}
+
 function aggregateKey(parentId: string | null, node: CascadeRenderNode): string {
   return `${parentId ?? "root"}|${node.depth}|${node.name}|${node.cause}`;
 }
@@ -220,8 +280,18 @@ export function buildCascadeProjection(
   const raw = buildRawGraph(store, interaction);
 
   const rawNodes = new Map<RenderId, CascadeRenderNode>();
+  const componentByRender = new Map<RenderId, ComponentId>();
+  for (const render of raw.renders) componentByRender.set(render.renderId, render.componentId);
   for (const render of raw.renders) {
-    const parentRender = raw.parentByRender.get(render.renderId);
+    const parentRenderId = raw.parentByRender.get(render.renderId);
+    const parentComponentId =
+      parentRenderId === undefined ? null : (componentByRender.get(parentRenderId) ?? null);
+    const instance = store.instance(render.componentId);
+    const ownerId = instance?.ownerId ?? null;
+    // An owner the trace never saw still owns the edge; name it by id rather
+    // than let the edge vanish, the same convention as an unnamed render.
+    const ownerName =
+      ownerId !== null ? (store.instance(ownerId)?.name ?? `#${ownerId as number}`) : null;
     rawNodes.set(render.renderId, {
       id: rawId(render.renderId),
       kind: "render",
@@ -229,16 +299,20 @@ export function buildCascadeProjection(
       renderIds: [render.renderId],
       componentId: render.componentId,
       commitId: render.commitId,
-      name: store.instance(render.componentId)?.name ?? `#${render.componentId as number}`,
+      name: instance?.name ?? `#${render.componentId as number}`,
       cause: causeOf(render),
       timestamp: render.timestamp,
       duration: Math.max(render.totalDuration, render.selfDuration),
       selfDuration: render.selfDuration,
       depth: raw.depthByRender.get(render.renderId) ?? 0,
-      parentId: parentRender === undefined ? null : rawId(parentRender),
+      parentId: parentRenderId === undefined ? null : rawId(parentRenderId),
       childCount: raw.childrenByRender.get(render.renderId)?.length ?? 0,
       aggregateCount: 1,
-      compiled: store.instance(render.componentId)?.compiler?.compiled ?? null,
+      compiled: instance?.compiler?.compiled ?? null,
+      ownerId,
+      ownerName,
+      ownerEdge: ownerEdgeOf(causeOf(render), ownerId, parentComponentId),
+      changedProps: changedPropsOf(render),
     });
   }
 
@@ -259,6 +333,7 @@ export function buildCascadeProjection(
     for (const node of group) hidden.add(node.id);
     const first = group[0]!;
     const renderIds = group.map((node) => node.renderId);
+    const ownerId = sharedOf(group.map((node) => node.ownerId));
     aggregates.push({
       id: `g:${aggregateSequence++}:${key}`,
       kind: "aggregate",
@@ -276,6 +351,12 @@ export function buildCascadeProjection(
       childCount: 0,
       aggregateCount: group.length,
       compiled: sharedCompiled(group),
+      ownerId,
+      // Named from the shared id, never from the names: two owners can share a
+      // name and disagree on id, and the aggregate must not paper over that.
+      ownerName: ownerId === null ? null : (group[0]?.ownerName ?? null),
+      ownerEdge: sharedOf(group.map((node) => node.ownerEdge)),
+      changedProps: unionChangedProps(group),
     });
   }
 
@@ -311,6 +392,10 @@ export function buildCascadeProjection(
         depth: Math.max(1, ...omitted.map((node) => node.depth)),
         parentId: null,
         compiled: sharedCompiled(omitted),
+        ownerId: null,
+        ownerName: null,
+        ownerEdge: sharedOf(omitted.map((node) => node.ownerEdge)),
+        changedProps: [],
         childCount: 0,
         aggregateCount: omitted.reduce((sum, node) => sum + node.aggregateCount, 0),
       });

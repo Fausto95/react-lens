@@ -44,9 +44,24 @@ export interface Fiber {
   selfBaseDuration?: number;
   treeBaseDuration?: number;
   _debugSource?: { fileName: string; lineNumber: number; columnNumber?: number };
-  _debugOwner?: Fiber | null;
+  /**
+   * The component whose render created this element. A fiber on the client;
+   * on React 19 with Flight it can be a `ReactComponentInfo` for an element a
+   * server component created.
+   */
+  _debugOwner?: Fiber | ReactComponentInfo | null;
   /** React 19: an Error capturing the element's JSX creation site. */
   _debugStack?: unknown;
+}
+
+/**
+ * React 19 / Flight: the debug record of a server component. It has no `tag`
+ * and no `return`, which is how it is told apart from a fiber.
+ */
+export interface ReactComponentInfo {
+  name: string;
+  env?: string;
+  owner?: ReactComponentInfo | null;
 }
 
 export interface FiberRoot {
