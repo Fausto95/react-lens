@@ -37,6 +37,13 @@ export interface RollupRow {
   compilerKnownCount: number;
   /** The Doctor flagged at least one instance of this component. */
   flagged: boolean;
+  /**
+   * Renders whose props came from an owner other than the cascade parent —
+   * the cross-tree edges. Counts aggregate members.
+   */
+  crossTree: number;
+  /** Changed prop keys, ranked by how many renders each crossed. */
+  propKeys: ReadonlyMap<string, number>;
   verdict: RollupVerdict;
   /** Costliest instance — where a drill-down should land. */
   anchorId: string;
@@ -77,6 +84,11 @@ function verdictFor(row: Omit<RollupRow, "verdict">): RollupVerdict {
   return { tone: "none", text: "—" };
 }
 
+/** Most-crossed key first; name breaks ties so the order never flickers. */
+function rankedKeys(keys: ReadonlyMap<string, number>): ReadonlyMap<string, number> {
+  return new Map([...keys.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])));
+}
+
 /**
  * @param flagged Components the Doctor has an issue with. These used to surface
  *   as a "Watchlist" section in the Components pane; with that pane gone the
@@ -97,6 +109,8 @@ export function buildRollup(
     compiledCount: number;
     compilerKnownCount: number;
     flagged: boolean;
+    crossTree: number;
+    propKeys: Map<string, number>;
     anchorId: string;
     anchorSelf: number;
   }
@@ -121,6 +135,8 @@ export function buildRollup(
       compiledCount: 0,
       compilerKnownCount: 0,
       flagged: false,
+      crossTree: 0,
+      propKeys: new Map<string, number>(),
       anchorId: node.id,
       anchorSelf: -1,
     };
@@ -135,6 +151,9 @@ export function buildRollup(
       if (node.compiled) bucket.compiledCount += node.aggregateCount;
     }
     if (node.componentId !== null && flagged.has(node.componentId)) bucket.flagged = true;
+    if (node.ownerEdge === true) bucket.crossTree += node.aggregateCount;
+    for (const key of node.changedProps)
+      bucket.propKeys.set(key, (bucket.propKeys.get(key) ?? 0) + node.aggregateCount);
     if (node.selfDuration > bucket.anchorSelf) {
       bucket.anchorSelf = node.selfDuration;
       bucket.anchorId = node.id;
@@ -160,6 +179,8 @@ export function buildRollup(
       compiledCount: bucket.compiledCount,
       compilerKnownCount: bucket.compilerKnownCount,
       flagged: bucket.flagged,
+      crossTree: bucket.crossTree,
+      propKeys: rankedKeys(bucket.propKeys),
       anchorId: bucket.anchorId,
     };
     return { ...base, verdict: verdictFor(base) };

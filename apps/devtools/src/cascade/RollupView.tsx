@@ -43,6 +43,13 @@ const COLUMNS: readonly Column[] = [
   { key: "renderCount", label: "Renders", align: "right" },
   { key: null, label: "Why", align: "left", title: "Cause mix across every render" },
   { key: "minDepth", label: "Depth", align: "left", title: "Causal depth it rendered at" },
+  {
+    key: null,
+    label: "Props",
+    align: "left",
+    title:
+      "Prop keys that crossed, most frequent first · ⤿ renders fed by an owner other than the parent",
+  },
   { key: "selfTime", label: "Self ms", align: "right" },
   { key: null, label: "Share", align: "right", title: "Share of this interaction's self time" },
   {
@@ -65,6 +72,28 @@ function causeClass(cause: CascadeCause): string {
     default:
       return "cascade";
   }
+}
+
+/** Up to `cap` keys, then a count — the full ranking sits in the tooltip. */
+const PROPS_CAP = 2;
+
+function propsCell(row: RollupRow): { text: string; title: string } | null {
+  if (row.propKeys.size === 0 && row.crossTree === 0) return null;
+  const ranked = [...row.propKeys.entries()];
+  const head = ranked
+    .slice(0, PROPS_CAP)
+    .map(([key]) => key)
+    .join("·");
+  const rest = ranked.length > PROPS_CAP ? ` +${ranked.length - PROPS_CAP}` : "";
+  const title = [
+    ...ranked.map(([key, count]) => `${key} — crossed ${count.toLocaleString()}×`),
+    row.crossTree > 0
+      ? `${row.crossTree.toLocaleString()} of ${row.renderCount.toLocaleString()} renders were fed by an owner other than the parent above`
+      : null,
+  ]
+    .filter((line) => line !== null)
+    .join("\n");
+  return { text: `${head}${rest}`, title };
 }
 
 function depthLabel(row: RollupRow): string {
@@ -104,8 +133,12 @@ export function RollupView({
   }
 
   const needle = query.trim().toLowerCase();
+  // The filter is shared with the ledger, which also matches prop keys.
   const rows = sortRollup(buildRollup(projection, flagged), sort).filter(
-    (row) => needle === "" || row.name.toLowerCase().includes(needle),
+    (row) =>
+      needle === "" ||
+      row.name.toLowerCase().includes(needle) ||
+      [...row.propKeys.keys()].some((key) => key.toLowerCase().includes(needle)),
   );
   const byId = new Map(projection.nodes.map((node) => [node.id, node]));
 
@@ -162,6 +195,7 @@ export function RollupView({
           <tbody>
             {rows.map((row) => {
               const anchor = byId.get(row.anchorId);
+              const props = propsCell(row);
               return (
                 <tr
                   key={row.name}
@@ -213,6 +247,16 @@ export function RollupView({
                     </span>
                   </td>
                   <td className="rl-rollup-depth">{depthLabel(row)}</td>
+                  <td>
+                    {props ? (
+                      <span className="rl-rollup-props" title={props.title}>
+                        {props.text}
+                        {row.crossTree > 0 ? (
+                          <span className="rl-rollup-cross">⤿{row.crossTree}</span>
+                        ) : null}
+                      </span>
+                    ) : null}
+                  </td>
                   <td className="rl-rollup-num">{row.selfTime.toFixed(2)}</td>
                   <td className="rl-rollup-num" data-hot={row.share > 0.2 || undefined}>
                     {(row.share * 100).toFixed(0)}%
