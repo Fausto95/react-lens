@@ -31,6 +31,11 @@ function node(
     parentId,
     childCount: 0,
     aggregateCount: 1,
+    compiled: null,
+    ownerId: null,
+    ownerName: null,
+    ownerEdge: null,
+    changedProps: [],
     ...overrides,
   } as CascadeNode;
 }

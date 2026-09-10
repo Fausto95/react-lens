@@ -22,6 +22,11 @@ function node(partial: Partial<CascadeNode> & Pick<CascadeNode, "id" | "name">):
     parentId: null,
     childCount: 0,
     aggregateCount: 1,
+    compiled: null,
+    ownerId: null,
+    ownerName: null,
+    ownerEdge: null,
+    changedProps: [],
     ...partial,
   } as CascadeNode;
 }
