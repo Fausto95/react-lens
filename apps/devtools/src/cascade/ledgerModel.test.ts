@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vite-plus/test";
 import type { CommitId, ComponentId, RenderId } from "@reactlens/protocol";
 import type { CascadeCause, CascadeNode, CascadeProjection } from "./model.js";
-import { buildLedgerRows, ledgerRowIndex } from "./ledgerModel.js";
+import { ancestorIds, buildLedgerRows, ledgerRowIndex, ownerNodeOf } from "./ledgerModel.js";
 
 let seq = 0;
 
@@ -325,5 +325,77 @@ describe("ledgerRowIndex", () => {
     const rows = buildLedgerRows(projectionFixture(), NO_FILTER);
     expect(ledgerRowIndex(rows, "List")).toBe(3);
     expect(ledgerRowIndex(rows, "nope")).toBe(-1);
+  });
+});
+
+describe("ownerNodeOf", () => {
+  /**
+   *  App#1 (commit 1) ── Layout#2 ── Card#3, owned by App
+   *  App#1 (commit 2)                — the same component, a later render
+   */
+  function ownerProjection(): CascadeProjection {
+    const nodes: CascadeNode[] = [
+      node("app", null, 0, { name: "App", componentId: 1 as ComponentId, commitId: 1 as CommitId }),
+      node("layout", "app", 1, { name: "Layout", componentId: 2 as ComponentId, childCount: 1 }),
+      node("card", "layout", 2, {
+        name: "Card",
+        componentId: 3 as ComponentId,
+        commitId: 1 as CommitId,
+        cause: "props",
+        ownerId: 1 as ComponentId,
+        ownerName: "App",
+        ownerEdge: true,
+      }),
+      node("app-later", null, 0, {
+        name: "App",
+        componentId: 1 as ComponentId,
+        commitId: 2 as CommitId,
+      }),
+    ];
+    return {
+      interaction: { id: "i1", start: 0, end: 10 } as CascadeProjection["interaction"],
+      nodes,
+      edges: [],
+      roots: ["app", "app-later"],
+      totalRenderCount: 4,
+      totalSelfTime: 4,
+      maxDepth: 2,
+      aggregatedRenderCount: 0,
+    };
+  }
+
+  it("finds the owner's render in the same commit as the child", () => {
+    const projection = ownerProjection();
+    const card = projection.nodes.find((n) => n.id === "card")!;
+    expect(ownerNodeOf(projection, card)?.id).toBe("app");
+  });
+
+  it("falls back to any render of the owner when none shares the commit", () => {
+    const projection = ownerProjection();
+    projection.nodes = projection.nodes.filter((n) => n.id !== "app");
+    const card = projection.nodes.find((n) => n.id === "card")!;
+    expect(ownerNodeOf(projection, card)?.id).toBe("app-later");
+  });
+
+  it("returns null when the owner did not render in this interaction, or is unknown", () => {
+    const projection = ownerProjection();
+    projection.nodes = projection.nodes.filter((n) => n.componentId !== 1);
+    const card = projection.nodes.find((n) => n.id === "card")!;
+    expect(ownerNodeOf(projection, card)).toBe(null);
+    expect(
+      ownerNodeOf(
+        projection,
+        projection.nodes.find((n) => n.id === "layout")!,
+      ),
+    ).toBe(null);
+  });
+});
+
+describe("ancestorIds", () => {
+  it("lists the ids to un-collapse to reveal a node, nearest first", () => {
+    const projection = projectionFixture();
+    expect(ancestorIds(projection, "Rows")).toEqual(["List", "App"]);
+    expect(ancestorIds(projection, "App")).toEqual([]);
+    expect(ancestorIds(projection, "nope")).toEqual([]);
   });
 });
