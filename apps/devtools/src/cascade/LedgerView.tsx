@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { ComponentId } from "@reactlens/protocol";
 import { IconCollapse, IconSparkle } from "@reactlens/icons";
 import { FilterField } from "../FilterField.js";
+import type { CascadeDelta } from "./deltaModel.js";
 import {
   cascadeBaseName,
   isUnnamedRender,
@@ -56,6 +57,8 @@ export interface LedgerViewProps {
   flagged?: ReadonlySet<ComponentId>;
   /** Hand a component to the AI panel. Omitted when the agent is unavailable. */
   onAddToAgent?: (id: ComponentId, name: string) => void;
+  /** When set, show only what changed since the compared interaction. */
+  delta?: CascadeDelta | null;
 }
 
 function causeClass(cause: CascadeNode["cause"]): string {
@@ -72,9 +75,36 @@ function causeClass(cause: CascadeNode["cause"]): string {
 }
 
 /** Up to `cap` keys plus a count of the rest — one glance, full list in the tooltip. */
-function propKeysLabel(keys: readonly string[], cap = 3): string {
-  if (keys.length <= cap) return keys.join("·");
-  return `${keys.slice(0, cap).join("·")} +${keys.length - cap}`;
+const PROPS_CAP = 3;
+
+function PropKeys({
+  keys,
+  fresh,
+}: {
+  keys: readonly string[];
+  /** Keys that did not cross for this component in the compared interaction. */
+  fresh: ReadonlySet<string>;
+}): React.ReactNode {
+  // New keys first, so a delta never hides the thing it is pointing at behind "+n".
+  const ordered = [...keys].sort((a, b) => Number(fresh.has(b)) - Number(fresh.has(a)));
+  const shown = ordered.slice(0, PROPS_CAP);
+  const rest = ordered.length - shown.length;
+  return (
+    <span
+      className="rl-ledger-props"
+      title={`Props that crossed this render: ${keys.join(", ")}${
+        fresh.size > 0 ? `\nNew since the compared interaction: ${[...fresh].join(", ")}` : ""
+      }`}
+    >
+      {shown.map((key, i) => (
+        <span key={key} className={fresh.has(key) ? "is-new" : undefined}>
+          {i > 0 ? "·" : ""}
+          {key}
+        </span>
+      ))}
+      {rest > 0 ? ` +${rest}` : ""}
+    </span>
+  );
 }
 
 function Bar({
@@ -114,6 +144,7 @@ export function LedgerView({
   onHover,
   flagged,
   onAddToAgent,
+  delta = null,
 }: LedgerViewProps): React.ReactNode {
   const scrollerRef = useRef<HTMLDivElement>(null);
   const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(new Set());
@@ -139,7 +170,14 @@ export function LedgerView({
 
   // Collapse state is per-interaction: the caller remounts this view with a new
   // `key` when the interaction changes, rather than resetting it in an effect.
-  const rows = projection ? buildLedgerRows(projection, { collapsed, query, expandedChains }) : [];
+  const rows = projection
+    ? buildLedgerRows(projection, {
+        collapsed,
+        query,
+        expandedChains,
+        ...(delta ? { only: delta.changed } : {}),
+      })
+    : [];
   const scale = Math.max(
     0.001,
     ...rows.map((row) => row.subtree.selfTime),
@@ -290,9 +328,11 @@ export function LedgerView({
       >
         {rows.length === 0 ? (
           <div className="rl-cascade-empty">
-            {query
-              ? `No component matches “${query}”.`
-              : "No render cascade is available for this interaction."}
+            {delta && !query
+              ? `Nothing changed since the previous “${delta.against.label}”.`
+              : query
+                ? `No component matches “${query}”.`
+                : "No render cascade is available for this interaction."}
           </div>
         ) : (
           <div className="rl-ledger-spacer" style={{ height: rows.length * ROW_H }}>
@@ -315,6 +355,17 @@ export function LedgerView({
                 : [...node.changedProps];
               const owner = node.ownerEdge === true ? node.ownerName : null;
               const ownerNode = owner && projection ? ownerNodeOf(projection, node) : null;
+              const links = chain ?? [node];
+              const freshKeys = new Set(
+                delta ? links.flatMap((link) => delta.newKeysByNode.get(link.id) ?? []) : [],
+              );
+              const deltaMark = !delta
+                ? null
+                : links.some((link) => delta.newRenders.has(link.id))
+                  ? "new"
+                  : freshKeys.size > 0
+                    ? "keys"
+                    : null;
               return (
                 <div
                   key={node.id}
@@ -326,6 +377,7 @@ export function LedgerView({
                   data-selected={node.id === selectedId || undefined}
                   data-muted={!row.matched || undefined}
                   data-owner-target={node.id === ownerTargetId || undefined}
+                  data-delta={deltaMark ?? undefined}
                   style={{ transform: `translateY(${index * ROW_H}px)` }}
                   onMouseEnter={() => onHover(node)}
                   onClick={() => onSelect(node)}
@@ -357,14 +409,15 @@ export function LedgerView({
                     </span>
                     <span className={`rl-ledger-dot cause-${causeClass(node.cause)}`} />
                     <span className="rl-ledger-label">{node.name}</span>
-                    {propsKeys.length > 0 ? (
+                    {deltaMark === "new" ? (
                       <span
-                        className="rl-ledger-props"
-                        title={`Props that crossed this render: ${propsKeys.join(", ")}`}
+                        className="rl-ledger-delta"
+                        title={`Did not render in the previous “${delta!.against.label}”`}
                       >
-                        {propKeysLabel(propsKeys)}
+                        new
                       </span>
                     ) : null}
+                    {propsKeys.length > 0 ? <PropKeys keys={propsKeys} fresh={freshKeys} /> : null}
                     {owner ? (
                       <button
                         type="button"

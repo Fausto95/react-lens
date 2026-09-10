@@ -25,7 +25,9 @@ export function CascadeSection() {
             wrappers and pass-through chains fold away; each row carries its own self time and its
             subtree&apos;s. A props render names the keys that changed and, when they came from a
             component other than the parent above it, the <b>owner</b> that sent them — React&apos;s
-            second tree, drawn on the first. Filter by name and the ancestors of every hit are kept.
+            second tree, drawn on the first. Filter by name and the ancestors of every hit are kept,
+            or press <b>Δ</b> to keep only what changed since the last time the same component
+            started an interaction.
           </p>
         </article>
         <article className="change">

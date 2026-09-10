@@ -13,6 +13,7 @@ import {
   type CascadeNode,
   type CascadeProjection,
 } from "./model.js";
+import { diffCascades, previousComparable, type CascadeDelta } from "./deltaModel.js";
 import { LedgerView } from "./LedgerView.js";
 import { RollupView } from "./RollupView.js";
 import { InteractionList } from "./InteractionList.js";
@@ -159,6 +160,8 @@ export function Cascade({
   const [pinnedAggregateId, setPinnedAggregateId] = useState<string | null>(null);
   const [lens, setLens] = useState<CascadeLens>(DEFAULT_LENS);
   const [query, setQuery] = useState("");
+  /** Show only what changed since the previous interaction with the same origin. */
+  const [deltaOn, setDeltaOn] = useState(false);
 
   /**
    * Which interaction is on screen is *derived*, never mirrored into state:
@@ -204,6 +207,34 @@ export function Cascade({
           }),
     [expandedAggregates, interaction, store],
   );
+
+  /**
+   * The interaction this one is compared against when Δ is on. Resolved even
+   * while Δ is off, so the toggle can say whether there is anything to compare
+   * to; the previous projection is only built once the developer asks.
+   */
+  const previous = useMemo(
+    () =>
+      interaction === null ? null : previousComparable(store, model.interactions, interaction),
+    [interaction, model.interactions, store],
+  );
+  const previousProjection = useMemo<CascadeProjection | null>(
+    () =>
+      deltaOn && previous !== null
+        ? buildCascadeProjection(store, previous, { aggregateThreshold: 6, maxVisibleNodes: 1_200 })
+        : null,
+    [deltaOn, previous, store],
+  );
+  const delta: CascadeDelta | null =
+    previousProjection && projection ? diffCascades(previousProjection, projection) : null;
+  const deltaNames = delta
+    ? new Set(
+        [...delta.changed].map((id) => {
+          const node = projection!.nodes.find((candidate) => candidate.id === id);
+          return node ? cascadeBaseName(node) : id;
+        }),
+      )
+    : null;
 
   // A live render selection outranks a pinned aggregate: selecting an aggregate
   // clears the clip, so only one of the two is ever set.
@@ -272,9 +303,11 @@ export function Cascade({
   );
 
   const interactions = interactionWindow(model.interactions, interaction?.id ?? null);
-  const footer = projection
-    ? `${projection.totalRenderCount.toLocaleString()} renders · ${projection.totalSelfTime.toFixed(1)}ms self · depth ${projection.maxDepth}${projection.aggregatedRenderCount ? ` · ${projection.aggregatedRenderCount.toLocaleString()} aggregated` : ""}`
-    : "No interaction data";
+  const footer = delta
+    ? `Δ vs previous “${delta.against.label}” · ${delta.newRenders.size.toLocaleString()} new · ${delta.newKeysByNode.size.toLocaleString()} with new prop keys${delta.gone.length ? ` · gone: ${delta.gone.join(", ")}` : ""}`
+    : projection
+      ? `${projection.totalRenderCount.toLocaleString()} renders · ${projection.totalSelfTime.toFixed(1)}ms self · depth ${projection.maxDepth}${projection.aggregatedRenderCount ? ` · ${projection.aggregatedRenderCount.toLocaleString()} aggregated` : ""}`
+      : "No interaction data";
 
   return (
     <div className="rl-cascade">
@@ -301,6 +334,22 @@ export function Cascade({
               {item.label}
             </Tool>
           ))}
+        </Island>
+        <Island label="Compare">
+          <Tool
+            className="rl-cascade-tool-text rl-cascade-delta"
+            title={
+              previous
+                ? `Only what changed since the previous “${previous.label}”`
+                : "No earlier interaction started by the same component to compare against"
+            }
+            label="Delta"
+            active={deltaOn && previous !== null}
+            disabled={previous === null}
+            onClick={() => setDeltaOn((on) => !on)}
+          >
+            Δ
+          </Tool>
         </Island>
         <span className="rl-cascade-sep rl-cascade-sep-kind" aria-hidden="true" />
         <span className="rl-cascade-pill">{interaction?.label ?? "idle"}</span>
@@ -349,6 +398,7 @@ export function Cascade({
             onHover={hoverNode}
             {...(flagged ? { flagged } : {})}
             {...(onAddToAgent ? { onAddToAgent } : {})}
+            delta={delta}
           />
         ) : null}
         {lens === "rollup" ? (
@@ -361,6 +411,7 @@ export function Cascade({
             onHover={hoverNode}
             {...(flagged ? { flagged } : {})}
             {...(onAddToAgent ? { onAddToAgent } : {})}
+            onlyNames={deltaNames}
           />
         ) : null}
       </div>

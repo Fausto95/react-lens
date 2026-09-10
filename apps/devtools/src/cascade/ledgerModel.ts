@@ -41,6 +41,12 @@ export interface LedgerOptions {
   foldChains?: boolean;
   /** Chain heads (and their links) the user has expanded. */
   expandedChains?: ReadonlySet<string>;
+  /**
+   * Show only these node ids (plus the ancestors needed to reach them),
+   * intersected with the query. Behaves like a filter: collapse and folding
+   * are ignored, because asking for a subset is asking to see it.
+   */
+  only?: ReadonlySet<string>;
 }
 
 /**
@@ -62,12 +68,15 @@ const MIN_WRAPPER_RUN = 2;
 const NEVER_ELIDE_SHARE = 0.05;
 
 /** Ids of every node that matches, plus every ancestor needed to reach one. */
-function keptByQuery(index: CascadeTree, query: string): { kept: Set<string>; hits: Set<string> } {
+function keptBy(
+  index: CascadeTree,
+  matches: (node: CascadeNode) => boolean,
+): { kept: Set<string>; hits: Set<string> } {
   const kept = new Set<string>();
   const hits = new Set<string>();
 
   const visit = (node: CascadeNode, trail: CascadeNode[]): boolean => {
-    const self = nodeMatchesQuery(node, query);
+    const self = matches(node);
     if (self) hits.add(node.id);
     let any = self;
     const next = [...trail, node];
@@ -141,7 +150,15 @@ export function buildLedgerRows(
 ): LedgerRow[] {
   const index = indexCascadeTree(projection);
   const query = options.query.trim();
-  const filter = query === "" ? null : keptByQuery(index, query);
+  const only = options.only ?? null;
+  const filter =
+    query === "" && only === null
+      ? null
+      : keptBy(
+          index,
+          (node) =>
+            (only === null || only.has(node.id)) && (query === "" || nodeMatchesQuery(node, query)),
+        );
   const expandedChains = options.expandedChains ?? EMPTY;
   const folding = (options.foldChains ?? true) && filter === null;
   const hotFloor = projection.totalSelfTime * NEVER_ELIDE_SHARE;

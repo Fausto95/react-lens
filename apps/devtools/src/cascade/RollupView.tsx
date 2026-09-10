@@ -29,6 +29,8 @@ export interface RollupViewProps {
   onAddToAgent?: (id: ComponentId, name: string) => void;
   onSelect: (node: CascadeNode) => void;
   onHover: (node: CascadeNode | null) => void;
+  /** When set, show only these components — the delta's changed set. */
+  onlyNames?: ReadonlySet<string> | null;
 }
 
 interface Column {
@@ -121,6 +123,7 @@ export function RollupView({
   onAddToAgent,
   onSelect,
   onHover,
+  onlyNames = null,
 }: RollupViewProps): React.ReactNode {
   const [sort, setSort] = useState<RollupSort>({ key: "selfTime", dir: "desc" });
 
@@ -136,9 +139,10 @@ export function RollupView({
   // The filter is shared with the ledger, which also matches prop keys.
   const rows = sortRollup(buildRollup(projection, flagged), sort).filter(
     (row) =>
-      needle === "" ||
-      row.name.toLowerCase().includes(needle) ||
-      [...row.propKeys.keys()].some((key) => key.toLowerCase().includes(needle)),
+      (onlyNames === null || onlyNames.has(row.name)) &&
+      (needle === "" ||
+        row.name.toLowerCase().includes(needle) ||
+        [...row.propKeys.keys()].some((key) => key.toLowerCase().includes(needle))),
   );
   const byId = new Map(projection.nodes.map((node) => [node.id, node]));
 

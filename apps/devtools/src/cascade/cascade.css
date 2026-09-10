@@ -792,6 +792,24 @@
 .rl-ledger-row[data-muted] .rl-ledger-owner {
   opacity: 0.4;
 }
+/* Δ: what changed since the compared interaction. A new render gets a chip;
+   a key that did not cross before is lifted out of the key list. */
+.rl-ledger-delta {
+  flex: none;
+  margin-left: 6px;
+  padding: 0 4px;
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--props, var(--accent)) 22%, transparent);
+  color: var(--text);
+  font-size: 9px;
+  letter-spacing: 0.02em;
+}
+.rl-ledger-props .is-new {
+  color: var(--text);
+  font-weight: 600;
+  text-decoration: underline dotted;
+  text-underline-offset: 2px;
+}
 /* The other end of a hovered ⤿ Owner marker: the edge, drawn as a row. */
 .rl-ledger-row[data-owner-target] {
   background: color-mix(in srgb, var(--props, var(--accent)) 14%, transparent);
