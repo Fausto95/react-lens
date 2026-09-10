@@ -40,6 +40,38 @@ describe("cascade search", () => {
     expect(nodeMatchesQuery(node({ id: "r:1", name: "List", cause: "state" }), "state")).toBe(true);
   });
 
+  it("matches the prop keys that crossed a render", () => {
+    const card = node({
+      id: "r:1",
+      name: "Card",
+      cause: "props",
+      changedProps: ["items", "onSelect"],
+    });
+    expect(nodeMatchesQuery(card, "onselect")).toBe(true);
+    expect(nodeMatchesQuery(card, "items")).toBe(true);
+    expect(nodeMatchesQuery(card, "value")).toBe(false);
+  });
+
+  it("matches the owner only when it is a cross-tree edge", () => {
+    const fromOwner = node({
+      id: "r:1",
+      name: "Card",
+      cause: "props",
+      ownerName: "App",
+      ownerEdge: true,
+    });
+    // The owner is the parent: naming it would match every child of every component.
+    const fromParent = node({
+      id: "r:2",
+      name: "Field",
+      cause: "props",
+      ownerName: "Card",
+      ownerEdge: false,
+    });
+    expect(nodeMatchesQuery(fromOwner, "app")).toBe(true);
+    expect(nodeMatchesQuery(fromParent, "card")).toBe(false);
+  });
+
   it("ANDs space-separated tokens", () => {
     const card = node({ id: "r:1", name: "ProductCard", cause: "props" });
     expect(nodeMatchesQuery(card, "product props")).toBe(true);
