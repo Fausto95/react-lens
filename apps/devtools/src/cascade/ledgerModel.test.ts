@@ -313,6 +313,35 @@ describe("buildLedgerRows — unnamed wrappers", () => {
   });
 });
 
+describe("buildLedgerRows — only", () => {
+  it("keeps the given ids and their ancestors, marking only the given ids as matched", () => {
+    const rows = buildLedgerRows(projectionFixture(), {
+      collapsed: new Set(["App"]),
+      query: "",
+      only: new Set(["Icon"]),
+    });
+    // Collapse is ignored, like a query: asking for a subset is asking to see it.
+    expect(rows.map((row) => row.node.id)).toEqual(["App", "Nav", "Icon"]);
+    expect(rows.map((row) => row.matched)).toEqual([false, false, true]);
+  });
+
+  it("intersects with the query when both are given", () => {
+    const both = buildLedgerRows(projectionFixture(), {
+      collapsed: new Set(),
+      query: "icon",
+      only: new Set(["Icon", "List"]),
+    });
+    expect(both.map((row) => row.node.id)).toEqual(["App", "Nav", "Icon"]);
+    // Icon matches the query but is outside the subset: nothing is left.
+    const disjoint = buildLedgerRows(projectionFixture(), {
+      collapsed: new Set(),
+      query: "icon",
+      only: new Set(["List"]),
+    });
+    expect(disjoint).toEqual([]);
+  });
+});
+
 describe("ledgerRowIndex", () => {
   it("finds the row a folded chain member is hiding inside", () => {
     const rows = buildLedgerRows(spineFixture(), NO_FILTER);
