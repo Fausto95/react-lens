@@ -210,3 +210,32 @@ export function collapsibleIds(projection: CascadeProjection): Set<string> {
   for (const root of index.childrenOf.get(null) ?? []) ids.delete(root.id);
   return ids;
 }
+
+/**
+ * The render of `node`'s owner in this interaction, so ⤿ Owner can jump to it.
+ * The owner's render in the same commit is the one that produced the props;
+ * any other render of it is the fallback. `null` when the owner is unknown or
+ * did not render here — the marker still names it, it just cannot travel.
+ */
+export function ownerNodeOf(projection: CascadeProjection, node: CascadeNode): CascadeNode | null {
+  if (node.ownerId === null) return null;
+  let fallback: CascadeNode | null = null;
+  for (const candidate of projection.nodes) {
+    if (candidate.kind !== "render" || candidate.componentId !== node.ownerId) continue;
+    if (candidate.commitId === node.commitId) return candidate;
+    fallback ??= candidate;
+  }
+  return fallback;
+}
+
+/** Ids from `id`'s parent up to its root — what a reveal has to un-collapse. */
+export function ancestorIds(projection: CascadeProjection, id: string): string[] {
+  const byId = new Map(projection.nodes.map((node) => [node.id, node]));
+  const out: string[] = [];
+  let current = byId.get(id)?.parentId ?? null;
+  while (current !== null && byId.has(current) && !out.includes(current)) {
+    out.push(current);
+    current = byId.get(current)!.parentId;
+  }
+  return out;
+}

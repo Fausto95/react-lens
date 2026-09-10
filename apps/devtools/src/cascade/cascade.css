@@ -781,9 +781,21 @@
   font-size: 10px;
   color: var(--text-2);
 }
+.rl-ledger-owner:not(:disabled) {
+  cursor: pointer;
+}
+.rl-ledger-owner:not(:disabled):hover {
+  background: var(--panel-3, var(--panel-2));
+  color: var(--text);
+}
 .rl-ledger-row[data-muted] .rl-ledger-props,
 .rl-ledger-row[data-muted] .rl-ledger-owner {
   opacity: 0.4;
+}
+/* The other end of a hovered ⤿ Owner marker: the edge, drawn as a row. */
+.rl-ledger-row[data-owner-target] {
+  background: color-mix(in srgb, var(--props, var(--accent)) 14%, transparent);
+  border-left-color: var(--props, var(--accent));
 }
 .rl-ledger-twist {
   width: 13px;

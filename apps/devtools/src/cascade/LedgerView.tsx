@@ -9,10 +9,12 @@ import {
   type CascadeProjection,
 } from "./model.js";
 import {
+  ancestorIds,
   buildLedgerRows,
   chainIds,
   collapsibleIds,
   ledgerRowIndex,
+  ownerNodeOf,
   type LedgerRow,
 } from "./ledgerModel.js";
 
@@ -116,6 +118,8 @@ export function LedgerView({
   const scrollerRef = useRef<HTMLDivElement>(null);
   const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(new Set());
   const [expandedChains, setExpandedChains] = useState<ReadonlySet<string>>(new Set());
+  /** Row being pointed at by a hovered ⤿ Owner marker — the edge, drawn on demand. */
+  const [ownerTargetId, setOwnerTargetId] = useState<string | null>(null);
   const [scrollTop, setScrollTop] = useState(0);
   const [viewportHeight, setViewportHeight] = useState(480);
   const [viewportWidth, setViewportWidth] = useState(720);
@@ -175,6 +179,29 @@ export function LedgerView({
   const expandChain = useCallback((row: LedgerRow) => {
     setExpandedChains((previous) => new Set([...previous, ...chainIds(row)]));
   }, []);
+
+  /**
+   * Follow a ⤿ Owner marker to the owner's own row. The owner may sit inside a
+   * collapsed subtree, so its ancestors are opened first; the selection chase
+   * then scrolls to it once the rows include it.
+   */
+  const jumpToOwner = useCallback(
+    (node: CascadeNode) => {
+      if (!projection) return;
+      const owner = ownerNodeOf(projection, node);
+      if (!owner) return;
+      const reveal = ancestorIds(projection, owner.id);
+      setCollapsed((previous) => {
+        if (!reveal.some((id) => previous.has(id))) return previous;
+        const next = new Set(previous);
+        for (const id of reveal) next.delete(id);
+        return next;
+      });
+      chasedRef.current = null;
+      onSelect(owner);
+    },
+    [onSelect, projection],
+  );
 
   const first = Math.max(0, Math.floor(scrollTop / ROW_H) - OVERSCAN);
   const visible = Math.ceil(viewportHeight / ROW_H) + OVERSCAN * 2;
@@ -287,6 +314,7 @@ export function LedgerView({
                 ? [...new Set(chain.flatMap((link) => [...link.changedProps]))]
                 : [...node.changedProps];
               const owner = node.ownerEdge === true ? node.ownerName : null;
+              const ownerNode = owner && projection ? ownerNodeOf(projection, node) : null;
               return (
                 <div
                   key={node.id}
@@ -297,6 +325,7 @@ export function LedgerView({
                   aria-expanded={row.hasChildren ? !row.collapsed : undefined}
                   data-selected={node.id === selectedId || undefined}
                   data-muted={!row.matched || undefined}
+                  data-owner-target={node.id === ownerTargetId || undefined}
                   style={{ transform: `translateY(${index * ROW_H}px)` }}
                   onMouseEnter={() => onHover(node)}
                   onClick={() => onSelect(node)}
@@ -337,14 +366,25 @@ export function LedgerView({
                       </span>
                     ) : null}
                     {owner ? (
-                      <span
+                      <button
+                        type="button"
                         className="rl-ledger-owner"
+                        disabled={ownerNode === null}
                         title={`Props came from ${owner} — the component that renders ${cascadeBaseName(
                           node,
-                        )} — not from the parent above it`}
+                        )} — not from the parent above it.${
+                          ownerNode ? " Click to jump to its render." : " It did not render here."
+                        }`}
+                        aria-label={`Owner ${owner}${ownerNode ? ", jump to its render" : ""}`}
+                        onMouseEnter={() => setOwnerTargetId(ownerNode?.id ?? null)}
+                        onMouseLeave={() => setOwnerTargetId(null)}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          jumpToOwner(node);
+                        }}
                       >
                         ⤿ {owner}
-                      </span>
+                      </button>
                     ) : null}
                     {node.componentId !== null && flagged?.has(node.componentId) ? (
                       <span
