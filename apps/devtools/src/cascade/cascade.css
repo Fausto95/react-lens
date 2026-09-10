@@ -760,7 +760,8 @@
    component you are reading off the row. */
 .rl-ledger-props,
 .rl-ledger-owner {
-  flex: 0 1 auto;
+  /* Shrinks three times faster than the name, so the name is what survives. */
+  flex: 0 3 auto;
   min-width: 0;
   margin-left: 7px;
   overflow: hidden;
