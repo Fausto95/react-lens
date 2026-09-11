@@ -48,6 +48,7 @@ import { sourceResolver } from "./sourceResolver.js";
 import { createTooltipLayer } from "./tooltip.js";
 import type { EditApi } from "./Inspector.js";
 import { RedesignShell } from "./redesign/RedesignShell.js";
+import { addAttachment, removeAttachment, type AgentAttachment } from "./agentAttachments.js";
 import { RestoreIndicator } from "./timeline/RestoreIndicator.js";
 import { ErrorChip } from "./ErrorChip.js";
 import { reportError, reportNotice } from "./errors.js";
@@ -209,6 +210,12 @@ export function Panel({
     };
   }, [settingsVersion]);
   const [agentAsk] = useState<{ token: number; question: string } | null>(null);
+  /** Components handed to the AI panel from a cascade row's ✦ button. */
+  const [agentAttachments, setAgentAttachments] = useState<readonly AgentAttachment[]>([]);
+  const addToAgent = useCallback((id: ComponentId, name: string) => {
+    setAgentAttachments((prev) => addAttachment(prev, { id, name }));
+    setAgentOpen(true);
+  }, []);
   const { dockWidth, dockHeight, onDockResize } = useDockResize(embedded, embedDock);
   const stats = readFresh(version, () => store.stats());
 
@@ -587,6 +594,7 @@ export function Panel({
         doctor={affected}
         selected={selected}
         onSelect={select}
+        onAddToAgent={addToAgent}
         {...(onHighlight ? { onHighlight } : {})}
         {...(edit ? { edit } : {})}
         {...(onRequestSnapshot ? { onRequestSnapshot } : {})}
@@ -801,6 +809,8 @@ export function Panel({
           settings={agentSettings}
           settingsVersion={settingsVersion}
           askRequest={agentAsk}
+          attachments={agentAttachments}
+          onDetach={(id) => setAgentAttachments((prev) => removeAttachment(prev, id))}
           onClose={() => setAgentOpen(false)}
           onOpenSettings={() => setSettingsOpen(true)}
           onSelectComponent={select}

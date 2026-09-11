@@ -21,7 +21,14 @@ type Item =
       group: string;
       run: () => void;
     }
-  | { kind: "component"; key: string; label: string; id: ComponentId; group: string }
+  | {
+      kind: "component";
+      key: string;
+      label: string;
+      hint?: string;
+      id: ComponentId;
+      group: string;
+    }
   | { kind: "header"; key: string; label: string };
 
 const GROUP_ORDER = ["Timeline", "Session", "Navigate", "Components"];
@@ -58,20 +65,26 @@ export function CommandPalette({
         group: c.group ?? "Navigate",
         run: c.run,
       }));
-    const comps = store
-      .allInstances()
-      .filter((i) => store.renderCount(i.id) > 0)
-      .map((i) => ({ i, score: fuzzyScore(q, i.name) }))
-      .filter((x): x is { i: (typeof x)["i"]; score: number } => x.score !== null)
-      .sort((a, b) => b.score - a.score)
-      .slice(0, 40)
-      .map(({ i }) => ({
-        kind: "component" as const,
-        key: `c:${i.id}`,
-        label: i.name,
-        id: i.id,
-        group: "Components" as const,
-      }));
+    // Components that rendered rank exactly as they always did. Ones that never
+    // rendered are *appended*, never interleaved — with the Components pane gone
+    // this is the only way to reach them, but they must not displace a match you
+    // are far more likely to want.
+    const scoreComponents = (wantRendered: boolean) =>
+      store
+        .allInstances()
+        .filter((i) => store.renderCount(i.id) > 0 === wantRendered)
+        .map((i) => ({ i, score: fuzzyScore(q, i.name) }))
+        .filter((x): x is { i: (typeof x)["i"]; score: number } => x.score !== null)
+        .sort((a, b) => b.score - a.score)
+        .map(({ i }) => ({
+          kind: "component" as const,
+          key: `c:${i.id}`,
+          label: i.name,
+          ...(wantRendered ? {} : { hint: "not rendered yet" }),
+          id: i.id,
+          group: "Components" as const,
+        }));
+    const comps = [...scoreComponents(true), ...scoreComponents(false)].slice(0, 40);
 
     const byGroup = new Map<string, Array<(typeof cmds)[0] | (typeof comps)[0]>>();
     for (const item of [...cmds, ...comps]) {
@@ -165,9 +178,7 @@ export function CommandPalette({
                     {item.kind === "command" ? "⌘" : "◈"}
                   </span>
                   <span className="rl-cmdk-label">{item.label}</span>
-                  {item.kind === "command" && item.hint && (
-                    <span className="rl-cmdk-hint">{item.hint}</span>
-                  )}
+                  {item.hint && <span className="rl-cmdk-hint">{item.hint}</span>}
                 </div>
               ),
             )

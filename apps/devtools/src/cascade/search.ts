@@ -4,18 +4,25 @@ function causeLabel(cause: CascadeCause): string {
   return cause === "parent" ? "cascade" : cause;
 }
 
-/** Lowercased haystack a query token can hit: name, cause, and aggregate kind. */
+/**
+ * Lowercased haystack a query token can hit: name, cause, aggregate kind, the
+ * prop keys that crossed, and the owner — but the owner only on a cross-tree
+ * edge, because naming a parent-owner would match every child it has.
+ */
 export function cascadeSearchHaystack(node: CascadeNode): string {
   const bits = [node.name, causeLabel(node.cause)];
   if (node.cause === "parent") bits.push("parent");
   if (node.kind === "aggregate") bits.push("aggregate");
+  bits.push(...node.changedProps);
+  if (node.ownerEdge === true && node.ownerName !== null) bits.push(node.ownerName);
   return bits.join(" ").toLowerCase();
 }
 
 /**
  * Space-separated tokens are AND-combined. Each token is a case-insensitive
- * substring of the node's name, cause label (`cascade` for parent), or
- * `aggregate`. An empty / whitespace query matches nothing — search is opt-in.
+ * substring of the node's name, cause label (`cascade` for parent),
+ * `aggregate`, a changed prop key, or the cross-tree owner. An empty /
+ * whitespace query matches nothing — search is opt-in.
  */
 export function nodeMatchesQuery(node: CascadeNode, query: string): boolean {
   const tokens = tokenizeQuery(query);

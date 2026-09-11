@@ -5,19 +5,14 @@ test("Force re-render records a large cascade and surfaces Doctor", async ({ pag
   await boot(page);
   await clickInPage(page, /Force re-render/);
 
+  // The rail's rows are one line now; the selected interaction's size is
+  // reported by the cascade footer.
   await expect
-    .poll(
-      async () => {
-        const selected = page.locator(".rl-cascade-interaction.selected .meta");
-        if ((await selected.count()) === 0) return "";
-        return selected.innerText();
-      },
-      { timeout: 10_000 },
-    )
-    .toMatch(/(\d+)\s+renders/);
+    .poll(async () => page.locator(".rl-cascade-footer").innerText(), { timeout: 10_000 })
+    .toMatch(/(\d[\d,]*)\s+renders/);
 
-  const meta = await page.locator(".rl-cascade-interaction.selected .meta").innerText();
-  const renders = Number(/(\d+)\s+renders/.exec(meta)?.[1] ?? 0);
+  const footer = await page.locator(".rl-cascade-footer").innerText();
+  const renders = Number((/(\d[\d,]*)\s+renders/.exec(footer)?.[1] ?? "0").replace(/,/g, ""));
   expect(renders).toBeGreaterThan(10);
 
   await expect.poll(async () => interactionRows(page).count()).toBeGreaterThan(0);

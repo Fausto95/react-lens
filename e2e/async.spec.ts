@@ -1,15 +1,10 @@
 import { test, expect } from "@playwright/test";
-import { boot, clickInPage, jumpTo } from "./helpers.js";
+import { boot, clickInPage, jumpTo, selectInLedger } from "./helpers.js";
 
 async function selectAsyncContent(page: import("@playwright/test").Page): Promise<void> {
-  await page.locator(".rl-tree-search").fill("AsyncContent");
-  const row = page
-    .getByRole("treeitem")
-    .filter({ has: page.locator(".rl-tree-name", { hasText: /^AsyncContent/ }) })
-    .first();
-  await expect(row).toBeVisible({ timeout: 10_000 });
-  await row.click();
-  await expect(page.locator(".rl-insp-head h2")).toHaveText(/^AsyncContent/);
+  // Not ⌘K: AsyncContent unmounts while suspended, so it is not always a live
+  // instance — but it is always a row in the cascade that just happened.
+  await selectInLedger(page, "AsyncContent");
 }
 
 test("SuspenseDemo suspends then resolves, with Suspense chip in the inspector", async ({

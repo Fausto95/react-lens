@@ -4,46 +4,29 @@ import {
   bumpCounter,
   cascade,
   cascadeToolbar,
-  cascadeZoomPercent,
   clickInPage,
   collapsePane,
   eventCount,
   expandPane,
-  hoverCascadeNode,
   interactionRows,
   replayAllButton,
   replayButton,
+  selectCascadeLens,
   waitForInteractions,
 } from "./helpers.js";
 
-test("cascade chrome: fit, 1:1, focus modes, and latest", async ({ page }) => {
+test("cascade chrome: interaction stepping, lens switch, and latest", async ({ page }) => {
   await boot(page);
   const bar = cascadeToolbar(page);
 
-  await expect(bar.getByRole("button", { name: "Fit the entire cascade" })).toBeVisible();
-  await expect(bar.getByRole("button", { name: "Reset zoom to 100%" })).toBeVisible();
-
-  await bar.getByRole("button", { name: "Fit the entire cascade" }).click();
-  await bar.getByRole("button", { name: "Reset zoom to 100%" }).click();
-  expect(await cascadeZoomPercent(page)).toBe(100);
-
-  const all = bar.getByRole("button", { name: "All renders" });
-  await expect(all).toHaveAttribute("aria-pressed", "true");
-  const expensive = bar.getByRole("button", { name: "Expensive renders" });
-  if ((await expensive.count()) > 0 && (await expensive.isVisible())) {
-    await expensive.click();
-    await expect(expensive).toHaveAttribute("aria-pressed", "true");
-    await all.click();
-    await expect(all).toHaveAttribute("aria-pressed", "true");
+  await expect(bar.getByRole("button", { name: "Previous interaction" })).toBeVisible();
+  await expect(bar.getByRole("button", { name: "Next interaction" })).toBeVisible();
+  for (const lens of ["Ledger", "Roll-up"]) {
+    await expect(bar.getByRole("button", { name: lens, exact: true })).toBeVisible();
   }
-
   await expect(bar.getByRole("button", { name: "Follow the latest interaction" })).toHaveAttribute(
     "aria-pressed",
     "true",
-  );
-  await expect(page.locator(".rl-cascade-stage")).toHaveAttribute(
-    "aria-label",
-    "Render cascade graph",
   );
   await expect(cascade(page).locator(".rl-cascade-footer")).toContainText(/renders/);
 });
@@ -60,8 +43,9 @@ test("toolbar stays inside the cascade column when the panel is narrow", async (
     return bar.scrollWidth > bar.clientWidth + 1 || barBox.right > rootBox.right + 1;
   });
   expect(overflow).toBe(false);
+  // The lens switch survives narrowing — it is how you leave a lens.
   await expect(
-    cascadeToolbar(page).getByRole("button", { name: "Fit the entire cascade" }),
+    cascadeToolbar(page).getByRole("button", { name: "Ledger", exact: true }),
   ).toBeVisible();
   await expect(
     cascadeToolbar(page).getByRole("button", { name: "Follow the latest interaction" }),
@@ -124,109 +108,98 @@ test("replay controls are available while capture stays live", async ({ page }) 
   await expect.poll(() => eventCount(page)).toBeGreaterThan(mounted);
 });
 
-test("load cascade aggregates fan-out and Fit/1:1 change the zoom", async ({ page }) => {
-  await boot(page);
-  await expect(cascade(page).locator(".rl-cascade-footer")).toContainText(/\d[\d,]* renders/);
-  await expect(cascade(page).locator(".rl-cascade-footer")).toContainText(/aggregated/i);
-  await expect(page.locator(".rl-cascade-minimap")).toBeVisible();
-
-  await cascadeToolbar(page).getByRole("button", { name: "Reset zoom to 100%" }).click();
-  expect(await cascadeZoomPercent(page)).toBe(100);
-
-  const stage = page.locator(".rl-cascade-stage");
-  await stage.hover();
-  await stage.evaluate((el) => {
-    el.dispatchEvent(
-      new WheelEvent("wheel", { deltaY: -240, ctrlKey: true, bubbles: true, cancelable: true }),
-    );
-  });
-  const zoomed = await cascadeZoomPercent(page);
-  expect(zoomed).toBeGreaterThan(100);
-
-  await stage.focus();
-  await page.keyboard.press("f");
-  expect(await cascadeZoomPercent(page)).toBeLessThan(zoomed);
-
-  await cascadeToolbar(page).getByRole("button", { name: "Reset zoom to 100%" }).click();
-  expect(await cascadeZoomPercent(page)).toBe(100);
-});
-
-test("hovering and clicking a cascade node selects it in the inspector", async ({ page }) => {
-  await boot(page);
-  await collapsePane(page, "Components");
-  await collapsePane(page, "Inspector");
-
-  const hit = await hoverCascadeNode(page);
-  const tip = page.locator(".rl-cascade-tooltip");
-  await expect(tip).toBeVisible();
-  const name = (await tip.locator("strong").textContent())?.trim() ?? "";
-  expect(name.length).toBeGreaterThan(0);
-  const meta = (await tip.locator("span").textContent()) ?? "";
-  const aggregate = /\d+\s+renders/.test(meta);
-
-  const stage = page.locator(".rl-cascade-stage");
-  const box = await stage.boundingBox();
-  if (!box) throw new Error("cascade stage has no box");
-  await page.mouse.click(box.x + hit.x, box.y + hit.y);
-
-  await expect(page.getByRole("button", { name: "Focus cause" })).toBeEnabled();
-  await expect(page.getByRole("button", { name: "Focus effects" })).toBeEnabled();
-
-  if (aggregate) {
-    const collapse = page.getByRole("button", { name: /Collapse all expanded render groups/ });
-    await expect(collapse).toBeVisible();
-    await collapse.click();
-    await expect(collapse).toHaveCount(0);
-  } else {
-    await expandPane(page, "Inspector");
-    await expect(page.locator(".rl-insp-head h2")).toHaveText(
-      new RegExp(`^${name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`),
-    );
-  }
-});
-
-test("focus modes All / Roots are mutually exclusive", async ({ page }) => {
+test("every lens survives the inspector collapsing", async ({ page }) => {
   await boot(page);
   await collapsePane(page, "Inspector");
-  await collapsePane(page, "Components");
 
+  await expect(page.locator(".rl-ledger-row").first()).toBeVisible();
+  await selectCascadeLens(page, "Roll-up");
+  await expect(page.locator(".rl-rollup-table tbody tr").first()).toBeVisible();
+
+  await expandPane(page, "Inspector");
+  await expect(page.locator(".rl-rollup-table tbody tr").first()).toBeVisible();
+});
+
+/* ------------------------------------------------------------------ lenses */
+
+test("cascade opens on the ledger and the lens switch reaches the roll-up", async ({ page }) => {
+  await boot(page);
   const bar = cascadeToolbar(page);
-  const all = bar.getByRole("button", { name: "All renders" });
-  const roots = bar.getByRole("button", { name: "Interaction roots" });
-  await expect(roots).toBeVisible();
 
-  await roots.click();
-  await expect(roots).toHaveAttribute("aria-pressed", "true");
-  await expect(all).toHaveAttribute("aria-pressed", "false");
+  await expect(bar.getByRole("button", { name: "Ledger", exact: true })).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
+  await expect(page.locator(".rl-ledger-row").first()).toBeVisible();
 
-  await all.click();
-  await expect(all).toHaveAttribute("aria-pressed", "true");
-  await expect(roots).toHaveAttribute("aria-pressed", "false");
+  await selectCascadeLens(page, "Roll-up");
+  await expect(page.locator(".rl-rollup-table tbody tr").first()).toBeVisible();
+  await expect(page.locator(".rl-rollup-table thead th").first()).toContainText("Component");
+  await expect(page.locator(".rl-ledger-row")).toHaveCount(0);
+
+  await selectCascadeLens(page, "Ledger");
+  await expect(page.locator(".rl-ledger-row").first()).toBeVisible();
 });
 
-test("find locates cascade nodes and / focuses the field", async ({ page }) => {
+test("ledger filters by component and keeps the ancestors of a hit", async ({ page }) => {
   await boot(page);
-  const input = page.getByRole("searchbox", { name: "Find renders in this cascade" });
-  await expect(input).toBeVisible();
+  const rowsBefore = await page.locator(".rl-ledger-row").count();
+  expect(rowsBefore).toBeGreaterThan(1);
 
-  await page.locator(".rl-cascade-stage").focus();
-  await page.keyboard.press("/");
-  await expect(input).toBeFocused();
+  const name = await page.locator(".rl-ledger-row .rl-ledger-label").last().innerText();
+  // The component tree has a filter too — scope to the cascade's own.
+  await cascade(page).getByRole("textbox", { name: "Filter components" }).fill(name);
 
-  await input.fill("zzzznope");
-  await expect(page.locator(".rl-cascade-find-count")).toHaveText("0");
+  await expect(page.locator(".rl-ledger-row")).not.toHaveCount(rowsBefore);
+  // The hit itself is never dimmed; anything kept only as an ancestor is.
+  await expect(page.locator(".rl-ledger-row:not([data-muted])").first()).toBeVisible();
+});
 
-  await input.fill("a");
-  await expect(page.locator(".rl-cascade-find-count")).toHaveText(/^\d+\/\d+$/);
+test("a roll-up row drills into that component in the ledger", async ({ page }) => {
+  await boot(page);
+  await selectCascadeLens(page, "Roll-up");
 
-  const before = await page.locator(".rl-cascade-find-count").textContent();
-  await page.keyboard.press("Enter");
-  await expect(page.locator(".rl-cascade-find-count")).toHaveText(/^\d+\/\d+$/);
-  const after = await page.locator(".rl-cascade-find-count").textContent();
-  const total = Number(/\/(\d+)/.exec(before ?? "")?.[1] ?? 0);
-  if (total > 1) expect(after).not.toBe(before);
+  const row = page.locator(".rl-rollup-table tbody tr").first();
+  const name = (await row.locator(".rl-rollup-name").innerText()).trim();
+  await row.click();
 
-  await page.keyboard.press("Escape");
-  await expect(input).toHaveValue("");
-  await expect(page.locator(".rl-cascade-find-count")).toHaveText("");
+  await selectCascadeLens(page, "Ledger");
+  await expect(page.locator(".rl-ledger-row[data-selected] .rl-ledger-label").first()).toHaveText(
+    name,
+  );
+});
+
+test("a lens row hands its component to the AI panel", async ({ page }) => {
+  await boot(page);
+
+  const row = page.locator(".rl-ledger-row").first();
+  const name = (await row.locator(".rl-ledger-label").first().innerText()).trim();
+  await row.hover();
+  await row.locator(".rl-row-ai").click();
+
+  // The panel opens on its own and the component arrives as a chip.
+  const chip = page.locator(".rl-agent-chip", { hasText: name });
+  await expect(chip).toBeVisible();
+  // Adding is not selecting — the row click must not have gone through.
+  await expect(page.locator(".rl-ledger-row[data-selected]")).toHaveCount(0);
+
+  // Adding the same component twice is a no-op.
+  await row.locator(".rl-row-ai").click();
+  await expect(page.locator(".rl-agent-chip", { hasText: name })).toHaveCount(1);
+
+  await chip.getByRole("button", { name: `Remove ${name}` }).click();
+  await expect(page.locator(".rl-agent-chip", { hasText: name })).toHaveCount(0);
+});
+
+test("the roll-up offers the same hand-off", async ({ page }) => {
+  await boot(page);
+  await selectCascadeLens(page, "Roll-up");
+
+  const row = page.locator(".rl-rollup-table tbody tr").first();
+  const name = (await row.locator(".rl-rollup-name").innerText()).trim();
+  await row.hover();
+  await row.locator(".rl-row-ai").click();
+
+  await expect(page.locator(".rl-agent-chip", { hasText: name })).toBeVisible();
+  await expect(page.locator(".rl-rollup-table tbody tr[data-selected]")).toHaveCount(0);
 });

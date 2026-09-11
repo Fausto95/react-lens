@@ -9,11 +9,9 @@ export const FIXTURES_DIR = path.join(here, "..", "fixtures");
 export async function boot(page: Page): Promise<void> {
   await page.goto("/");
   await expect(page.locator(".rl-root")).toBeVisible();
-  // HooksShowcase is the primary specimen; App is the fallback if virtualization
-  // hasn't painted HooksShowcase yet (rare on a cold boot).
-  await expect(
-    page.locator(".rl-tree-name", { hasText: /^(HooksShowcase|App)$/ }).first(),
-  ).toBeVisible();
+  // The mount interaction always produces a cascade, so the ledger's first row
+  // is the signal that the panel is up and has data.
+  await expect(page.locator(".rl-ledger-row").first()).toBeVisible();
 }
 
 /**
@@ -34,10 +32,34 @@ export function counterLine(page: Page) {
 }
 
 /** Select a component in the tree by its displayed name prefix. */
-export async function selectInTree(page: Page, namePrefix: string): Promise<void> {
+/**
+ * Select a component by clicking its row in the ledger. Reaches anything in the
+ * current cascade, including components ⌘K cannot see because they unmounted.
+ */
+export async function selectInLedger(page: Page, namePrefix: string): Promise<void> {
+  const row = page
+    .locator(".rl-ledger-row")
+    .filter({ has: page.locator(".rl-ledger-label", { hasText: new RegExp(`^${namePrefix}`) }) })
+    .first();
+  await expect(row).toBeVisible({ timeout: 10_000 });
+  await row.click();
+  await expect(page.locator(".rl-insp-head h2")).toHaveText(new RegExp(`^${namePrefix}`));
+}
+
+/**
+ * Select a component by name. The Components pane is gone, so ⌘K is the way in
+ * — and unlike the old tree it also reaches components that never rendered.
+ */
+export async function selectComponent(page: Page, namePrefix: string): Promise<void> {
+  // The button, not ⌘K: the host page may claim that shortcut for itself.
+  await page.getByRole("button", { name: "Command palette (⌘K)" }).click();
+  const input = page.locator(".rl-cmdk-input");
+  await expect(input).toBeVisible();
+  await input.fill(namePrefix);
   await page
-    .getByRole("treeitem")
-    .filter({ has: page.locator(".rl-tree-name", { hasText: new RegExp(`^${namePrefix}`) }) })
+    .locator(".rl-cmdk-item")
+    .filter({ has: page.locator(".rl-cmdk-kind.component") })
+    .filter({ has: page.locator(".rl-cmdk-label", { hasText: new RegExp(`^${namePrefix}`) }) })
     .first()
     .click();
   await expect(page.locator(".rl-insp-head h2")).toHaveText(new RegExp(`^${namePrefix}`));
@@ -164,6 +186,11 @@ export function cascadeToolbar(page: Page) {
   return page.locator(".rl-cascade-toolbar");
 }
 
+/** Cascade opens on the Ledger lens; every other lens has to be asked for. */
+export async function selectCascadeLens(page: Page, lens: "Ledger" | "Roll-up"): Promise<void> {
+  await cascadeToolbar(page).getByRole("button", { name: lens, exact: true }).click();
+}
+
 /** Interaction replay (not Replay all). */
 export function replayButton(page: Page) {
   return page.locator(".rl-cascade-transport-button:not(.session)");
@@ -191,7 +218,7 @@ export async function goLive(page: Page): Promise<void> {
   await page.keyboard.press("Enter");
 }
 
-export type PanelPane = "Components" | "Inspector";
+export type PanelPane = "Inspector";
 
 export async function collapsePane(page: Page, pane: PanelPane): Promise<void> {
   await page.getByRole("button", { name: `Collapse ${pane}` }).click();
@@ -201,41 +228,4 @@ export async function collapsePane(page: Page, pane: PanelPane): Promise<void> {
 export async function expandPane(page: Page, pane: PanelPane): Promise<void> {
   await page.getByRole("button", { name: `Expand ${pane}` }).click();
   await expect(page.getByRole("button", { name: `Collapse ${pane}` })).toBeVisible();
-}
-
-export function cascadeZoom(page: Page) {
-  return page.locator(".rl-cascade-zoom");
-}
-
-export async function cascadeZoomPercent(page: Page): Promise<number> {
-  const text = (await cascadeZoom(page).textContent()) ?? "";
-  const n = Number(/^(\d+)%/.exec(text)?.[1]);
-  if (!Number.isFinite(n)) throw new Error(`Could not parse cascade zoom from "${text}"`);
-  return n;
-}
-
-/** Walk the graph until a node tooltip appears; return the stage-local hit. */
-export async function hoverCascadeNode(page: Page): Promise<{ x: number; y: number }> {
-  const stage = page.locator(".rl-cascade-stage");
-  await expect(stage).toBeVisible();
-  await page.getByRole("button", { name: "Fit the entire cascade" }).click();
-  const box = await stage.boundingBox();
-  if (!box) throw new Error("cascade stage has no box");
-  const tooltipOn = () =>
-    page.evaluate(() => {
-      const tip = document.querySelector(".rl-cascade-tooltip");
-      return tip instanceof HTMLElement && tip.style.display === "block";
-    });
-  const x0 = Math.max(16, box.width * 0.12);
-  const y0 = Math.max(16, box.height * 0.12);
-  const x1 = box.width * 0.88;
-  const y1 = box.height * 0.88;
-  const step = 22;
-  for (let y = y0; y <= y1; y += step) {
-    for (let x = x0; x <= x1; x += step) {
-      await page.mouse.move(box.x + x, box.y + y);
-      if (await tooltipOn()) return { x, y };
-    }
-  }
-  throw new Error("no cascade node produced a tooltip");
 }

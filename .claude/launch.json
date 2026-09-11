@@ -26,6 +26,12 @@
       "port": 5189
     },
     {
+      "name": "prototypes",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["vite", "prototypes", "--port", "5193", "--strictPort"],
+      "port": 5193
+    },
+    {
       "name": "site",
       "runtimeExecutable": "pnpm",
       "runtimeArgs": ["--filter", "@reactlens/site", "dev"],

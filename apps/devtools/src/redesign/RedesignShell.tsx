@@ -3,13 +3,6 @@ import { useEffect, useRef, useState } from "react";
 import type { TraceStore } from "@reactlens/trace-engine";
 import type { Causality } from "@reactlens/causality";
 import type { ComponentId, RenderId } from "@reactlens/protocol";
-import {
-  buildTree,
-  flatten,
-  parseQuery,
-  type ComponentDatum,
-  type SemanticNode,
-} from "@reactlens/tree";
 import { useTraceVersion } from "../useLens.js";
 import { readFresh, derivationCache } from "../traceFresh.js";
 import { loadPanelPrefs, savePanelPrefs } from "../panelPrefs.js";
@@ -19,7 +12,6 @@ import { useTimeline } from "../timeline/useTimeline.js";
 import { Timeline } from "../timeline/view/Timeline.js";
 import { buildRenderStory } from "../inspector/renderStory.js";
 import { Inspector, type EditApi } from "../Inspector.js";
-import { TreeView, treeViewRows } from "./TreeView.js";
 import { InspectorView } from "./InspectorView.js";
 import { columnTemplate, fitColumns, nextColumnWidth, type CollapsedPanes } from "./columns.js";
 import { ErrorBoundary } from "../ErrorBoundary.js";
@@ -39,6 +31,7 @@ export function RedesignShell({
   edit,
   onRequestSnapshot,
   onAskAI,
+  onAddToAgent,
 }: {
   store: TraceStore;
   causality: Causality;
@@ -54,39 +47,19 @@ export function RedesignShell({
   edit?: EditApi;
   onRequestSnapshot?: (renderId: RenderId) => void;
   onAskAI?: (question: string) => void;
+  /** Hand a component to the AI panel from a cascade row. */
+  onAddToAgent?: (id: ComponentId, name: string) => void;
 }) {
   const version = useTraceVersion(store, { kind: "global" });
   const [fixApplied, setFixApplied] = useState(false);
   const [flashId, setFlashId] = useState<ComponentId | null>(null);
   const timeline = useTimeline({ store, causality, cursor, fixApplied });
-  const [filterChips, setFilterChips] = useState<string[]>([]);
-  const [filterFree, setFilterFree] = useState("");
-  const query = [...filterChips, filterFree.trim()].filter(Boolean).join(" ");
-  const filterRef = useRef<HTMLInputElement>(null);
-  const commitFilterTokens = (raw: string) => {
-    const bits = raw.trim().split(/\s+/).filter(Boolean);
-    const structured = bits.filter((t) => t.includes(":"));
-    if (structured.length === 0) return false;
-    setFilterChips((prev) => [...prev, ...structured.filter((t) => !prev.includes(t))]);
-    setFilterFree(bits.filter((t) => !t.includes(":")).join(" "));
-    return true;
-  };
-  const onFilterKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === "Backspace" && filterFree === "" && filterChips.length > 0) {
-      e.preventDefault();
-      setFilterChips((prev) => prev.slice(0, -1));
-      return;
-    }
-    if ((e.key === " " || e.key === "Enter") && commitFilterTokens(filterFree)) e.preventDefault();
-  };
   const gridRef = useRef<HTMLDivElement>(null);
-  const [treeW, setTreeW] = useState(() => loadPanelPrefs().treeWidth);
   const [inspW, setInspW] = useState(() => loadPanelPrefs().inspectorWidth);
   const [gridW, setGridW] = useState(0);
-  const [collapsed, setCollapsed] = useState<CollapsedPanes>(() => {
-    const prefs = loadPanelPrefs();
-    return { tree: prefs.treeCollapsed, inspector: prefs.inspectorCollapsed };
-  });
+  const [collapsed, setCollapsed] = useState<CollapsedPanes>(() => ({
+    inspector: loadPanelPrefs().inspectorCollapsed,
+  }));
   useEffect(() => {
     const host = gridRef.current;
     if (!host) return;
@@ -96,94 +69,37 @@ export function RedesignShell({
     observer.observe(host);
     return () => observer.disconnect();
   }, []);
-  const fitted = fitColumns(gridW || Number.POSITIVE_INFINITY, treeW, inspW, collapsed);
+  const fitted = fitColumns(gridW || Number.POSITIVE_INFINITY, inspW, collapsed);
   useEffect(() => {
     savePanelPrefs({
-      treeWidth: treeW,
       inspectorWidth: inspW,
-      treeCollapsed: collapsed.tree,
       inspectorCollapsed: collapsed.inspector,
     });
-  }, [treeW, inspW, collapsed]);
+  }, [inspW, collapsed]);
   const togglePane = (which: keyof CollapsedPanes) =>
     setCollapsed((prev) => ({ ...prev, [which]: !prev[which] }));
-  const startColumnDrag =
-    (which: "tree" | "inspector") => (e: React.PointerEvent<HTMLDivElement>) => {
-      e.preventDefault();
-      const host = gridRef.current;
-      if (!host) return;
-      const move = (ev: PointerEvent) => {
-        const rect = host.getBoundingClientRect();
-        const wanted = which === "tree" ? ev.clientX - rect.left : rect.right - ev.clientX;
-        const next = nextColumnWidth(which, wanted, { total: rect.width, treeW, inspW, collapsed });
-        (which === "tree" ? setTreeW : setInspW)(next);
-      };
-      const up = () => {
-        window.removeEventListener("pointermove", move);
-        window.removeEventListener("pointerup", up);
-        document.body.style.userSelect = "";
-      };
-      document.body.style.userSelect = "none";
-      window.addEventListener("pointermove", move);
-      window.addEventListener("pointerup", up);
+  const startColumnDrag = () => (e: React.PointerEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    const host = gridRef.current;
+    if (!host) return;
+    const move = (ev: PointerEvent) => {
+      const rect = host.getBoundingClientRect();
+      setInspW(nextColumnWidth(rect.right - ev.clientX, { total: rect.width, inspW, collapsed }));
     };
-  const [collapsedNodes, setCollapsedNodes] = useState<ReadonlySet<string>>(new Set());
-  const [openGroups, setOpenGroups] = useState<ReadonlySet<string>>(new Set());
-  const treeCaches = useRef({
-    data: derivationCache<ReturnType<typeof buildData>>(),
-    watchlist:
-      derivationCache<Array<{ id: ComponentId; name: string; issues: number; renders: number }>>(),
+    const up = () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+      document.body.style.userSelect = "";
+    };
+    document.body.style.userSelect = "none";
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+  };
+  const shellCaches = useRef({
     story: derivationCache<ReturnType<typeof buildRenderStory> | null>(),
   }).current;
-  const data = treeCaches.data.read([store, causality, version], () => buildData(store, causality));
-  const parsed = parseQuery(query);
-  const roots = buildTree(data, { include: parsed.predicate });
-  const expanded = (() => {
-    const set = new Set<string>();
-    const walk = (nodes: SemanticNode[]) => {
-      for (const node of nodes) {
-        if (node.kind === "group") {
-          if (openGroups.has(node.key)) set.add(node.key);
-          walk(node.instances);
-        } else {
-          if (!collapsedNodes.has(node.key)) set.add(node.key);
-          walk(node.children);
-        }
-      }
-    };
-    walk(roots);
-    return set;
-  })();
-  const treeRows = treeViewRows(flatten(roots, expanded));
-  const matchCount = query.trim() ? data.filter(parsed.predicate).length : null;
-  const maxSelf = Math.max(
-    1,
-    ...treeRows.map(({ row }) =>
-      row.node.kind === "component" ? row.node.datum.selfTime : row.node.selfTime,
-    ),
-  );
-  const toggleTree = (key: string) => {
-    const setter = key.startsWith("g:") ? setOpenGroups : setCollapsedNodes;
-    setter((prev) => {
-      const next = new Set(prev);
-      if (!next.delete(key)) next.add(key);
-      return next;
-    });
-  };
-  const watchlist = treeCaches.watchlist.read([doctor, store, version], () => {
-    if (!doctor || doctor.size === 0) return [];
-    return [...doctor]
-      .map((id) => ({
-        id,
-        name: store.instance(id)?.name ?? `#${id}`,
-        issues: 1,
-        renders: store.renderCount(id),
-      }))
-      .sort((a, b) => b.renders - a.renders)
-      .slice(0, 3);
-  });
   const selectedRender = timeline.state.selectedRender;
-  const story = treeCaches.story.read([store, causality, selectedRender, version], () =>
+  const story = shellCaches.story.read([store, causality, selectedRender, version], () =>
     selectedRender === null ? null : buildRenderStory(store, causality, selectedRender),
   );
   const selectedRenderEvent = readFresh(version, () =>
@@ -245,95 +161,16 @@ export function RedesignShell({
       <div
         className="grid"
         ref={gridRef}
-        style={{ gridTemplateColumns: columnTemplate(fitted.treeW, fitted.inspW, collapsed) }}
+        style={{ gridTemplateColumns: columnTemplate(fitted.inspW, collapsed) }}
       >
-        {!collapsed.tree && (
-          <div
-            className="colresize"
-            style={{ left: fitted.treeW }}
-            title="Drag to resize"
-            onPointerDown={startColumnDrag("tree")}
-          />
-        )}{" "}
         {!collapsed.inspector && (
           <div
             className="colresize"
             style={{ right: fitted.inspW }}
             title="Drag to resize"
-            onPointerDown={startColumnDrag("inspector")}
+            onPointerDown={startColumnDrag()}
           />
         )}{" "}
-        {collapsed.tree ? (
-          <PaneRail label="Components" side="left" onExpand={() => togglePane("tree")} />
-        ) : (
-          <div className="col">
-            <div className="colhead">
-              Components
-              <PaneToggle label="Components" side="left" onClick={() => togglePane("tree")} />
-            </div>
-            <div className="filter">
-              <svg
-                width="11"
-                height="11"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="#5C5C66"
-                strokeWidth="2.4"
-              >
-                <circle cx="11" cy="11" r="7" />
-                <path d="m20 20-3.5-3.5" />
-              </svg>
-              {filterChips.map((token) => (
-                <span
-                  key={token}
-                  className="chip"
-                  title="Click to remove"
-                  role="button"
-                  tabIndex={0}
-                  onClick={() => setFilterChips((prev) => prev.filter((t) => t !== token))}
-                  onKeyDown={(e) =>
-                    e.key === "Enter" && setFilterChips((prev) => prev.filter((t) => t !== token))
-                  }
-                >
-                  {token}
-                </span>
-              ))}
-              <input
-                ref={filterRef}
-                className="rl-tree-search"
-                placeholder={filterChips.length > 0 ? "Filter…" : "Filter components…"}
-                value={filterFree}
-                spellCheck={false}
-                aria-invalid={parsed.errors.length > 0}
-                {...(parsed.errors.length > 0 ? { title: parsed.errors.join(" · ") } : {})}
-                onChange={(e) => setFilterFree(e.target.value)}
-                onKeyDown={onFilterKeyDown}
-                onBlur={() => commitFilterTokens(filterFree)}
-              />
-              {parsed.errors.length > 0 ? (
-                <span className="rl-tree-search-count invalid">!</span>
-              ) : (
-                matchCount !== null && <span className="rl-tree-search-count">{matchCount}</span>
-              )}
-            </div>
-            <ErrorBoundary scope="components">
-              <TreeView
-                rows={treeRows}
-                maxSelf={maxSelf}
-                selected={selected}
-                onSelect={selectTreeComponent}
-                onToggle={toggleTree}
-                watchlist={watchlist}
-                regionHeat={timeline.statsRaw.byLane}
-                componentHeat={timeline.statsRaw.byComponent}
-                fixApplied={fixApplied}
-                flashId={flashId}
-                {...(doctor ? { doctor } : {})}
-                {...(onHighlight ? { onHover: onHighlight } : {})}
-              />
-            </ErrorBoundary>
-          </div>
-        )}
         <div className="col">
           <div className="colhead">
             Cascade
@@ -356,6 +193,8 @@ export function RedesignShell({
               }}
               {...(onHighlight ? { onHighlight } : {})}
               {...(transport ? { transport } : {})}
+              {...(doctor ? { flagged: doctor } : {})}
+              {...(onAddToAgent ? { onAddToAgent } : {})}
             />
           </ErrorBoundary>
         </div>
@@ -521,22 +360,4 @@ function PaneRail({
       <span className="rl-rail-label">{label}</span>
     </button>
   );
-}
-function buildData(store: TraceStore, _causality: Causality): ComponentDatum[] {
-  return store
-    .allInstances()
-    .filter((i) => store.renderCount(i.id) > 0)
-    .map((i) => {
-      const observableChange = store.flatTree.lastObservable(i.id as number);
-      return {
-        id: i.id,
-        name: i.name,
-        renders: store.renderCount(i.id),
-        selfTime: store.selfTimeTotal(i.id),
-        compiled: i.compiler.compiled,
-        observableChange,
-        ...(i.parentId !== undefined ? { parentId: i.parentId } : {}),
-        ...(i.kind && i.kind !== "component" ? { kind: i.kind } : {}),
-      } satisfies ComponentDatum;
-    });
 }

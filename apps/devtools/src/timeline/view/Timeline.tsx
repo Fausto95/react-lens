@@ -39,9 +39,9 @@ function travelControlProps(node: React.ReactNode): TravelControlProps | null {
  * @deprecated Compatibility adapter for callers that still mount the old
  * Timeline view entry point. Cascade is now the product/view abstraction.
  *
- * Replay intentionally lives at this temporal boundary rather than inside the
- * graph renderer: Cascade explains causality, while the shared TimeCursor and
- * panel time-travel controller own playback/restoration.
+ * Replay intentionally lives at this temporal boundary rather than inside a
+ * lens: Cascade explains causality, while the shared TimeCursor and panel
+ * time-travel controller own playback/restoration.
  */
 export function Timeline({
   model,
@@ -51,6 +51,8 @@ export function Timeline({
   onSelectComponent,
   onHighlight,
   transport,
+  flagged,
+  onAddToAgent,
 }: {
   model: TimelineModel;
   cursor: TimeCursor;
@@ -59,49 +61,21 @@ export function Timeline({
   onSelectComponent?: (id: ComponentId) => void;
   onHighlight?: (id: ComponentId | null) => void;
   transport?: React.ReactNode;
+  /** Components the Doctor flagged, forwarded to the lenses. */
+  flagged?: ReadonlySet<ComponentId>;
+  /** Hand a component to the AI panel from a lens row. */
+  onAddToAgent?: (id: ComponentId, name: string) => void;
 }) {
   const [replayMode, setReplayMode] = useState<"interaction" | "session" | null>(null);
   const replayRaf = useRef(0);
   const replayGeneration = useRef(0);
   const transportRef = useRef(transport);
-  const gestureBoundaryRef = useRef<HTMLDivElement>(null);
   /** Toggle we invoked because replay needed restoration while the user's mode was off. */
   const autoTravelToggle = useRef<(() => void) | null>(null);
 
   useEffect(() => {
     transportRef.current = transport;
   }, [transport]);
-
-  /**
-   * The graph owns wheel/trackpad/pinch gestures while the pointer is inside
-   * its stage. Cancel the browser/system default in a native, non-passive
-   * capture listener, then let the event keep propagating to Cascade's own
-   * React handler. This prevents Chrome zoom/history navigation and macOS
-   * overscroll without duplicating the graph's pan/zoom math here.
-   */
-  useEffect(() => {
-    const boundary = gestureBoundaryRef.current;
-    if (!boundary) return;
-
-    const belongsToStage = (target: EventTarget | null) =>
-      target instanceof Element && target.closest(".rl-cascade-stage") !== null;
-    const preventBrowserGesture = (event: Event) => {
-      if (belongsToStage(event.target)) event.preventDefault();
-    };
-    const options: AddEventListenerOptions = { capture: true, passive: false };
-
-    boundary.addEventListener("wheel", preventBrowserGesture, options);
-    boundary.addEventListener("gesturestart", preventBrowserGesture, options);
-    boundary.addEventListener("gesturechange", preventBrowserGesture, options);
-    boundary.addEventListener("gestureend", preventBrowserGesture, options);
-
-    return () => {
-      boundary.removeEventListener("wheel", preventBrowserGesture, true);
-      boundary.removeEventListener("gesturestart", preventBrowserGesture, true);
-      boundary.removeEventListener("gesturechange", preventBrowserGesture, true);
-      boundary.removeEventListener("gestureend", preventBrowserGesture, true);
-    };
-  }, []);
 
   const ensureReplayTravel = () => {
     const props = travelControlProps(transportRef.current);
@@ -313,7 +287,7 @@ export function Timeline({
   );
 
   return (
-    <div className="rl-cascade-gesture-boundary" ref={gestureBoundaryRef}>
+    <div className="rl-cascade-gesture-boundary">
       <Cascade
         store={model.store}
         model={model}
@@ -322,6 +296,8 @@ export function Timeline({
         {...(onSelectComponent ? { onSelectComponent } : {})}
         {...(onHighlight ? { onHighlight } : {})}
         transport={cascadeTransport}
+        {...(flagged ? { flagged } : {})}
+        {...(onAddToAgent ? { onAddToAgent } : {})}
       />
     </div>
   );

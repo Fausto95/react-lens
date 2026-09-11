@@ -9,7 +9,7 @@ import { eventCount, clickInPage } from "./helpers.js";
 async function bootPanel(page: import("@playwright/test").Page): Promise<void> {
   await page.goto("/");
   await expect(page.locator(".rl-root")).toBeVisible();
-  await expect(page.locator(".rl-tree-name", { hasText: /^HooksShowcase$/ }).first()).toBeVisible();
+  await expect(page.locator(".rl-ledger-row").first()).toBeVisible();
 }
 
 test("a reload starts a clean session and keeps capturing", async ({ page }) => {
